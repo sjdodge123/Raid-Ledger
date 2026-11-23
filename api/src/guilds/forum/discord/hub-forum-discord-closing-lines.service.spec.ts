@@ -237,6 +237,7 @@ describe('subject entry points (ROK-2272 S8)', () => {
       gameName: 'Valheim',
       linkedEventId: null,
       linkedEventTitle: null,
+      followupOfEventTitle: null,
       lineupTitle: 'Standalone Scheduling Poll',
     } as never);
     await svc.pollLockedIn(4, 99);

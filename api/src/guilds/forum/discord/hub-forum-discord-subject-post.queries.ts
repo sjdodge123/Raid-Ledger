@@ -13,7 +13,11 @@ import {
   findEventPostSource,
   type EventPostSource,
 } from './hub-forum-discord-event-outbound.queries';
-import { subjectOf, type SubjectRef } from './hub-forum-discord-subject';
+import {
+  pollPostTitle,
+  subjectOf,
+  type SubjectRef,
+} from './hub-forum-discord-subject';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const threads = schema.hubForumThreads;
@@ -25,6 +29,11 @@ export interface ScheduleSubjectPostSource extends EventThreadWriteState {
   id: number;
   /** The subject title, before the ` — Poll|Lineup` suffix. */
   title: string;
+  /**
+   * ROK-2301: the full post name when the subject composes its own (a poll:
+   * the follow-up `(after <event>)` form); else `subjectPostTitle(kind, title)`.
+   */
+  name?: string;
   /** The S7 root text. */
   body: string;
 }
@@ -33,17 +42,18 @@ export interface ScheduleSubjectPostSource extends EventThreadWriteState {
 export type SubjectPostSource =
   ({ kind: 'event' } & EventPostSource) | ScheduleSubjectPostSource;
 
-/** The subject's title; null once the poll / lineup row is gone. */
+/** The subject's title (+ a poll's post name); null once the row is gone. */
 async function scheduleTitle(
   db: ForumDiscordDb,
   subject: SubjectRef,
-): Promise<string | null> {
+): Promise<{ title: string; name?: string } | null> {
   if (subject.kind === 'poll') {
     const poll = await findPollForSync(db, subject.id);
-    return poll ? pollSubjectTitle(poll) : null;
+    if (!poll) return null;
+    return { title: pollSubjectTitle(poll), name: pollPostTitle(poll) };
   }
   const lineup = await findLineupForSync(db, subject.id);
-  return lineup ? lineup.title : null;
+  return lineup ? { title: lineup.title } : null;
 }
 
 /** The thread's subject columns, root text and write state. */
@@ -75,9 +85,9 @@ export async function findSubjectPostSource(
     const src = await findEventPostSource(db, threadId);
     return src ? { kind: 'event', ...src } : null;
   }
-  const title = await scheduleTitle(db, subject);
-  if (title === null) return null;
+  const titled = await scheduleTitle(db, subject);
+  if (titled === null) return null;
   const { body, writeClosesAt, eventDetachedAt } = row;
   const { kind, id } = subject;
-  return { kind, id, title, body, writeClosesAt, eventDetachedAt };
+  return { kind, id, ...titled, body, writeClosesAt, eventDetachedAt };
 }

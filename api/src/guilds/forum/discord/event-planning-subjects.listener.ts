@@ -10,7 +10,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import * as Sentry from '@sentry/nestjs';
-import { DISCORD_BOT_EVENTS } from '../../../discord-bot/discord-bot.constants';
+import {
+  DISCORD_BOT_EVENTS,
+  POST_EVENT_FOLLOWUP_EVENTS,
+} from '../../../discord-bot/discord-bot.constants';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import {
   LINEUP_EVENTS,
@@ -73,6 +76,12 @@ export class EventPlanningSubjectsListener {
     return this.syncPoll('entered-scheduling', payload);
   }
 
+  /** ROK-2301: a follow-up prompt recorded this poll; re-derive its post name. */
+  @OnEvent(POST_EVENT_FOLLOWUP_EVENTS.POLL_LINKED, { async: true })
+  onFollowupLinked(payload: unknown): Promise<void> {
+    return this.syncPoll('followup-linked', payload);
+  }
+
   @OnEvent(LINEUP_EVENTS.DECIDED, { async: true })
   async onDecided(payload: unknown): Promise<void> {
     await this.run('decided', payloadId(payload, 'lineupId'), (id) =>
@@ -110,18 +119,31 @@ export class EventPlanningSubjectsListener {
 
   /**
    * ROK-2287: on every (re)connect, post the voting lineups whose edge found
-   * the bot offline (the 5-minute sweep is the backstop).
+   * the bot offline (the 5-minute sweep is the backstop). ROK-2301: then
+   * re-sync the live poll posts so each takes its derived name.
    */
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED, { async: true })
   async onConnected(): Promise<void> {
+    await this.guarded('lineup-catch-up', () =>
+      this.subjects.ensureMissingLineupPosts(),
+    );
+    // ROK-2301: existing poll posts take their derived name.
+    await this.guarded('poll-title-catch-up', () =>
+      this.subjects.resyncLivePollPosts(),
+    );
+  }
+
+  /** One connect step: logged and captured, never thrown. */
+  private async guarded(
+    tag: string,
+    fn: () => Promise<unknown>,
+  ): Promise<void> {
     try {
-      await this.subjects.ensureMissingLineupPosts();
+      await fn();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`event-planning lineup catch-up failed: ${msg}`);
-      Sentry.captureException(err, {
-        tags: { event_planning_posts: 'lineup-catch-up' },
-      });
+      this.logger.warn(`event-planning ${tag} failed: ${msg}`);
+      Sentry.captureException(err, { tags: { event_planning_posts: tag } });
     }
   }
 
