@@ -9,6 +9,7 @@ import type { SchedulingPollEmbedQueueService } from '../../../lineups/schedulin
 import { Logger } from '@nestjs/common';
 import type { SettingsService } from '../../../settings/settings.service';
 import type { EventPlanningPostCreator } from './event-planning-posts.create';
+import type { EventPlanningPostsGateway } from './event-planning-posts.discord';
 import { findVotingLineupsWithoutPlanningPost } from './event-planning-posts.queries';
 import {
   EventPlanningSubjectPosts,
@@ -34,6 +35,7 @@ function setup(forum: typeof FORUM | null = FORUM) {
     creator as unknown as EventPlanningPostCreator,
     { build: jest.fn() } as unknown as SchedulingPollForumCard,
     { enqueue: jest.fn() } as unknown as SchedulingPollEmbedQueueService,
+    {} as unknown as EventPlanningPostsGateway,
   );
   const ensure = jest
     .spyOn(subjects, 'ensureLineupPost')

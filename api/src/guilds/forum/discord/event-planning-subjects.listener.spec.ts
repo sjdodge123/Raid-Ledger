@@ -23,6 +23,7 @@ function setup() {
     syncPoll: jest.fn().mockResolvedValue(undefined),
     syncLineup: jest.fn().mockResolvedValue(undefined),
     ensureMissingLineupPosts: jest.fn().mockResolvedValue(0),
+    resyncLivePollPosts: jest.fn().mockResolvedValue(0),
   };
   const voterPings = { planningVote: jest.fn().mockResolvedValue('pinged') };
   const listener = new EventPlanningSubjectsListener(
@@ -195,5 +196,23 @@ describe('ROK-2287 EventPlanningSubjectsListener reconnect catch-up', () => {
     expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
       tags: { event_planning_posts: 'lineup-catch-up' },
     });
+  });
+
+  it('ROK-2301: then re-syncs the live poll posts, even if the lineup catch-up failed', async () => {
+    const { listener, subjects } = setup();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    subjects.ensureMissingLineupPosts.mockRejectedValueOnce(new Error('db'));
+    subjects.resyncLivePollPosts.mockRejectedValueOnce(new Error('gw'));
+    await expect(listener.onConnected()).resolves.toBeUndefined();
+    expect(subjects.resyncLivePollPosts).toHaveBeenCalledTimes(1);
+    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
+      tags: { event_planning_posts: 'poll-title-catch-up' },
+    });
+  });
+
+  it('ROK-2301: a recorded follow-up poll re-syncs its post (rename)', async () => {
+    const { listener, subjects } = setup();
+    await listener.onFollowupLinked({ matchId: 900, endedEventId: 42 });
+    expect(subjects.syncPoll).toHaveBeenCalledWith(900);
   });
 });
