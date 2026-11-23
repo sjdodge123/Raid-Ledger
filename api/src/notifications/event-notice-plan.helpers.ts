@@ -17,7 +17,7 @@ export interface EventNoticePlanInput {
   groupIds: readonly number[];
   /** Users who muted the group. */
   groupMuted: ReadonlySet<number>;
-  /** Users with `hub_event_tagged` bell AND Discord off (nothing would reach them). */
+  /** Users whose `hub_event_tagged` inApp is off (`create` would return null). */
   groupTypeOff: ReadonlySet<number>;
 }
 

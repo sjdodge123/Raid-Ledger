@@ -18,11 +18,6 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { NotificationService } from '../notifications/notification.service';
 import {
-  buildNotificationValues,
-  type Delivery,
-  resolveDelivery,
-} from '../notifications/notification-create.helpers';
-import {
   hasPendingMemberInvite,
   MEMBER_INVITE_TITLE,
 } from './event-invite-state.helpers';
@@ -43,10 +38,8 @@ export interface MemberInviteNotice {
 /**
  * `claimed: false` — the member already holds an unanswered invite; nothing
  * was written. `claimed: true` — the invite is ours; `notificationId` is the
- * new row (hidden from the bell when the member turned the in-app switch off
- * but kept Discord on — ROK-2290, the DM still goes out with its id), or null
- * when both switches are off (no row, no DM — what `NotificationService.create`
- * does for that member).
+ * new row, or null when the member turned in-app event notices off (no row,
+ * no DM — what `NotificationService.create` did for a muted category).
  */
 export type MemberInviteClaim =
   { claimed: false } | { claimed: true; notificationId: string | null };
@@ -62,25 +55,20 @@ async function lockMemberInvite(
   );
 }
 
-/** Insert the invite notification on `tx` (hidden when 'dm-only'); its id. */
+/** Insert the invite notification on `tx`; resolves its id. */
 async function insertInviteNotification(
   tx: Db,
   notice: MemberInviteNotice,
-  delivery: Exclude<Delivery, 'none'>,
 ): Promise<string | null> {
-  const values = buildNotificationValues(
-    {
+  const [row] = await tx
+    .insert(schema.notifications)
+    .values({
       userId: notice.userId,
       type: 'new_event',
       title: MEMBER_INVITE_TITLE,
       message: `${notice.inviterName} invited you to "${notice.eventTitle}"`,
       payload: { eventId: notice.eventId, invitedBy: notice.inviterName },
-    },
-    delivery,
-  );
-  const [row] = await tx
-    .insert(schema.notifications)
-    .values(values)
+    })
     .returning({ id: schema.notifications.id });
   return row?.id ?? null;
 }
@@ -88,7 +76,7 @@ async function insertInviteNotification(
 /**
  * Check-and-insert under the per-(event, recipient) lock. The preference read
  * runs BEFORE the transaction so no second pool connection is needed while
- * the lock is held. Mirrors `NotificationService.create`'s `resolveDelivery`.
+ * the lock is held. Mirrors `NotificationService.isCategoryEnabled`.
  */
 export async function claimMemberInvite(
   db: Db,
@@ -96,14 +84,14 @@ export async function claimMemberInvite(
   notice: MemberInviteNotice,
 ): Promise<MemberInviteClaim> {
   const prefs = await notificationService.getPreferences(notice.userId);
-  const delivery = resolveDelivery('new_event', prefs);
+  const inApp = prefs.channelPrefs.new_event?.inApp ?? true;
   return db.transaction(async (tx): Promise<MemberInviteClaim> => {
     await lockMemberInvite(tx, notice.eventId, notice.userId);
     if (await hasPendingMemberInvite(tx, notice.eventId, notice.userId)) {
       return { claimed: false };
     }
-    if (delivery === 'none') return { claimed: true, notificationId: null };
-    const notificationId = await insertInviteNotification(tx, notice, delivery);
+    if (!inApp) return { claimed: true, notificationId: null };
+    const notificationId = await insertInviteNotification(tx, notice);
     return { claimed: true, notificationId };
   });
 }

@@ -1,12 +1,10 @@
 /**
  * ROK-2187 — who a GG <year> `gg_ready` send reaches, in one place so the
  * admin dry run counts exactly what delivery does: `NotificationService.create`
- * resolves the player's `gg_ready` channel prefs (bell AND Discord off ⇒
- * nothing; Discord off ⇒ in-app only; ROK-2290: bell off + Discord on ⇒ a
- * hidden row and the DM) and only DMs a real Discord id — `local:` /
- * `unlinked:` placeholders never get a DM (Q6: in-app only).
+ * resolves the player's `gg_ready` channel prefs (in-app off ⇒ nothing; Discord
+ * off ⇒ in-app only) and only DMs a real Discord id — `local:` / `unlinked:`
+ * placeholders never get a DM (Q6: in-app only).
  */
-import { resolveStoredDelivery } from '../../../notifications/notification-create.helpers';
 import { resolveChannelPrefs } from '../../../notifications/notification-mapping.helpers';
 
 /** Placeholder `discord_id` prefixes that are not Discord accounts. */
@@ -30,19 +28,16 @@ export function hasRealDiscordId(discordId: string | null): boolean {
 }
 
 /**
- * The bucket for one player: deactivated → skipped; `gg_ready` bell AND
- * Discord off → optedOut (nothing is delivered); Discord off for `gg_ready` OR
- * no real Discord id → noDiscord (no DM; the in-app notification when the bell
- * is on); else a DM — including bell off + Discord on (ROK-2290).
+ * The bucket for one player: deactivated → skipped; `gg_ready` in-app off →
+ * optedOut (nothing is delivered); Discord off for `gg_ready` OR no real
+ * Discord id → noDiscord (in-app only — `create` still writes the in-app
+ * notification); else a DM.
  */
 export function ggRecipientBucket(facts: GgRecipientFacts): GgRecipientBucket {
   if (facts.deactivatedAt !== null) return 'deactivated';
-  if (resolveStoredDelivery('gg_ready', facts.prefs) === 'none') {
-    return 'optedOut';
-  }
-  if (resolveChannelPrefs(facts.prefs).gg_ready.discord === false) {
-    return 'noDiscord';
-  }
+  const ready = resolveChannelPrefs(facts.prefs).gg_ready;
+  if (ready.inApp === false) return 'optedOut';
+  if (ready.discord === false) return 'noDiscord';
   if (!hasRealDiscordId(facts.discordId)) return 'noDiscord';
   return 'dm';
 }
