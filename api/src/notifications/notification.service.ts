@@ -82,7 +82,7 @@ export class NotificationService {
     const delivery = resolveInputDelivery(input, prefs);
     if (delivery === 'none') {
       this.logger.debug(
-        `Skipping notification for user ${input.userId}: ${input.type} in-app and Discord disabled`,
+        `Skipping notification for user ${input.userId}: ${input.type} has no channel to deliver on`,
       );
       return null;
     }

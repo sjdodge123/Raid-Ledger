@@ -96,7 +96,8 @@ async function insertNotificationBatch(
 
 /**
  * Create many notifications in a single batch (ROK-1043).
- * Drops inputs with bell AND Discord off; bell-off + Discord-on inputs get a
+ * Drops inputs with bell AND Discord off, and `skipDiscord` inputs without
+ * `callerSendsDm` once the bell is off; bell-off + Discord-on inputs get a
  * hidden row (ROK-2290). Multi-row insert, then the Discord batch.
  */
 export async function createManyNotifications(
