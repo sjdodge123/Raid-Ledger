@@ -14,6 +14,7 @@ import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { LINEUP_LIFECYCLE_EVENTS } from '../../../lineups/lineup-events.constants';
 import { LINEUP_MATCH_EVENTS } from '../../../lineups/lineups-scheduling-hook.helpers';
+import { findPollForSync } from './poll-discussion.queries';
 import {
   planPollSync,
   POLL_CLOSE_GRACE_MS,
@@ -115,6 +116,13 @@ async function newEvent(title: string, fromPollId?: number): Promise<number> {
     'event',
   );
   return e.id;
+}
+
+/** ROK-2301: the follow-up prompt row that opened poll `matchId`. */
+async function newFollowup(eventId: number, matchId: number): Promise<void> {
+  await testApp.db
+    .insert(schema.postEventFollowupSent)
+    .values({ eventId, matchId, choice: 'poll' });
 }
 
 const threadRows = (matchId: number) =>
@@ -233,6 +241,44 @@ describe('syncPollDiscussion (real db)', () => {
     expect(await syncPollDiscussion(testApp.db, matchId)).toBe('refresh');
     expect((await liveThread(matchId))?.title).toBe(
       `${testApp.seed.game.name} — Poll`,
+    );
+  });
+
+  it('ROK-2301: findPollForSync reads the follow-up source event title', async () => {
+    const guildId = await newHub();
+    const { matchId } = await newPoll({ guildId });
+    expect(
+      (await findPollForSync(testApp.db, matchId))?.followupOfEventTitle,
+    ).toBeNull();
+    const eventId = await newEvent('Tuesday Dungeon Night');
+    await newFollowup(eventId, matchId);
+    const poll = await findPollForSync(testApp.db, matchId);
+    expect(poll?.followupOfEventTitle).toBe('Tuesday Dungeon Night');
+    expect(poll?.linkedEventId).toBeNull();
+  });
+
+  it('ROK-2301: a follow-up poll thread is "<game> — Poll (after <event>)"', async () => {
+    const guildId = await newHub();
+    const title = 'Standalone Scheduling Poll';
+    const { matchId } = await newPoll({ guildId, standalone: { title } });
+    await newFollowup(await newEvent('Tuesday Dungeon Night'), matchId);
+    expect(await syncPollDiscussion(testApp.db, matchId)).toBe('insert');
+    expect((await liveThread(matchId))?.title).toBe(
+      `${testApp.seed.game.name} — Poll (after Tuesday Dungeon Night)`,
+    );
+  });
+
+  it('ROK-2301: an existing "<game> — Poll" thread is renamed on its next sync', async () => {
+    const guildId = await newHub();
+    const { matchId } = await newPoll({ guildId });
+    await syncPollDiscussion(testApp.db, matchId);
+    expect((await liveThread(matchId))?.title).toBe(
+      `${testApp.seed.game.name} — Poll`,
+    );
+    await newFollowup(await newEvent('Tuesday Dungeon Night'), matchId);
+    expect(await syncPollDiscussion(testApp.db, matchId)).toBe('refresh');
+    expect((await liveThread(matchId))?.title).toBe(
+      `${testApp.seed.game.name} — Poll (after Tuesday Dungeon Night)`,
     );
   });
 

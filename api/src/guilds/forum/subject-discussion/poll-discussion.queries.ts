@@ -58,35 +58,38 @@ export interface LivePollThread {
   writeClosesAt: Date | null;
 }
 
+const m = schema.communityLineupMatches;
+const l = schema.communityLineups;
+const followup = schema.postEventFollowupSent;
 /** The follow-up prompt's source event (`events` is joined for the link). */
 const followupEvent = alias(schema.events, 'poll_followup_event');
+
+/** The columns `findPollForSync` reads, before shaping. */
+const pollColumns = {
+  matchId: m.id,
+  lineupId: m.lineupId,
+  status: m.status,
+  lineupStatus: l.status,
+  phaseDeadline: l.phaseDeadline,
+  linkedEventId: m.linkedEventId,
+  eventTitle: schema.events.title,
+  eventFromPollId: schema.events.createdFromPollId,
+  followupTitle: followupEvent.title,
+  guildId: l.guildId,
+  visibility: l.visibility,
+  creatorId: l.createdBy,
+  gameName: schema.games.name,
+  lineupTitle: l.title,
+  override: l.phaseDurationOverride,
+};
 
 /** The poll row, or null when the match (or its lineup) is gone. */
 export async function findPollForSync(
   db: DbOrTx,
   matchId: number,
 ): Promise<PollSyncRow | null> {
-  const m = schema.communityLineupMatches;
-  const l = schema.communityLineups;
-  const followup = schema.postEventFollowupSent;
   const [row] = await db
-    .select({
-      matchId: m.id,
-      lineupId: m.lineupId,
-      status: m.status,
-      lineupStatus: l.status,
-      phaseDeadline: l.phaseDeadline,
-      linkedEventId: m.linkedEventId,
-      eventTitle: schema.events.title,
-      eventFromPollId: schema.events.createdFromPollId,
-      followupTitle: followupEvent.title,
-      guildId: l.guildId,
-      visibility: l.visibility,
-      creatorId: l.createdBy,
-      gameName: schema.games.name,
-      lineupTitle: l.title,
-      override: l.phaseDurationOverride,
-    })
+    .select(pollColumns)
     .from(m)
     .innerJoin(l, eq(l.id, m.lineupId))
     .innerJoin(schema.games, eq(schema.games.id, m.gameId))
@@ -96,13 +99,12 @@ export async function findPollForSync(
     .where(eq(m.id, matchId))
     .limit(1);
   if (!row) return null;
-  const { override, eventTitle, eventFromPollId, followupTitle, ...rest } =
-    row;
+  const { override, eventTitle, eventFromPollId, followupTitle, ...rest } = row;
   const produced = eventFromPollId === matchId;
   return {
     ...rest,
     linkedEventTitle: produced ? null : eventTitle,
-    followupOfEventTitle: followupTitle?.trim() ? followupTitle.trim() : null,
+    followupOfEventTitle: followupTitle?.trim() || null,
     standalone: override?.standalone === true,
   };
 }
@@ -135,7 +137,6 @@ export async function findPollMatchIds(
   db: DbOrTx,
   lineupId: number,
 ): Promise<number[]> {
-  const m = schema.communityLineupMatches;
   const rows = await db
     .select({ id: m.id })
     .from(m)
