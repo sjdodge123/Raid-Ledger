@@ -8,7 +8,13 @@
  * auto-nominates off a choice whose only visible outcome was a failure.
  */
 import { NotFoundException } from '@nestjs/common';
-import { STEAM_NOMINATE_BUTTON_IDS } from '../discord-bot.constants';
+import {
+  STEAM_INTEREST_BUTTON_IDS,
+  STEAM_NOMINATE_BUTTON_IDS,
+} from '../discord-bot.constants';
+import { createDrizzleMock } from '../../common/testing/drizzle-mock';
+import { ACCOUNT_BLOCKED_REPLY } from '../../users/discord-account-status.helpers';
+import { handleInterestButtonClick } from './steam-link.listener.interest-flow';
 import {
   handleNominateButtonClick,
   translateNominateError,
@@ -130,5 +136,68 @@ describe('translateNominateError — moderated game (backlog 2842)', () => {
     expect(copy).toBe(
       'Could not nominate **Some Game** right now. Please try again.',
     );
+  });
+});
+
+describe('Steam DM buttons refuse a blocked account (ROK-2298)', () => {
+  const lineupsService = { nominate: jest.fn() };
+  const blockedUser = { id: USER_ID, blocked: true };
+
+  function replyOf(interaction: { update: jest.Mock }): unknown {
+    return (interaction.update.mock.calls[0]?.[0] as { content?: unknown })
+      ?.content;
+  }
+
+  it.each([
+    STEAM_NOMINATE_BUTTON_IDS.NOMINATE,
+    STEAM_NOMINATE_BUTTON_IDS.AUTO,
+    STEAM_NOMINATE_BUTTON_IDS.HEART,
+  ])(
+    '%s: blocked reply, no nominate / interest / pref write',
+    async (action) => {
+      const deps = makeDeps({
+        lineupsService: lineupsService as never,
+        findLinkedUser: jest.fn().mockResolvedValue(blockedUser),
+      });
+      const interaction = makeInteraction();
+      await handleNominateButtonClick(
+        deps,
+        interaction as never,
+        action,
+        GAME_ID,
+      );
+      expect({
+        reply: replyOf(interaction),
+        nominate: lineupsService.nominate.mock.calls.length,
+        interest: (deps.addInterest as jest.Mock).mock.calls.length,
+        pref: (deps.setAutoNominatePref as jest.Mock).mock.calls.length,
+      }).toEqual({
+        reply: ACCOUNT_BLOCKED_REPLY,
+        nominate: 0,
+        interest: 0,
+        pref: 0,
+      });
+    },
+  );
+
+  it('heart-flow button: blocked reply, no interest row', async () => {
+    const db = createDrizzleMock();
+    db.limit.mockResolvedValueOnce([
+      {
+        id: USER_ID,
+        discordId: 'discord-user-1',
+        bannedAt: new Date(),
+        deactivatedAt: null,
+      },
+    ]);
+    const interaction = {
+      ...makeInteraction(),
+      customId: `${STEAM_INTEREST_BUTTON_IDS.HEART}:${GAME_ID}`,
+    };
+    await handleInterestButtonClick(db as never, interaction as never);
+    expect({
+      reply: replyOf(interaction),
+      inserts: db.insert.mock.calls.length,
+    }).toEqual({ reply: ACCOUNT_BLOCKED_REPLY, inserts: 0 });
   });
 });

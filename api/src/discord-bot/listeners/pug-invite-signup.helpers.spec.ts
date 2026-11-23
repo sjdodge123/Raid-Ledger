@@ -157,7 +157,9 @@ describe('PUG signup — linked path', () => {
     (deps.db.select as jest.Mock).mockReturnValueOnce({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
-          limit: jest.fn().mockResolvedValue([{ id: 1 }]),
+          limit: jest
+            .fn()
+            .mockResolvedValue([{ id: 1, discordId: 'discord-pug-1' }]),
         }),
       }),
     });
