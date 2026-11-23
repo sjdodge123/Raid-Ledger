@@ -77,6 +77,12 @@ test('literalsOf skips imports, short strings and path-like strings but keeps te
   assert.deepEqual(literalsOf('<button data-testid="signup-confirm-btn">'), ['signup-confirm-btn']);
 });
 
+test('literalsOf drops the tail of a nested template (ROK-2301 replay)', () => {
+  const line = '  return `${poll} · ${maskedLink(`${hub.label} ${ARROW}`, hub.url)}`;';
+  assert.deepEqual(literalsOf(line), []);
+  assert.deepEqual(literalsOf('const t = `Vote now (open)`;'), ['Vote now (open)']);
+});
+
 test('removedStrings ignores strings re-added elsewhere and removals in test files', () => {
   const diff = [
     '--- a/api/src/x/a.ts', '+++ b/api/src/x/a.ts',

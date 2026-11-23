@@ -141,9 +141,24 @@ export function literalsOf(line) {
     const s = m[1] ?? m[2] ?? m[3] ?? '';
     if (s.length < MIN_LEN) continue;
     if (!/\s/.test(s) && (/\//.test(s) || /^[.@]/.test(s))) continue;
+    if (m[3] !== undefined && unbalanced(s)) continue;
     out.push(s);
   }
   return out;
+}
+
+/**
+ * A backtick "literal" with more closers than openers is the tail of a nested
+ * template (`${a} ${f(`${b}`, c)}`), not text a user sees — e.g. `, hub.url)}`.
+ */
+function unbalanced(s) {
+  let depth = 0;
+  for (const ch of s) {
+    if (ch === '(' || ch === '{') depth += 1;
+    else if (ch === ')' || ch === '}') depth -= 1;
+    if (depth < 0) return true;
+  }
+  return false;
 }
 
 /** Is a diff path a non-test source file whose removed strings count? */

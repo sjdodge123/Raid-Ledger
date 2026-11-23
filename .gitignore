@@ -49,6 +49,7 @@ scripts/*
 !scripts/lane-check.sh
 !scripts/lane-check-plan.mjs
 !scripts/lane-check-plan.spec.mjs
+!scripts/lane-check.spec.mjs
 # Renumber a branch's migrations after origin/main + the index-collision guard.
 !scripts/renumber-branch-migrations.sh
 !scripts/renumber-branch-migrations.mjs

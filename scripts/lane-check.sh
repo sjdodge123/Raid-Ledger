@@ -20,17 +20,19 @@
 #
 # Usage: scripts/lane-check.sh [--plan]
 #   --plan   print the plan (JSON) and exit 0 without running anything.
-# Env:     LANE_CHECK_WORKERS (default 2), LANE_CHECK_BASE (default origin/main)
+# Env:     LANE_CHECK_WORKERS (default 2), LANE_CHECK_BASE (default origin/main),
+#          LANE_CHECK_ONLY (comma list of phases: typecheck,tests,lint,smoke).
 # Exit:    0 all PASS/SKIPPED · 1 a FAIL · 2 usage / git error.
 set -uo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "lane-check: not in a git repo" >&2; exit 2; }
 BASE="${LANE_CHECK_BASE:-origin/main}"
 WORKERS="${LANE_CHECK_WORKERS:-2}"
+ONLY="${LANE_CHECK_ONLY:-}"
 PLAN_ONLY=false
 case "${1:-}" in
   --plan) PLAN_ONLY=true ;;
-  -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
   "") ;;
   *) echo "lane-check: unknown argument $1" >&2; exit 2 ;;
 esac
@@ -87,13 +89,18 @@ run_step() {
   fi
 }
 
+# A fresh worktree has no tools/test-bot install; say so instead of a TS2307 wall.
+tb_installed() {
+  [ -d tools/test-bot/node_modules ] && return 0
+  echo "tools/test-bot has no node_modules — run (cd tools/test-bot && npm ci) and re-run"; return 1
+}
 typecheck() {
   case "$1" in
     api) NODE_OPTIONS="--max-old-space-size=8192" npx tsc --noEmit -p api/tsconfig.json ;;
     web) npx tsc --noEmit -p web/tsconfig.test.json ;;
     contract) npx tsc --noEmit -p packages/contract/tsconfig.json ;;
     smoke) npx tsc --noEmit -p scripts/smoke/tsconfig.typecheck.json ;;
-    tool:test-bot) (cd tools/test-bot && npx tsc --noEmit -p tsconfig.json) ;;
+    tool:test-bot) tb_installed && (cd tools/test-bot && npx tsc --noEmit -p tsconfig.json) ;;
     tool:*) npx tsc --noEmit -p "tools/${1#tool:}/tsconfig.json" ;;
     *) echo "no typecheck for $1"; return 1 ;;
   esac
@@ -111,13 +118,13 @@ jest_related() { (cd api && npx jest --maxWorkers="$WORKERS" --passWithNoTests -
 vitest_related() { (cd web && npx vitest related --run --maxWorkers="$WORKERS" --passWithNoTests $(strip_ws web "$1")); }
 contract_tests() { npm test -w @raid-ledger/contract -- --maxWorkers="$WORKERS"; }
 tool_tests() {
-  if [ "$1" = "test-bot" ]; then npm test --prefix tools/test-bot
+  if [ "$1" = "test-bot" ]; then tb_installed && npm test --prefix tools/test-bot
   else npm test -w "@raid-ledger/$1" -- --maxWorkers="$WORKERS"; fi
 }
 # shellcheck disable=SC2086
 eslint_files() {
   local dir
-  case "$1" in api) dir=api ;; web) dir=web ;; tool:test-bot) dir=tools/test-bot ;; *) return 1 ;; esac
+  case "$1" in api) dir=api ;; web) dir=web ;; tool:test-bot) tb_installed || return 1; dir=tools/test-bot ;; *) return 1 ;; esac
   (cd "$dir" && npx eslint $2)
 }
 smoke_grep() {
@@ -129,6 +136,7 @@ smoke_grep() {
 
 # Order: typechecks first (serial), then tests, then lint, then smoke strings.
 [ "${#KINDS[@]}" -gt 0 ] && for phase in typecheck tests lint smoke skipped; do
+  [ -z "$ONLY" ] || [ "$phase" = skipped ] || [[ ",$ONLY," == *",$phase,"* ]] || continue
   for i in "${!KINDS[@]}"; do
     k="${KINDS[$i]}"; t="${TARGETS[$i]}"
     case "$phase:$k" in
@@ -149,7 +157,7 @@ smoke_grep() {
 done
 
 echo
-echo "lane-check summary (base $BASE, workers $WORKERS)"
+echo "lane-check summary (base $BASE, workers $WORKERS${ONLY:+, only $ONLY})"
 printf '%-14s | %-48s | %-7s | %s\n' Step Target Result Seconds
 printf '%s\n' "---------------+--------------------------------------------------+---------+--------"
 if [ "${#ROWS[@]}" -eq 0 ]; then echo "(nothing to check for this diff)"
