@@ -137,4 +137,4 @@ Each cycle it reads `gh pr view <n> --json number,state,mergeStateStatus,autoMer
 | `ERROR #n: <gh error>` | 1 | three consecutive failed reads of that PR (one blip is retried) |
 | `TIMEOUT` | 2 | `--minutes` elapsed; usage errors exit 64 |
 
-Then one line per PR (`#n STATE MERGE_STATE auto=true|false failing=<names|->`) and a UTC timestamp. **It only reports:** it never reruns CI, updates a branch or merges — triage the reason it prints (memory `feedback_red_prs_need_triage_not_rebases`). Spec: `node --test scripts/pr-watch.spec.mjs` (fake `gh` via `GH_BIN`).
+Then one line per PR (`#n STATE MERGE_STATE auto=true|false failing=<names|->`) and a UTC timestamp. **It only reports:** it never reruns CI, updates a branch or merges — triage the reason it prints (memory `feedback_babysit_prs_and_cleanup`). Spec: `node --test scripts/pr-watch.spec.mjs` (fake `gh` via `GH_BIN`).
