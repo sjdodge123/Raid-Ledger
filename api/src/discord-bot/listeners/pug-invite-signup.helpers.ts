@@ -3,6 +3,10 @@ import { eq, and } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import type { PugInviteDeps } from './pug-invite.helpers';
 import type { CreateDiscordSignupDto } from '@raid-ledger/contract';
+import {
+  ACCOUNT_BLOCKED_REPLY,
+  resolveDiscordAccount,
+} from '../../users/discord-account-status.helpers';
 
 type PugSlot = typeof schema.pugSlots.$inferSelect;
 type SlotRole = 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
@@ -31,9 +35,11 @@ export async function createPugSignup(
 ): Promise<string | null> {
   const discordUserId = slot.discordUserId;
   if (!discordUserId) return null;
-  const linkedUser = await findLinkedUser(deps, discordUserId);
-  if (linkedUser) {
-    return createLinkedPugSignup(deps, slot, linkedUser, role);
+  const account = await resolveDiscordAccount(deps.db, discordUserId);
+  // ROK-2298 (AC 3, Q5): a blocked invitee is refused — never anonymous.
+  if (account.kind === 'blocked') return ACCOUNT_BLOCKED_REPLY;
+  if (account.kind === 'linked') {
+    return createLinkedPugSignup(deps, slot, account.user, role);
   }
   return createAnonymousPugSignup(deps, slot, discordUserId, role);
 }
@@ -54,18 +60,6 @@ export async function replyPugSignupFailed(
   reply: string,
 ): Promise<void> {
   await interaction.editReply({ content: reply, components: [] });
-}
-
-async function findLinkedUser(
-  deps: PugInviteDeps,
-  discordId: string,
-): Promise<{ id: number } | null> {
-  const [user] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordId))
-    .limit(1);
-  return user ?? null;
 }
 
 /** Create signup for a linked user PUG. */
