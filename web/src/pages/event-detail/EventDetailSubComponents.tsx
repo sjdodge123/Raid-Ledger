@@ -17,6 +17,7 @@ import { Button } from '../../components/ui/button';
 import { SeriesNotSignedUpSlot, SeriesSignedUpActions } from '../../components/events/series-signup/SeriesSignupSlots';
 import type { useEventDetailHandlers } from './use-event-detail-handlers';
 import { isRosterShownSignup } from './event-detail-helpers';
+import { RESTORE_DAY_SCROLL_STATE } from '../../components/calendar/day-scroll-restore-flag';
 
 /** Omits an absent character name instead of carrying the key as `undefined`. */
 type AttendeeCharacter = { gameId: number | string; name?: string; avatarUrl: string | null };
@@ -124,7 +125,7 @@ function resolveBackNavigation(fromCalendar: boolean, navState: { calendarDate?:
         const params = new URLSearchParams();
         if (navState?.calendarDate) params.set('date', navState.calendarDate);
         if (navState?.calendarView) params.set('view', navState.calendarView);
-        navigate(`/calendar?${params.toString()}`);
+        navigate(`/calendar?${params.toString()}`, { state: RESTORE_DAY_SCROLL_STATE });
     } else if (hasHistory) { navigate(-1); }
     else { navigate('/calendar'); }
 }

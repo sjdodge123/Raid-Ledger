@@ -1,17 +1,22 @@
-import { useEffect } from 'react';
-import { NavigationType, useNavigationType } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { NavigationType, useLocation, useNavigationType } from 'react-router-dom';
+import { safeSessionGetItem, safeSessionRemoveItem, safeSessionSetItem } from '../../lib/safe-storage';
 import { isPhoneCalendarWidth } from './phone-calendar-width';
+import { hasRestoreDayScrollFlag } from './day-scroll-restore-flag';
 
 /**
  * ROK-2303: on a phone the Day view scrolls the window (`.rbc-time-content` is
  * `overflow: visible`), and the page remounts when Back returns from an event,
  * so the browser's own restore runs before the grid is tall enough. Opening an
  * event from the phone Day view saves the window offset here; the next mount
- * reached by Back (a POP) on the same date in Day view puts it back. Any other
- * mount just drops the saved offset.
+ * reached by Back (a POP) or by the event page's "Back to Calendar" button (a
+ * PUSH carrying `RESTORE_DAY_SCROLL_STATE`) on the same date in Day view puts
+ * it back. Any other mount just drops the saved offset.
  */
 const STORAGE_KEY = 'rl:calendar-day-scroll';
 const MAX_RESTORE_FRAMES = 30;
+/** A user gesture that ends the restore: the user is scrolling on their own. */
+const USER_SCROLL_EVENTS = ['touchstart', 'wheel'] as const;
 
 interface SavedDayScroll {
     date: string;
@@ -21,18 +26,11 @@ interface SavedDayScroll {
 /** Called when an event is opened from the Day view; a no-op at tablet/desktop width. */
 export function rememberDayViewScroll(date: string): void {
     if (!isPhoneCalendarWidth()) return;
-    try {
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ date, y: window.scrollY }));
-    } catch {
-        // Storage blocked (private mode): Back simply opens at the top.
-    }
+    safeSessionSetItem(STORAGE_KEY, JSON.stringify({ date, y: window.scrollY }));
 }
 
-function takeSavedDayScroll(): SavedDayScroll | null {
+function parseSaved(raw: string): SavedDayScroll | null {
     try {
-        const raw = sessionStorage.getItem(STORAGE_KEY);
-        sessionStorage.removeItem(STORAGE_KEY);
-        if (raw === null) return null;
         const parsed: unknown = JSON.parse(raw);
         if (typeof parsed !== 'object' || parsed === null || !('date' in parsed) || !('y' in parsed)) return null;
         const { date, y } = parsed;
@@ -42,33 +40,58 @@ function takeSavedDayScroll(): SavedDayScroll | null {
     }
 }
 
+function takeSavedDayScroll(): SavedDayScroll | null {
+    const raw = safeSessionGetItem(STORAGE_KEY);
+    safeSessionRemoveItem(STORAGE_KEY);
+    return raw === null ? null : parseSaved(raw);
+}
+
 /**
  * Scrolls the window to `y` on the next frames until it sticks (the grid may
- * still be growing) or the frame budget runs out. Returns a cancel function.
+ * still be growing) or the frame budget runs out. The first touch or wheel
+ * ends it, so it never fights a user who starts scrolling. Returns a cancel.
  */
 export function restoreWindowScroll(y: number, maxFrames: number = MAX_RESTORE_FRAMES): () => void {
     let frame = 0;
     let handle = 0;
+    const stop = (): void => {
+        window.cancelAnimationFrame(handle);
+        for (const type of USER_SCROLL_EVENTS) window.removeEventListener(type, stop);
+    };
     const step = (): void => {
         window.scrollTo(window.scrollX, y);
         frame += 1;
-        if (Math.abs(window.scrollY - y) <= 1 || frame >= maxFrames) return;
+        if (Math.abs(window.scrollY - y) <= 1 || frame >= maxFrames) { stop(); return; }
         handle = window.requestAnimationFrame(step);
     };
+    for (const type of USER_SCROLL_EVENTS) window.addEventListener(type, stop, { passive: true });
     handle = window.requestAnimationFrame(step);
-    return () => window.cancelAnimationFrame(handle);
+    return stop;
 }
 
 /**
- * Mount-only: restores the saved Day-view offset when this mount came from
- * Back/Forward onto the same date in Day view. Later date or view changes
- * never restore, because the saved entry is consumed on mount.
+ * Restores the saved Day-view offset when this mount came from Back (or the
+ * flagged "Back to Calendar" button) onto the same date in Day view. The saved
+ * entry is consumed on mount, so later date or view changes never restore. The
+ * restore waits for `ready` (the grid's loading block gone) so it lands on the
+ * final layout, and is skipped if the width is no longer a phone's.
  */
-export function useDayViewScrollRestore(date: string, isDayView: boolean): void {
+export function useDayViewScrollRestore(date: string, isDayView: boolean, ready: boolean = true): void {
     const navigationType = useNavigationType();
+    const { state } = useLocation();
+    const targetRef = useRef<number | null>(null);
+    const decidedRef = useRef(false);
     useEffect(() => {
+        if (decidedRef.current) return;
+        decidedRef.current = true;
         const saved = takeSavedDayScroll();
-        if (!saved || navigationType !== NavigationType.Pop || !isDayView || saved.date !== date) return undefined;
-        return restoreWindowScroll(saved.y);
+        const returning = navigationType === NavigationType.Pop || hasRestoreDayScrollFlag(state);
+        if (saved && returning && isDayView && saved.date === date) targetRef.current = saved.y;
     }, []); // eslint-disable-line react-hooks/exhaustive-deps -- mount only, by design
+    useEffect(() => {
+        const y = targetRef.current;
+        if (!ready || y === null) return undefined;
+        targetRef.current = null;
+        return isPhoneCalendarWidth() ? restoreWindowScroll(y) : undefined;
+    }, [ready]);
 }

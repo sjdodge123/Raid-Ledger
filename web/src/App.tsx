@@ -54,17 +54,20 @@ import './plugins/valheim/register';
 import './plugins/bg3/register';
 import './plugins/minecraft/register';
 import './App.css';
+import { hasRestoreDayScrollFlag } from './components/calendar/day-scroll-restore-flag';
 
 /** Scroll to top on PUSH navigations */
 function ScrollToTop() {
-  const { pathname } = useLocation();
+  const { pathname, state } = useLocation();
   const navigationType = useNavigationType();
+  // ROK-2303: "Back to Calendar" is a PUSH whose Day-view scroll the calendar restores itself.
+  const keepScroll = hasRestoreDayScrollFlag(state);
 
   useEffect(() => {
-    if (navigationType !== 'POP') {
+    if (navigationType !== 'POP' && !keepScroll) {
       window.scrollTo(0, 0);
     }
-  }, [pathname, navigationType]);
+  }, [pathname, navigationType, keepScroll]);
 
   return null;
 }

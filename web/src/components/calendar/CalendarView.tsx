@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useLiveSearchParams, type SearchParamsMutator } from './use-live-search-params';
 import { parseDateParam } from './parse-date-param';
 import { rememberDayViewScroll, useDayViewScrollRestore } from './use-day-view-scroll-restore';
+import { isPhoneCalendarWidth } from './phone-calendar-width';
 import { useEvents } from '../../hooks/use-events';
 import { useCalendarImageHints } from '../../hooks/use-calendar-image-hints';
 import { getCalendarEventStyle } from '../../constants/game-colors';
@@ -199,8 +200,9 @@ function useCalendarViewState(
     const calendarEvents = useHubFilteredEvents(useCalendarEvents(eventsData, selectedGames, resolved), eventsData?.data);
     useCalendarImageHints(calendarEvents);
     const { handlePrev, handleNext, handleToday } = useCalendarNavigation(currentDate, setCurrentDate, view);
-    useDayViewScrollRestore(format(currentDate, 'yyyy-MM-dd'), view === Views.DAY && !isScheduleView);
-    return { navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, calendarEvents, handlePrev, handleNext, handleToday };
+    const isGridLoading = isLoading || (isFetching && calendarEvents.length === 0);
+    useDayViewScrollRestore(format(currentDate, 'yyyy-MM-dd'), view === Views.DAY && !isScheduleView, !isGridLoading);
+    return { navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, isGridLoading, calendarEvents, handlePrev, handleNext, handleToday };
 }
 
 function useEventWrappers(eventOverlapsGameTime: (s: Date, e: Date) => boolean, handleMonthChipClick: (e: React.MouseEvent, d: Date) => void) {
@@ -220,7 +222,7 @@ function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handl
         <div className={`calendar-container calendar-view-${s.view} ${className}`}>
             <CalendarToolbar view={s.view} currentDate={s.currentDate} tzAbbr={s.tzAbbr} isHeaderHidden={isHeaderHidden} calendarView={calendarView} onPrev={s.handlePrev} onNext={s.handleNext} onToday={s.handleToday} onViewChange={s.setView} action={toolbarAction} />
             {belowToolbar}
-            {(s.isLoading || (s.isFetching && s.calendarEvents.length === 0)) && <div className="calendar-loading"><div className="loading-spinner" /><span>Loading events...</span></div>}
+            {s.isGridLoading && <div className="calendar-loading"><div className="loading-spinner" /><span>Loading events...</span></div>}
             <CalendarLayerGrid markers={layer.markers} dayEntries={layer.dayEntries}>
                 <Calendar<GridEvent> key={s.view} localizer={localizer} events={s.calendarEvents} backgroundEvents={layer.backgroundEvents} date={s.currentDate} view={s.view}
                     views={[Views.MONTH, Views.WEEK, Views.DAY]} onNavigate={(date: Date) => s.setCurrentDate(date)} onView={s.setView}
@@ -230,7 +232,7 @@ function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handl
                     components={{ month: { event: wrappers.MonthEventWrapper, dateHeader: LayerMonthDateHeader }, week: { event: wrappers.WeekEventWrapper }, day: { event: wrappers.DayEventWrapper }, dayColumnWrapper: LayerDayColumnWrapper, eventWrapper: LayerBackgroundEventWrapper, toolbar: () => null }}
                     getNow={() => new TZDate(Date.now(), s.resolved)} allDayAccessor={() => false} popup selectable
                     onSelectSlot={(slotInfo) => {
-                        if (slotInfo.action === 'doubleClick' || (window.innerWidth < 768 && slotInfo.action === 'click' && s.view === Views.MONTH)) {
+                        if (slotInfo.action === 'doubleClick' || (isPhoneCalendarWidth() && slotInfo.action === 'click' && s.view === Views.MONTH)) {
                             s.setCurrentDate(slotInfo.start); s.setView(Views.DAY);
                         }
                     }} />
@@ -247,14 +249,14 @@ function useCalendarInteractions(
     const { setCurrentDate, setView, navigate, view, currentDate, isScheduleView } = s;
 
     const handleMonthChipClick = useCallback((e: React.MouseEvent, eventStart: Date) => {
-        if (window.innerWidth >= 768) return;
+        if (!isPhoneCalendarWidth()) return;
         e.stopPropagation(); e.preventDefault();
         setCurrentDate(eventStart); setView(Views.DAY);
     }, [setCurrentDate, setView]);
 
     const handleSelectEvent = useCallback((event: GridEvent) => {
         if (isLayerEvent(event)) return;
-        if (window.innerWidth < 768 && view === Views.MONTH && !isScheduleView) {
+        if (isPhoneCalendarWidth() && view === Views.MONTH && !isScheduleView) {
             setCurrentDate(event.start); setView(Views.DAY); return;
         }
         if (view === Views.DAY && !isScheduleView) rememberDayViewScroll(format(currentDate, 'yyyy-MM-dd'));
