@@ -5,7 +5,7 @@
  * 300-line ESLint cap and so a future redis-mock unit test can target this
  * module directly. The mock implements only the subset of ioredis methods
  * the codebase touches (set with NX, setex, del, incr, expire, ttl, exists,
- * keys with `*` glob, getdel, ping, quit, disconnect, duplicate, and an
+ * keys with `*` glob, getdel, sadd/srem/smembers/pexpireat (ROK-2260), ping, quit, disconnect, duplicate, and an
  * `eval` that runs only the compare-and-delete lease release and the
  * fixed-window counter). The `store` Map
  * is exposed via the returned handle so `truncateAllTables` can purge
@@ -19,6 +19,7 @@
  * expiry, matching Redis.
  */
 import { COMPARE_AND_DELETE_LUA, INCR_FIXED_WINDOW_LUA } from '../redis-lease';
+import { mockRedisHashes, mockRedisSets } from './redis-mock-sets';
 
 /** True when the trailing ioredis args carry the given bare flag (NX/XX). */
 function hasFlag(args: (string | number)[], flag: 'NX' | 'XX'): boolean {
@@ -217,6 +218,8 @@ function buildRedisMockClient(
       return Promise.resolve(list.slice(start, end));
     },
     set: mockRedisSet(store, expiries),
+    ...mockRedisSets(store, expiries),
+    ...mockRedisHashes(store, expiries),
     eval: mockRedisEval(store, expiries),
     setex: (key: string, seconds: number, value: string) => {
       store.set(key, value);

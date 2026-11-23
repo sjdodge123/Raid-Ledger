@@ -14,6 +14,7 @@ import { useForeverConfig } from '../hooks/use-forever-config';
 import { ForeverDiagnostics } from './forever-diagnostics';
 import { ForeverQuestImportPanel } from './forever-quest-import-panel';
 import { save, savedDto, type SaveFn } from './forever-settings-save';
+import { BnetAccountProbeSection } from './bnet-account-probe-section';
 
 /** One setting that applies at once: label + hint on the left, a Switch on the right. */
 interface SwitchRowProps {
@@ -163,6 +164,8 @@ export function ForeverSettingsSection(): JSX.Element | null {
                 pending={update.isPending}
             />
             <ForeverQuestImportPanel />
+            {/* ROK-2129 spike: DEMO_MODE-only Battle.net account probe (renders nothing otherwise). */}
+            <BnetAccountProbeSection />
         </section>
     );
 }

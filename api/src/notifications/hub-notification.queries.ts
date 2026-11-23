@@ -4,6 +4,7 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { announcementRowsOnly } from '../discord-bot/services/event-message-rows.helpers';
 import { isStaff } from '../guilds/guild-access.service';
 import { findHiddenAt } from '../guilds/hub-hidden.helpers';
 import { notHubMutedSql } from './hub-notification-mute.helpers';
@@ -134,7 +135,7 @@ export async function hasPostedEmbed(
   const [row] = await db
     .select({ id: m.id })
     .from(m)
-    .where(eq(m.eventId, eventId))
+    .where(and(eq(m.eventId, eventId), announcementRowsOnly()))
     .limit(1);
   return row !== undefined;
 }

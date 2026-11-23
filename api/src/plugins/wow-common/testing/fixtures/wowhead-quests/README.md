@@ -10,8 +10,8 @@ UA `RaidLedger/1.0 (+https://raid.gamernight.net)`, <=1 req/s.
 
 ## Files
 - `zone-1584-forever.html`, `quest-4136-forever.html`: real Forever pages (full).
+- `quest-4136-classic.html`, `quest-4001-classic.html`: full.
 - `zone-1584-classic.html`: TRIMMED (orig 474 KB) to `<head>` + the quest Listview `<script>`.
-- `quest-4136-classic.html`, `quest-4001-classic.html`, `quest-4136-tooltip.json`: full.
 
 ## Zone quest Listview
 `new Listview({template: 'quest', id: 'quests', ... data: [ {...}, ... ]` (JSON array in `data:`).

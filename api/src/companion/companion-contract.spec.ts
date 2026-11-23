@@ -21,6 +21,10 @@
  * ROK-1964 adds `wow-ledgerlink` v1 (wraps an unchanged LedgerLink v1 export
  * string): W1 its golden fixtures parse and each wraps its LedgerLink fixture
  * verbatim, its invalid set joins C3 and its schema.json joins C7.
+ * ROK-2099 adds `wow-addon-errors` v1 (scrubbed BugGrabber records): E1
+ * its golden fixtures parse and resolve through the registry, its invalid
+ * set joins C3, its schema.json joins C7 (the full guard is
+ * `packages/contract/src/__tests__/companion-wow-addon-errors-contract.spec.ts`).
  * Lives in the api (like `valheim-link-contract.spec.ts`) because the
  * contract workspace has no Node types for reading fixture files.
  */
@@ -42,6 +46,8 @@ import {
   serializeCompanionEnvelopeJsonSchema,
   serializeWowLedgerlinkJsonSchema,
   WowLedgerlinkMessageSchema,
+  WowAddonErrorsMessageSchema,
+  serializeWowAddonErrorsJsonSchema,
   type Bg3SaveMessage,
 } from '@raid-ledger/contract';
 
@@ -51,6 +57,8 @@ const BG3_V1 = join(ROOT, 'bg3-save', 'v1');
 const LINK_V1 = join(ROOT, 'device-link', 'v1');
 const WOW_V1 = join(ROOT, 'wow-ledgerlink', 'v1');
 const WOW_FIX = join(WOW_V1, 'fixtures');
+const AERR_V1 = join(ROOT, 'wow-addon-errors', 'v1');
+const AERR_FIX = join(AERR_V1, 'fixtures');
 const LEDGERLINK_FIX = join(ROOT, '..', 'ledgerlink', 'v1', 'fixtures');
 const LINK_FIX = join(LINK_V1, 'fixtures');
 const ENV_FIX = join(ENV_V1, 'fixtures');
@@ -134,6 +142,11 @@ const SchemaCases: ReadonlyArray<{
     label: 'wow-ledgerlink',
     dir: join(WOW_FIX, 'invalid'),
     schema: WowLedgerlinkMessageSchema,
+  },
+  {
+    label: 'wow-addon-errors',
+    dir: join(AERR_FIX, 'invalid'),
+    schema: WowAddonErrorsMessageSchema,
   },
 ];
 
@@ -229,6 +242,31 @@ describe('Companion wow-ledgerlink v1 golden fixtures (W1)', () => {
       );
       expect(msg.payload.exportString).toBe(
         read(LEDGERLINK_FIX, `${name}.txt`),
+      );
+    },
+  );
+});
+
+describe('Companion wow-addon-errors v1 golden fixtures (E1)', () => {
+  it('ships the agreed cases', () => {
+    expect(namesIn(AERR_FIX)).toEqual([
+      'buggrabber-50-records',
+      'buggrabber-minimal',
+      'buggrabber-three-addons',
+    ]);
+  });
+
+  it.each(namesIn(AERR_FIX))(
+    '%s parses as message + envelope and resolves to wow-addon-errors v1',
+    (name) => {
+      const body = readJson(AERR_FIX, `${name}.json`);
+      expect(
+        WowAddonErrorsMessageSchema.safeParse(body).error?.issues,
+      ).toBeUndefined();
+      const env = CompanionEnvelopeSchema.parse(body);
+      const hit = lookupCompanionContract(env.contract, env.contractVersion);
+      expect(hit.kind === 'ok' && hit.spec.schema).toBe(
+        WowAddonErrorsMessageSchema,
       );
     },
   );
@@ -430,6 +468,12 @@ describe('Companion v1 schema.json drift guards (C7)', () => {
   it('wow-ledgerlink schema.json matches a fresh generation', () => {
     expect(read(WOW_V1, 'schema.json')).toBe(
       serializeWowLedgerlinkJsonSchema(),
+    );
+  });
+
+  it('wow-addon-errors schema.json matches a fresh generation', () => {
+    expect(read(AERR_V1, 'schema.json')).toBe(
+      serializeWowAddonErrorsJsonSchema(),
     );
   });
 

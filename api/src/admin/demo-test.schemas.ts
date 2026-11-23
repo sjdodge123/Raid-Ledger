@@ -8,6 +8,18 @@ export const LinkDiscordSchema = z.object({
   username: z.string().min(1).max(100),
 });
 
+/**
+ * Body of `POST /admin/test/signup-status` (ROK-2275): change ANY user's
+ * signup status through `SignupsService.updateStatus`, as the PATCH route does
+ * for the caller.
+ */
+export const SetSignupStatusTestSchema = z.object({
+  eventId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+  status: z.enum(['signed_up', 'tentative']),
+});
+export type SetSignupStatusTestBody = z.infer<typeof SetSignupStatusTestSchema>;
+
 export const EnableNotificationsSchema = z.object({
   userId: z.number().int().positive(),
 });

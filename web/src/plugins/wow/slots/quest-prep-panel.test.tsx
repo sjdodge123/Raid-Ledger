@@ -283,3 +283,32 @@ describe('QuestPrepPanel — before-you-go-in vs picked-up-inside (ROK-2142)', (
         expect(screen.getByText(/Must pick up yourself/)).toBeInTheDocument();
     });
 });
+
+describe('QuestPrepPanel — location not confirmed (ROK-2276)', () => {
+    beforeEach(() => {
+        server.resetHandlers();
+    });
+
+    it('renders "Location not confirmed" last, after the two known groups (ROK-2276)', async () => {
+        const unconfirmed = createQuest({ questId: 203, name: 'Blizzard Only', dungeonInstanceId: 63, startLocationUnconfirmed: true });
+        setupMswHandlers({ [DEADMINES_INSTANCE.id]: [...singleDungeonQuests, unconfirmed] });
+
+        const { container } = renderPanel([DEADMINES_INSTANCE]);
+
+        expect(await screen.findByText('Location not confirmed (1)')).toBeInTheDocument();
+        expect(screen.getByText("We don't know yet if these start outside or inside")).toBeInTheDocument();
+        const titles = [...container.querySelectorAll('.quest-group__title')].map((el) => el.textContent);
+        expect(titles).toEqual([
+            '\u{1F5FA}\u{FE0F}Get before you go in (1)', '\u{1F3F0}Picked up inside (1)', '\u2754Location not confirmed (1)',
+        ]);
+    });
+
+    it('hides "Location not confirmed" when every quest has start evidence', async () => {
+        setupMswHandlers({ [DEADMINES_INSTANCE.id]: singleDungeonQuests });
+
+        renderPanel([DEADMINES_INSTANCE]);
+
+        await screen.findByText('Get before you go in (1)');
+        expect(screen.queryByText(/Location not confirmed/)).not.toBeInTheDocument();
+    });
+});

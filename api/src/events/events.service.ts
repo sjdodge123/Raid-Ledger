@@ -38,6 +38,7 @@ import {
   queryAggregateGameTime,
 } from './event-availability.helpers';
 import {
+  resetSignupConfirmations,
   deleteEvent,
   cancelEvent,
   rescheduleEvent,
@@ -62,6 +63,10 @@ import {
   assertEventExists,
 } from './event-find.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import {
+  auditEventCancelled,
+  auditEventRescheduled,
+} from './event-audit.helpers';
 import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
@@ -188,9 +193,8 @@ export class EventsService {
       isAdmin,
       dto,
     );
-    await this.activityLog.log('event', eventId, 'event_cancelled', userId, {
-      reason: dto.reason ?? null,
-    });
+    const reason = dto.reason ?? null;
+    await auditEventCancelled(this.activityLog, eventId, userId, reason);
     return this.postMutate(
       eventId,
       userId,
@@ -218,6 +222,15 @@ export class EventsService {
     return queryAggregateGameTime(this.db, eventId);
   }
 
+  /**
+   * ROK-2271: reset every active signup's confirmation (the rescheduler
+   * excepted), signalling the event thread around the write.
+   */
+  async resetConfirmations(eventId: number, by: number | null): Promise<void> {
+    const { db, eventEmitter } = this;
+    await resetSignupConfirmations(db, eventId, by, eventEmitter);
+  }
+
   /** Reschedules an event and notifies participants. */
   async reschedule(
     eventId: number,
@@ -226,18 +239,11 @@ export class EventsService {
     dto: RescheduleEventDto,
   ): Promise<EventResponseDto> {
     const eventBefore = await this.findOne(eventId);
-    await rescheduleEvent(
-      this.db,
-      this.notificationService,
-      eventId,
-      userId,
-      isAdmin,
-      dto,
-    );
-    await this.activityLog.log('event', eventId, 'event_rescheduled', userId, {
-      oldStart: eventBefore.startTime,
-      newStart: dto.startTime,
-    });
+    const { db, notificationService: ns, eventEmitter: em } = this;
+    await rescheduleEvent(db, ns, eventId, userId, isAdmin, dto, em);
+    const { startTime: oldStart } = eventBefore;
+    const change = { eventId, userId, oldStart, newStart: dto.startTime };
+    await auditEventRescheduled(this.activityLog, change);
     return this.postMutate(
       eventId,
       userId,

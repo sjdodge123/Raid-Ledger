@@ -203,12 +203,13 @@ export async function setSignupStatus(
   if (rows.length !== 1) throw new Error(`no signup for ${who}`);
 }
 
-/** End the event 25 h ago and resync, so `write_closes_at` has passed. */
+/** End the event `agoMs` ago (default 25 h) and resync its thread. */
 export async function endEvent(
   ctx: DiscussionCtx,
   eventId: number,
+  agoMs: number = 25 * HOUR,
 ): Promise<void> {
-  const end = new Date(Date.now() - 25 * HOUR);
+  const end = new Date(Date.now() - agoMs);
   await ctx.posts.testApp.db
     .update(schema.events)
     .set({ duration: [new Date(end.getTime() - 2 * HOUR), end] })

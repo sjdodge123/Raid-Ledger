@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LocalAuthService } from './local-auth.service';
 import { MagicLinkService } from './magic-link.service';
+import { DiscordSigninLinkService } from './discord-signin-link.service';
 import { IntentTokenService } from './intent-token.service';
 import { LinkNonceService } from './link-nonce.service';
 import { UsersModule } from '../users/users.module';
@@ -13,6 +14,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { AuthController } from './auth.controller';
 import { LocalAuthController } from './local-auth.controller';
 import { MagicLinkController } from './magic-link.controller';
+import { DiscordSigninLinkController } from './discord-signin-link.controller';
 import { LinkStartController } from './link-start.controller';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -63,12 +65,14 @@ import { PasswordChangeSessionService } from './password-change/password-change-
     LocalAuthController,
     RefreshTokenController,
     MagicLinkController,
+    DiscordSigninLinkController,
     LinkStartController,
   ],
   providers: [
     AuthService,
     LocalAuthService,
     MagicLinkService,
+    DiscordSigninLinkService,
     IntentTokenService,
     LinkNonceService,
     JwtStrategy,
@@ -83,6 +87,7 @@ import { PasswordChangeSessionService } from './password-change/password-change-
     AuthService,
     LocalAuthService,
     MagicLinkService,
+    DiscordSigninLinkService,
     IntentTokenService,
     LinkNonceService,
     RefreshTokenService,

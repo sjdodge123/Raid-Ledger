@@ -1,0 +1,142 @@
+{
+  "zoneId": 16732,
+  "zone": "Excavation Site: Wetlands",
+  "url": "https://www.wowhead.com/forever/zone=16732/excavation-site-wetlands",
+  "capturedAt": "2026-11-20",
+  "totalShown": 11,
+  "note": "Drops tab, Normal. Quality from item link colour class, icon from icon image file name.",
+  "drops": [
+    {
+      "itemId": 273022,
+      "name": "Supple Bellyskin Leggings",
+      "itemLevel": 31,
+      "requiredLevel": 26,
+      "slot": "Legs",
+      "type": "Leather Armor",
+      "quality": 3,
+      "icon": "inv_pants_11",
+      "npcId": 260322,
+      "source": "Saltspine"
+    },
+    {
+      "itemId": 273023,
+      "name": "Saltscale Girdle",
+      "itemLevel": 31,
+      "requiredLevel": 26,
+      "slot": "Waist",
+      "type": "Mail Armor",
+      "quality": 3,
+      "icon": "inv_belt_21",
+      "npcId": 260322,
+      "source": "Saltspine"
+    },
+    {
+      "itemId": 273024,
+      "name": "Glinteye Slippers",
+      "itemLevel": 31,
+      "requiredLevel": 26,
+      "slot": "Feet",
+      "type": "Cloth Armor",
+      "quality": 3,
+      "icon": "inv_boots_05",
+      "npcId": 260322,
+      "source": "Saltspine"
+    },
+    {
+      "itemId": 273025,
+      "name": "Raptorclaw Greaves",
+      "itemLevel": 31,
+      "requiredLevel": 26,
+      "slot": "Feet",
+      "type": "Mail Armor",
+      "quality": 3,
+      "icon": "inv_boots_chain_08",
+      "npcId": 260325,
+      "source": "Shadetooth"
+    },
+    {
+      "itemId": 273026,
+      "name": "Garb of Florid Feathers",
+      "itemLevel": 31,
+      "requiredLevel": 26,
+      "slot": "Chest",
+      "type": "Leather Armor",
+      "quality": 3,
+      "icon": "inv_misc_bandage_14",
+      "npcId": 260325,
+      "source": "Shadetooth"
+    },
+    {
+      "itemId": 273027,
+      "name": "Raptor's Gaze",
+      "itemLevel": 31,
+      "requiredLevel": 26,
+      "slot": "Held In Off-hand",
+      "type": "Off-hand Frill",
+      "quality": 3,
+      "icon": "spell_nature_crystalball",
+      "npcId": 260325,
+      "source": "Shadetooth"
+    },
+    {
+      "itemId": 273028,
+      "name": "Reliquary Mantle",
+      "itemLevel": 33,
+      "requiredLevel": 28,
+      "slot": "Shoulder",
+      "type": "Mail Armor",
+      "quality": 3,
+      "icon": "inv_shoulder_27",
+      "npcId": 260326,
+      "source": "Relic Guardian"
+    },
+    {
+      "itemId": 273029,
+      "name": "Golemsight Long Gun",
+      "itemLevel": 33,
+      "requiredLevel": 28,
+      "slot": "Ranged",
+      "type": "Gun",
+      "quality": 3,
+      "icon": "inv_musket_02",
+      "npcId": 260326,
+      "source": "Relic Guardian"
+    },
+    {
+      "itemId": 273030,
+      "name": "Ring of Power Regulation",
+      "itemLevel": 33,
+      "requiredLevel": 28,
+      "slot": "Finger",
+      "type": "Ring",
+      "quality": 3,
+      "icon": "inv_jewelry_ring_28",
+      "npcId": 260326,
+      "source": "Relic Guardian"
+    },
+    {
+      "itemId": 273097,
+      "name": "Blueprint: Rock Garden",
+      "itemLevel": 25,
+      "requiredLevel": null,
+      "slot": null,
+      "type": "Book",
+      "quality": 2,
+      "icon": "inv_garrison_blueprints3",
+      "npcId": 260326,
+      "source": "Relic Guardian"
+    },
+    {
+      "itemId": 273106,
+      "name": "Blueprint: Greenhouse",
+      "itemLevel": 25,
+      "requiredLevel": null,
+      "slot": null,
+      "type": "Book",
+      "quality": 2,
+      "icon": "inv_garrison_blueprints3",
+      "npcId": 260325,
+      "source": "Shadetooth"
+    }
+  ]
+}

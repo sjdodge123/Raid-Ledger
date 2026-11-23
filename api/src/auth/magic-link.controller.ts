@@ -70,6 +70,10 @@ export class MagicLinkController {
     );
     if (!issued) throw new UnauthorizedException(INVALID_MAGIC_LINK_MESSAGE);
     setRefreshCookie(res, issued.rawToken, issued.maxAgeMs);
+    // ROK-2283: a `/login` link is a Discord sign-in — guild stamp, claims.
+    if (user.commandDiscordId !== undefined) {
+      this.authService.emitDiscordLogin(user.id, user.commandDiscordId);
+    }
     return this.authService.login(user, user.tokenVersion);
   }
 }

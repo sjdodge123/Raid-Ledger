@@ -25,6 +25,8 @@ export interface SessionOpenEvent {
   gameId: number | null;
   discordActivityName: string;
   startedAt: Date;
+  /** ROK-2259: per-player game a plugin adapter credited instead (`null` = none). */
+  attributedGameId?: number | null;
 }
 
 export interface SessionCloseEvent {
@@ -66,18 +68,31 @@ export async function resolveGameNames(
   }
 }
 
+/** The game an open event's session row is credited to. */
+export function creditedGameId(
+  ev: SessionOpenEvent,
+  cache: Map<string, number | null>,
+): number | null {
+  return ev.attributedGameId !== undefined
+    ? ev.attributedGameId
+    : (cache.get(ev.discordActivityName) ?? null);
+}
+
 /**
- * Process open events: insert new game activity sessions.
+ * Process open events: insert new game activity sessions. Returns the events
+ * whose row was actually stored (not a duplicate, not a failed insert).
  */
 export async function processOpenEvents(
   db: PostgresJsDatabase<typeof schema>,
   opens: SessionOpenEvent[],
   cache: Map<string, number | null>,
   logger: Logger,
-): Promise<void> {
+): Promise<SessionOpenEvent[]> {
+  const stored: SessionOpenEvent[] = [];
   for (const ev of opens) {
-    await insertOpenSession(db, ev, cache, logger);
+    if (await insertOpenSession(db, ev, cache, logger)) stored.push(ev);
   }
+  return stored;
 }
 
 async function hasOpenSession(
@@ -104,12 +119,13 @@ async function insertOpenSession(
   ev: SessionOpenEvent,
   cache: Map<string, number | null>,
   logger: Logger,
-): Promise<void> {
-  const resolvedGameId = cache.get(ev.discordActivityName);
-  const gameId = resolvedGameId !== undefined ? resolvedGameId : null;
+): Promise<boolean> {
+  const gameId = creditedGameId(ev, cache);
 
   try {
-    if (await hasOpenSession(db, ev.userId, ev.discordActivityName)) return;
+    if (await hasOpenSession(db, ev.userId, ev.discordActivityName)) {
+      return false;
+    }
 
     await db.insert(tables.gameActivitySessions).values({
       userId: ev.userId,
@@ -117,10 +133,12 @@ async function insertOpenSession(
       discordActivityName: ev.discordActivityName,
       startedAt: ev.startedAt,
     });
+    return true;
   } catch (err) {
     logger.warn(
       `Failed to insert session for user ${ev.userId} / "${ev.discordActivityName}": ${err}`,
     );
+    return false;
   }
 }
 

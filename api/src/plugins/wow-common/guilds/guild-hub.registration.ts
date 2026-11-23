@@ -15,6 +15,9 @@ import { GuildPageService } from './guild-page.service';
 import { GuildRecruitmentController } from './guild-recruitment.controller';
 import { GuildRecruitmentService } from './guild-recruitment.service';
 import { GuildRaidsService } from './guild-raids.service';
+import { GuildPublicCardSettingsController } from './public-card/guild-public-card-settings.controller';
+import { GuildPublicCardService } from './public-card/guild-public-card.service';
+import { PublicGuildCardController } from './public-card/public-guild-card.controller';
 import { GuildProgressionController } from './progression/guild-progression.controller';
 import { GuildProgressionService } from './progression/guild-progression.service';
 import { GuildsController } from './guilds.controller';
@@ -33,6 +36,9 @@ export const CONTROLLERS = [
   GuildContentController,
   GuildIngameTextController,
   GuildRecruitmentController,
+  // ROK-1813: opt-in public visitor card (editor toggle + unguarded read).
+  GuildPublicCardSettingsController,
+  PublicGuildCardController,
   GuildProgressionController,
   GuildContributionsController,
   GuildBlizzardRosterController,
@@ -49,6 +55,7 @@ export const PROVIDERS = [
   GuildAddonsService,
   GuildIngameTextService,
   GuildRecruitmentService,
+  GuildPublicCardService,
   GuildProgressionService,
   GuildContributionsService,
   GuildBlizzardRosterService,

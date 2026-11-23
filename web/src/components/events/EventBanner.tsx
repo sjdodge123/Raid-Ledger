@@ -10,6 +10,7 @@ import { SeriesBadge } from './SeriesBadge';
 import { HUB_PAGE_PREFIX } from '../routing/hub-paths';
 import { hubCopy } from '../hub/hub-copy';
 import { safeHttpUrl } from '../../lib/safe-http-url';
+import { cssUrl } from '../../constants/game-colors';
 import './EventBanner.css';
 
 interface EventBannerProps {
@@ -143,7 +144,7 @@ function FullBanner({ title, game, hub, dateStr, timeStr, duration, creator, des
 }) {
     return (
         <div className="event-banner">
-            {game?.coverUrl && <div className="event-banner__bg" style={{ backgroundImage: `url(${game.coverUrl})` }} />}
+            {game?.coverUrl && <div className="event-banner__bg" style={{ backgroundImage: cssUrl(game.coverUrl) }} />}
             <div className="event-banner__content">
                 <BannerBadges game={game} hub={hub} />
                 <h1 className="event-banner__title">{title}</h1>

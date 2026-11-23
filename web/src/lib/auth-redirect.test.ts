@@ -3,7 +3,8 @@
  * path. The stored value is attacker-reachable in principle (any future
  * writer), so a full URL or protocol-relative host must never reach navigate().
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { blockWebStorage } from '../test/block-web-storage';
 import { saveAuthRedirect, consumeAuthRedirect } from './auth-redirect';
 
 describe('consumeAuthRedirect — open-redirect guard (ROK-1757)', () => {
@@ -27,5 +28,16 @@ describe('consumeAuthRedirect — open-redirect guard (ROK-1757)', () => {
         consumeAuthRedirect();
         expect(sessionStorage.getItem('authRedirect')).toBeNull();
         expect(sessionStorage.getItem('authRedirectSavedAt')).toBeNull();
+    });
+});
+
+describe('auth redirect with blocked storage (TECH-DEBT L4009)', () => {
+    let restore: () => void = () => {};
+    afterEach(() => restore());
+
+    it('save does not throw and consume returns null', () => {
+        restore = blockWebStorage();
+        expect(() => saveAuthRedirect('/events/1')).not.toThrow();
+        expect(consumeAuthRedirect()).toBeNull();
     });
 });

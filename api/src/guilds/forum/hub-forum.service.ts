@@ -44,6 +44,7 @@ import {
   assertCanReply,
   assertEventEditable,
   assertNotEventThread,
+  isSubjectThread,
 } from './event-discussion/event-discussion.access';
 import {
   forumThreadContext,
@@ -227,7 +228,7 @@ export class HubForumService {
     const { body } = parseOrThrow(CreateHubForumReplySchema, input);
     const clean = finalBody(body);
     const ctx = await this.thread(actor, guildId, threadId);
-    assertCanReply(ctx.canReply, ctx.lock);
+    assertCanReply(ctx.canReply, ctx.lock, ctx.record.thread);
     const row = await writes.insertReply(
       this.db,
       { guildId, threadId },
@@ -253,7 +254,7 @@ export class HubForumService {
     const { reply } = await this.requireReply(target);
     const now = this.now();
     const replier = { ...ctx.who, canReply: ctx.canReply };
-    assertEventEditable(replier, reply, ctx.lock);
+    assertEventEditable(replier, reply, ctx.lock, ctx.record.thread);
     assertCanEdit(ctx.who, reply, now);
     const row = await writes.updateReply(this.db, target, { body, now });
     if (!row) throw new NotFoundException('Reply not found');
@@ -313,9 +314,9 @@ export class HubForumService {
     const id = record.thread.id;
     const page = await listReplies(this.db, id, HUB_FORUM_PAGE_MAX, after);
     const now = this.now();
-    const managed = record.thread.eventId !== null;
+    const managed = isSubjectThread(record.thread);
     const base = canFor(ctx.who, record.thread, { now, pinnable: true });
-    // D6/§5.5: the lifecycle owns an event thread's root — nobody edits or removes it.
+    // D6/§5.5: a subject's lifecycle owns its thread root — nobody edits/removes it.
     const can = managed ? { ...base, edit: false, delete: false } : base;
     const replies = page.records.map((r) => this.replyView(ctx, r, now));
     const live = record.thread.deletedAt === null;

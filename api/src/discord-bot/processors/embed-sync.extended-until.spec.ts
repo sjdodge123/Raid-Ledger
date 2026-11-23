@@ -20,6 +20,7 @@ import { QueueHealthService } from '../../queue/queue-health.service';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import type { Job } from 'bullmq';
 import type { EmbedSyncJobData } from '../queues/embed-sync.queue';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 
 /** Build a chainable Drizzle select mock that resolves via `.limit()` or `.then`. */
 function makeSelectChain(rows: unknown[] = []) {
@@ -109,6 +110,7 @@ beforeEach(async () => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       EmbedSyncProcessor,
+      EventEmbedMessageEditor,
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       {
         provide: getQueueToken(EMBED_SYNC_QUEUE),

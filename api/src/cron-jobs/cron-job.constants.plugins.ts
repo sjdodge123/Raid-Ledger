@@ -24,6 +24,12 @@ export const PLUGIN_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Delivers GG <year> on the configured December day: computes every snapshot, posts the announcement once, then sends up to 25 player notifications every 5 minutes',
     category: 'Notifications',
   },
+  // ROK-2284: Core's sign-in reminder DMs (direct, never the notification queue).
+  SigninReminderCron_tick: {
+    description:
+      'DMs guild members who have never signed in to Raid Ledger a /login reminder, at most 25 per hour, every few weeks up to a lifetime maximum (admin settings)',
+    category: 'Notifications',
+  },
   // ROK-2208 §5.6: Core's hub Forum → Discord outbound retry sweep.
   HubForumDiscordSync_retrySweep: {
     description:
@@ -33,13 +39,19 @@ export const PLUGIN_JOB_METADATA: Record<string, CoreJobMetadata> = {
   // ROK-2208 §5.7: Core's event-thread Discord lock sweep.
   HubForumDiscordSync_eventLockSweep: {
     description:
-      'Locks and archives the Discord post of a hub Forum event thread once it is read-only, and reopens it if the event is rescheduled, every 5 minutes',
+      'Closes (locks and archives) event, poll and lineup posts in the Discord forum 1 hour after they end, and reopens them if the event is rescheduled, every 5 minutes',
     category: 'Data Sync',
   },
   // ROK-1957 D-9: the BG3 plugin's nightly save-history thinning.
   Bg3HistoryRetentionCron_prune: {
     description:
       'Thins Baldur’s Gate 3 save history older than 90 days to one save per play session, nightly at 05:15',
+    category: 'Maintenance',
+  },
+  // ROK-2099 D7: the Blizzard plugin's addon-error retention.
+  WowAddonErrorsRetention_prune: {
+    description:
+      'Deletes WoW addon errors uploaded by the Companion that have not been seen for 90 days, nightly at 05:45',
     category: 'Maintenance',
   },
   // ROK-1959 D-3: the BG3 plugin's save-picture copy into hub Galleries.

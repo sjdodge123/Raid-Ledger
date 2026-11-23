@@ -1,6 +1,6 @@
 /**
  * ROK-2208 Q10 (option c, RULED) — the unbound form's choice as pure
- * state: the shared `#hub-forums` (preselected while it has a free tag
+ * state: the shared `#event-planning` (preselected while it has a free tag
  * slot) or the hub's own channel, created (named after the hub) or an
  * existing forum. Derives the PUT body, the channel the acknowledgement
  * names, and the permissions the bot lacks for that choice.

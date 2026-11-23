@@ -30,6 +30,8 @@ import { EPHEMERAL_VOICE_IDLE_QUEUE } from '../discord-bot/queues/ephemeral-voic
 import { SCHEDULING_POLL_EMBED_QUEUE } from '../lineups/scheduling/scheduling-poll-embed.queue';
 import { CHANNEL_LIFECYCLE_NUDGE_QUEUE } from '../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import { STEAM_APP_STATS_QUEUE } from '../plugins/core/steam-stats/steam-stats.constants';
+import { SIGNUP_PING_QUEUE } from '../guilds/forum/discord/hub-forum-discord-signup-pings.queue';
+import { FORUM_CHAT_COPY_QUEUE } from '../guilds/forum/discord/forum-chat-copy.queue';
 import {
   CALENDAR_READ_QUEUE,
   CALENDAR_WRITE_QUEUE,
@@ -56,6 +58,8 @@ export const ALL_QUEUE_NAMES = [
   CALENDAR_READ_QUEUE,
   CHANNEL_LIFECYCLE_NUDGE_QUEUE,
   STEAM_APP_STATS_QUEUE,
+  SIGNUP_PING_QUEUE,
+  FORUM_CHAT_COPY_QUEUE,
 ] as const;
 
 export type RegisteredQueueName = (typeof ALL_QUEUE_NAMES)[number];

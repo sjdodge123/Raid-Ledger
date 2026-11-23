@@ -169,3 +169,29 @@ describe('BottomSheet closeGuard — closed by another route', () => {
         expect(confirm()).toBeNull();
     });
 });
+
+/** ROK-2264 — the sheet's confirm takes the same `discardCopy` as `Modal` (show-once secret on a phone). */
+function CopyHarness({ onClose }: { onClose: () => void }) {
+    const guard = useDirtyCloseGuard(true, onClose);
+    return (
+        <BottomSheet isOpen onClose={onClose} title={TITLE} closeGuard={guard} discardMessage={MESSAGE}
+            discardCopy={{ title: 'Leave without copying?', keepLabel: 'Stay', discardLabel: 'Leave' }}>
+            <p>Sheet body</p>
+        </BottomSheet>
+    );
+}
+
+describe('BottomSheet closeGuard — custom discardCopy', () => {
+    it('renders the caller title and button labels instead of the edit wording', () => {
+        const onClose = vi.fn();
+        render(<CopyHarness onClose={onClose} />);
+        pressEscape();
+        expect(confirm(), 'a dirty Escape must open the confirm').not.toBeNull();
+        expect(screen.getByText('Leave without copying?')).toBeInTheDocument();
+        expect(screen.queryByText('Discard your changes?'), 'the generic title must not show').toBeNull();
+        expect(screen.getByTestId('discard-changes-keep')).toHaveTextContent('Stay');
+        expect(screen.getByTestId('discard-changes-discard')).toHaveTextContent('Leave');
+        fireEvent.click(screen.getByTestId('discard-changes-discard'));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+});

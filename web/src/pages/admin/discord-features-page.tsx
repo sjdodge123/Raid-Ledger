@@ -9,6 +9,7 @@ import { WeeklyDigestSection } from './weekly-digest-section';
 import { GameRolesSection } from './game-roles-section';
 import { JoinPostSection } from './join-post-section';
 import { VoiceAttendanceGraceForm } from '../../components/admin/VoiceAttendanceGraceForm';
+import { SigninReminderSettingsForm } from '../../components/admin/SigninReminderSettingsForm';
 
 export function DiscordFeaturesPage() {
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
@@ -63,7 +64,7 @@ function DiscordFeaturesContent() {
     );
 }
 
-/** The bot-backed feature cards, in page order (ROK-1940 adds Voice attendance). */
+/** The bot-backed feature cards, in page order (ROK-1940 adds Voice attendance, ROK-2284 Sign-in reminders). */
 function BotFeatureSections() {
     return (
         <>
@@ -73,6 +74,7 @@ function BotFeatureSections() {
             <WeeklyDigestSection />
             <GameRolesSection />
             <JoinPostSection />
+            <SigninReminderSettingsForm />
         </>
     );
 }

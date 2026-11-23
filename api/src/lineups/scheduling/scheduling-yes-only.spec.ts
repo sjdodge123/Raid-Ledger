@@ -11,6 +11,7 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { yesVotesOnly } from './scheduling-stance.helpers';
 import { assertSlotHasVoters } from './scheduling-lock-in.helpers';
 import { createLockedInEvent } from './scheduling-event.helpers';
+import { LINEUP_MATCH_EVENTS } from '../lineups-scheduling-hook.helpers';
 import type { LockInEventDeps } from './scheduling-event.helpers';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
@@ -187,6 +188,58 @@ describe('createLockedInEvent — the roster is yes-voters only (BLOCKER-1)', ()
       false,
     );
     expect(deps.eventsService.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('createLockedInEvent — POLL_LOCKED_IN (ROK-2272 S6)', () => {
+  const slot = { id: 1, proposedTime: new Date('2026-10-01T20:00:00.000Z') };
+
+  function depsWithBus(): { deps: LockInEventDeps; emit: jest.Mock } {
+    const db = createDrizzleMock();
+    db.limit.mockResolvedValue([]);
+    const emit = jest.fn();
+    const deps: LockInEventDeps = {
+      db: db as unknown as LockInEventDeps['db'],
+      eventsService: {
+        create: jest.fn().mockResolvedValue({ id: 55 }),
+        delete: jest.fn().mockResolvedValue(undefined),
+      },
+      signupsService: { signup: jest.fn() },
+      lineupNotifications: {} as LockInEventDeps['lineupNotifications'],
+      pollEmbed: { fireUpdateEmbed: jest.fn() },
+      logger: {
+        log: jest.fn(),
+        error: jest.fn(),
+      } as unknown as LockInEventDeps['logger'],
+      events: { emit } as unknown as NonNullable<LockInEventDeps['events']>,
+    };
+    return { deps, emit };
+  }
+
+  function lockedInEmits(emit: jest.Mock): unknown[][] {
+    return emit.mock.calls.filter(
+      (c) => c[0] === LINEUP_MATCH_EVENTS.POLL_LOCKED_IN,
+    );
+  }
+
+  it('emits once with the match and the linked event after the claim wins', async () => {
+    mockFindVotes.mockResolvedValue([row(10, 'yes')]);
+    mockLinkEvent.mockResolvedValue(true);
+    const { deps, emit } = depsWithBus();
+    await createLockedInEvent(deps, { id: 3, gameId: 7 }, slot, 10, false);
+    expect(lockedInEmits(emit)).toEqual([
+      [LINEUP_MATCH_EVENTS.POLL_LOCKED_IN, { matchId: 3, eventId: 55 }],
+    ]);
+  });
+
+  it('emits nothing when another lock-in won the match (409)', async () => {
+    mockFindVotes.mockResolvedValue([row(10, 'yes')]);
+    mockLinkEvent.mockResolvedValue(false);
+    const { deps, emit } = depsWithBus();
+    await expect(
+      createLockedInEvent(deps, { id: 3, gameId: 7 }, slot, 10, false),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(lockedInEmits(emit)).toEqual([]);
   });
 });
 

@@ -99,6 +99,7 @@ describe('WowCommonModule character-identity registration', () => {
       { kind: 'wow_guild' } as never,
       {} as never,
       {} as never,
+      {} as never,
       true,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
@@ -129,6 +130,7 @@ describe('WowCommonModule character-identity registration', () => {
       { kind: 'wow_guild' } as never,
       {} as never,
       {} as never,
+      {} as never,
       true,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
@@ -154,6 +156,7 @@ describe('WowCommonModule hub-kind registration (ROK-1830)', () => {
       {} as never,
       { gameSlugs: [] } as never,
       hubKind as never,
+      {} as never,
       {} as never,
       {} as never,
       true,

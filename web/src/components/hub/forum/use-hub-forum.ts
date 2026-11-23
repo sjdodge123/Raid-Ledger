@@ -13,6 +13,7 @@ import type {
 } from '@raid-ledger/contract';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
 import { invalidateAllEventDiscussions } from '../../../hooks/event-discussion-key';
+import { invalidateAllSubjectDiscussions } from '../../../hooks/subject-discussion-key';
 import { httpStatusOf } from '../../../lib/api/api-error';
 import { toast } from '../../../lib/toast';
 import {
@@ -66,6 +67,7 @@ function useRefreshForum(guildId: number): () => Promise<unknown> {
     const queryClient = useQueryClient();
     return () => {
         invalidateAllEventDiscussions(queryClient); // ROK-2226: an event thread's card
+        invalidateAllSubjectDiscussions(queryClient); // ROK-2272 S9: a poll / lineup thread's card
         return queryClient.invalidateQueries({ queryKey: hubForumKey(guildId) });
     };
 }

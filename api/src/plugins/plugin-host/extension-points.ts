@@ -442,6 +442,12 @@ export interface HubClaimProvider {
   ): Promise<HubClaimResult>;
 }
 
+/**
+ * ROK-2259 — `GameActivityAttributionAdapter` lives in its own file to keep
+ * this one under the max-lines cap; re-exported so importers are unchanged.
+ */
+export type { GameActivityAttributionAdapter } from './game-activity-attribution.adapter';
+
 /** Well-known extension point identifiers */
 export const EXTENSION_POINTS = {
   CHARACTER_SYNC: 'character-sync',
@@ -457,6 +463,7 @@ export const EXTENSION_POINTS = {
   GAME_LOG_PARSER: 'game-log-parser',
   HUB_KIND: 'hub-kind',
   HUB_CLAIM_PROVIDER: 'hub-claim-provider',
+  GAME_ACTIVITY_ATTRIBUTION: 'game-activity-attribution',
 } as const;
 
 /**

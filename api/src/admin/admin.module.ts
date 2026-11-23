@@ -38,6 +38,7 @@ import { DemoTestGuildDiscordController } from './demo-test-guild-discord.contro
 import { DemoTestGuildGameTextController } from './demo-test-guild-game-text.controller';
 import { DemoTestWowItemTooltipsController } from './demo-test-wow-item-tooltips.controller';
 import { DemoTestAttunementsController } from './demo-test-attunements.controller';
+import { DemoTestAddonErrorsController } from './demo-test-addon-errors.controller';
 import { DemoTestHubMemberController } from './demo-test-hub-member.controller';
 import { DemoTestHubForumController } from './demo-test-hub-forum.controller';
 import { DemoTestEventDiscussionController } from './demo-test-event-discussion.controller';
@@ -160,6 +161,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestGuildGameTextController,
     DemoTestWowItemTooltipsController,
     DemoTestAttunementsController,
+    DemoTestAddonErrorsController,
     DemoTestHubMemberController,
     DemoTestHubForumController,
     DemoTestEventDiscussionController,

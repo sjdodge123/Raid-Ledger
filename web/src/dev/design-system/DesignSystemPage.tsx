@@ -29,6 +29,7 @@ import { MemberListSection } from './member-list-section';
 import { WizardSubstepRailSection } from './wizard-substep-rail-section';
 import { CrestSection } from './crest-section';
 import { StoryViewerSection } from './story-viewer-section';
+import { PublicGuildCardSection } from './public-guild-card-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
 import { DualFamily } from './dual-family';
@@ -148,7 +149,17 @@ function FeatureSections(): JSX.Element {
             <Suspense fallback={<SamplesLoading />}>
                 <CrestPickerSection />
             </Suspense>
+            <ShareSections />
+        </>
+    );
+}
+
+/** Full-screen story viewer + the signed-out public card (ROK-2187, ROK-1813). */
+function ShareSections(): JSX.Element {
+    return (
+        <>
             <StoryViewerSection />
+            <PublicGuildCardSection />
         </>
     );
 }

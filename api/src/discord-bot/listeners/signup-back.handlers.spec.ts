@@ -155,3 +155,36 @@ describe('handleSignupCharacterBack (ROK-2228)', () => {
     expect(firstEdit(interaction).content).toBe('Event not found.');
   });
 });
+
+describe('handleSignupCharacterBack — import link (ROK-2294)', () => {
+  it('re-renders the import Link row for the event game when a trusted URL is set', async () => {
+    const deps = createMockDeps();
+    seedCharacterList(deps);
+    (deps.settingsService.getTrustedClientUrl as jest.Mock).mockResolvedValue(
+      'https://raid.example',
+    );
+    const interaction = backInteraction('char_back:char_select:10');
+
+    await handleSignupCharacterBack(
+      interaction,
+      { charSelectPrefix: 'char_select', eventId: 10 },
+      deps,
+    );
+
+    const rows: unknown[] = firstEdit(interaction).components.map((row) =>
+      row.toJSON(),
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual({
+      type: 1,
+      components: [
+        {
+          type: 2,
+          style: 5,
+          label: "Don't see your character? Import it",
+          url: 'https://raid.example/profile/gaming/characters?game=3',
+        },
+      ],
+    });
+  });
+});

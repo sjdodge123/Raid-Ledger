@@ -3,23 +3,64 @@
  * hold it under the file-size limit.
  */
 import type { Logger } from '@nestjs/common';
-import type { UpdateSignupStatusDto } from '@raid-ledger/contract';
+import type {
+  CreateSignupDto,
+  UpdateSignupStatusDto,
+} from '@raid-ledger/contract';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
+import { logBestEffort } from '../activity-log/activity-log-best-effort';
 import type { SignupsAllocationService } from './signups-allocation.service';
+
+type ActivityLogger = Pick<ActivityLogService, 'log'>;
 
 /**
  * Audits an in-place status change. ROK-1728 Q6: a series re-join reads it
  * as the user's own decision on that night, so the night is not revived.
+ * Best-effort: the status already landed, so a failed insert never fails it.
  */
 export async function logStatusChange(
-  activityLog: Pick<ActivityLogService, 'log'>,
+  activityLog: ActivityLogger,
   eventId: number,
   userId: number | null,
   status: UpdateSignupStatusDto['status'],
 ): Promise<void> {
-  await activityLog.log('event', eventId, 'signup_status_changed', userId, {
-    status,
+  await logBestEffort(
+    activityLog,
+    'event',
+    eventId,
+    'signup_status_changed',
+    userId,
+    {
+      status,
+    },
+  );
+}
+
+/** Audits a new signup (post-commit, best-effort). */
+export async function auditSignupAdded(
+  activityLog: ActivityLogger,
+  eventId: number,
+  userId: number,
+  dto?: Pick<CreateSignupDto, 'slotRole' | 'preferredRoles'>,
+): Promise<void> {
+  await logBestEffort(activityLog, 'event', eventId, 'signup_added', userId, {
+    role: dto?.slotRole ?? dto?.preferredRoles?.[0] ?? null,
   });
+}
+
+/** Audits a cancel after the roster already dropped the row (best-effort). */
+export async function auditSignupCancelled(
+  activityLog: ActivityLogger,
+  eventId: number,
+  userId: number,
+): Promise<void> {
+  await logBestEffort(
+    activityLog,
+    'event',
+    eventId,
+    'signup_cancelled',
+    userId,
+  );
 }
 
 /** ROK-459: fire-and-forget bench displacement check after a tentative. */

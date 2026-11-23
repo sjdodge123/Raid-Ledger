@@ -12,6 +12,9 @@ import { ChannelType } from 'discord.js';
 import { APP_EVENT_EVENTS } from '../discord-bot.constants';
 import { at } from '../../common/testing/narrow';
 
+/** `/bind` game changes read the event's guild tag first (L2836). */
+const UNTAGGED_EVENT_TAG = { guildId: null, gameId: 3 };
+
 function makeSelectChain(rows: unknown[] = []) {
   const chain: Record<string, jest.Mock> = {};
   chain.from = jest.fn().mockReturnValue(chain);
@@ -261,6 +264,7 @@ describe('BindCommand ROK-599 actions — game reassignment: none/general', () =
       .fn()
       .mockReturnValueOnce(makeSelectChain([mockEvent]))
       .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
+      .mockReturnValueOnce(makeSelectChain([UNTAGGED_EVENT_TAG])) // guild-tag check (L2836)
       .mockReturnValueOnce(makeSelectChain([noGameEvent]))
       .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
     mockDb.update = jest.fn().mockReturnValue(updateChain);
@@ -281,6 +285,7 @@ describe('BindCommand ROK-599 actions — game reassignment: none/general', () =
       .fn()
       .mockReturnValueOnce(makeSelectChain([mockEvent]))
       .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
+      .mockReturnValueOnce(makeSelectChain([UNTAGGED_EVENT_TAG])) // guild-tag check (L2836)
       .mockReturnValueOnce(makeSelectChain([noGameEvent]))
       .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
     mockDb.update = jest.fn().mockReturnValue(updateChain);
@@ -300,6 +305,7 @@ describe('BindCommand ROK-599 actions — game reassignment: none/general', () =
       .fn()
       .mockReturnValueOnce(makeSelectChain([mockEvent]))
       .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
+      .mockReturnValueOnce(makeSelectChain([UNTAGGED_EVENT_TAG])) // guild-tag check (L2836)
       .mockReturnValueOnce(makeSelectChain([updatedNoGame]))
       .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
     mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
@@ -336,6 +342,7 @@ describe('BindCommand ROK-599 actions — game reassignment: named game', () => 
       .mockReturnValueOnce(makeSelectChain([mockEvent]))
       .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
       .mockReturnValueOnce(makeSelectChain([mockGame]))
+      .mockReturnValueOnce(makeSelectChain([UNTAGGED_EVENT_TAG])) // guild-tag check (L2836)
       .mockReturnValueOnce(
         makeSelectChain([
           {
@@ -378,6 +385,7 @@ describe('BindCommand ROK-599 actions — game reassignment: named game', () => 
       .mockReturnValueOnce(makeSelectChain([mockEvent]))
       .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
       .mockReturnValueOnce(makeSelectChain([mockGame]))
+      .mockReturnValueOnce(makeSelectChain([UNTAGGED_EVENT_TAG])) // guild-tag check (L2836)
       .mockReturnValueOnce(
         makeSelectChain([
           {
@@ -435,6 +443,7 @@ describe('BindCommand ROK-599 actions — game removal events', () => {
       .fn()
       .mockReturnValueOnce(makeSelectChain([mockEvent]))
       .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
+      .mockReturnValueOnce(makeSelectChain([UNTAGGED_EVENT_TAG])) // guild-tag check (L2836)
       .mockReturnValueOnce(makeSelectChain([updatedNoGame]))
       .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
     mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
@@ -498,6 +507,7 @@ describe('BindCommand ROK-599 actions — combined override + game', () => {
       .mockReturnValueOnce(makeSelectChain([mockEvent]))
       .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
       .mockReturnValueOnce(makeSelectChain([mockGame]))
+      .mockReturnValueOnce(makeSelectChain([UNTAGGED_EVENT_TAG])) // guild-tag check (L2836)
       .mockReturnValueOnce(makeSelectChain([combinedUpdated]))
       .mockReturnValueOnce(makeCountSelectChain([{ count: 3 }]));
   }

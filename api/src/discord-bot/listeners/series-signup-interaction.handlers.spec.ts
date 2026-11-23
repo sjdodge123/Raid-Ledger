@@ -35,6 +35,7 @@ function makeDeps(): SeriesInteractionDeps & {
     leave: jest.Mock;
   };
   charactersService: { findAllForUser: jest.Mock };
+  settingsService: { getTrustedClientUrl: jest.Mock };
 } {
   return {
     db: {} as SeriesInteractionDeps['db'],
@@ -53,6 +54,9 @@ function makeDeps(): SeriesInteractionDeps & {
     signupsService: { cancelByDiscordUser: jest.fn() },
     charactersService: {
       findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
+    },
+    settingsService: {
+      getTrustedClientUrl: jest.fn().mockResolvedValue(null),
     },
     emojiService: {
       getRoleEmojiComponent: jest.fn(),
@@ -187,6 +191,54 @@ describe('handleJoinSeries', () => {
     expect(lastReply(i).content).toContain('Pick a character');
     expect(customIds(i)).toEqual(['series_char:42']);
     expect(deps.seriesSignupsService.join).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleJoinSeries — import link (ROK-2294)', () => {
+  const importRow = {
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 5,
+        label: "Don't see your character? Import it",
+        url: 'https://raid.example/profile/gaming/characters?game=3',
+      },
+    ],
+  };
+
+  function trustedDeps(): ReturnType<typeof makeDeps> {
+    const deps = makeDeps();
+    deps.settingsService.getTrustedClientUrl.mockResolvedValue(
+      'https://raid.example',
+    );
+    return deps;
+  }
+
+  it('offers the import Link row under the zero-character MMO role step', async () => {
+    mockedEvent.mockResolvedValue({
+      ...seriesEvent,
+      gameId: 3,
+      slotConfig: { type: 'mmo' },
+    });
+    const i = makeInteraction();
+    await handleJoinSeries(i, 42, trustedDeps());
+    const rows = (lastReply(i).components ?? []).map((r) => r.toJSON());
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual(importRow);
+  });
+
+  it('offers the import Link row under the series_char list', async () => {
+    mockedEvent.mockResolvedValue({ ...seriesEvent, gameId: 3 });
+    const deps = trustedDeps();
+    deps.charactersService.findAllForUser.mockResolvedValue({
+      data: [THORIN],
+    });
+    const i = makeInteraction();
+    await handleJoinSeries(i, 42, deps);
+    const rows = (lastReply(i).components ?? []).map((r) => r.toJSON());
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual(importRow);
   });
 });
 

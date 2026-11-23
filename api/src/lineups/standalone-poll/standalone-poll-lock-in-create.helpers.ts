@@ -23,6 +23,7 @@ import {
   type Logger,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   SCHEDULING_POLL_ALREADY_LOCKED_IN_MESSAGE,
@@ -31,6 +32,7 @@ import {
   type LockInSchedulingPollDto,
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import { emitStandaloneLineupArchived } from '../lineup-lifecycle-emit.helpers';
 import {
   claimMatchForLockIn,
   linkClaimedMatch,
@@ -67,6 +69,8 @@ export interface LockInCreateDeps {
   logger: Pick<Logger, 'error' | 'warn'>;
   /** `guildTag.assertCreate` + `assertSchedulingMatchUsable`, bound by L3. */
   assertCreate: (dto: CreateEventDto) => Promise<void>;
+  /** ROK-2272 S6: carries the standalone carrier's `decided → archived`. */
+  events?: EventEmitter2 | undefined;
 }
 
 /** One lock-in request: the path's match, the caller and the parsed body. */
@@ -283,7 +287,11 @@ async function claimCreateAndLink(
     await releaseMatchClaim(deps.db, match.id, claim, deps.logger);
     throw err;
   }
-  if (linked) return event;
+  if (linked) {
+    if (match.standalone)
+      emitStandaloneLineupArchived(deps.events, match.lineupId);
+    return event;
+  }
   await discardEvents(deps, eventIds, userId);
   throw new ConflictException(SCHEDULING_POLL_ALREADY_LOCKED_IN_MESSAGE);
 }

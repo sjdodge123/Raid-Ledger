@@ -21,5 +21,5 @@ export interface ValheimOverlayProps {
 export function ValheimOverlay({ discardCopy, ...props }: ValheimOverlayProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     if (isDesktop) return <Modal isOpen {...props} discardCopy={discardCopy} maxWidth="max-w-lg" />;
-    return <BottomSheet isOpen {...props} />;
+    return <BottomSheet isOpen {...props} discardCopy={discardCopy} />;
 }

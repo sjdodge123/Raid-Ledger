@@ -16,7 +16,10 @@ import {
   wowClassicBossLoot,
   wowItemMeta,
 } from '../../drizzle/schema';
-import { lootExpansionsFor } from './boss-loot-expansions';
+import {
+  lootExpansionsFor,
+  lootFallbackExpansionFor,
+} from './boss-loot-expansions';
 
 /** A stored loot row plus the joined cache tooltip (null/absent = none). */
 export type BossLootRow = typeof wowClassicBossLoot.$inferSelect & {
@@ -48,9 +51,12 @@ type BossLootReadRow = BossLootRow & { instanceId: number };
 /**
  * Loot for one boss under `variant`, each row with its cached tooltip.
  * ROK-2209: the boss's instance decides the loot expansion
- * (`lootExpansionsFor`), so a Forever read never returns Classic rows — a
- * boss without Forever rows reads as `[]`. `fallbackExpansions` is the
- * variant's expansion set for variants the catalogue does not serve.
+ * (`lootExpansionsFor`). ROK-2270: a Forever boss with no Forever rows on an
+ * instance with a Classic edition reads its Classic rows instead
+ * (`lootFallbackExpansionFor`; each row keeps `expansion: 'classic'`, which
+ * the web labels); Forever-new dungeons still read as `[]`.
+ * `fallbackExpansions` is the variant's expansion set for variants the
+ * catalogue does not serve.
  */
 export async function loadBossLoot(
   db: PostgresJsDatabase<typeof schema>,
@@ -72,10 +78,22 @@ export async function loadBossLoot(
     .leftJoin(wowItemMeta, eq(wowItemMeta.itemId, wowClassicBossLoot.itemId))
     .where(eq(wowClassicBossLoot.bossId, bossId))
     .orderBy(wowClassicBossLoot.quality);
+  return pickLootRows(rows, variant, fallbackExpansions).map(toLootDto);
+}
+
+/** The variant's own rows; else the ROK-2270 fallback expansion's; else []. */
+function pickLootRows(
+  rows: BossLootReadRow[],
+  variant: string,
+  fallbackExpansions: (variant: string) => string[],
+): BossLootReadRow[] {
   const first = rows[0];
   if (!first) return [];
   const allowed = new Set(
     lootExpansionsFor(variant, first.instanceId, fallbackExpansions),
   );
-  return rows.filter((r) => allowed.has(r.expansion)).map(toLootDto);
+  const own = rows.filter((r) => allowed.has(r.expansion));
+  if (own.length > 0) return own;
+  const fallback = lootFallbackExpansionFor(variant, first.instanceId);
+  return fallback ? rows.filter((r) => r.expansion === fallback) : [];
 }

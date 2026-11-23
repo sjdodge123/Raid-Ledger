@@ -126,7 +126,7 @@
       "Night Elf",
       "Gnome"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": false,
     "rewardType": "none",
     "rewardXp": 2600,
@@ -433,7 +433,7 @@
       "Night Elf",
       "Gnome"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": false,
     "rewardType": "choice",
     "rewardXp": 2600,
@@ -462,7 +462,7 @@
       "Night Elf",
       "Gnome"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": false,
     "rewardType": "choice",
     "rewardXp": 2600,
@@ -490,7 +490,7 @@
       "Tauren",
       "Troll"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": false,
     "rewardType": "choice",
     "rewardXp": 2600,
@@ -549,7 +549,7 @@
       "Night Elf",
       "Gnome"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
     "rewardXp": 1650,
@@ -657,7 +657,7 @@
       "Tauren",
       "Troll"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": false,
     "rewardType": "none",
     "rewardXp": 630,
@@ -799,7 +799,7 @@
       "Night Elf",
       "Gnome"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
     "rewardXp": 3150,
@@ -830,7 +830,7 @@
       "Night Elf",
       "Gnome"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": false,
     "rewardType": "choice",
     "rewardXp": 3150,
@@ -856,7 +856,7 @@
       "Night Elf",
       "Gnome"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": false,
     "rewardType": "none",
     "rewardXp": 630,
@@ -965,7 +965,7 @@
     "objectives": null,
     "classRestriction": null,
     "raceRestriction": null,
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
     "rewardXp": 1050,
@@ -1082,7 +1082,7 @@
       "Tauren",
       "Troll"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
     "rewardXp": 3950,
@@ -1163,7 +1163,7 @@
       "Tauren",
       "Troll"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": false,
     "rewardType": "none",
     "rewardXp": 1650,

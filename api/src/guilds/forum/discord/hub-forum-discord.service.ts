@@ -26,7 +26,7 @@ import {
   preflight,
   suggestedForumName,
 } from './hub-forum-discord.picker';
-import { KeyedSerializer } from './hub-forum-discord.bind-lock';
+import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import {
   deleteBinding,
   deleteForumRow,
@@ -40,7 +40,9 @@ import {
   type ForumDiscordDb,
 } from './hub-forum-discord.queries';
 import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
+import { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import { shareForumTags } from './hub-forum-discord.share';
+import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 
 const alreadyBound = () =>
   forumDiscordError(
@@ -64,12 +66,13 @@ function healthOf(
  */
 @Injectable()
 export class HubForumDiscordService {
-  private readonly binds = new KeyedSerializer();
-
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordGateway,
     private readonly routes: HubForumDiscordRouteResolver,
+    private readonly decor: HubForumDiscordDecor,
+    private readonly binds: HubForumBindLock,
+    private readonly planningForum: EventPlanningForumResolver,
   ) {}
 
   /** `GET` — the hub's binding (null while unlinked) and its health. */
@@ -141,6 +144,11 @@ export class HubForumDiscordService {
     await this.ensureWebhook(forum, info.id);
     await this.insert(actor, guildId, forum.id, tagId);
     this.routes.invalidate(); // §5.4: inbound routing sees the new hub now
+    this.planningForum.invalidate(); // ROK-2272 §3.2: candidates changed
+    // ROK-2258: tags + 👍, best-effort. Awaited under the bind lock (a 2nd
+    // bind must not rewrite the tag list mid-run); bounded to the joining
+    // hub's event posts, and already-tagged posts cost no write.
+    await this.decor.run(forum.id, info.id, guildId);
     return this.status(guildId);
   }
 
@@ -150,13 +158,22 @@ export class HubForumDiscordService {
     if (!row) return;
     await deleteBinding(this.db, guildId);
     this.routes.invalidate(); // D9: an unbound hub stops syncing now
-    if (!deleteForum || !row.forum.managed) return;
+    this.planningForum.invalidate(); // ROK-2272 §3.2: candidates changed
     // Review M1: under the bind lock, so a bind that just picked this forum
     // lands (and keeps it) before the "nobody uses it" check runs.
-    const { discordGuildId, id, channelId } = row.forum;
+    const { discordGuildId, id, channelId, managed } = row.forum;
     await this.binds.run(discordGuildId, async () => {
       if ((await listForumBindings(this.db, id)).length > 0) return;
       if (this.gateway.guildId() === null) return;
+      if (!deleteForum || !managed) {
+        // ROK-2296: every webhook reader (outbound, starter edits, inbound
+        // echo check) goes through a binding, and planning posts are
+        // bot-authored — so the last unbind frees the bot's webhooks, which
+        // otherwise count toward the guild's 1000 cap even after the
+        // channel is deleted. Best-effort inside the gateway.
+        await this.gateway.deleteOwnWebhooks(channelId);
+        return;
+      }
       await this.gateway.deleteForum(channelId);
       await deleteForumRow(this.db, id);
     });
@@ -211,7 +228,7 @@ export class HubForumDiscordService {
 
   /**
    * Q10(c) — the forum to bind: `existing` as picked; `create` + `shared`
-   * joins the one `#hub-forums` (made only when none exists); `create` +
+   * joins the one `#event-planning` (made only when none exists); `create` +
    * `own` makes a forum named from the request or the hub.
    */
   private async target(

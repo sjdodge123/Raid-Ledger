@@ -1,0 +1,479 @@
+{
+  "envelopeVersion": 1,
+  "contract": "wow-addon-errors",
+  "contractVersion": 1,
+  "capturedAt": "2026-11-19T12:00:05Z",
+  "appVersion": "0.4.0",
+  "collectorVersion": "0.4.0",
+  "payload": {
+    "source": "buggrabber",
+    "sourceVersion": "12.1.1",
+    "accountKey": "df0c21ea2a73aa9274591916713c9ffe97adab716e7f463e1b9b0bb10098cc84",
+    "characterHint": {
+      "name": "Testchar",
+      "realm": "Example Realm"
+    },
+    "wowFlavor": "_classic_era_",
+    "records": [
+      {
+        "addon": "TestAddon01",
+        "message": "Interface\\AddOns\\TestAddon01\\Main.lua:100: attempt to index field 'frame0' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon01\\Main.lua]:100: in function <Interface\\AddOns\\TestAddon01\\Main.lua:96>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon01\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 1,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon02",
+        "message": "Interface\\AddOns\\TestAddon02\\Main.lua:101: attempt to index field 'frame1' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon02\\Main.lua]:101: in function <Interface\\AddOns\\TestAddon02\\Main.lua:97>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon02\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 2,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon03",
+        "message": "Interface\\AddOns\\TestAddon03\\Main.lua:102: attempt to index field 'frame2' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon03\\Main.lua]:102: in function <Interface\\AddOns\\TestAddon03\\Main.lua:98>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon03\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 3,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon04",
+        "message": "Interface\\AddOns\\TestAddon04\\Main.lua:103: attempt to index field 'frame3' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon04\\Main.lua]:103: in function <Interface\\AddOns\\TestAddon04\\Main.lua:99>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon04\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 4,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon05",
+        "message": "Interface\\AddOns\\TestAddon05\\Main.lua:104: attempt to index field 'frame4' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon05\\Main.lua]:104: in function <Interface\\AddOns\\TestAddon05\\Main.lua:100>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon05\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 5,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon06",
+        "message": "Interface\\AddOns\\TestAddon06\\Main.lua:105: attempt to index field 'frame5' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon06\\Main.lua]:105: in function <Interface\\AddOns\\TestAddon06\\Main.lua:101>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon06\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 6,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon07",
+        "message": "Interface\\AddOns\\TestAddon07\\Main.lua:106: attempt to index field 'frame6' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon07\\Main.lua]:106: in function <Interface\\AddOns\\TestAddon07\\Main.lua:102>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon07\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 7,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon08",
+        "message": "Interface\\AddOns\\TestAddon08\\Main.lua:107: attempt to index field 'frame7' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon08\\Main.lua]:107: in function <Interface\\AddOns\\TestAddon08\\Main.lua:103>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon08\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 8,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon09",
+        "message": "Interface\\AddOns\\TestAddon09\\Main.lua:108: attempt to index field 'frame8' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon09\\Main.lua]:108: in function <Interface\\AddOns\\TestAddon09\\Main.lua:104>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon09\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 9,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon10",
+        "message": "Interface\\AddOns\\TestAddon10\\Main.lua:109: attempt to index field 'frame9' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon10\\Main.lua]:109: in function <Interface\\AddOns\\TestAddon10\\Main.lua:105>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon10\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 10,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon11",
+        "message": "Interface\\AddOns\\TestAddon11\\Main.lua:110: attempt to index field 'frame10' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon11\\Main.lua]:110: in function <Interface\\AddOns\\TestAddon11\\Main.lua:106>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon11\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 11,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon12",
+        "message": "Interface\\AddOns\\TestAddon12\\Main.lua:111: attempt to index field 'frame11' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon12\\Main.lua]:111: in function <Interface\\AddOns\\TestAddon12\\Main.lua:107>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon12\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 12,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon13",
+        "message": "Interface\\AddOns\\TestAddon13\\Main.lua:112: attempt to index field 'frame12' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon13\\Main.lua]:112: in function <Interface\\AddOns\\TestAddon13\\Main.lua:108>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon13\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 13,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon14",
+        "message": "Interface\\AddOns\\TestAddon14\\Main.lua:113: attempt to index field 'frame13' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon14\\Main.lua]:113: in function <Interface\\AddOns\\TestAddon14\\Main.lua:109>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon14\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 14,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon15",
+        "message": "Interface\\AddOns\\TestAddon15\\Main.lua:114: attempt to index field 'frame14' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon15\\Main.lua]:114: in function <Interface\\AddOns\\TestAddon15\\Main.lua:110>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon15\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 15,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon16",
+        "message": "Interface\\AddOns\\TestAddon16\\Main.lua:115: attempt to index field 'frame15' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon16\\Main.lua]:115: in function <Interface\\AddOns\\TestAddon16\\Main.lua:111>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon16\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 16,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon17",
+        "message": "Interface\\AddOns\\TestAddon17\\Main.lua:116: attempt to index field 'frame16' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon17\\Main.lua]:116: in function <Interface\\AddOns\\TestAddon17\\Main.lua:112>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon17\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 17,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon18",
+        "message": "Interface\\AddOns\\TestAddon18\\Main.lua:117: attempt to index field 'frame17' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon18\\Main.lua]:117: in function <Interface\\AddOns\\TestAddon18\\Main.lua:113>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon18\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 18,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon19",
+        "message": "Interface\\AddOns\\TestAddon19\\Main.lua:118: attempt to index field 'frame18' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon19\\Main.lua]:118: in function <Interface\\AddOns\\TestAddon19\\Main.lua:114>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon19\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 19,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon20",
+        "message": "Interface\\AddOns\\TestAddon20\\Main.lua:119: attempt to index field 'frame19' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon20\\Main.lua]:119: in function <Interface\\AddOns\\TestAddon20\\Main.lua:115>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon20\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 20,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon21",
+        "message": "Interface\\AddOns\\TestAddon21\\Main.lua:120: attempt to index field 'frame20' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon21\\Main.lua]:120: in function <Interface\\AddOns\\TestAddon21\\Main.lua:116>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon21\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 21,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon22",
+        "message": "Interface\\AddOns\\TestAddon22\\Main.lua:121: attempt to index field 'frame21' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon22\\Main.lua]:121: in function <Interface\\AddOns\\TestAddon22\\Main.lua:117>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon22\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 22,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon23",
+        "message": "Interface\\AddOns\\TestAddon23\\Main.lua:122: attempt to index field 'frame22' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon23\\Main.lua]:122: in function <Interface\\AddOns\\TestAddon23\\Main.lua:118>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon23\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 23,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon24",
+        "message": "Interface\\AddOns\\TestAddon24\\Main.lua:123: attempt to index field 'frame23' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon24\\Main.lua]:123: in function <Interface\\AddOns\\TestAddon24\\Main.lua:119>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon24\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 24,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon25",
+        "message": "Interface\\AddOns\\TestAddon25\\Main.lua:124: attempt to index field 'frame24' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon25\\Main.lua]:124: in function <Interface\\AddOns\\TestAddon25\\Main.lua:120>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon25\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 25,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon26",
+        "message": "Interface\\AddOns\\TestAddon26\\Main.lua:125: attempt to index field 'frame25' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon26\\Main.lua]:125: in function <Interface\\AddOns\\TestAddon26\\Main.lua:121>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon26\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 26,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon27",
+        "message": "Interface\\AddOns\\TestAddon27\\Main.lua:126: attempt to index field 'frame26' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon27\\Main.lua]:126: in function <Interface\\AddOns\\TestAddon27\\Main.lua:122>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon27\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 27,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon28",
+        "message": "Interface\\AddOns\\TestAddon28\\Main.lua:127: attempt to index field 'frame27' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon28\\Main.lua]:127: in function <Interface\\AddOns\\TestAddon28\\Main.lua:123>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon28\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 28,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon29",
+        "message": "Interface\\AddOns\\TestAddon29\\Main.lua:128: attempt to index field 'frame28' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon29\\Main.lua]:128: in function <Interface\\AddOns\\TestAddon29\\Main.lua:124>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon29\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 29,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon30",
+        "message": "Interface\\AddOns\\TestAddon30\\Main.lua:129: attempt to index field 'frame29' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon30\\Main.lua]:129: in function <Interface\\AddOns\\TestAddon30\\Main.lua:125>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon30\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 30,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon31",
+        "message": "Interface\\AddOns\\TestAddon31\\Main.lua:130: attempt to index field 'frame30' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon31\\Main.lua]:130: in function <Interface\\AddOns\\TestAddon31\\Main.lua:126>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon31\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 31,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon32",
+        "message": "Interface\\AddOns\\TestAddon32\\Main.lua:131: attempt to index field 'frame31' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon32\\Main.lua]:131: in function <Interface\\AddOns\\TestAddon32\\Main.lua:127>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon32\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 32,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon33",
+        "message": "Interface\\AddOns\\TestAddon33\\Main.lua:132: attempt to index field 'frame32' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon33\\Main.lua]:132: in function <Interface\\AddOns\\TestAddon33\\Main.lua:128>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon33\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 33,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon34",
+        "message": "Interface\\AddOns\\TestAddon34\\Main.lua:133: attempt to index field 'frame33' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon34\\Main.lua]:133: in function <Interface\\AddOns\\TestAddon34\\Main.lua:129>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon34\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 34,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon35",
+        "message": "Interface\\AddOns\\TestAddon35\\Main.lua:134: attempt to index field 'frame34' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon35\\Main.lua]:134: in function <Interface\\AddOns\\TestAddon35\\Main.lua:130>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon35\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 35,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon36",
+        "message": "Interface\\AddOns\\TestAddon36\\Main.lua:135: attempt to index field 'frame35' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon36\\Main.lua]:135: in function <Interface\\AddOns\\TestAddon36\\Main.lua:131>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon36\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 36,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon37",
+        "message": "Interface\\AddOns\\TestAddon37\\Main.lua:136: attempt to index field 'frame36' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon37\\Main.lua]:136: in function <Interface\\AddOns\\TestAddon37\\Main.lua:132>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon37\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 37,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon38",
+        "message": "Interface\\AddOns\\TestAddon38\\Main.lua:137: attempt to index field 'frame37' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon38\\Main.lua]:137: in function <Interface\\AddOns\\TestAddon38\\Main.lua:133>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon38\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 38,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon39",
+        "message": "Interface\\AddOns\\TestAddon39\\Main.lua:138: attempt to index field 'frame38' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon39\\Main.lua]:138: in function <Interface\\AddOns\\TestAddon39\\Main.lua:134>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon39\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 39,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon40",
+        "message": "Interface\\AddOns\\TestAddon40\\Main.lua:139: attempt to index field 'frame39' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon40\\Main.lua]:139: in function <Interface\\AddOns\\TestAddon40\\Main.lua:135>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon40\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 40,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon41",
+        "message": "Interface\\AddOns\\TestAddon41\\Main.lua:140: attempt to index field 'frame40' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon41\\Main.lua]:140: in function <Interface\\AddOns\\TestAddon41\\Main.lua:136>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon41\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 41,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon42",
+        "message": "Interface\\AddOns\\TestAddon42\\Main.lua:141: attempt to index field 'frame41' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon42\\Main.lua]:141: in function <Interface\\AddOns\\TestAddon42\\Main.lua:137>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon42\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 42,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon43",
+        "message": "Interface\\AddOns\\TestAddon43\\Main.lua:142: attempt to index field 'frame42' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon43\\Main.lua]:142: in function <Interface\\AddOns\\TestAddon43\\Main.lua:138>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon43\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 43,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon44",
+        "message": "Interface\\AddOns\\TestAddon44\\Main.lua:143: attempt to index field 'frame43' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon44\\Main.lua]:143: in function <Interface\\AddOns\\TestAddon44\\Main.lua:139>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon44\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 44,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon45",
+        "message": "Interface\\AddOns\\TestAddon45\\Main.lua:144: attempt to index field 'frame44' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon45\\Main.lua]:144: in function <Interface\\AddOns\\TestAddon45\\Main.lua:140>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon45\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 45,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon46",
+        "message": "Interface\\AddOns\\TestAddon46\\Main.lua:145: attempt to index field 'frame45' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon46\\Main.lua]:145: in function <Interface\\AddOns\\TestAddon46\\Main.lua:141>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon46\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 46,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon47",
+        "message": "Interface\\AddOns\\TestAddon47\\Main.lua:146: attempt to index field 'frame46' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon47\\Main.lua]:146: in function <Interface\\AddOns\\TestAddon47\\Main.lua:142>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon47\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 47,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon48",
+        "message": "Interface\\AddOns\\TestAddon48\\Main.lua:147: attempt to index field 'frame47' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon48\\Main.lua]:147: in function <Interface\\AddOns\\TestAddon48\\Main.lua:143>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon48\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 48,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon49",
+        "message": "Interface\\AddOns\\TestAddon49\\Main.lua:148: attempt to index field 'frame48' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon49\\Main.lua]:148: in function <Interface\\AddOns\\TestAddon49\\Main.lua:144>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon49\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 49,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon50",
+        "message": "Interface\\AddOns\\TestAddon50\\Main.lua:149: attempt to index field 'frame49' (a nil value)",
+        "stack": "[Interface\\AddOns\\TestAddon50\\Main.lua]:149: in function <Interface\\AddOns\\TestAddon50\\Main.lua:145>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon50\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 50,
+        "session": 412
+      },
+      {
+        "addon": "TestAddon51",
+        "message": "Interface\\AddOns\\TestAddon51\\Main.lua:999: x",
+        "stack": "[Interface\\AddOns\\TestAddon51\\Main.lua]:999: in function <Interface\\AddOns\\TestAddon51\\Main.lua:995>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\TestAddon51\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 1,
+        "session": 412
+      }
+    ]
+  }
+}

@@ -1,3 +1,4 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 /**
  * ROK-1728 follow-up: the FIRST post of a series night must already carry the
  * Join Series row. Lifecycle payloads keep `recurrenceGroupId` at the payload
@@ -86,6 +87,7 @@ describe('EmbedPosterService — first post carries the Join Series row', () => 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EmbedPosterService,
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         {
           provide: DiscordBotClientService,

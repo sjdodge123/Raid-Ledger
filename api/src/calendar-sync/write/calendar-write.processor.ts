@@ -7,7 +7,8 @@
  * `runCalendarDisconnect` (A7, D7 — cleanup kinds run with the kill switch off).
  * ROK-1593 — a `failed` reconcile / write-off that left the
  * connection `needs_reconnect` queues a read `derive` for its user, so its
- * synced away days stop counting (Q12).
+ * synced away days stop counting (Q12), and emits the ROK-1866 reconnect
+ * nudge event (the listener claims only a `needs_reconnect` row).
  * A job never runs alongside its own `-rerun` (or vice versa): it defers
  * itself first — `calendar-write-overlap.helpers.ts` explains why.
  * ROK-2189: a provider TransientError / RateLimitError rethrown on a
@@ -15,6 +16,7 @@
  * rethrown, so BullMQ's backoff and Retry-After are unchanged).
  */
 import { Inject, type OnModuleInit } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import type { Job, Queue } from 'bullmq';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -28,6 +30,7 @@ import {
   CALENDAR_WRITE_QUEUE,
 } from '../calendar-sync.constants';
 import { calendarRetryBackoff } from '../calendar-retry-backoff.helpers';
+import { emitNeedsReconnect } from '../calendar-needs-reconnect.events';
 import { markRetryPendingProviderError } from '../calendar-retry-report.helpers';
 import { deriveIfNeedsReconnect } from '../read/calendar-away-heal.helpers';
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
@@ -64,6 +67,7 @@ export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
     @InjectQueue(CALENDAR_WRITE_QUEUE) private readonly queue: Queue,
     private readonly queueHealth: QueueHealthService,
     @InjectQueue(CALENDAR_READ_QUEUE) private readonly readQueue: Queue,
+    private readonly emitter: EventEmitter2,
   ) {
     super();
   }
@@ -125,6 +129,9 @@ export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
   ): Promise<T> {
     if (outcome.result !== 'failed') return outcome;
     await deriveIfNeedsReconnect(this.db, this.readQueue, connectionId);
+    // ROK-1866: any committed `needs_reconnect` flip (copy or write-off auth
+    // failure) nudges once; the listener's claim ignores a non-flipped row.
+    emitNeedsReconnect(this.emitter, connectionId);
     return outcome;
   }
 }

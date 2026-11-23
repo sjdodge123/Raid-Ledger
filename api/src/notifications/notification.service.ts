@@ -13,6 +13,7 @@ import { eq, and, isNull, desc, lt, not, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
+import { findAnnouncementMessage } from '../discord-bot/services/event-message-rows.helpers';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { DiscordNotificationService } from './discord-notification.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
@@ -288,15 +289,7 @@ export class NotificationService {
 
   /** ROK-538: Look up the Discord embed URL for an event. */
   async getDiscordEmbedUrl(eventId: number): Promise<string | null> {
-    const [row] = await this.db
-      .select({
-        guildId: schema.discordEventMessages.guildId,
-        channelId: schema.discordEventMessages.channelId,
-        messageId: schema.discordEventMessages.messageId,
-      })
-      .from(schema.discordEventMessages)
-      .where(eq(schema.discordEventMessages.eventId, eventId))
-      .limit(1);
+    const row = await findAnnouncementMessage(this.db, eventId);
     if (!row) return null;
     return `https://discord.com/channels/${row.guildId}/${row.channelId}/${row.messageId}`;
   }

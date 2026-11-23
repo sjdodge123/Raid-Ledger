@@ -3,6 +3,7 @@
  * 2017) covers every wing's bosses, not just the parent row's.
  */
 import bossData from '../data/boss-encounter-data.json';
+import lootData from '../data/boss-loot-data.json';
 import {
   planCapture,
   type BossRow,
@@ -98,6 +99,114 @@ describe('planCapture — rows carry the listed boss instanceId (ROK-2209)', () 
     );
   });
 });
+
+describe('planCapture — Forever-new dungeons (ROK-2270)', () => {
+  it('attaches a Ruins of Lordaeron drop to the forever boss row 90000002', () => {
+    const c = capture('Ruins of Lordaeron', 16611, [
+      drop(271223, 'Viktor the Vile'),
+    ]);
+    const plan = planCapture(c, BOSSES);
+    expect(
+      plan.rows.map((r) => [r.bossName, r.instanceId, r.expansion]),
+    ).toEqual([['Viktor the Vile', 90000002, 'forever']]);
+  });
+
+  it('skips a source that is not one of our boss names (no guessing)', () => {
+    const c = capture('Ruins of Lordaeron', 16611, [
+      drop(271204, 'The Baron'),
+      drop(286977, 'Zone Drop'),
+    ]);
+    const plan = planCapture(c, BOSSES);
+    expect(plan.rows).toEqual([]);
+    expect(plan.skipped.map((d) => d.source)).toEqual([
+      'The Baron',
+      'Zone Drop',
+    ]);
+  });
+});
+
+describe('boss-loot-data.json — Forever-new imports (ROK-2270)', () => {
+  const foreverRowsOf = (boss: string) =>
+    lootData.filter((l) => l.bossName === boss && l.expansion === 'forever');
+
+  it("carries Viktor the Vile's captured drops on Ruins of Lordaeron", () => {
+    const rows = foreverRowsOf('Viktor the Vile');
+    expect(rows.map((l) => l.instanceId)).toEqual([
+      90000002, 90000002, 90000002,
+    ]);
+  });
+
+  it('carries nothing for bosses the capture did not name', () => {
+    for (const boss of ['The Butcher', 'Lordaeron Captain', 'Infurnus']) {
+      expect([boss, foreverRowsOf(boss).length]).toEqual([boss, 0]);
+    }
+  });
+});
+
+/**
+ * boss name -> forever row count for one Forever-new instance. Returned as a
+ * plain object so `toEqual` ignores the JSON's capture order.
+ */
+function perBossCounts(instanceId: number): Record<string, number> {
+  const counts = new Map<string, number>();
+  for (const l of lootData) {
+    if (l.instanceId !== instanceId || l.expansion !== 'forever') continue;
+    const name = String(l.bossName);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return Object.fromEntries(counts);
+}
+
+describe('boss-loot-data.json — Alcaz Prison and Blackmaw Hold (ROK-2270 batch 2)', () => {
+  it('carries Alcaz Prison (90000007) drops for all five bosses', () => {
+    expect(perBossCounts(90000007)).toEqual({
+      'Overseer Wrex': 3,
+      "Tidemistress Ca'zass": 3,
+      'Katerina the Cleaner': 3,
+      'The Questioner': 3,
+      Blazeroar: 3,
+    });
+  });
+
+  it('carries Blackmaw Hold (90000008) drops for six of seven bosses', () => {
+    expect(perBossCounts(90000008)).toEqual({
+      Withermaw: 3,
+      'Impaan the Imprisoner': 3,
+      'Elder Shaman Bloodmane': 4,
+      'Bonesnout the Unbroken': 3,
+      'Varrox Bleakhoof': 3,
+      'Unbound Spirit': 3,
+    });
+  });
+
+  it('carries nothing for Blackmaw Behemoth (not on the capture)', () => {
+    expect(foreverRowsOfBoss('Blackmaw Behemoth')).toEqual([]);
+  });
+
+  it('imports no trash, rare or zone-drop source from either capture', () => {
+    const unmatched = [
+      'Alcaz Jailer',
+      'Strashaz Enchantress',
+      'Zone Drop',
+      'Legashi Summoner',
+      'Blackmaw Druid',
+      'Gortek the Apprentice',
+      'Moontouched Wanderer',
+      'Mopes',
+      'Tunnelweb Matriarch',
+    ];
+    const hits = lootData.filter((l) =>
+      unmatched.some((n) => n === l.bossName),
+    );
+    expect(hits.map((l) => l.bossName)).toEqual([]);
+  });
+});
+
+function foreverRowsOfBoss(boss: string): number[] {
+  return lootData
+    .filter((l) => l.bossName === boss && l.expansion === 'forever')
+    .map((l) => l.itemId);
+}
 
 function must(rows: BossRow[], name: string): BossRow {
   const row = rows.find((b) => b.name === name && b.expansion === 'classic');

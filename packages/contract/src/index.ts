@@ -69,6 +69,7 @@ export * from './templates.schema.js';
 
 // Blizzard Instance Data
 export * from './blizzard.schema.js';
+export * from './blizzard-bnet-account-probe.schema.js';
 
 // Plugins (ROK-236)
 export * from './plugins.schema.js';
@@ -271,6 +272,8 @@ export * from './companion-bg3-save-normalise.js';
 export * from './companion-bg3-screenshot.schema.js';
 // Companion `wow-ledgerlink` v1 — wraps a LedgerLink v1 export string (ROK-1964).
 export * from './companion-wow-ledgerlink.schema.js';
+export * from './companion-wow-addon-errors.schema.js';
+export * from './wow-addon-errors-admin.schema.js';
 export * from './companion-registry.js';
 export * from './companion-install.js';
 export * from './companion-bg3-display.js';
@@ -333,11 +336,15 @@ export * from './hub-posts.schema.js';
 export * from './hub-forum.schema.js';
 export * from './hub-forum-discord.schema.js';
 export * from './event-discussion.schema.js';
+export * from './subject-discussion.schema.js';
+export * from './event-planning-forum.schema.js';
 export * from './hub-session-note.schema.js';
 // WoW: Forever guild MOTD + Guild Information (ROK-2136).
 export * from './guild-ingame-text.schema.js';
 // WoW: Forever guild recruitment — switch, per-class rows, apply URL (ROK-1789).
 export * from './guild-recruitment.schema.js';
+// WoW guild opt-in public visitor card (ROK-1813).
+export * from './guild-public-card.schema.js';
 // WoW: Forever guild Progression tab — per-instance bosses + activity feed (ROK-1789 Part B).
 export * from './wow-guild-progression.schema.js';
 export * from './hub-taggable.schema.js';
@@ -363,7 +370,11 @@ export * from './hub-notification-mutes.schema.js';
 export * from './hub-widget-prefs.schema.js';
 // Companion device tokens — RFC 8628 link flow + Devices API (ROK-1955).
 export * from './companion-devices.schema.js';
+// Backup-export tokens — revocable rlbx_ bearer for clone scripts (ROK-2263).
+export * from './backup-export-token.schema.js';
 // GG <year> — yearly personalised story snapshot, cards, share + admin DTOs (ROK-2187).
 export * from './gg-cards.schema.js';
 export * from './gg.schema.js';
 export * from './event-invite-characters.schema.js';
+// Sign-in reminder DM settings (ROK-2284).
+export * from './signin-reminder.schema.js';

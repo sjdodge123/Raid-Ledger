@@ -16,7 +16,7 @@ import type {
   EmbedContext,
   EmbedEventData,
 } from '../services/discord-embed.factory';
-import { embedComponents } from '../services/discord-embed.factory';
+import type { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 import type { SettingsService } from '../../settings/settings.service';
 import { RUNNING_LATE_BUTTON_IDS } from '../discord-bot.constants';
 import type { EmbedState } from '../discord-bot.constants';
@@ -32,6 +32,8 @@ export interface RunningLateDeps {
   eventsService: EventsService;
   embedFactory: DiscordEmbedFactory;
   settingsService: SettingsService;
+  /** ROK-2292 D4: routes announcement vs forum-starter rows. */
+  messageEditor: Pick<EventEmbedMessageEditor, 'edit'>;
   logger: Logger;
 }
 
@@ -233,12 +235,7 @@ async function rerenderRecord(
     const built = deps.embedFactory.buildEventEmbed(eventData, context, {
       state,
     });
-    await deps.clientService.editEmbed(
-      record.channelId,
-      record.messageId,
-      built.embed,
-      embedComponents(built),
-    );
+    await deps.messageEditor.edit(record, built);
   } catch (err) {
     deps.logger.warn(
       `Failed to update embed message ${record.messageId} for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,

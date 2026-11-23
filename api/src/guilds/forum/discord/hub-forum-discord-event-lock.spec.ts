@@ -1,14 +1,22 @@
 /**
  * ROK-2208 §5.7 item 4 (R12) — the event-thread lock sweep (unit).
  */
+import type { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
 import type { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import {
   HubForumDiscordEventLockGateway,
   HubForumDiscordEventLockSweep,
   type LockChange,
 } from './hub-forum-discord-event-lock';
+import type { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import type { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+import { syncExpiredPolls } from '../subject-discussion/poll-discussion.deadline';
+
+jest.mock('../subject-discussion/poll-discussion.deadline', () => ({
+  syncExpiredPolls: jest.fn(),
+}));
+const deadline = jest.mocked(syncExpiredPolls);
 
 const NOW = new Date('2026-11-16T12:00:00Z');
 
@@ -48,8 +56,14 @@ describe('HubForumDiscordEventLockGateway.setReadOnly', () => {
 });
 
 function setup(rounds: LockChange[][], connected = true) {
+  deadline.mockReset();
+  deadline.mockResolvedValue(0);
   const sets: unknown[] = [];
+  const deletes = jest.fn(() => ({
+    where: jest.fn().mockResolvedValue(undefined),
+  }));
   const db = {
+    delete: deletes,
     update: jest.fn(() => ({
       set: (v: unknown) => {
         sets.push(v);
@@ -62,27 +76,61 @@ function setup(rounds: LockChange[][], connected = true) {
     isConnected: () => connected,
   } as unknown as DiscordBotClientService;
   const outbound = { apply: jest.fn().mockResolvedValue(undefined) };
+  const registry = { sweep: jest.fn().mockResolvedValue(0) };
+  const starters = { restore: jest.fn().mockResolvedValue(true) };
   const sweep = new HubForumDiscordEventLockSweep(
     db,
     gateway as unknown as HubForumDiscordEventLockGateway,
     client,
     outbound as unknown as HubForumDiscordOutboundService,
+    registry as unknown as EventPlanningPostsLockSweep,
+    starters as unknown as EventForumStarterCards,
   );
   const due = jest.spyOn(sweep, 'due');
   for (const r of rounds) due.mockResolvedValueOnce(r);
   due.mockResolvedValue([]);
-  return { sweep, gateway, sets, outbound };
+  return { sweep, gateway, sets, outbound, registry, due, deletes, starters };
 }
 
-const row = (readOnly: boolean): LockChange => ({
+const row = (readOnly: boolean, eventId: number | null = 42): LockChange => ({
   linkId: 1,
   guildId: 7,
   threadId: 3,
   discordThreadId: '9',
   readOnly,
+  eventId,
 });
 
 describe('HubForumDiscordEventLockSweep.sweep', () => {
+  it('ROK-2292 D7: a lock drops the post starter row; a reopen keeps it', async () => {
+    const locked = setup([[row(true)]]);
+    await locked.sweep.sweep(NOW);
+    expect(locked.deletes).toHaveBeenCalledTimes(1);
+    const reopened = setup([[row(false)]]);
+    await reopened.sweep.sweep(NOW);
+    expect(reopened.deletes).not.toHaveBeenCalled();
+  });
+
+  it('ROK-2292: a reopened event post tracks its starter again BEFORE the re-drive', async () => {
+    const { sweep, starters, outbound } = setup([[row(false)]]);
+    await sweep.sweep(NOW);
+    expect(starters.restore).toHaveBeenCalledWith(42, '9');
+    const restoredAt = starters.restore.mock.invocationCallOrder[0] ?? -1;
+    const redriveAt = outbound.apply.mock.invocationCallOrder[0] ?? -1;
+    // D6 reads the restored row: a re-drive first would re-send the text.
+    expect(restoredAt).toBeLessThan(redriveAt);
+  });
+
+  it('ROK-2292: a lock, or a reopened poll / lineup post, restores no starter', async () => {
+    const locked = setup([[row(true)]]);
+    await locked.sweep.sweep(NOW);
+    const poll = setup([[row(false, null)]]);
+    await poll.sweep.sweep(NOW);
+    expect(locked.starters.restore).not.toHaveBeenCalled();
+    expect(poll.starters.restore).not.toHaveBeenCalled();
+    expect(poll.outbound.apply).toHaveBeenCalledTimes(1);
+  });
+
   it('locks + archives once and records the lock', async () => {
     const { sweep, gateway, sets, outbound } = setup([[row(true)]]);
     expect(await sweep.sweep(NOW)).toBe(1);
@@ -124,5 +172,115 @@ describe('HubForumDiscordEventLockSweep.sweep', () => {
     const { sweep, gateway } = setup([[row(true)]], false);
     expect(await sweep.sweep(NOW)).toBe(0);
     expect(gateway.setReadOnly).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2272 S4a: the registry pass', () => {
+  it('adds the registry count to the hub count', async () => {
+    const { sweep, registry } = setup([[row(true)]]);
+    registry.sweep.mockResolvedValueOnce(2);
+    expect(await sweep.sweep(NOW)).toBe(3);
+    expect(registry.sweep).toHaveBeenCalledWith(NOW);
+  });
+
+  it('a hub-pass throw still runs the registry pass, then rejects with it (MAJOR-1)', async () => {
+    const { sweep, registry, due } = setup([]);
+    const err = new Error('db down');
+    due.mockRejectedValueOnce(err);
+    registry.sweep.mockResolvedValueOnce(1);
+    await expect(sweep.sweep(NOW)).rejects.toBe(err);
+    expect(registry.sweep).toHaveBeenCalledWith(NOW);
+  });
+
+  it('a registry-pass throw still applies the hub pass, then rejects with it (MAJOR-1)', async () => {
+    const { sweep, registry, gateway, sets } = setup([[row(true)]]);
+    const err = new Error('boom');
+    registry.sweep.mockRejectedValueOnce(err);
+    await expect(sweep.sweep(NOW)).rejects.toBe(err);
+    expect(gateway.setReadOnly).toHaveBeenCalledWith('9', true);
+    expect(sets).toEqual([{ discordLockedAt: NOW }]);
+  });
+
+  it('both passes throw: rejects with the FIRST (hub) error', async () => {
+    const { sweep, registry, due } = setup([]);
+    const first = new Error('hub down');
+    due.mockRejectedValueOnce(first);
+    registry.sweep.mockRejectedValueOnce(new Error('registry down'));
+    await expect(sweep.sweep(NOW)).rejects.toBe(first);
+    expect(registry.sweep).toHaveBeenCalledTimes(1);
+  });
+
+  it('a per-row Discord failure stays logged-and-skipped (no rejection)', async () => {
+    const { sweep, gateway, registry } = setup([[row(true)]]);
+    gateway.setReadOnly.mockRejectedValueOnce(new Error('50013'));
+    registry.sweep.mockResolvedValueOnce(1);
+    expect(await sweep.sweep(NOW)).toBe(1);
+  });
+
+  it('offline bot runs neither pass', async () => {
+    const { sweep, registry } = setup([[row(true)]], false);
+    expect(await sweep.sweep(NOW)).toBe(0);
+    expect(registry.sweep).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2272 S8: the poll-deadline pass', () => {
+  it('runs first, with the sweep db and now, before hub and registry', async () => {
+    const { sweep, registry, due } = setup([]);
+    const order: string[] = [];
+    deadline.mockImplementationOnce(() => {
+      order.push('poll-deadline');
+      return Promise.resolve(4);
+    });
+    due.mockImplementationOnce(() => {
+      order.push('hub');
+      return Promise.resolve([]);
+    });
+    registry.sweep.mockImplementationOnce(() => {
+      order.push('registry');
+      return Promise.resolve(0);
+    });
+    expect(await sweep.sweep(NOW)).toBe(0);
+    expect(order).toEqual(['poll-deadline', 'hub', 'registry']);
+    expect(deadline).toHaveBeenCalledWith(expect.anything(), NOW);
+  });
+
+  it('its count is not part of the posts-flipped total', async () => {
+    const { sweep, registry } = setup([[row(true)]]);
+    deadline.mockResolvedValueOnce(5);
+    registry.sweep.mockResolvedValueOnce(2);
+    expect(await sweep.sweep(NOW)).toBe(3);
+  });
+
+  it('a throw still runs hub + registry, then rejects with it', async () => {
+    const { sweep, registry, gateway } = setup([[row(true)]]);
+    const err = new Error('poll db down');
+    deadline.mockRejectedValueOnce(err);
+    await expect(sweep.sweep(NOW)).rejects.toBe(err);
+    expect(gateway.setReadOnly).toHaveBeenCalledWith('9', true);
+    expect(registry.sweep).toHaveBeenCalledWith(NOW);
+  });
+
+  it('deadline + hub both throw: rejects with the FIRST (deadline) error', async () => {
+    const { sweep, due } = setup([]);
+    const first = new Error('poll db down');
+    deadline.mockRejectedValueOnce(first);
+    due.mockRejectedValueOnce(new Error('hub down'));
+    await expect(sweep.sweep(NOW)).rejects.toBe(first);
+  });
+
+  it('runs while the bot is offline; the Discord passes still do not', async () => {
+    const { sweep, registry, gateway } = setup([[row(true)]], false);
+    expect(await sweep.sweep(NOW)).toBe(0);
+    expect(deadline).toHaveBeenCalledWith(expect.anything(), NOW);
+    expect(gateway.setReadOnly).not.toHaveBeenCalled();
+    expect(registry.sweep).not.toHaveBeenCalled();
+  });
+
+  it('an offline throw is still rethrown', async () => {
+    const { sweep } = setup([], false);
+    const err = new Error('poll db down');
+    deadline.mockRejectedValueOnce(err);
+    await expect(sweep.sweep(NOW)).rejects.toBe(err);
   });
 });

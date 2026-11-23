@@ -8,6 +8,7 @@ import { BlizzardRosterSyncJob } from './guilds/blizzard-roster-sync.job';
 import { ForeverAutoLinkService } from './forever-auto-link/forever-auto-link.service';
 import { RosterArmoryService } from './forever-armory-snapshot/roster-armory.service';
 import { ForeverQuestAutoImportService } from './forever-quest-import/forever-quest-auto-import.service';
+import { SettingsService } from '../../settings/settings.service';
 
 let registrar: WowCronRegistrar;
 let mockCharactersService: { syncAllCharacters: jest.Mock };
@@ -17,6 +18,7 @@ let mockRosterJob: { run: jest.Mock };
 let mockAutoLink: { runDue: jest.Mock };
 let mockRosterArmory: { runDue: jest.Mock };
 let mockQuestImport: { runWeekly: jest.Mock };
+let mockSettings: { getBlizzardConfig: jest.Mock };
 
 async function setupEach() {
   mockCharactersService = {
@@ -33,6 +35,11 @@ async function setupEach() {
   mockAutoLink = { runDue: jest.fn().mockResolvedValue(null) };
   mockRosterArmory = { runDue: jest.fn().mockResolvedValue(null) };
   mockQuestImport = { runWeekly: jest.fn().mockResolvedValue(undefined) };
+  mockSettings = {
+    getBlizzardConfig: jest
+      .fn()
+      .mockResolvedValue({ clientId: 'id', clientSecret: 'secret' }),
+  };
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -44,6 +51,7 @@ async function setupEach() {
       { provide: ForeverAutoLinkService, useValue: mockAutoLink },
       { provide: RosterArmoryService, useValue: mockRosterArmory },
       { provide: ForeverQuestAutoImportService, useValue: mockQuestImport },
+      { provide: SettingsService, useValue: mockSettings },
     ],
   }).compile();
 
@@ -177,6 +185,12 @@ describe('WowCronRegistrar — handlers', () => {
     });
 
     it('should prevent concurrent syncs', () => testPreventConcurrentSyncs());
+
+    it('skips the sync when Blizzard is not configured (TECH-DEBT L4410)', async () => {
+      mockSettings.getBlizzardConfig.mockResolvedValue(null);
+      await at(registrar.getCronJobs(), 0).handler();
+      expect(mockCharactersService.syncAllCharacters).not.toHaveBeenCalled();
+    });
 
     it('should reset isSyncing flag after failure', async () => {
       mockCharactersService.syncAllCharacters

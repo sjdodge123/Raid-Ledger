@@ -27,6 +27,8 @@ import { GraceCountdownBanner } from '../components/lineups/grace-countdown-bann
 import { TieReadinessSection } from '../components/lineups/tie/TieReadinessSection';
 import { LineupAbortedBanner } from '../components/lineups/LineupAbortedBanner';
 import { useLineupAbortedAt } from '../lib/lineup-aborted';
+import { useNominateRosterSize } from '../components/lineups/lineup-roster-size';
+import { SubjectDiscussionCardLazy } from '../components/discussion/subject-discussion-lazy';
 
 /**
  * Render the lineup invitee panel (ROK-1065, ROK-1440). Creator/operator
@@ -193,6 +195,8 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
   const isBuilding = !isAborted && rawIsBuilding;
   const canParticipate = !isAborted && rawCanParticipate;
   const { user } = useAuth();
+  // TD batch 4 B1: participants, not `votingEligibleCount` (whole community).
+  const nominateRoster = useNominateRosterSize(lineup.id, isBuilding && modalOpen);
   const leaderboardRef = useRef<HTMLElement | null>(null);
   const bracketRef = useRef<HTMLElement | null>(null);
 
@@ -285,6 +289,10 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         bracketRef={bracketRef}
       />
 
+      <div className="mt-6 empty:hidden">
+        <SubjectDiscussionCardLazy subject={{ kind: 'lineup', id: lineup.id }} enabled={user != null} />
+      </div>
+
       <div className="mt-6">
         <ActivityTimeline
           entityType="lineup"
@@ -303,7 +311,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
           onClose={() => { setModalOpen(false); setPreSelectedGame(null); }}
           lineupId={lineup.id}
           preSelectedGame={preSelectedGame}
-          participantCount={lineup.votingEligibleCount}
+          participantCount={nominateRoster}
         />
       )}
 

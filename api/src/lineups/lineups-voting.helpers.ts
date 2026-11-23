@@ -6,6 +6,7 @@ import { BadRequestException } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { voteOnNominatedEntry } from './lineups-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -236,7 +237,8 @@ export async function findUserStar(
 
 /**
  * Count top picks per game for a lineup (ROK-1474).
- * Mirrors `countVotesPerGame`, narrowed to starred rows.
+ * Mirrors `countVotesPerGame` — nominated games only — narrowed to starred
+ * rows, so a star on a removed nomination is not counted (TECH-DEBT 2884).
  */
 export function countStarsPerGame(db: Db, lineupId: number) {
   return db
@@ -245,6 +247,7 @@ export function countStarsPerGame(db: Db, lineupId: number) {
       starCount: sql<number>`count(*)::int`.as('star_count'),
     })
     .from(schema.communityLineupVotes)
+    .innerJoin(schema.communityLineupEntries, voteOnNominatedEntry)
     .where(
       and(
         eq(schema.communityLineupVotes.lineupId, lineupId),

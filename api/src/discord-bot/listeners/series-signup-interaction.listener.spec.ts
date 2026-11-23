@@ -20,7 +20,7 @@ jest.mock('./series-signup-decline.handlers', () => ({
 }));
 
 function makeListener(): SeriesSignupInteractionListener {
-  const ctorArgs = [{}, {}, {}, {}, {}, {}] as ConstructorParameters<
+  const ctorArgs = [{}, {}, {}, {}, {}, {}, {}] as ConstructorParameters<
     typeof SeriesSignupInteractionListener
   >;
   return new SeriesSignupInteractionListener(...ctorArgs);

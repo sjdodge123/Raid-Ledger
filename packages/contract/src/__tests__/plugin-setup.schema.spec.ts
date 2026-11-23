@@ -99,7 +99,7 @@ describe('declared setup (§3.5)', () => {
     ]);
     expect(setupIds('pelican')).toEqual(['panel-connection', 'server-hub']);
     expect(setupIds('blizzard')).toEqual([
-      'battle-net-api', 'ledgerlink-addon', 'ledgerlink-companion', 'mailworthy-addon',
+      'battle-net-api', 'ledgerlink-addon', 'ledgerlink-companion', 'mailworthy-addon', 'addon-errors-companion',
     ]);
   });
 

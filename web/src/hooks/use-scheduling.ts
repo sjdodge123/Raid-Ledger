@@ -3,6 +3,7 @@
  * Wraps scheduling-api.ts functions with query caching and mutation invalidation.
  */
 import { useQuery, useMutation, useQueryClient, type Query, type QueryClient } from '@tanstack/react-query';
+import { invalidateSubjectDiscussion } from './subject-discussion-key';
 import type {
   SchedulePollPageResponseDto,
   ScheduleSlotWithVotesDto,
@@ -187,6 +188,8 @@ export function invalidatePollViews(
   void qc.invalidateQueries({
     queryKey: [...PARTICIPANTS_KEY, lineupId, matchId],
   });
+  // ROK-2272 S9: a vote / suggestion grants (or a retract revokes) reply on the Discussion card.
+  invalidateSubjectDiscussion(qc, { kind: 'poll', id: matchId });
 }
 
 /** Hook for fetching full scheduling poll page data. */

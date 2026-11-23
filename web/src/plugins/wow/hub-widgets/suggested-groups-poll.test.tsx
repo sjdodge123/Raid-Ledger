@@ -15,6 +15,9 @@ import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import { suggestedGroupsHandler } from '../hub/suggested-groups/suggested-groups.fixtures';
 import { SuggestedGroupsWidget } from './suggested-groups-widget';
 
+// Pin a desktop viewport (jsdom matches no width query): below DESKTOP_MQ Poll opens a confirm first,
+// covered in suggested-group-actions.test.tsx.
+vi.mock('../../../hooks/use-media-query', () => ({ useMediaQuery: (q: string) => q === '(min-width: 1024px)' }));
 vi.mock('../../../hooks/use-standalone-poll', () => ({ useCreateSchedulingPoll: vi.fn() }));
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),

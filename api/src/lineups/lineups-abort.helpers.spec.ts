@@ -29,6 +29,7 @@ import { findLineupById, findUserDisplayName } from './lineups-query.helpers';
 import { applyStatusUpdate } from './lineups-lifecycle.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { logAborted } from './lineups-activity.helpers';
+import { LINEUP_LIFECYCLE_EVENTS } from './lineup-events.constants';
 
 const mockedFindLineupById = findLineupById as jest.MockedFunction<
   typeof findLineupById
@@ -279,9 +280,70 @@ describe('runLineupAbort — cleared reschedule polls (ROK-1857)', () => {
       null,
       99,
     );
-    expect(emit.mock.calls).toEqual([
+    // ROK-2272 S6: the abort also emits a lifecycle STATUS_CHANGED; this
+    // case asserts only the reschedule-cleared calls.
+    const cleared = emit.mock.calls.filter(
+      (c) => c[0] === APP_EVENT_EVENTS.RESCHEDULE_CLEARED,
+    );
+    expect(cleared).toEqual([
       [APP_EVENT_EVENTS.RESCHEDULE_CLEARED, { eventId: 31 }],
       [APP_EVENT_EVENTS.RESCHEDULE_CLEARED, { eventId: 32 }],
     ]);
+  });
+});
+
+describe('runLineupAbort — lifecycle STATUS_CHANGED (ROK-2272 S6)', () => {
+  function statusEmits(emit: jest.Mock): unknown[][] {
+    return emit.mock.calls.filter(
+      (c) => c[0] === LINEUP_LIFECYCLE_EVENTS.STATUS_CHANGED,
+    );
+  }
+
+  it('emits once, from the pre-abort status, with the row subject fields', async () => {
+    const { deps } = makeMocks();
+    const emit = jest.fn();
+    mockedFindLineupById.mockResolvedValue([
+      buildingLineup({
+        visibility: 'public',
+        guildId: 4,
+        phaseDurationOverride: null,
+      }),
+    ]);
+    await runLineupAbort(
+      { ...deps, eventEmitter: { emit } as unknown as EventEmitter2 },
+      7,
+      null,
+      99,
+    );
+    expect(statusEmits(emit)).toEqual([
+      [
+        LINEUP_LIFECYCLE_EVENTS.STATUS_CHANGED,
+        {
+          lineupId: 7,
+          from: 'building',
+          to: 'archived',
+          visibility: 'public',
+          guildId: 4,
+          standalone: false,
+        },
+      ],
+    ]);
+  });
+
+  it('emits nothing when the lineup is already archived (409)', async () => {
+    const { deps } = makeMocks();
+    const emit = jest.fn();
+    mockedFindLineupById.mockResolvedValue([
+      buildingLineup({ status: 'archived' }),
+    ]);
+    await expect(
+      runLineupAbort(
+        { ...deps, eventEmitter: { emit } as unknown as EventEmitter2 },
+        7,
+        null,
+        99,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(statusEmits(emit)).toEqual([]);
   });
 });

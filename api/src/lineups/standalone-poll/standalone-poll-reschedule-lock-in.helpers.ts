@@ -16,12 +16,14 @@ import {
   type Logger,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   EventResponseDto,
   RescheduleEventDto,
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import { emitStandaloneLineupArchived } from '../lineup-lifecycle-emit.helpers';
 import type { EventsService } from '../../events/events.service';
 import { findExistingOrThrow } from '../../events/event-lifecycle.helpers';
 import type { NotificationService } from '../../notifications/notification.service';
@@ -44,9 +46,14 @@ type EventRow = typeof schema.events.$inferSelect;
 /** What the reschedule lock-in needs from its service. */
 export interface RescheduleLockInDeps {
   db: Db;
-  eventsService: Pick<EventsService, 'reschedule' | 'findOne'>;
+  eventsService: Pick<
+    EventsService,
+    'reschedule' | 'findOne' | 'resetConfirmations'
+  >;
   notificationService: NotificationService;
   logger: Pick<Logger, 'error'>;
+  /** ROK-2272 S6: carries the carrier lineup's `decided → archived`. */
+  events?: EventEmitter2 | undefined;
 }
 
 /** One reschedule lock-in request. */
@@ -64,7 +71,7 @@ export interface RescheduledPoll {
 }
 
 /** The poll row a reschedule lock-in works on. */
-interface RescheduleTarget {
+export interface RescheduleTarget {
   lineupId: number;
   eventId: number;
   eventCreatorId: number | null;
@@ -217,14 +224,18 @@ async function archiveAndRelease(
   });
 }
 
-/** Archive + release, logged on failure so `afterComplete` still runs. */
-async function archiveOrLog(
+/**
+ * Archive + release, logged on failure so `afterComplete` still runs.
+ * Exported for its ROK-2272 S6 emit spec only.
+ */
+export async function archiveOrLog(
   deps: RescheduleLockInDeps,
   matchId: number,
   target: RescheduleTarget,
 ): Promise<void> {
   try {
     await archiveAndRelease(deps.db, target);
+    emitStandaloneLineupArchived(deps.events, target.lineupId);
   } catch (err: unknown) {
     // Not rethrown: the event moved and the claim holds, so a retry can only
     // 409; `afterComplete` must still re-emit. The stale lock is ROK-2033's.

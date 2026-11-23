@@ -5,6 +5,7 @@ import {
   PermissionFlagsBits,
   type ForumChannel,
   type Guild,
+  type Webhook,
 } from 'discord.js';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import {
@@ -12,6 +13,11 @@ import {
   MANAGE_CHANNELS,
   missingForumPermissions,
 } from './hub-forum-discord.helpers';
+import {
+  DEFAULT_REACTION_EMOJI,
+  failureOutcome,
+  shouldSetDefaultReaction,
+} from './hub-forum-discord-decor';
 
 /** A Discord forum as the binding service sees it (no discord.js objects). */
 export interface ForumInfo {
@@ -99,7 +105,12 @@ export class HubForumDiscordGateway {
     return toInfo(guild, forum);
   }
 
-  /** R9: the forum's one webhook — the stored one if live, else a new one. */
+  /**
+   * R9: the forum's one webhook — the stored one if live, else (ROK-2296) a
+   * "Raid Ledger" hook this bot already owns on the channel, else a new one.
+   * Reusing stops a fresh forum row from stacking duplicates toward the
+   * guild's 1000-webhook cap.
+   */
   async ensureWebhook(
     channelId: string,
     webhookId: string | null,
@@ -107,6 +118,11 @@ export class HubForumDiscordGateway {
     const forum = await this.requireForum(channelId);
     const hooks = await forum.fetchWebhooks();
     if (webhookId && hooks.has(webhookId)) return webhookId;
+    const own = hooks.find(
+      (h) =>
+        h.name === FORUM_WEBHOOK_NAME && this.ownsHook(h) && Boolean(h.token),
+    );
+    if (own) return own.id;
     const hook = await forum.createWebhook({
       name: FORUM_WEBHOOK_NAME,
       reason: REASON,
@@ -148,7 +164,24 @@ export class HubForumDiscordGateway {
     await forum.edit({ flags, reason: REASON });
   }
 
-  /** Apply a hub's tag to its synced posts (≤5 per post). Best-effort. */
+  /**
+   * ROK-2258 ruling 1 — set the forum's default reaction to 👍 unless a
+   * moderator already chose one. Returns true when it was set.
+   */
+  async setDefaultReactionIfUnset(channelId: string): Promise<boolean> {
+    const forum = await this.requireForum(channelId);
+    if (!shouldSetDefaultReaction(forum.defaultReactionEmoji)) return false;
+    const emoji = { id: null, name: DEFAULT_REACTION_EMOJI };
+    await forum.setDefaultReactionEmoji(emoji, REASON);
+    return true;
+  }
+
+  /**
+   * Apply a tag to synced posts (≤5 per post). A post that already carries
+   * it costs a read but no write (review r1 MAJOR 2a). A post Discord
+   * refuses for good is skipped; a transient error (429/5xx/network) throws
+   * so the caller retries (Codex P2 #4).
+   */
   async applyTag(
     channelId: string,
     threadIds: string[],
@@ -158,22 +191,82 @@ export class HubForumDiscordGateway {
     for (const id of threadIds) {
       try {
         const thread = await forum.threads.fetch(id);
-        const tags = [...new Set([...(thread?.appliedTags ?? []), tagId])];
-        await thread?.setAppliedTags(tags.slice(0, 5), REASON);
+        if (!thread || thread.appliedTags.includes(tagId)) continue;
+        const tags = [...thread.appliedTags, tagId];
+        await thread.setAppliedTags(tags.slice(0, 5), REASON);
       } catch (err) {
+        if (failureOutcome(err) === 'retry') throw err;
         this.logger.warn(`Could not tag forum post ${id}: ${describe(err)}`);
       }
     }
   }
 
-  /** Delete a bot-made forum on unlink. Best-effort. */
+  /** ROK-2272 §3.4: a channel of any type in the guild already has `name`. */
+  channelNameTaken(name: string): boolean {
+    const guild = this.onlineGuild();
+    if (!guild) return false;
+    return guild.channels.cache.some((c) => c.name === name);
+  }
+
+  /** ROK-2272 §3.4: rename a forum; Discord errors (e.g. 50013) propagate. */
+  async renameForum(channelId: string, name: string): Promise<ForumInfo> {
+    const guild = this.requireGuild();
+    const forum = await this.requireForum(channelId);
+    const renamed = await forum.edit({ name, reason: REASON });
+    return toInfo(guild, renamed);
+  }
+
+  /**
+   * Delete a bot-made forum on unlink. Best-effort. ROK-2296: the bot's own
+   * webhooks go first — Discord keeps counting a deleted channel's webhooks
+   * toward the guild cap, so deleting the channel alone leaks them.
+   */
   async deleteForum(channelId: string): Promise<void> {
     try {
       const forum = await this.requireForum(channelId);
+      await this.deleteHooksOn(forum);
       await forum.delete(REASON);
     } catch (err) {
       this.logger.warn(`Could not delete forum ${channelId}: ${describe(err)}`);
     }
+  }
+
+  /**
+   * ROK-2296: the last hub left this channel — delete the bot's webhooks on
+   * it (nothing else posts through them). Best-effort; never throws.
+   */
+  async deleteOwnWebhooks(channelId: string): Promise<void> {
+    try {
+      await this.deleteHooksOn(await this.requireForum(channelId));
+    } catch (err) {
+      this.logger.warn(
+        `Could not clear webhooks on ${channelId}: ${describe(err)}`,
+      );
+    }
+  }
+
+  /** ROK-2296: delete every webhook this bot owns on `forum`; never throws. */
+  private async deleteHooksOn(forum: ForumChannel): Promise<void> {
+    const hooks = await forum.fetchWebhooks().catch((err: unknown) => {
+      this.logger.warn(
+        `Could not list webhooks on ${forum.id}: ${describe(err)}`,
+      );
+      return null;
+    });
+    for (const hook of hooks?.values() ?? []) {
+      if (!this.ownsHook(hook)) continue;
+      await hook.delete(REASON).catch((err: unknown) => {
+        this.logger.warn(
+          `Could not delete webhook ${hook.id}: ${describe(err)}`,
+        );
+      });
+    }
+  }
+
+  /** A webhook this bot created (a moderator's own hooks are never touched). */
+  private ownsHook(hook: Pick<Webhook, 'owner'>): boolean {
+    const botId = this.client.getBotUser()?.id;
+    return botId !== undefined && hook.owner?.id === botId;
   }
 
   private onlineGuild(): Guild | null {
@@ -197,8 +290,18 @@ async function fetchForumChannel(
   guild: Guild,
   channelId: string,
 ): Promise<ForumChannel | null> {
-  const ch = await guild.channels.fetch(channelId).catch(() => null);
+  const ch = await guild.channels.fetch(channelId).catch(goneOrThrow);
   return ch?.type === ChannelType.GuildForum ? ch : null;
+}
+
+/**
+ * Codex P2 #5 — a channel Discord says is gone or hidden (10003/50001/50013)
+ * reads as null; a transient failure (429/5xx/network) rethrows, so a
+ * caller never mistakes a blip for a deleted forum.
+ */
+function goneOrThrow(err: unknown): null {
+  if (failureOutcome(err) === 'retry') throw err;
+  return null;
 }
 
 function toInfo(guild: Guild, forum: ForumChannel): ForumInfo {

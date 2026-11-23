@@ -5,6 +5,8 @@
  * `calendar-away-heal.helpers.spec.ts`).
  */
 import { WORKER_METADATA } from '@nestjs/bullmq/dist/bull.constants';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { CALENDAR_NEEDS_RECONNECT_EVENT } from '../calendar-needs-reconnect.events';
 import { DelayedError, type Job, type Queue } from 'bullmq';
 import type { QueueHealthService } from '../../queue/queue-health.service';
 import type { SettingsService } from '../../settings/settings.service';
@@ -47,6 +49,8 @@ function makeQueue(states: Record<string, string> = {}) {
   };
 }
 
+const EMITTER = { emit: jest.fn() };
+
 function makeProcessor(queue = makeQueue()) {
   return new CalendarWriteProcessor(
     DB as never,
@@ -55,6 +59,7 @@ function makeProcessor(queue = makeQueue()) {
     queue as unknown as Queue,
     {} as QueueHealthService,
     READ_QUEUE as unknown as Queue,
+    EMITTER as unknown as EventEmitter2,
   );
 }
 
@@ -88,7 +93,29 @@ describe('CalendarWriteProcessor → derive on needs_reconnect', () => {
     const data = { kind: 'reconcile', connectionId: 8, eventId: 2, userId: 4 };
     await makeProcessor().process(job(data as CalendarWriteJobData));
     expect(check).not.toHaveBeenCalled();
+    expect(EMITTER.emit).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['write-off', { kind: 'write-off', connectionId: 8 }],
+    [
+      'reconcile',
+      { kind: 'reconcile', connectionId: 8, eventId: 2, userId: 4 },
+    ],
+  ])(
+    'ROK-1866: failed %s → emits the reconnect nudge (F2/F3)',
+    async (_k, data) => {
+      writeOff.mockResolvedValue({ result: 'failed', reason: 'auth' });
+      reconcile.mockResolvedValue({ result: 'failed', reason: 'auth' });
+      await makeProcessor().process(job(data as CalendarWriteJobData));
+      expect(EMITTER.emit).toHaveBeenCalledWith(
+        CALENDAR_NEEDS_RECONNECT_EVENT,
+        {
+          connectionId: 8,
+        },
+      );
+    },
+  );
 });
 
 const attempt = (data: CalendarWriteJobData, attemptsMade: number) =>

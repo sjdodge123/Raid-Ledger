@@ -55,6 +55,8 @@ const RULING_TABLE: ReadonlyArray<[NotificationType, EmbedState]> = [
   ['valheim_claim_suggestion', 'needs_you'],
   // ROK-2187: "your GG <year> is ready" — news, asks nothing.
   ['gg_ready', 'announcing'],
+  // ROK-1866 D5: an action ask — reconnect your calendar.
+  ['calendar_needs_reconnect', 'needs_you'],
   ['user_deactivated_discord', 'done'],
   ['user_reactivated_discord', 'done'],
   ['post_event_followup', 'done'],

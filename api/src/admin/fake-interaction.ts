@@ -6,6 +6,8 @@
  * and capture their responses in a serializable format.
  */
 
+import { MessageFlags } from 'discord.js';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -15,6 +17,8 @@ export interface CapturedResponse {
   embeds?: Record<string, unknown>[];
   components?: Record<string, unknown>[];
   deferred?: boolean;
+  /** ROK-2283: present (true) only when a reply or defer was flagged ephemeral. */
+  ephemeral?: boolean;
 }
 
 interface NoopCollector {
@@ -102,6 +106,7 @@ export class FakeInteraction {
   readonly captured: CapturedResponse[] = [];
   replied = false;
   deferred = false;
+  ephemeral = false;
 
   constructor(params: {
     commandName: string;
@@ -123,13 +128,14 @@ export class FakeInteraction {
 
   reply(data: unknown): Promise<void> {
     this.replied = true;
+    if (isEphemeralReply(data)) this.ephemeral = true;
     this.captured.push(serializeReplyData(data));
     return Promise.resolve();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   deferReply(data?: unknown): Promise<void> {
     this.deferred = true;
+    if (isEphemeralReply(data)) this.ephemeral = true;
     return Promise.resolve();
   }
 
@@ -149,7 +155,8 @@ export class FakeInteraction {
 
   /** Build a unified response from all captured reply data. */
   toResponse(): CapturedResponse {
-    return mergeCaptures(this.captured, this.deferred);
+    const merged = mergeCaptures(this.captured, this.deferred);
+    return this.ephemeral ? { ...merged, ephemeral: true } : merged;
   }
 }
 
@@ -191,6 +198,14 @@ export class FakeAutocompleteInteraction {
 // ---------------------------------------------------------------------------
 // Serialization helpers
 // ---------------------------------------------------------------------------
+
+/** True when reply/defer options carry the Ephemeral flag (64) or `ephemeral: true`. */
+function isEphemeralReply(data: unknown): boolean {
+  if (typeof data !== 'object' || data === null) return false;
+  const { flags, ephemeral } = data as { flags?: unknown; ephemeral?: unknown };
+  if (ephemeral === true) return true;
+  return typeof flags === 'number' && (flags & MessageFlags.Ephemeral) !== 0;
+}
 
 function serializeReplyData(data: unknown): CapturedResponse {
   if (typeof data === 'string') return { content: data };

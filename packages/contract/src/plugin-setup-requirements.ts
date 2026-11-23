@@ -36,9 +36,9 @@ export const CORE_SETUP = {
     {
       id: 'discord-forum-sync',
       kind: 'discord_channel',
-      title: 'Discord forum for the hub Forum',
+      title: 'Discord forum for events, polls and lineups',
       instructions:
-        "1. In Discord, give the Raid Ledger bot Manage Channels, Manage Webhooks, Manage Threads, Manage Messages, Create Public Threads, Send Messages in Threads, Send Messages, View Channels and Read Message History in the forum (or server-wide so it can create one).\n2. In the hub's Settings → Discord forum, create the shared #hub-forums forum or pick an existing forum, and confirm that everyone who can see that channel can read and post in the hub forum.",
+        "1. In Discord, give the Raid Ledger bot Manage Channels, Manage Webhooks, Manage Threads, Manage Messages, Create Public Threads, Send Messages in Threads, Send Messages, View Channels and Read Message History in the forum (or server-wide so it can create one).\n2. In the hub's Settings → Discord forum, create the shared #event-planning forum or pick an existing forum, and confirm that everyone who can see that channel can read and post in the hub forum. Non-hub events, scheduling polls and lineups post here too. With more than one forum bound, pick which one in Admin → Discord.",
       required: false,
     },
   ],
@@ -210,6 +210,15 @@ export const BLIZZARD_SETUP = {
         '1. Install Mailworthy.\n2. An officer (guild master or the rank below) publishes the guild template in Mailworthy.\n3. Players export with LedgerLink as usual — LedgerLink adds the Mailworthy summary. The Guild contributions card fills in from those exports.',
       required: false,
       appliesTo: ['wow_guild'],
+    },
+    {
+      // ROK-2099: optional; admins read the uploaded errors, nobody else.
+      id: 'addon-errors-companion',
+      kind: 'companion_app',
+      title: 'Share addon errors (players, optional)',
+      instructions:
+        '1. In the Raid Ledger Companion, turn on "Share addon errors".\n2. The Companion reads BugGrabber errors, removes your folder paths and character names, and uploads them. Only admins can see them; they are deleted 90 days after they were last seen.\n3. Turning it off stops new uploads.',
+      required: false,
     },
   ],
 } satisfies PluginSetup;

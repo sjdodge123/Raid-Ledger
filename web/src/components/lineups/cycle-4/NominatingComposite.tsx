@@ -28,6 +28,7 @@ import { SearchInput } from '../../ui/search-input';
 import { FilterEntryTrigger } from '../../ui/filter-entry';
 import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 import { LineupHeroMeta } from '../LineupHeroMeta';
+import { rosterSize } from '../lineup-roster-size';
 
 export interface NominatingCompositeProps {
   lineup: LineupDetailResponseDto;
@@ -55,37 +56,6 @@ function targetSuffix(lineup: LineupDetailResponseDto): string {
   // Promising early voting there would be a lie.
   if (!lineup.nominationTargetArmed) return '';
   return ` · voting opens at ${lineup.nominationTargetPct}%`;
-}
-
-/**
- * ROK-1444: group size for the roster-fit flags.
- *
- * Base is Common Ground's `participantCount` — the people actually IN this
- * lineup (nominators + voters, or invitees + creator when private) — NOT
- * `votingEligibleCount`, which on a public lineup is the whole community and
- * flagged every co-op game on the dev env ("group is 249").
- *
- * Codex P2: that count only reaches public invitees once they nominate or
- * vote, so a public lineup seeded with explicit invitees (ROK-1440) reported
- * `participantCount = 1` and stayed silent for a group of five. Take the
- * larger of the two views; for a private lineup `participantCount` is already
- * invitees + creator, so the max is a no-op there.
- *
- * Returns undefined below two people: a "group" of one cannot outgrow a co-op
- * cap, and flagging a synced-zero game at "group is 1" would be noise.
- */
-function rosterSize(
-  lineup: LineupDetailResponseDto,
-  participantCount: number,
-): number | undefined {
-  // Codex round-5 P2: count DISTINCT people. `addInvitees` does not exclude
-  // the creator, so a creator who is also in the invitee list would otherwise
-  // be counted twice and report the group one person too large — enough to
-  // wrongly flag a 4-player co-op game for a real four-person roster.
-  const invited = new Set(lineup.invitees.map((i) => i.id));
-  invited.add(lineup.createdBy.id);
-  const size = Math.max(participantCount, invited.size);
-  return size >= 2 ? size : undefined;
 }
 
 function deriveJourneyState(

@@ -32,6 +32,25 @@ describe('ROK-1366: magic-link fragment is captured before Sentry initialises', 
         expect(mod.takeCapturedMagicLinkToken()).toBeNull();
     });
 
+    it('ROK-2283: on /signin-link strips the token but holds it for the tap instead of the auto-redeem', async () => {
+        window.history.replaceState(null, '', '/signin-link#token=held.tok');
+        const mod = await import('./magic-link-capture');
+        expect(window.location.hash).toBe('');
+        expect(window.location.pathname).toBe('/signin-link');
+        expect(mod.takeCapturedMagicLinkToken(), 'App must not auto-redeem a /signin-link token').toBeNull();
+        expect(mod.peekCapturedSigninLinkToken()).toBe('held.tok');
+        expect(mod.peekCapturedSigninLinkToken(), 'peek does not spend it').toBe('held.tok');
+        mod.clearCapturedSigninLinkToken();
+        expect(mod.peekCapturedSigninLinkToken()).toBeNull();
+    });
+
+    it('ROK-2283: any other route still hands the token to the auto-redeem and holds nothing', async () => {
+        window.history.replaceState(null, '', '/signin-linked#token=auto.tok');
+        const mod = await import('./magic-link-capture');
+        expect(mod.takeCapturedMagicLinkToken()).toBe('auto.tok');
+        expect(mod.peekCapturedSigninLinkToken()).toBeNull();
+    });
+
     it("is main.tsx's first import, evaluated ahead of ./sentry", () => {
         const specifiers = importsOf('../main.tsx');
         expect(specifiers[0], 'the fragment strip must run before Sentry.init').toBe('./lib/magic-link-capture');

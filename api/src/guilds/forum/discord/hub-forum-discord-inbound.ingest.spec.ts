@@ -130,6 +130,17 @@ describe('HubForumDiscordInboundIngest.onCreate — starter import race', () => 
     await expect(got).resolves.toBe('skipped');
   });
 
+  it('ROK-2272 S3: an event-planning registry post is never imported', async () => {
+    w.findPostLink.mockResolvedValue(null);
+    w.isEventPlanningPost.mockResolvedValue(true);
+    const got = makeIngest().onCreate(message(POST), thread, {
+      botUserId: 'bot',
+    });
+    await expect(got).resolves.toBe('skipped');
+    expect(w.isEventPlanningPost).toHaveBeenCalledWith(expect.anything(), POST);
+    expect(w.insertDiscordThread).not.toHaveBeenCalled();
+  });
+
   it('any other insert failure still throws', async () => {
     w.findPostLink.mockResolvedValue(null);
     w.insertDiscordThread.mockRejectedValue(new Error('connection lost'));
@@ -137,5 +148,55 @@ describe('HubForumDiscordInboundIngest.onCreate — starter import race', () => 
       botUserId: 'bot',
     });
     await expect(run).rejects.toThrow('connection lost');
+  });
+});
+
+describe('HubForumDiscordInboundIngest.onThreadDelete — outbound 404 stamp', () => {
+  const stamped: ForumLink = { ...postLink, discordDeletedAt: new Date(1) };
+
+  it('a link stamped by an outbound 404 still removes the live RL thread', async () => {
+    w.findPostLink.mockResolvedValue(stamped);
+    w.removeFromDiscord.mockResolvedValue(true);
+    const now = new Date(2);
+    await expect(makeIngest().onThreadDelete(thread, now)).resolves.toBe(
+      'deleted',
+    );
+    expect(w.removeFromDiscord).toHaveBeenCalledWith(
+      expect.anything(),
+      stamped,
+      'moderator',
+      now,
+    );
+  });
+
+  it('a stamped link whose RL thread is already removed skips', async () => {
+    w.findPostLink.mockResolvedValue(stamped);
+    w.removeFromDiscord.mockResolvedValue(false);
+    await expect(makeIngest().onThreadDelete(thread)).resolves.toBe('skipped');
+  });
+
+  it('a post outside the current binding skips without removing', async () => {
+    w.findPostLink.mockResolvedValue(stamped);
+    const off = { ...thread, parentId: null };
+    await expect(makeIngest().onThreadDelete(off)).resolves.toBe('skipped');
+    expect(w.removeFromDiscord).not.toHaveBeenCalled();
+  });
+});
+
+describe('HubForumDiscordInboundIngest.onDelete — reports what removeFromDiscord did', () => {
+  it('a message whose RL row was already removed reports skipped, not deleted', async () => {
+    w.findLinkByMessage.mockResolvedValue(postLink);
+    w.removeFromDiscord.mockResolvedValue(false);
+    const result = await makeIngest().onDelete(POST, 'forum-1');
+    expect(w.removeFromDiscord).toHaveBeenCalledTimes(1);
+    expect(result).toBe('skipped');
+  });
+
+  it('a message whose RL row it soft-deleted reports deleted', async () => {
+    w.findLinkByMessage.mockResolvedValue(postLink);
+    w.removeFromDiscord.mockResolvedValue(true);
+    await expect(makeIngest().onDelete(POST, 'forum-1')).resolves.toBe(
+      'deleted',
+    );
   });
 });

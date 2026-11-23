@@ -11,8 +11,10 @@ import { DEACTIVATED_MESSAGE } from '../lib/api/deactivated-session';
 import { DiscordIcon } from '../components/icons/DiscordIcon';
 import type { LoginMethodDto } from '@raid-ledger/contract';
 import { LocalLoginForm } from './login/LocalLoginForm';
+import { PhoneSignInHint } from './login/PhoneSignInHint';
 import { Button } from '../components/ui/button';
 import { nativeFetch } from '../lib/api/native-fetch';
+import { safeGetItem, safeSetItem } from '../lib/safe-storage';
 
 /** Watches for OAuth error query param and displays a toast */
 function useOAuthErrorHandler(): void {
@@ -44,7 +46,7 @@ function useOAuthErrorHandler(): void {
 /** Derives community display info from system status */
 function useCommunityInfo(): {
     isFirstRun: boolean; authProviders: LoginMethodDto[];
-    hasProviders: boolean; communityName: string; communityLogoUrl: string | null;
+    hasProviders: boolean; communityName: string; communityLogoUrl: string | null; showPhoneHint: boolean;
 } {
     const { data: systemStatus } = useSystemStatus();
     const isFirstRun = systemStatus?.isFirstRun ?? false;
@@ -52,7 +54,10 @@ function useCommunityInfo(): {
     const hasProviders = authProviders.length > 0;
     const communityName = systemStatus?.communityName || 'Raid Ledger';
     const communityLogoUrl = systemStatus?.communityLogoUrl ? `${API_BASE_URL}${systemStatus.communityLogoUrl}` : null;
-    return { isFirstRun, authProviders, hasProviders, communityName, communityLogoUrl };
+    // ROK-2291: the phone hint names Discord and /login, so it needs Discord
+    // sign-in; first run already shows its own callout (§4.7: one at a time).
+    const showPhoneHint = !isFirstRun && authProviders.some((p) => p.icon === 'discord');
+    return { isFirstRun, authProviders, hasProviders, communityName, communityLogoUrl, showPhoneHint };
 }
 
 /** Redirect logic after successful login */
@@ -61,9 +66,9 @@ function handlePostLoginRedirect(
     isFirstRun: boolean,
     navigate: ReturnType<typeof useNavigate>,
 ): void {
-    const hasSeenWelcome = localStorage.getItem('rl-welcome-shown');
+    const hasSeenWelcome = safeGetItem('rl-welcome-shown');
     if (isFirstRun && !hasSeenWelcome) {
-        localStorage.setItem('rl-welcome-shown', 'true');
+        safeSetItem('rl-welcome-shown', 'true');
         setTimeout(() => toast.info('Welcome! Visit your Profile to add characters.', { duration: 6000 }), 1000);
     }
     if (user.role !== 'admin' && !user.onboardingCompletedAt) {
@@ -111,7 +116,7 @@ export function LoginPage(): JSX.Element {
     const [localLoginToggled, setLocalLoginToggled] = useState<boolean | null>(null);
 
     useOAuthErrorHandler();
-    const { isFirstRun, authProviders, hasProviders, communityName, communityLogoUrl } = useCommunityInfo();
+    const { isFirstRun, authProviders, hasProviders, communityName, communityLogoUrl, showPhoneHint } = useCommunityInfo();
     const { isLoading, error, handleLocalLogin } = useLocalLogin(isFirstRun);
 
     // Show local login by default on first run with providers; otherwise respect user toggle
@@ -128,7 +133,7 @@ export function LoginPage(): JSX.Element {
                 <div className="bg-panel/50 backdrop-blur-sm rounded-2xl shadow-xl border border-edge/50 p-8">
                     <LoginHeader communityName={communityName} communityLogoUrl={communityLogoUrl} />
                     <LoginBody hasProviders={hasProviders} authProviders={authProviders} isRedirecting={isRedirecting}
-                        onProviderLogin={handleProviderLogin} showLocalLogin={showLocalLogin}
+                        onProviderLogin={handleProviderLogin} showLocalLogin={showLocalLogin} showPhoneHint={showPhoneHint}
                         onToggleLocal={() => setLocalLoginToggled(!showLocalLogin)}
                         onLocalLogin={handleLocalLogin} isLoading={isLoading} error={error} />
                     <FirstRunBanner isFirstRun={isFirstRun} />
@@ -183,9 +188,9 @@ function LoginHeader({ communityName, communityLogoUrl }: {
 }
 
 /** Main login body — provider buttons or local login form */
-function LoginBody({ hasProviders, authProviders, isRedirecting, onProviderLogin, showLocalLogin, onToggleLocal, onLocalLogin, isLoading, error }: {
+function LoginBody({ hasProviders, authProviders, isRedirecting, onProviderLogin, showLocalLogin, showPhoneHint, onToggleLocal, onLocalLogin, isLoading, error }: {
     hasProviders: boolean; authProviders: LoginMethodDto[]; isRedirecting: boolean;
-    onProviderLogin: (p: LoginMethodDto) => void; showLocalLogin: boolean; onToggleLocal: () => void;
+    onProviderLogin: (p: LoginMethodDto) => void; showLocalLogin: boolean; showPhoneHint: boolean; onToggleLocal: () => void;
     onLocalLogin: (u: string, p: string) => Promise<void>; isLoading: boolean; error: string | null;
 }): JSX.Element {
     if (!hasProviders) {
@@ -194,6 +199,7 @@ function LoginBody({ hasProviders, authProviders, isRedirecting, onProviderLogin
     return (
         <>
             <ProviderButtons providers={authProviders} isRedirecting={isRedirecting} onLogin={onProviderLogin} />
+            {showPhoneHint && <PhoneSignInHint />}
             <div className="text-center mt-6">
                 <Button variant="ghost" size="sm" onClick={onToggleLocal}>
                     {showLocalLogin ? 'Hide username login' : 'Sign in with username instead'}

@@ -12,6 +12,10 @@ import type { CreateSignupDto, SignupResponseDto } from '@raid-ledger/contract';
 import { SignupsService } from '../events/signups.service';
 import { SignupsRosterService } from '../events/signups-roster.service';
 import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grace.queue';
+import { RunningLateService } from '../events/running-late.service';
+import { z } from 'zod';
+import { activatedAtPatch } from '../events/signup-activated-at.helpers';
+import type { SetSignupStatusTestBody } from './demo-test.schemas';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -46,7 +50,7 @@ async function overrideSignupStatus(
 ): Promise<void> {
   await db
     .update(schema.eventSignups)
-    .set({ status })
+    .set({ status, ...activatedAtPatch(status) })
     .where(eq(schema.eventSignups.id, signupId));
 }
 
@@ -90,4 +94,46 @@ export async function cancelSignupForTest(
 ): Promise<void> {
   const svc = moduleRef.get(SignupsRosterService, { strict: false });
   await svc.cancel(eventId, userId);
+}
+
+/** Body of `POST /admin/test/running-late` (ROK-2271). */
+export const RunningLateTestSchema = z.object({
+  eventId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+  minutes: z.number().int().min(1).max(240).optional(),
+  clear: z.boolean().optional(),
+});
+export type RunningLateTestBody = z.infer<typeof RunningLateTestSchema>;
+
+/**
+ * Mark (or clear) a signup as running late through the REAL service, so the
+ * urgent signup emit fires exactly as the DM button does (ROK-2271).
+ * `changed` is false when the row was already in that state or is missing.
+ */
+export async function setRunningLateForTest(
+  moduleRef: ModuleRef,
+  body: RunningLateTestBody,
+): Promise<{ changed: boolean }> {
+  const svc = moduleRef.get(RunningLateService, { strict: false });
+  const changed = body.clear
+    ? await svc.clearRunningLate(body.eventId, body.userId)
+    : await svc.setRunningLate(body.eventId, body.userId, body.minutes);
+  return { changed };
+}
+
+/**
+ * Change any user's signup status through the REAL service call the
+ * `PATCH /events/:id/signup/status` route makes for the caller, so
+ * `SIGNUP_EVENTS.UPDATED` fires (ROK-2275).
+ */
+export async function setSignupStatusForTest(
+  moduleRef: ModuleRef,
+  body: SetSignupStatusTestBody,
+): Promise<SignupResponseDto> {
+  const svc = moduleRef.get(SignupsService, { strict: false });
+  return svc.updateStatus(
+    body.eventId,
+    { userId: body.userId },
+    { status: body.status },
+  );
 }

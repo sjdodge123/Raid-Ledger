@@ -1,11 +1,15 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RescheduleResponseListener } from './reschedule-response.listener';
+import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';
 import { CharactersService } from '../../characters/characters.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { MessageFlags } from 'discord.js';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
+import { LFG_BLOCKED_REPLY } from '../commands/lfg.command.helpers';
+import type { LinkedRescheduleUser } from './reschedule-response.helpers';
 import { EventEmitter } from 'node:events';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
@@ -88,6 +92,7 @@ let mockCharactersService: {
   findOne: jest.Mock;
 };
 let mockEmbedSyncQueue: { enqueue: jest.Mock };
+let mockSettingsService: { getTrustedClientUrl: jest.Mock };
 let mockEmojiService: {
   getClassEmojiComponent: jest.Mock;
   getRoleEmojiComponent: jest.Mock;
@@ -132,6 +137,9 @@ function createRescheduleMocks() {
     findOne: jest.fn().mockResolvedValue({ id: 'char-1', name: 'Arthas' }),
   };
   mockEmbedSyncQueue = { enqueue: jest.fn().mockResolvedValue(undefined) };
+  mockSettingsService = {
+    getTrustedClientUrl: jest.fn().mockResolvedValue(null),
+  };
   mockEmojiService = {
     getClassEmojiComponent: jest.fn().mockReturnValue(undefined),
     getRoleEmojiComponent: jest.fn().mockReturnValue(undefined),
@@ -150,6 +158,11 @@ function buildRescheduleProviders() {
     {
       provide: ActivityLogService,
       useValue: { log: jest.fn().mockResolvedValue(undefined) },
+    },
+    { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+    {
+      provide: SettingsService,
+      useValue: mockSettingsService,
     },
   ];
 }
@@ -191,6 +204,10 @@ describe('RescheduleResponseListener — confirm', () => {
 
   describe('handleLinkedConfirm', () => {
     linkedConfirmTests();
+  });
+
+  describe('Regression: TECH-DEBT T5 — a blocked account is refused', () => {
+    blockedAccountTests();
   });
 
   describe('Regression: ROK-1425 — attach lifecycle', () => {
@@ -471,6 +488,44 @@ function linkedConfirmMultiCharTest() {
   });
 }
 
+function linkedConfirmImportLinkTest() {
+  it('puts the import Link row under the re-confirm character list (ROK-2294)', async () => {
+    const eventWithGame = { ...mockEvent, gameId: 5, slotConfig: null };
+    mockDb.limit.mockResolvedValueOnce([eventWithGame]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    mockDb.limit.mockResolvedValueOnce([{ id: 5 }]);
+    mockDb.limit.mockResolvedValueOnce([{ id: 5, name: 'WoW' }]);
+    mockCharactersService.findAllForUser.mockResolvedValue({
+      data: [
+        { id: 'char-1', name: 'Arthas', isMain: true, class: 'Paladin' },
+        { id: 'char-2', name: 'Sylvanas', isMain: false, class: 'Hunter' },
+      ],
+    });
+    mockSettingsService.getTrustedClientUrl.mockResolvedValue(
+      'https://raid.example',
+    );
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.CONFIRM}:42`,
+    );
+    await listener['handleButtonInteraction'](interaction);
+    const reply = interaction.editReply.mock.calls.at(-1)?.[0] as
+      { components?: Array<{ toJSON(): unknown }> } | undefined;
+    const rows = reply?.components?.map((row) => row.toJSON()) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual({
+      type: 1,
+      components: [
+        {
+          type: 2,
+          style: 5,
+          label: "Don't see your character? Import it",
+          url: 'https://raid.example/profile/gaming/characters?game=5',
+        },
+      ],
+    });
+  });
+}
+
 function linkedConfirmMmoTests() {
   const linkedUser = { id: 5 };
 
@@ -526,4 +581,55 @@ function linkedConfirmTests() {
   linkedConfirmAutoSelectTest();
   linkedConfirmMultiCharTest();
   linkedConfirmMmoTests();
+  linkedConfirmImportLinkTest();
+}
+
+/**
+ * TECH-DEBT T5: `NotDeactivatedGuard` guards HTTP routes only, so the
+ * reschedule DM's Confirm / Tentative buttons must refuse a banned or
+ * deactivated account themselves — without touching the signup.
+ */
+function blockedAccountTests() {
+  const pressAs = async (
+    action: string,
+    user: LinkedRescheduleUser,
+  ): Promise<ReturnType<typeof makeButtonInteraction>> => {
+    mockDb.limit.mockResolvedValueOnce([mockEvent]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    mockDb.limit.mockResolvedValueOnce([user]);
+    mockDb.limit.mockResolvedValueOnce([mockSignup]);
+    mockDb.limit.mockResolvedValueOnce([]);
+    const interaction = makeButtonInteraction(`${action}:42`);
+    await listener['handleButtonInteraction'](interaction);
+    return interaction;
+  };
+  const expectRefused = (i: ReturnType<typeof makeButtonInteraction>) => {
+    expect(i.editReply).toHaveBeenCalledWith({ content: LFG_BLOCKED_REPLY });
+    expect(i.editReply).toHaveBeenCalledTimes(1);
+    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(mockSignupsService.updateStatus).not.toHaveBeenCalled();
+    expect(mockEmbedSyncQueue.enqueue).not.toHaveBeenCalled();
+  };
+
+  it('a banned user pressing Confirm is refused and the signup is untouched', async () => {
+    const banned = { id: 5, bannedAt: new Date(), deactivatedAt: null };
+    expectRefused(await pressAs(RESCHEDULE_BUTTON_IDS.CONFIRM, banned));
+  });
+
+  it('a deactivated user pressing Tentative is refused and the signup is untouched', async () => {
+    const gone = { id: 5, bannedAt: null, deactivatedAt: new Date() };
+    expectRefused(await pressAs(RESCHEDULE_BUTTON_IDS.TENTATIVE, gone));
+  });
+
+  it('an active user pressing Confirm is still re-confirmed', async () => {
+    const active = { id: 5, bannedAt: null, deactivatedAt: null };
+    const i = await pressAs(RESCHEDULE_BUTTON_IDS.CONFIRM, active);
+    expect(i.editReply).toHaveBeenCalledWith({
+      content: "You're confirmed for **Mythic Raid Night**.",
+    });
+    expect(mockEmbedSyncQueue.enqueue).toHaveBeenCalledWith(
+      42,
+      'reschedule-confirm',
+    );
+  });
 }
