@@ -12,6 +12,15 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPTS = ['lane-check.sh', 'lane-check-plan.mjs', 'scoped-gate-plan.mjs'];
 
+// Hermetic env for every child: the caller's PATH may hold stub binaries
+// (validate-ci-fleet-scope-skip.test.sh runs this spec with a fake `git` whose
+// `diff --name-only` prints the harness's own change set), and those would
+// leak into the fixture repo. Use the system tool dirs plus this node's dir,
+// and drop the harness's STUB_* variables.
+const CLEAN_PATH = [dirname(process.execPath), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'].join(':');
+const BASE_ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('STUB_')));
+BASE_ENV.PATH = CLEAN_PATH;
+
 function write(root, rel, text) {
   mkdirSync(dirname(join(root, rel)), { recursive: true });
   writeFileSync(join(root, rel), text);
@@ -21,7 +30,7 @@ function write(root, rel, text) {
 // in the base commit / the lane commit.
 function fixtureRepo(smokeText, opts = {}) {
   const root = mkdtempSync(join(tmpdir(), opts.prefix ?? 'lane-check-e2e-'));
-  const git = (...a) => execFileSync('git', a, { cwd: root, stdio: 'pipe' });
+  const git = (...a) => execFileSync('git', a, { cwd: root, stdio: 'pipe', env: BASE_ENV });
   git('init', '-q', '-b', 'main');
   git('config', 'user.email', 'e2e@example.invalid');
   git('config', 'user.name', 'e2e');
@@ -41,7 +50,7 @@ function fixtureRepo(smokeText, opts = {}) {
 function run(root, extraEnv = {}, args = []) {
   return spawnSync('bash', ['scripts/lane-check.sh', ...args], {
     cwd: root, encoding: 'utf8',
-    env: { ...process.env, LANE_CHECK_BASE: 'main', LANE_CHECK_ONLY: 'smoke',
+    env: { ...BASE_ENV, LANE_CHECK_BASE: 'main', LANE_CHECK_ONLY: 'smoke',
       // never contend with a real lane-check running on this laptop
       LANE_CHECK_LOCK_DIR: join(root, '.lane-check-test.lock'), ...extraEnv },
   });
@@ -88,7 +97,7 @@ test('a second run waits for a live holder, then proceeds once it releases', asy
   try {
     const child = spawn('bash', ['scripts/lane-check.sh'], {
       cwd: root,
-      env: { ...process.env, LANE_CHECK_BASE: 'main', LANE_CHECK_ONLY: 'smoke',
+      env: { ...BASE_ENV, LANE_CHECK_BASE: 'main', LANE_CHECK_ONLY: 'smoke',
         LANE_CHECK_LOCK_DIR: lock, LANE_CHECK_LOCK_POLL: '1', LANE_CHECK_LOCK_WAIT: '30' },
     });
     let out = '';
@@ -161,7 +170,7 @@ case "$*" in *vitest*|*jest*) echo "No test files found"; exit 1 ;; esac
 exit 0
 `;
   ['npx', 'npm'].forEach((n) => { write(root, `.fake-bin/${n}`, body); chmodSync(join(bin, n), 0o755); });
-  return { PATH: `${bin}:${process.env.PATH}` };
+  return { PATH: `${bin}:${CLEAN_PATH}` };
 }
 const cleanup = (root) => rmSync(root, { recursive: true, force: true });
 
