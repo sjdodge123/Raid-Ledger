@@ -209,4 +209,4 @@ Commit the backlog append as part of the batch's commits with the `chore(config)
 | `/build` (light) | Skipped — no worktree deploy. Operator reviews directly. | `gates.chrome_mcp_e2e: N/A — light scope` |
 | `/bulk` | Step 3, after Playwright smoke, BEFORE batch push + PR creation | `gates.chrome_mcp_e2e` |
 
-Related memory: [[feedback_chrome_mcp_e2e_before_review]], [[feedback_smoke_tests]], [[feedback_no_push_before_review]].
+Related memory: [[feedback_chrome_mcp_e2e_before_review]], [[feedback_smoke_tests]].

@@ -93,6 +93,31 @@ beforeEach(() => {
 });
 
 describe('ensureSyncedHead', () => {
+  it('check_only: a stale /workspace fails after ONE probe and never force-resyncs (ROK-2205 P2)', async () => {
+    wireGitAndFlush();
+    runOnRunnerExecute.mockResolvedValue({ ok: true, stdout: `${OLD_HEAD}:stale:deadbeef`, stderr: '', exit_code: 0 });
+
+    const res = await ensureSyncedHead({ slot: 3, worktree_path: '/wt', check_only: true });
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('sync_stuck');
+    expect(res.attempts).toBe(1);
+    expect(res.resynced).toBe(false);
+    expect(runRl).not.toHaveBeenCalled();
+    expect(res.message).toMatch(/check-only/);
+  });
+
+  it('check_only: a matching /workspace is verified on the first probe', async () => {
+    wireGitAndFlush();
+    runnerEchoesToken();
+
+    const res = await ensureSyncedHead({ slot: 2, worktree_path: '/wt', check_only: true });
+
+    expect(res.ok).toBe(true);
+    expect(res.synced_head).toBe(HEAD);
+    expect(runRl).not.toHaveBeenCalled();
+  });
+
   it('happy path: /workspace already matches laptop HEAD → ok, no resync, 1 probe', async () => {
     wireGitAndFlush();
     runnerEchoesToken();

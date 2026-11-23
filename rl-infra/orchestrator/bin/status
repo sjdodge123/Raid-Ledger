@@ -15,7 +15,8 @@ source "$(dirname "$0")/_settings_bundle.sh"
 PRETTY=0
 [[ "${1:-}" == "--pretty" ]] && PRETTY=1
 
-CLAIMS=$(cat "$RL_CLAIMS_FILE")
+# ROK-2289: never advertise a free slot above RUNNER_SLOTS (no runner behind it).
+CLAIMS=$(state::offered_claims)
 QUEUE=$(cat "$RL_QUEUE_FILE" 2>/dev/null || echo "[]")
 ENVS_JSON=$(docker ps -a --filter "label=rl.role=env" --format '{{json .}}' | jq -s '
     map({

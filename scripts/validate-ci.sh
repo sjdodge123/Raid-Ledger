@@ -176,7 +176,11 @@
 #     tools/test-bot/src/helpers/polling.ts changed AND env is up AND this
 #     checkout has companion-bot credentials (tools/test-bot/.env, or both
 #     TEST_BOT_TOKEN and TEST_GUILD_ID). Without them the tier is SKIPPED
-#     locally and FAILS under --ci, mirroring the pg_dump precedent.
+#     locally and FAILS under --ci, mirroring the pg_dump precedent. On a
+#     fleet runner (RL_TARGET=runner) they come from the VM's
+#     RL_TEST_BOT_TOKEN / RL_DISCORD_TEST_GUILD_ID, only for an rl_validate_ci
+#     Discord-tier task; the SKIP names a missing VM key or says the run
+#     never gets creds (RL_DISCORD_CREDS_MISSING tells them apart).
 #   * Either step SKIPS with a clear message if scope is empty or env is down.
 #     "Env down" means you skipped the deploy; re-run after deploy_dev.sh if
 #     you need that coverage.
@@ -1286,8 +1290,27 @@ check_test_bot_env() {
     return 1
   fi
 
-  echo -e "${YELLOW}No tools/test-bot/.env on this checkout (missing: ${missing}) — skipping Discord smoke.${NC}"
-  echo -e "${YELLOW}Copy it from the main repo (or export TEST_BOT_TOKEN + TEST_GUILD_ID) to cover the changed bot/notification flows.${NC}"
+  # ROK-2280: on a fleet runner (RL_TARGET=runner, exported by
+  # run-on-runner-with-heartbeat) the credentials come from the VM's
+  # /srv/rl-infra/.env, forwarded ONLY into an rl_validate_ci task that includes
+  # the Discord tier. Such a task missing a VM key also gets
+  # RL_DISCORD_CREDS_MISSING (key NAMES) — name those. No marker means this
+  # kind of run never gets creds (rl validate-ci, /push self-dispatch,
+  # rl_run_on_runner), so do not send the reader to the VM. Never values.
+  if [[ "${RL_TARGET:-local}" == "runner" ]]; then
+    if [[ -n "${RL_DISCORD_CREDS_MISSING:-}" ]]; then
+      local vm_missing="$RL_DISCORD_CREDS_MISSING"
+      [[ "$vm_missing" =~ ^[A-Z0-9_,\ ]+$ ]] || vm_missing="RL_TEST_BOT_TOKEN, RL_DISCORD_TEST_GUILD_ID"
+      echo -e "${YELLOW}Fleet runner: companion-bot credentials come from the VM — set ${vm_missing} in /srv/rl-infra/.env${NC}"
+      echo -e "${YELLOW}(rl-infra/SETUP.md §3.2; takes effect on the next gate, no restart)${NC}"
+    else
+      echo -e "${YELLOW}Fleet runner: companion-bot credentials are forwarded only into an rl_validate_ci task that includes the Discord tier (--only-e2e / --with-e2e / --fleet / a full run), not into rl validate-ci, /push self-dispatch or rl_run_on_runner.${NC}"
+      echo -e "${YELLOW}Run the tier with rl_validate_ci to cover the changed bot/notification flows.${NC}"
+    fi
+  else
+    echo -e "${YELLOW}No tools/test-bot/.env on this checkout (missing: ${missing}) — skipping Discord smoke.${NC}"
+    echo -e "${YELLOW}Copy it from the main repo (or export TEST_BOT_TOKEN + TEST_GUILD_ID) to cover the changed bot/notification flows.${NC}"
+  fi
   export SKIP_DISCORD_SMOKE_NO_BOT_ENV=1
   return 0
 }

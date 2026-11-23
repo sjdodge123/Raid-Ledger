@@ -204,7 +204,9 @@ fi
 # grabbable if it's claimed=false AND (its per-slot queue is empty OR
 # this caller is the queue head for that slot).
 TARGET_SLOT=""
-FREE_SLOTS=$(jq -r '.[] | select(.claimed == false) | .slot' "$RL_CLAIMS_FILE" 2>/dev/null | sort -n)
+# ROK-2289: `.slot <= RUNNER_SLOTS` — a row above the cap has no runner.
+FREE_SLOTS=$(jq -r --argjson max "$RUNNER_SLOTS" \
+    '.[] | select(.claimed == false and .slot <= $max) | .slot' "$RL_CLAIMS_FILE" 2>/dev/null | sort -n)
 for slot in $FREE_SLOTS; do
     # --slot pins selection: a requested slot makes every other slot ineligible,
     # so the claim never lands on (and never branch-mismatch-destroys envs on) a
