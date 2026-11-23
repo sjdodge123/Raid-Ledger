@@ -79,11 +79,12 @@ export function pollPostTitle(poll: PollTitleFields): string {
   const plain = (subject: string): string => subjectPostTitle('poll', subject);
   // The shared rule counts code points; this file holds Discord names to 100
   // UTF-16 units (as `cutAtBoundary` does). An emoji-heavy event title is cut
-  // further until the name fits; the plain form already does.
+  // further until the name fits; the plain form already does. A code point
+  // is at most two units, so half the overshoot never cuts more than needed.
   let max = DISCORD_THREAD_NAME_MAX;
   let name = pollTitleWithin(poll, max, plain);
   while (name.length > DISCORD_THREAD_NAME_MAX && max > 0) {
-    max -= name.length - DISCORD_THREAD_NAME_MAX;
+    max -= Math.ceil((name.length - DISCORD_THREAD_NAME_MAX) / 2);
     name = pollTitleWithin(poll, max, plain);
   }
   return name;
