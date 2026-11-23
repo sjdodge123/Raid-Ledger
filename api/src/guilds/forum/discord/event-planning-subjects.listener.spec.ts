@@ -197,4 +197,16 @@ describe('ROK-2287 EventPlanningSubjectsListener reconnect catch-up', () => {
       tags: { event_planning_posts: 'lineup-catch-up' },
     });
   });
+
+  it('ROK-2301: then re-syncs the live poll posts, even if the lineup catch-up failed', async () => {
+    const { listener, subjects } = setup();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    subjects.ensureMissingLineupPosts.mockRejectedValueOnce(new Error('db'));
+    subjects.resyncLivePollPosts.mockRejectedValueOnce(new Error('gw'));
+    await expect(listener.onConnected()).resolves.toBeUndefined();
+    expect(subjects.resyncLivePollPosts).toHaveBeenCalledTimes(1);
+    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
+      tags: { event_planning_posts: 'poll-title-catch-up' },
+    });
+  });
 });
