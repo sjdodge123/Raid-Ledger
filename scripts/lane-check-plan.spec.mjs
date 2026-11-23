@@ -93,3 +93,11 @@ test('toLines emits tab-separated rows for the runner', () => {
   const plan = planLaneCheck(['api/src/a/b.ts']);
   assert.equal(toLines(plan), 'typecheck\tapi\njest\tapi/src/a\neslint:api\tsrc/a/b.ts');
 });
+
+test('scripts: a .mjs runs its sibling spec, a spec runs itself, a .sh gets bash -n', () => {
+  const files = ['scripts/a.mjs', 'scripts/a.spec.mjs', 'scripts/b.sh', 'scripts/c.mjs'];
+  const plan = planLaneCheck(files, { exists: (p) => p !== 'scripts/c.spec.mjs' });
+  assert.deepEqual(plan.nodeTests, ['scripts/a.spec.mjs']);
+  assert.deepEqual(plan.shellParse, ['scripts/b.sh']);
+  assert.deepEqual(plan.skipped, ['scripts/c.mjs: no spec or parse check']);
+});

@@ -21,6 +21,8 @@
 //   - packages/contract/** selects the contract's own tests plus the contract,
 //     api AND web typechecks.
 //   - scripts/smoke/**, playwright.config.*, scripts/*.ts: the smoke typecheck.
+//   - scripts/*.mjs: `node --test` its .spec.mjs (itself or sibling);
+//     scripts/**/*.sh: `bash -n`.
 //   - docs, markdown, .claude/**, planning-artifacts/**: nothing.
 //
 // smokeStrings: string literals (>= 8 chars) on REMOVED lines of non-test
@@ -64,7 +66,7 @@ export function collapseFolders(folders) {
 function emptyPlan() {
   return {
     jest: [], vitest: [], jestRelated: [], vitestRelated: [],
-    toolTests: [], contractTests: false, typecheck: [], eslint: {},
+    toolTests: [], contractTests: false, nodeTests: [], shellParse: [], typecheck: [], eslint: {},
     smokeStrings: [], skipped: [],
   };
 }
@@ -85,13 +87,22 @@ function addLint(plan, ws, path) {
   (plan.eslint[ws] ??= []).push(path.slice(base.length + 1));
 }
 
+/** scripts/**: node --test its spec (or its sibling spec), bash -n a .sh. */
+function addScript(plan, path, exists) {
+  if (!exists(path)) return;
+  const spec = path.replace(/(\.spec)?\.mjs$/, '.spec.mjs');
+  if (path.endsWith('.sh')) plan.shellParse.push(path);
+  else if (path.endsWith('.mjs') && exists(spec)) plan.nodeTests.push(spec);
+  else plan.skipped.push(`${path}: no spec or parse check`);
+}
+
 function addWorkspace(plan, typecheck, ws, path, exists) {
   if (ws === 'contract') {
     plan.contractTests = true;
     ['contract', 'api', 'web'].forEach((t) => typecheck.add(t));
     return;
   }
-  if (ws === 'scripts') return void plan.skipped.push(`${path}: scripts (run node --test on its spec)`);
+  if (ws === 'scripts') return void addScript(plan, path, exists);
   typecheck.add(ws);
   if (ws.startsWith('tool:') && !plan.toolTests.includes(ws.slice(5))) plan.toolTests.push(ws.slice(5));
   if (!exists(path)) return;
@@ -116,6 +127,7 @@ export function planLaneCheck(files, { diff = '', exists = () => true } = {}) {
   plan.jest = collapseFolders(plan.jest);
   plan.vitest = collapseFolders(plan.vitest);
   plan.typecheck = [...typecheck].sort();
+  plan.nodeTests = [...new Set(plan.nodeTests)];
   plan.smokeStrings = removedStrings(diff);
   return plan;
 }
@@ -165,6 +177,8 @@ export function toLines(plan) {
   if (plan.vitestRelated.length) rows.push(['vitest-related', plan.vitestRelated.join(' ')]);
   if (plan.contractTests) rows.push(['contract-tests', 'packages/contract']);
   plan.toolTests.forEach((t) => rows.push(['tool-tests', t]));
+  plan.nodeTests.forEach((t) => rows.push(['node-test', t]));
+  plan.shellParse.forEach((t) => rows.push(['bash-n', t]));
   Object.entries(plan.eslint).forEach(([ws, fs]) => rows.push([`eslint:${ws}`, fs.join(' ')]));
   plan.smokeStrings.forEach((s) => rows.push(['smoke-string', s.replace(/[\t\n]/g, ' ')]));
   plan.skipped.forEach((s) => rows.push(['skipped', s]));
