@@ -66,6 +66,8 @@ else
         "$TEST_DIR/task-admission-ledger.test.sh"
         # README memory-hardening step 4 — flocked slot shrink/grow.
         "$TEST_DIR/slots-resize.test.sh"
+        # ROK-2289 — never offer a slot above RUNNER_SLOTS (no runner behind it).
+        "$TEST_DIR/slot-cap.test.sh"
         # ROK-1469 — per-slot Discord bot identities (overlay + one-live-bot).
         "$TEST_DIR/env-settings-overlay.test.sh"
         # The stat-probe portability guard: `owner_of` tried BSD `stat -f`
@@ -100,6 +102,10 @@ else
         # guarantee has to hold at the moment of execution, so run-on-runner
         # {,-with-heartbeat} re-assert it before dispatching anything.
         "$TEST_DIR/run-on-runner-exec-bits.test.sh"
+        # ROK-2280 — companion-bot creds reach the runner by NAME only, and only
+        # for an rl_validate_ci task whose args include the Discord tier; a
+        # missing VM key is named, never a value.
+        "$TEST_DIR/run-on-runner-discord-creds.test.sh"
         # A3-B P3 — extra-slots provisioning parity: the /state-locks mount
         # runners 3-4 never had, the slot worktree scaffold that never existed,
         # and a missing mount that must fail by NAME rather than silently run

@@ -82,6 +82,11 @@ WORKDIR /app
 
 COPY . .
 
+# nest build's app-only type program peaks ~2.9 GB (ROK-2288 tsc trace);
+# V8's default ~2 GB heap aborts it. Builder stage only: the production
+# stage and the runtime heap are unaffected.
+ENV NODE_OPTIONS=--max-old-space-size=4096
+
 # Build contract, API, and Web
 RUN npm run build -w @raid-ledger/contract
 RUN npm run build -w @raid-ledger/api

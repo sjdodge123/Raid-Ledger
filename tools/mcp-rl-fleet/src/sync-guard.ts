@@ -58,6 +58,12 @@ export interface EnsureSyncedHeadParams {
   flush_timeout_ms?: number | undefined;
   /** Timeout (ms) for the `rl resync` recovery child process. Default 150000. */
   resync_timeout_ms?: number | undefined;
+  /**
+   * ROK-2205 P2: probe ONCE and never force-resync. The rl_validate_ci gate
+   * preflight uses this so a stalled sync is reported (not repaired) and the
+   * dispatch stays inside the 120s MCP call cap. Deploy/build leave it unset.
+   */
+  check_only?: boolean | undefined;
 }
 
 export interface SyncGuardResult {
@@ -271,7 +277,8 @@ export async function ensureSyncedHead(
   let last: ProbeOutcome | undefined;
 
   try {
-    for (let i = 0; i < 2; i++) {
+    const maxProbes = params.check_only ? 1 : 2;
+    for (let i = 0; i < maxProbes; i++) {
       attempts++;
       last = await probeOnce(
         sentinelName,
@@ -298,7 +305,7 @@ export async function ensureSyncedHead(
       }
       // Not good (stale content OR failed flush) — recover with a forced,
       // time-bounded resync, then probe once more.
-      if (i === 0) {
+      if (i === 0 && maxProbes > 1) {
         try {
           const { stdout } = await runRl(['resync'], {
             cwd: worktreePath,
@@ -373,7 +380,10 @@ export async function ensureSyncedHead(
     attempts,
     flush_ok: last?.flushOk ?? false,
     detail,
-    message:
+    message: params.check_only
+      ? `Sync UNVERIFIED (check-only, no force-resync attempted): ${reason}. ` +
+        `Run rl_force_resync, then re-dispatch.`
+      :
       `Sync STUCK: ${reason}, and a force-resync did NOT recover it. ` +
       `Refusing to build (would serve pre-change or partially-synced code). Recover manually: run ` +
       `rl_force_resync (or 'rl resync' from the worktree), confirm 'mutagen sync list rl-slot-${params.slot}' ` +

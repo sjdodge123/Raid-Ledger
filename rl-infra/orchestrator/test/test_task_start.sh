@@ -140,6 +140,27 @@ test_task_start_detach() {
     pkill -f "/bin/sleep 30" 2>/dev/null || true
 }
 
+# D7 (ROK-2280): task-start exports RL_TASK_TOOL for the wrapped command (the
+# heartbeat wrapper gates companion-bot creds on it) and the task record's
+# cmd/env never carry the VM token value.
+test_task_start_exports_tool_and_never_records_token() {
+    CURRENT_TEST_NAME="D7: env.RL_TASK_TOOL is the tool; no token in the record"
+    local task_id="dsc72280" json
+    RL_TASK_TOOL=stale_parent_tool RL_TEST_BOT_TOKEN=sentinel-tok-XYZ \
+        bash "$BIN_DIR/task-start" "$task_id" --tool rl_validate_ci --slot 1 -- /bin/sleep 5 >/dev/null 2>&1 || true
+    json=$(cat "$RL_TASKS_DIR/$task_id.json" 2>/dev/null || echo '{}')
+
+    assert_eq "$(jq -r '.env.RL_TASK_TOOL // "absent"' <<<"$json")" "rl_validate_ci" \
+        "the record's env must show RL_TASK_TOOL = this task's tool (not an inherited parent value)"
+    local leaks
+    leaks=$(jq -c '[.cmd, .env]' <<<"$json" | grep -c 'sentinel-tok-XYZ')
+    assert_eq "$leaks" "0" "the task record's cmd/env must never contain the VM bot token value"
+    assert_eq "$(jq -r '.env | has("RL_TEST_BOT_TOKEN")' <<<"$json")" "false" \
+        "the TOKEN-named VM key must stay filtered out of the record's env"
+
+    pkill -f "/bin/sleep 5" 2>/dev/null || true
+}
+
 # Run all tests.
 run_test "ac-m1-1" test_task_start_returns_fast
 run_test "ac-m1-2" test_task_start_state_file_created
@@ -149,5 +170,6 @@ run_test "invalid-tool" test_task_start_rejects_invalid_tool
 run_test "missing-cmd" test_task_start_rejects_missing_cmd
 run_test "duplicate-task-id" test_task_start_rejects_duplicate_task_id
 run_test "detach" test_task_start_detach
+run_test "d7-task-tool-env" test_task_start_exports_tool_and_never_records_token
 
 print_test_summary
