@@ -147,3 +147,16 @@ test('smoke-string candidates are capped and the overflow is reported', async ()
   assert.equal(plan.smokeStrings.length, MAX_SMOKE_STRINGS);
   assert.deepEqual(plan.skipped, [`3 more removed strings not grepped (cap ${MAX_SMOKE_STRINGS})`]);
 });
+
+test('eslint targets only the files each workspace lint actually covers (api {src,apps,libs,test}/**/*.ts; web minus dist + vendor)', () => {
+  const plan = planLaneCheck([
+    'api/jest.config.js', 'api/drizzle.config.ts', 'api/scripts/run-migrations-with-sentry.ts',
+    'api/src/a/b.ts', 'api/test/e2e.ts', 'api/src/a/c.js',
+    'web/vite.config.ts', 'web/src/x/y.tsx', 'web/dist/assets/i.js',
+    'web/src/plugins/bg3/upload/vendor/v.js', 'web/src/x/old.jsx',
+  ]);
+  assert.deepEqual(plan.eslint, {
+    api: ['src/a/b.ts', 'test/e2e.ts'],
+    web: ['src/x/y.tsx', 'vite.config.ts'],
+  });
+});

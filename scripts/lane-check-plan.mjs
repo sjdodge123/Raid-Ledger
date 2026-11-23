@@ -50,6 +50,15 @@ const NOTHING = [/^docs\//, /^planning-artifacts\//, /^\.claude\//, /\.md$/];
 const TEST_FILE = /(\.(spec|test)\.[cm]?[jt]sx?$)|(^|\/)(__tests__|test|tests|smoke)\//;
 const WS_ROOTS = { api: 'api/src', web: 'web/src' };
 const ESLINT_WS = { api: 'api', web: 'web', 'tool:test-bot': 'tools/test-bot' };
+// What each workspace's real lint covers (path relative to the workspace).
+// api: `eslint "{src,apps,libs,test}/**/*.ts"` — its projectService rejects any
+// other file ("not found by the project service"). web: `eslint .` = flat-config
+// defaults (.js/.mjs/.cjs) + `**/*.{ts,tsx}`, minus its globalIgnores.
+const ESLINT_COVERS = {
+  api: (p) => /^(src|apps|libs|test)\/.+\.ts$/.test(p),
+  web: (p) => /\.(ts|tsx|js|mjs|cjs)$/.test(p) && !/^(dist|src\/plugins\/bg3\/upload\/vendor)\//.test(p),
+  'tool:test-bot': (p) => /\.(ts|tsx|js|mjs|cjs)$/.test(p),
+};
 const MIN_LEN = 8;
 // lane-check.sh runs one `git grep` per candidate; past this many, the rest are
 // reported as one skipped row instead.
@@ -88,8 +97,9 @@ function selectTests(plan, ws, path) {
 
 function addLint(plan, ws, path) {
   const base = ESLINT_WS[ws];
-  if (!base || !path.startsWith(`${base}/`) || !/\.(ts|tsx|js|jsx|mjs)$/.test(path)) return;
-  (plan.eslint[ws] ??= []).push(path.slice(base.length + 1));
+  if (!base || !path.startsWith(`${base}/`)) return;
+  const rel = path.slice(base.length + 1);
+  if (ESLINT_COVERS[ws](rel)) (plan.eslint[ws] ??= []).push(rel);
 }
 
 /** scripts/**: node --test its spec (or its sibling spec), bash -n a .sh. */
