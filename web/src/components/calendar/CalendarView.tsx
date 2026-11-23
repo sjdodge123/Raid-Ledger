@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react';
 import { Calendar, dateFnsLocalizer, Views, type View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useLiveSearchParams, type SearchParamsMutator } from './use-live-search-params';
 import { parseDateParam } from './parse-date-param';
+import { rememberDayViewScroll, useDayViewScrollRestore } from './use-day-view-scroll-restore';
 import { useEvents } from '../../hooks/use-events';
 import { useCalendarImageHints } from '../../hooks/use-calendar-image-hints';
 import { getCalendarEventStyle } from '../../constants/game-colors';
@@ -112,8 +113,13 @@ function useCalendarViewSync(
         onCalendarViewChange?.(viewToStr(newView));
     }, [syncView, onCalendarViewChange]);
 
+    // ROK-2303: Schedule carries no `view` (phones honour ?view=day|month), so leaving it always writes one.
+    const prevViewRef = useRef(calendarView);
     useEffect(() => {
-        if (controlledView && controlledView !== uncontrolledView) syncView(controlledView);
+        const leftSchedule = prevViewRef.current === 'schedule';
+        prevViewRef.current = calendarView;
+        if (calendarView === 'schedule') writeSearchParams((next) => next.delete('view'));
+        else if (controlledView && (leftSchedule || controlledView !== uncontrolledView)) syncView(controlledView);
     }, [controlledView]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return { view, setView };
@@ -193,6 +199,7 @@ function useCalendarViewState(
     const calendarEvents = useHubFilteredEvents(useCalendarEvents(eventsData, selectedGames, resolved), eventsData?.data);
     useCalendarImageHints(calendarEvents);
     const { handlePrev, handleNext, handleToday } = useCalendarNavigation(currentDate, setCurrentDate, view);
+    useDayViewScrollRestore(format(currentDate, 'yyyy-MM-dd'), view === Views.DAY && !isScheduleView);
     return { navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, calendarEvents, handlePrev, handleNext, handleToday };
 }
 
@@ -250,6 +257,7 @@ function useCalendarInteractions(
         if (window.innerWidth < 768 && view === Views.MONTH && !isScheduleView) {
             setCurrentDate(event.start); setView(Views.DAY); return;
         }
+        if (view === Views.DAY && !isScheduleView) rememberDayViewScroll(format(currentDate, 'yyyy-MM-dd'));
         navigate(`/events/${event.id}`, { state: { fromCalendar: true, calendarDate: format(currentDate, 'yyyy-MM-dd'), calendarView: isScheduleView ? 'schedule' : viewToStr(view) } });
     }, [navigate, view, currentDate, isScheduleView, setCurrentDate, setView]);
 
