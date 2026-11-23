@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { hasRestoreDayScrollFlag } from '../../components/calendar/day-scroll-restore-flag';
 const { mockGameTimeWidget } = vi.hoisted(() => ({
     mockGameTimeWidget: vi.fn(),
 }));
@@ -133,6 +134,25 @@ describe('Regression: ROK-761 — back button mobile touch target', () => {
         renderTopbar({ fromCalendar: true, navState: { calendarDate: '2026-03-10' } });
         const backBtn = screen.getByRole('button', { name: 'Go back' });
         expect(backBtn).toHaveTextContent('\u2190 Back to Calendar');
+    });
+
+    it('Back to Calendar asks the calendar to restore its Day-view scroll (ROK-2303)', async () => {
+        const user = userEvent.setup();
+        let seen: unknown = null;
+        function CalendarProbe(): null {
+            seen = useLocation().state;
+            return null;
+        }
+        render(
+            <MemoryRouter initialEntries={['/events/1']}>
+                <Routes>
+                    <Route path="/events/1" element={<EventDetailTopbar {...defaultProps} fromCalendar navState={{ calendarDate: '2026-03-10', calendarView: 'day' }} />} />
+                    <Route path="/calendar" element={<CalendarProbe />} />
+                </Routes>
+            </MemoryRouter>,
+        );
+        await user.click(screen.getByRole('button', { name: 'Go back' }));
+        expect(hasRestoreDayScrollFlag(seen)).toBe(true);
     });
 
     it('shows "Back" text when not from calendar', () => {
