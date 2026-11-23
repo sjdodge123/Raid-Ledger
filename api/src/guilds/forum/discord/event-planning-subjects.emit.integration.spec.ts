@@ -175,7 +175,7 @@ async function newPoll(guildId: number | null) {
   await db()
     .insert(schema.communityLineupScheduleVotes)
     .values({ slotId: slot.id, userId: ctx.ids.signed });
-  return { lineupId: lineup.id, matchId: m.id };
+  return { lineupId: lineup.id, matchId: m.id, slotAt: slot.proposedTime };
 }
 
 async function registryRows(kind: 'poll' | 'lineup', subjectId: number) {
@@ -190,7 +190,8 @@ async function emitVote(poll: { lineupId: number; matchId: number }) {
   const hub = jest.spyOn(pings(), 'hubVote');
   const planning = jest.spyOn(pings(), 'planningVote');
   const payload: PollVotedPayload = {
-    ...poll,
+    lineupId: poll.lineupId,
+    matchId: poll.matchId,
     userId: ctx.ids.signed,
     stance: 'yes',
   };
@@ -199,6 +200,9 @@ async function emitVote(poll: { lineupId: number; matchId: number }) {
 }
 
 const mentions = () => out.spies.mention.mock.calls;
+/** ROK-2295: the voted line lists the voter's one `yes` slot. */
+const votedLine = (at: Date) =>
+  `\u{1F5F3} <@${discordId}> voted: <t:${Math.floor(at.getTime() / 1000)}:f>`;
 
 describe('ROK-2272 S10 emit — POLL_VOTED through both listeners', () => {
   it('5a: a non-hub poll vote makes ONE registry post and ONE mention', async () => {
@@ -208,7 +212,7 @@ describe('ROK-2272 S10 emit — POLL_VOTED through both listeners', () => {
     const [row] = nonEmpty(await registryRows('poll', poll.matchId), 'row');
     expect(await registryRows('poll', poll.matchId)).toHaveLength(1);
     expect(mentions()).toEqual([
-      [row.discordThreadId, `\u{1F5F3} <@${discordId}> voted`, [discordId]],
+      [row.discordThreadId, votedLine(poll.slotAt), [discordId]],
     ]);
   });
 
@@ -227,10 +231,7 @@ describe('ROK-2272 S10 emit — POLL_VOTED through both listeners', () => {
     await emitVote(poll);
     expect(mentions()).toHaveLength(1);
     const [[, line, users]] = nonEmpty(mentions(), 'mention');
-    expect([line, users]).toEqual([
-      `\u{1F5F3} <@${discordId}> voted`,
-      [discordId],
-    ]);
+    expect([line, users]).toEqual([votedLine(poll.slotAt), [discordId]]);
     expect(createPlanningPost).not.toHaveBeenCalled();
     expect(await registryRows('poll', poll.matchId)).toEqual([]);
   });

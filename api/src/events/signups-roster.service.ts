@@ -24,6 +24,7 @@ import * as writeH from './signups-roster-write.helpers';
 import * as rosterOpsH from './signups-roster-ops.helpers';
 import * as voiceH from '../notifications/voice-access-lost.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { auditRosterReconfirms } from './event-audit.helpers';
 import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
@@ -222,6 +223,11 @@ export class SignupsRosterService {
     });
   }
 
+  /** ROK-1269: best-effort audit of the attendees a roster update re-confirmed. */
+  private logReconfirms(eventId: number, userIds: number[]): Promise<void> {
+    return auditRosterReconfirms(this.activityLog, eventId, userIds);
+  }
+
   /** ROK-1769: db + the ephemeral-voice switches for the voice-line gate. */
   private get voiceGate(): voiceH.VoiceGateDeps {
     return { db: this.db, settings: this.settingsService };
@@ -309,22 +315,5 @@ export class SignupsRosterService {
 
   private emit(eventName: string, payload: SignupEventPayload): void {
     this.eventEmitter.emit(eventName, payload);
-  }
-
-  /**
-   * ROK-1269: log a signup_reconfirmed activity entry per attendee whose
-   * pending status flipped to confirmed via this roster update. Actor is
-   * the attendee themselves; metadata.reason='roster-update' discriminates
-   * from the discord-ack path.
-   */
-  private async logReconfirms(
-    eventId: number,
-    userIds: number[],
-  ): Promise<void> {
-    for (const uid of userIds) {
-      await this.activityLog.log('event', eventId, 'signup_reconfirmed', uid, {
-        reason: 'roster-update',
-      });
-    }
   }
 }

@@ -3,7 +3,8 @@
  * database: concurrent claims never share a row, the batch limit holds,
  * opted-out / capped / inside-cadence / recent-50007 / account-holder /
  * non-candidate rows are never claimed, a failure is recorded and counted,
- * and an abandoned claim becomes claimable again after 30 minutes.
+ * an abandoned claim becomes claimable again after 30 minutes, and a
+ * code-less failure (released claim) is retried behind every other due row.
  */
 import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
@@ -17,6 +18,7 @@ import {
   markSigninReminderSent,
   optOutOfSigninReminders,
   recordSigninReminderFailure,
+  releaseSigninReminderClaim,
 } from './signin-reminder.db';
 
 const T = schema.discordSigninReminders;
@@ -185,5 +187,50 @@ describe('recordSigninReminderFailure', () => {
     await backdate(id, 'last_failure_at', 30 * DAY);
     expect((await row(id)).sentCount).toBe(3);
     expect(await claim([id], { max: 3 })).toEqual([]);
+  });
+});
+
+describe('releaseSigninReminderClaim — a code-less failure retries last', () => {
+  const [failing, fresh] = ['928440001', '928440002'];
+
+  it('a never-tried member is claimed ahead of a released code-less failure', async () => {
+    await ensureSigninReminderRows(testApp.db, [failing, fresh]);
+    expect(await claim([failing], { limit: 1 })).toEqual([failing]);
+    await releaseSigninReminderClaim(testApp.db, failing);
+    // Both rows have last_sent_at NULL and `failing` sorts first by id, so
+    // only the retry-last ordering hands this slot to `fresh`.
+    expect(await claim([failing, fresh], { limit: 1 })).toEqual([fresh]);
+    expect(await claim([failing, fresh], { limit: 1 })).toEqual([failing]);
+    expect(await row(failing)).toMatchObject({
+      sentCount: 0,
+      lastSentAt: null,
+    });
+  });
+
+  it('a member due for a second reminder is claimed ahead of a code-less retry', async () => {
+    const due = '928440003';
+    await ensureSigninReminderRows(testApp.db, [failing, due]);
+    await markSigninReminderSent(testApp.db, due);
+    await backdate(due, 'last_sent_at', 30 * DAY);
+    expect(await claim([failing], { limit: 1 })).toEqual([failing]);
+    await releaseSigninReminderClaim(testApp.db, failing);
+    expect(await claim([failing, due], { limit: 1 })).toEqual([due]);
+  });
+
+  it('keeps count and cadence, and an older 50007 does not re-block a person already due', async () => {
+    await ensureSigninReminderRows(testApp.db, [failing]);
+    await recordSigninReminderFailure(
+      testApp.db,
+      failing,
+      DISCORD_DM_CLOSED_CODE,
+    );
+    await backdate(failing, 'last_sent_at', 30 * DAY);
+    await backdate(failing, 'last_failure_at', 30 * DAY);
+    expect(await claim([failing])).toEqual([failing]);
+    await releaseSigninReminderClaim(testApp.db, failing);
+    const released = await row(failing);
+    expect(released).toMatchObject({ sentCount: 1, lastFailureCode: null });
+    expect(released.lastFailureAt).not.toBeNull();
+    expect(await claim([failing])).toEqual([failing]);
   });
 });

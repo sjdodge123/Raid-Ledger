@@ -5,6 +5,8 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { SettingsService } from '../settings/settings.service';
 import { RoleGapAlertService } from './role-gap-alert.service';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 describe('EventReminderService', () => {
   let service: EventReminderService;
@@ -71,6 +73,43 @@ describe('EventReminderService', () => {
   });
 
   describe('sendReminder', () => {
+    const freshInput = {
+      eventId: 10,
+      userId: 1,
+      windowType: '15min' as const,
+      windowLabel: '15 Minutes',
+      title: 'Raid Night',
+      startTime: new Date(Date.now() + 15 * 60 * 1000),
+      minutesUntil: 15,
+      characterDisplay: null,
+    };
+
+    it('claims the window but sends no DM when the claim reports a fresh signup (ROK-2293)', async () => {
+      // The pass loaded the recipient as not fresh; a re-signup re-stamped
+      // activated_at before the claim, which sees the current signup.
+      mockDb.execute.mockResolvedValue([{ id: 1, fresh: true }]);
+      const result = await service.sendReminder(freshInput);
+      expect(result).toBe(false);
+      expect(mockDb.execute).toHaveBeenCalledTimes(1);
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('sends the DM when the claim reports the signup is not fresh', async () => {
+      mockDb.execute.mockResolvedValue([{ id: 1, fresh: false }]);
+      expect(await service.sendReminder(freshInput)).toBe(true);
+      expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("measures the grace from the pass's now, not the real clock", async () => {
+      mockDb.execute.mockResolvedValue([]);
+      const now = new Date('2030-01-01T12:00:00.000Z');
+      await service.sendReminder({ ...freshInput, now });
+      const query = new PgDialect().sqlToQuery(
+        mockDb.execute.mock.calls[0]?.[0] as SQL,
+      );
+      expect(query.params).toContain('2030-01-01T11:45:00.000Z');
+    });
+
     it('should insert tracking row and create notification', async () => {
       const trackingRow = {
         id: 1,

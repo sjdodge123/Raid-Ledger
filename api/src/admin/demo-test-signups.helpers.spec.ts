@@ -11,6 +11,7 @@ import {
   setSignupStatusForTest,
   RunningLateTestSchema,
 } from './demo-test-signups.helpers';
+import { activatedAtOnReactivation } from '../events/signup-activated-at.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -79,7 +80,10 @@ describe('demo-test-signups.helpers - createSignupForTest', () => {
     });
 
     expect(db.update).toHaveBeenCalled();
-    expect(db.set).toHaveBeenCalledWith({ status: 'tentative' });
+    expect(db.set).toHaveBeenCalledWith({
+      status: 'tentative',
+      activatedAt: activatedAtOnReactivation(), // ROK-2293 conditional re-stamp
+    });
   });
 });
 

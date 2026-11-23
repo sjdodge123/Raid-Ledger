@@ -476,9 +476,12 @@ describe('SchedulingPollEmbedService — debounced sync (ROK-1549/1551)', () => 
   });
 
   it('emits schedule-changed even when the poll has no Discord card', async () => {
-    mockDb.limit.mockResolvedValueOnce([
-      { id: MATCH_ID, lineupId: LINEUP_ID, embedMessageId: null },
-    ]);
+    // ROK-2295: a card-less poll still renders (its forum post's starter
+    // shows the same embed), so the lineup + game reads are queued too.
+    queueRows(
+      { status: 'scheduling', embedMessageId: null, embedChannelId: null },
+      { status: 'decided', phaseDeadline: null },
+    );
     await service.syncEmbed(MATCH_ID);
     expect(sync.emitScheduleChanged).toHaveBeenCalledWith(LINEUP_ID, MATCH_ID);
     expect(sync.editEmbed).not.toHaveBeenCalled();

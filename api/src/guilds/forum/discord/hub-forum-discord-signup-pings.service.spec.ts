@@ -1,3 +1,4 @@
+import { DiscordAPIError } from 'discord.js';
 import * as q from './hub-forum-discord-signup-pings.queries';
 import * as lq from './hub-forum-discord-signup-lines.queries';
 import type { SignupLineMember } from './hub-forum-discord-signup-lines.queries';
@@ -26,6 +27,7 @@ jest.mock('./hub-forum-discord-signup-lines.queries');
 jest.mock('./hub-forum-discord-links.queries', () => ({
   ...jest.requireActual('./hub-forum-discord-links.queries'),
   findThreadLink: jest.fn(),
+  markDeleted: jest.fn(),
 }));
 
 const A = '100000000000000001';
@@ -140,7 +142,7 @@ function setup(pinged: string[] = [], online = true) {
   };
   const gateway = {
     isOnline: jest.fn(() => online),
-    mention: jest.fn(() => Promise.resolve()),
+    mention: jest.fn(() => Promise.resolve('signup-msg')),
     removeThreadMembers: jest.fn((_post: string, ids: string[]) =>
       Promise.resolve(ids),
     ),
@@ -672,5 +674,37 @@ describe('Codex P2-2 — a reset flag is taken only once both passes used it', (
   it('takes it when the event has no RL thread to resync', async () => {
     const { t } = await landed(() => rlPass([null, null], 'no-thread'));
     expect(t.strings.has(lineResyncKey(5))).toBe(false);
+  });
+});
+
+describe('TECH-DEBT T1 — a hub post deleted in Discord is marked deleted, not retried', () => {
+  const unknownChannel = (): DiscordAPIError =>
+    new DiscordAPIError(
+      { code: 10003, message: 'Unknown Channel' },
+      10003,
+      404,
+      'POST',
+      '/x',
+      {},
+    );
+
+  it('a gone hub post marks its link deleted and closes the flush without throwing', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('signed_up', A)));
+    const t = setup();
+    t.gateway.mention.mockRejectedValueOnce(unknownChannel());
+    await expect(t.svc.flush(5)).resolves.toBe('closed');
+    expect(mockedLinks.markDeleted).toHaveBeenCalledWith(
+      expect.anything(),
+      POST.id,
+      expect.any(Date),
+    );
+  });
+
+  it('a non-gone failure still throws (the queue retries it) and marks nothing', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('signed_up', A)));
+    const t = setup();
+    t.gateway.mention.mockRejectedValueOnce(new Error('rate limited'));
+    await expect(t.svc.flush(5)).rejects.toThrow('rate limited');
+    expect(mockedLinks.markDeleted).not.toHaveBeenCalled();
   });
 });

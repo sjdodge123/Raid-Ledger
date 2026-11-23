@@ -117,7 +117,8 @@ async function newPoll(over: LineupOver = {}) {
       .returning(),
     'match',
   );
-  return { lineupId, matchId: m.id, title: `Planning subject ${seq}` };
+  // ROK-2295: a poll post is titled by its game, never the carrier's title.
+  return { lineupId, matchId: m.id, title: ctx.posts.testApp.seed.game.name };
 }
 
 async function setMatch(
@@ -178,6 +179,17 @@ describe('ROK-2272 S10 non-hub poll posts', () => {
         `/community-lineup/${lineupId}/schedule/${matchId}`,
       ) as string,
       tagIds: [tagId(POLL_TAG_NAME)],
+      // ROK-2295: the post opens with the live poll embed (no buttons).
+      card: {
+        embeds: [
+          expect.objectContaining({
+            data: expect.objectContaining({
+              title: expect.stringMatching(/^When should we play/) as string,
+            }) as object,
+          }) as object,
+        ],
+        components: [],
+      },
     });
     const row = await only('poll', matchId);
     expect(row.closesAt).toBeNull();

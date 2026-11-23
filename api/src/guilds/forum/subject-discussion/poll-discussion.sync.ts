@@ -86,6 +86,18 @@ export function pollThreadRootBody(poll: PollSyncRow): string {
 }
 
 /**
+ * ROK-2295: the event a reschedule poll is for, or null (unlinked, gone,
+ * produced by this poll at lock-in, or an empty title).
+ */
+export function rescheduledEvent(
+  poll: Pick<PollSyncRow, 'linkedEventId' | 'linkedEventTitle'>,
+): { title: string } | null {
+  const title = poll.linkedEventTitle?.trim() ?? '';
+  if (poll.linkedEventId === null || title.length === 0) return null;
+  return { title };
+}
+
+/**
  * Close deadline: open ⇒ none; ended ⇒ the stored one if any (the first
  * sync that saw the end stamped it), else `pollEndedAt + 1 h`.
  */
@@ -100,13 +112,16 @@ export function pollWriteClosesAt(
 }
 
 /**
- * Lead ruling (S7a call 1): a standalone poll is titled by its storage lineup
- * row's title; a lineup-derived poll by its game.
+ * ROK-2295: the poll's goal. A reschedule poll (linked event) ⇒
+ * `Reschedule: <event title>`; any other poll ⇒ its game. A standalone poll's
+ * storage lineup title is synthetic ("Standalone Scheduling Poll") and never
+ * surfaces. Callers add the ` — Poll` suffix and cut to their own limit.
  */
 export function pollSubjectTitle(
-  poll: Pick<PollSyncRow, 'standalone' | 'lineupTitle' | 'gameName'>,
+  poll: Pick<PollSyncRow, 'linkedEventId' | 'linkedEventTitle' | 'gameName'>,
 ): string {
-  return poll.standalone ? poll.lineupTitle : poll.gameName;
+  const event = rescheduledEvent(poll);
+  return event ? `Reschedule: ${event.title}` : poll.gameName;
 }
 
 /** The fields the poll dictates on its thread. */

@@ -141,8 +141,8 @@ export class HubForumDiscordInboundIngest {
     if (!link || link.discordDeletedAt !== null) return 'skipped';
     if (!(await this.boundTo(parentId, link.guildId))) return 'skipped';
     const as = link.origin === 'discord' ? 'author' : 'moderator';
-    await inbound.removeFromDiscord(this.db, link, as, now);
-    return 'deleted';
+    const removed = await inbound.removeFromDiscord(this.db, link, as, now);
+    return removed ? 'deleted' : 'skipped';
   }
 
   /** Post renamed (Discord-origin → title) and/or pin flag flipped (R5). */
@@ -168,7 +168,11 @@ export class HubForumDiscordInboundIngest {
     return 'updated';
   }
 
-  /** The whole post was deleted on Discord → RL moderator removal. */
+  /**
+   * The whole post was deleted on Discord → RL moderator removal. Keyed on
+   * the RL thread still being live, not on `discord_deleted_at`: an outbound
+   * send that hit a 404 first stamps the link without removing the thread.
+   */
   async onThreadDelete(
     thread: InboundThread,
     now = new Date(),
@@ -176,10 +180,14 @@ export class HubForumDiscordInboundIngest {
     const link = await inbound.findPostLink(this.db, thread.id);
     // ROK-2272 S4 MAJOR-2: a deleted registry post stops being live.
     if (!link) return planningThreadDeleted(this.db, thread.id, now);
-    if (link.discordDeletedAt !== null) return 'skipped';
     if (!(await this.boundTo(thread.parentId, link.guildId))) return 'skipped';
-    await inbound.removeFromDiscord(this.db, link, 'moderator', now);
-    return 'deleted';
+    const removed = await inbound.removeFromDiscord(
+      this.db,
+      link,
+      'moderator',
+      now,
+    );
+    return removed ? 'deleted' : 'skipped';
   }
 
   private routeOf(parentId: string | null): Promise<ForumRoute | null> {

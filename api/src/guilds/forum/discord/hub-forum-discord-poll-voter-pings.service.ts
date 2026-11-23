@@ -6,7 +6,12 @@
  * in its registry post (created on the vote by `EventPlanningSubjectPosts`).
  * A cleared tap, an unlinked user, a locked / deleted / unsent post or an
  * offline bot pings nothing; only a claimed once-key sends, and a failed
- * send releases it. Lineups get no pings.
+ * send releases it. Lineups get no pings. A send that finds the Discord
+ * post gone (10003 / 404 — deleted while the bot missed the inbound delete)
+ * marks it deleted on either arm, so later votes stop claiming and failing.
+ *
+ * ROK-2295 lane C: the one line lists the voter's slots read at send time
+ * and its message id is stored (`PollVoterLines`), so later votes edit it.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
@@ -18,7 +23,7 @@ import { REDIS_CLIENT } from '../../../redis/redis.module';
 import { findLivePollThread } from '../subject-discussion/poll-discussion.queries';
 import { markPlanningPostDeleted } from './event-planning-posts.queries';
 import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
-import { isUnsent } from './hub-forum-discord-links.queries';
+import { isUnsent, markDeleted } from './hub-forum-discord-links.queries';
 import {
   HubForumDiscordOutboundGateway,
   isGone,
@@ -28,12 +33,13 @@ import {
   linkedDiscordId,
   VOTER_ONCE_TTL_SECONDS,
   voterOnceKey,
-  voterPingLine,
+  voterLine,
   voterScopeKey,
   type VoterPingOutcome,
   type VoterPingScope,
 } from './hub-forum-discord-poll-voter-pings';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+import { PollVoterLines } from './poll-voter-lines.refresh';
 
 @Injectable()
 export class HubForumDiscordPollVoterPings {
@@ -45,6 +51,7 @@ export class HubForumDiscordPollVoterPings {
     private readonly subjects: EventPlanningSubjectPosts,
     private readonly gateway: HubForumDiscordOutboundGateway,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly lines: PollVoterLines,
   ) {}
 
   /**
@@ -66,7 +73,8 @@ export class HubForumDiscordPollVoterPings {
     }
     if (isUnsent(post)) return 'pending';
     const scope = { hubThreadId: thread.id };
-    return this.ping(scope, post.discordThreadId, p.userId);
+    const gone = () => markDeleted(this.db, post.id, new Date());
+    return this.ping(scope, post.discordThreadId, p, gone);
   }
 
   /** Non-hub arm: the registry post (created by this vote when eligible). */
@@ -82,13 +90,15 @@ export class HubForumDiscordPollVoterPings {
       return 'closed-post';
     }
     const scope = { planningPostId: ref.postId };
-    return this.ping(scope, ref.discordThreadId, p.userId);
+    const gone = () => markPlanningPostDeleted(this.db, ref.postId, new Date());
+    return this.ping(scope, ref.discordThreadId, p, gone);
   }
 
   private async ping(
     scope: VoterPingScope,
     discordThreadId: string,
-    userId: number,
+    { matchId, userId }: PollVotedPayload,
+    markGone: () => Promise<void>,
   ): Promise<VoterPingOutcome> {
     const discordId = await this.discordIdOf(userId);
     if (discordId === null) return 'unlinked';
@@ -98,12 +108,11 @@ export class HubForumDiscordPollVoterPings {
     const claimed = await this.redis.set(key, '1', 'EX', ttl, 'NX');
     if (claimed === null) return 'already';
     try {
-      const line = voterPingLine(discordId);
-      await this.gateway.mention(discordThreadId, line, [discordId]);
+      await this.sendLine(matchId, userId, discordId, discordThreadId);
       return 'pinged';
     } catch (err) {
       await this.redis.del(key);
-      await this.markIfGone(scope, err);
+      if (isGone(err)) await markGone();
       const why = err instanceof Error ? err.message : String(err);
       this.logger.warn(
         `Voter ping for user ${userId} in ${voterScopeKey(scope)} lost: ${why}`,
@@ -112,10 +121,26 @@ export class HubForumDiscordPollVoterPings {
     }
   }
 
-  /** A gone registry thread marks its row deleted (as signup pings do). */
-  private async markIfGone(scope: VoterPingScope, err: unknown): Promise<void> {
-    if (!('planningPostId' in scope) || !isGone(err)) return;
-    await markPlanningPostDeleted(this.db, scope.planningPostId, new Date());
+  /** The first voted line: sent, stored, then re-checked once. */
+  private async sendLine(
+    matchId: number,
+    userId: number,
+    discordId: string,
+    discordThreadId: string,
+  ): Promise<void> {
+    const slots = await this.lines.slotsOf(matchId, userId);
+    const line = voterLine(discordId, slots);
+    const ids = [discordId];
+    const messageId = await this.gateway.mention(discordThreadId, line, ids);
+    await this.lines.store(discordThreadId, userId, {
+      messageId,
+      discordId,
+      slots,
+    });
+    // Codex P2 / review m-1: a vote change during the send may have run its
+    // coalesced refresh before this line was stored (and skipped it). One
+    // trailing pass re-reads; it edits only on a difference, never throws.
+    await this.lines.refreshVoterLines(matchId, discordThreadId);
   }
 
   private async discordIdOf(userId: number): Promise<string | null> {

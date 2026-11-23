@@ -67,6 +67,7 @@ const insertedSignup = {
   discordUsername: 'TestUser',
   discordAvatarHash: null,
   signedUpAt: new Date(),
+  activatedAt: new Date(),
   confirmationStatus: 'confirmed',
   status: 'signed_up',
   note: null,

@@ -8,6 +8,8 @@ import type { SignupInteractionDeps } from './signup-interaction.types';
 
 export interface GameContext {
   eventTitle: string;
+  /** The event's game, for the character-import link (ROK-2294). */
+  gameId: number | null;
   characters: import('@raid-ledger/contract').CharacterDto[];
   isMMO: boolean;
 }
@@ -42,12 +44,17 @@ export async function loadGameContext(
   if (!event) return 'not_found';
   const slotConfig = event.slotConfig as Record<string, unknown> | null;
   const isMMO = slotConfig?.type === 'mmo';
-  if (!event.gameId) {
-    return isMMO ? { eventTitle: event.title, characters: [], isMMO } : null;
+  const gameId = event.gameId;
+  if (!gameId) {
+    return isMMO
+      ? { eventTitle: event.title, gameId: null, characters: [], isMMO }
+      : null;
   }
-  const characters = await fetchGameCharacters(event.gameId, userId, deps);
+  const characters = await fetchGameCharacters(gameId, userId, deps);
   if (characters === null) {
-    return isMMO ? { eventTitle: event.title, characters: [], isMMO } : null;
+    return isMMO
+      ? { eventTitle: event.title, gameId, characters: [], isMMO }
+      : null;
   }
-  return { eventTitle: event.title, characters, isMMO };
+  return { eventTitle: event.title, gameId, characters, isMMO };
 }

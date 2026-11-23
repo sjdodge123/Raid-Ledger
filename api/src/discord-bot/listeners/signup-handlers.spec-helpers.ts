@@ -48,6 +48,7 @@ export function createMockDeps(): SignupInteractionDeps {
         communityLogoPath: null,
       }),
       getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
+      getTrustedClientUrl: jest.fn().mockResolvedValue(null),
     },
     emojiService: {
       getRoleEmojiComponent: jest.fn().mockReturnValue(undefined),

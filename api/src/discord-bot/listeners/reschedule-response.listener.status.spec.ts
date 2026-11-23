@@ -1,6 +1,7 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RescheduleResponseListener } from './reschedule-response.listener';
+import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';
 import { CharactersService } from '../../characters/characters.service';
@@ -151,6 +152,10 @@ async function setupStatusModule() {
         useValue: { log: jest.fn().mockResolvedValue(undefined) },
       },
       { provide: EventEmitter2, useValue: mockEmitter },
+      {
+        provide: SettingsService,
+        useValue: { getTrustedClientUrl: jest.fn().mockResolvedValue(null) },
+      },
     ],
   }).compile();
 

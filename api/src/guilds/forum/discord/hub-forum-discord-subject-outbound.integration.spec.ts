@@ -205,6 +205,12 @@ describe('ROK-2272 S8 poll / lineup threads → Discord', () => {
       tagIds: await bindingTagIds(guildId),
     });
     expect(post.content).toContain(`/schedule/${matchId})`);
+    // ROK-2295: the post opens with the live poll embed (no buttons); the
+    // gateway then sends content '' (ROK-2292 `starterBody`).
+    expect(post.card?.components).toEqual([]);
+    const [embed, ...more] = post.card?.embeds ?? [];
+    expect(more).toEqual([]);
+    expect(embed?.data.title).toMatch(/^When should we play/);
 
     await reply(pollRoute(matchId), 'Friday!', 2);
     expect(out.spies.createPost).toHaveBeenCalledTimes(1);
@@ -329,7 +335,7 @@ async function expectNeverPosted(guildId: number, threadId: number) {
 }
 
 describe('ROK-2272 S8 review — a reopen re-drive of a poll post', () => {
-  it('a thread.updated re-drive (lock-sweep reopen) keeps "<game> — Poll" and an absolute link', async () => {
+  it('a thread.updated re-drive (lock-sweep reopen) keeps "<game> — Poll" and never writes text over the poll embed', async () => {
     const guildId = await hubWithSigned();
     const matchId = await hubPoll(guildId);
     await bind(guildId);
@@ -349,10 +355,10 @@ describe('ROK-2272 S8 review — a reopen re-drive of a poll post', () => {
       subjectPostTitle('poll', game),
       expect.any(Function),
     );
-    const [edit] = nonEmpty(out.spies.editMessage.mock.calls, 'editMessage');
-    expect(edit[2]).toMatch(
-      new RegExp(`\\]\\(https?://[^)\\s]+/schedule/${matchId}\\)`),
-    );
+    // ROK-2295 (review M-1): the poll post opens with the live poll embed and
+    // keeps it; a re-drive renames only. The absolute /schedule link lives in
+    // the created post (asserted in the S8 creation case above).
+    expect(out.spies.editMessage).not.toHaveBeenCalled();
   });
 });
 

@@ -37,6 +37,26 @@ interface ReminderFetchContext {
   charsByUser: CharsByUserMap;
 }
 
+/** One reminder DM to claim and (unless fresh) send. */
+export interface ReminderSendInput {
+  eventId: number;
+  userId: number;
+  windowType: ReminderWindowType;
+  windowLabel: string;
+  title: string;
+  startTime: Date;
+  minutesUntil: number;
+  characterDisplay: string | null;
+  timezone?: string;
+  defaultTimezone?: string;
+  discordUrl?: string | null;
+  voiceChannelId?: string | null;
+  plannedVoiceChannel?: PlannedEphemeralVoice | null;
+  gameId?: number | null;
+  /** The reminder pass's clock (ROK-2293 fresh-signup grace). */
+  now?: Date;
+}
+
 /** Scheduled service that sends event reminders via Discord DM (ROK-126). */
 @Injectable()
 export class EventReminderService {
@@ -220,6 +240,7 @@ export class EventReminderService {
         fetchCtx,
         windowType,
         windowLabel,
+        now,
         defaultTimezone,
       );
     }
@@ -263,6 +284,7 @@ export class EventReminderService {
     fetchCtx: Pick<ReminderFetchContext, 'charsByUser' | 'tzMap'>,
     windowType: ReminderWindowType,
     windowLabel: string,
+    now: Date,
     defaultTimezone: string,
   ): Promise<void> {
     const timezone = fetchCtx.tzMap.get(userId);
@@ -280,31 +302,23 @@ export class EventReminderService {
       ),
       ...(timezone !== undefined ? { timezone } : {}),
       defaultTimezone,
+      now,
     });
   }
 
   /**
    * Send a single reminder notification with duplicate prevention. The dedup
    * claim only succeeds while the event still starts at `input.startTime`
-   * (ROK-2042), so a pass holding a stale start sends nothing.
+   * (ROK-2042), so a pass holding a stale start sends nothing. A recipient
+   * whose current signup is fresh at claim time (ROK-2293, measured from
+   * `input.now`, default the real clock) consumes the window without a DM.
    */
-  async sendReminder(input: {
-    eventId: number;
-    userId: number;
-    windowType: ReminderWindowType;
-    windowLabel: string;
-    title: string;
-    startTime: Date;
-    minutesUntil: number;
-    characterDisplay: string | null;
-    timezone?: string;
-    defaultTimezone?: string;
-    discordUrl?: string | null;
-    voiceChannelId?: string | null;
-    plannedVoiceChannel?: PlannedEphemeralVoice | null;
-    gameId?: number | null;
-  }): Promise<boolean> {
-    if (!(await claimReminderDedup(this.db, input))) return false;
+  async sendReminder(input: ReminderSendInput): Promise<boolean> {
+    const claim = await claimReminderDedup(this.db, {
+      ...input,
+      now: input.now ?? new Date(),
+    });
+    if (!claim.claimed || claim.fresh) return false;
     const { messageText, titleTimeLabel } = buildReminderStrings(input);
     await this.notificationService.create({
       userId: input.userId,

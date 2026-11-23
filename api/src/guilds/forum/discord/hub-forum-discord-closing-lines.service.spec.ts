@@ -1,9 +1,16 @@
 import { Logger } from '@nestjs/common';
+import { DiscordAPIError } from 'discord.js';
 import type Redis from 'ioredis';
 import type { SettingsService } from '../../../settings/settings.service';
 import { findLiveLineupThread } from '../subject-discussion/lineup-discussion.queries';
-import { findLivePollThread } from '../subject-discussion/poll-discussion.queries';
-import { findLivePlanningPost } from './event-planning-posts.queries';
+import {
+  findLivePollThread,
+  findPollForSync,
+} from '../subject-discussion/poll-discussion.queries';
+import {
+  findLivePlanningPost,
+  markPlanningPostDeleted,
+} from './event-planning-posts.queries';
 import {
   closingOnceKey,
   HubForumDiscordClosingLines,
@@ -12,6 +19,7 @@ import {
 import {
   findThreadLink,
   isCurrentBindingLink,
+  markDeleted,
 } from './hub-forum-discord-links.queries';
 import type { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
@@ -20,6 +28,7 @@ jest.mock('./hub-forum-discord-links.queries', () => ({
   ...jest.requireActual('./hub-forum-discord-links.queries'),
   findThreadLink: jest.fn(),
   isCurrentBindingLink: jest.fn(),
+  markDeleted: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../subject-discussion/poll-discussion.queries', () => ({
   findLivePollThread: jest.fn(),
@@ -31,6 +40,7 @@ jest.mock('../subject-discussion/lineup-discussion.queries', () => ({
 }));
 jest.mock('./event-planning-posts.queries', () => ({
   findLivePlanningPost: jest.fn(),
+  markPlanningPostDeleted: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../../settings/settings-bot.helpers', () => ({
   getClientUrl: jest.fn().mockResolvedValue('https://rl.example'),
@@ -41,9 +51,12 @@ const currentBinding = jest.mocked(isCurrentBindingLink);
 const findPoll = jest.mocked(findLivePollThread);
 const findLineup = jest.mocked(findLiveLineupThread);
 const findPlanning = jest.mocked(findLivePlanningPost);
+const markLinkDeleted = jest.mocked(markDeleted);
+const markPlanningDeleted = jest.mocked(markPlanningPostDeleted);
 
 function sentLink(over: Record<string, unknown> = {}) {
   return {
+    id: 60,
     discordThreadId: 'd-thread',
     discordMessageId: '111',
     discordDeletedAt: null,
@@ -67,14 +80,14 @@ function fakeRedis() {
   };
 }
 
-function build(online = true) {
+function build(online = true, db: object = {}) {
   const gateway = {
     isOnline: jest.fn().mockReturnValue(online),
-    mention: jest.fn().mockResolvedValue(undefined),
+    mention: jest.fn().mockResolvedValue('closing-msg'),
   };
   const redis = fakeRedis();
   const svc = new HubForumDiscordClosingLines(
-    {} as unknown as ForumDiscordDb,
+    db as unknown as ForumDiscordDb,
     gateway as unknown as HubForumDiscordOutboundGateway,
     redis as unknown as Redis,
     {} as unknown as SettingsService,
@@ -210,6 +223,28 @@ describe('subject entry points (ROK-2272 S8)', () => {
     expect(redis.del).not.toHaveBeenCalled();
   });
 
+  it('ROK-2295 m-3: an unreadable event falls back to the poll subject (game), never the storage title', async () => {
+    const noEvent = {
+      select: () => noEvent,
+      from: () => noEvent,
+      where: () => noEvent,
+      limit: () => Promise.resolve([]),
+    };
+    const { svc, gateway } = build(true, noEvent);
+    findPoll.mockResolvedValue(thread);
+    findLink.mockResolvedValue(sentLink() as never);
+    jest.mocked(findPollForSync).mockResolvedValueOnce({
+      gameName: 'Valheim',
+      linkedEventId: null,
+      linkedEventTitle: null,
+      lineupTitle: 'Standalone Scheduling Poll',
+    } as never);
+    await svc.pollLockedIn(4, 99);
+    const [call] = gateway.mention.mock.calls;
+    expect(call?.[1]).toContain('Valheim');
+    expect(call?.[1]).not.toContain('Standalone Scheduling Poll');
+  });
+
   it('an eventless lock-in posts nothing and reads nothing', async () => {
     const { svc, gateway } = build();
     await svc.pollLockedIn(4, null);
@@ -340,5 +375,75 @@ describe('registry planning posts (ROK-2272 S10)', () => {
     expect(gateway.mention.mock.calls).toEqual([
       ['d-thread', 'Poll cancelled', []],
     ]);
+  });
+});
+
+/** The error Discord returns when the thread/post was deleted. */
+const unknownChannel = (): DiscordAPIError =>
+  new DiscordAPIError(
+    { code: 10003, message: 'Unknown Channel' },
+    10003,
+    404,
+    'POST',
+    '/x',
+    {},
+  );
+
+describe('a send that finds the Discord post gone (TECH-DEBT L4487)', () => {
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('a gone hub post marks its link deleted, releases the key, and the next line skips it', async () => {
+    const { svc, gateway, redis } = build();
+    findLink.mockResolvedValue(sentLink() as never);
+    gateway.mention.mockRejectedValueOnce(unknownChannel());
+    await expect(svc.postClosingLine(5, 'bye', 'k')).resolves.toBe(
+      'send-failed',
+    );
+    expect(markLinkDeleted).toHaveBeenCalledWith(
+      expect.anything(),
+      60,
+      expect.any(Date),
+    );
+    expect(markPlanningDeleted).not.toHaveBeenCalled();
+    expect(redis.store.size).toBe(0);
+    findLink.mockResolvedValue(
+      sentLink({ discordDeletedAt: new Date() }) as never,
+    );
+    await expect(svc.postClosingLine(5, 'bye', 'k')).resolves.toBe(
+      'closed-post',
+    );
+    expect(gateway.mention).toHaveBeenCalledTimes(1);
+  });
+
+  it('a gone planning post marks its row deleted', async () => {
+    const { svc, gateway } = build();
+    findPoll.mockResolvedValue(null);
+    findPlanning.mockResolvedValue({
+      id: 41,
+      discordThreadId: 'p-thread',
+      discordLockedAt: null,
+      discordDeletedAt: null,
+    } as never);
+    gateway.mention.mockRejectedValueOnce(unknownChannel());
+    await svc.pollCancelled(4, null);
+    expect(markPlanningDeleted).toHaveBeenCalledWith(
+      expect.anything(),
+      41,
+      expect.any(Date),
+    );
+    expect(markLinkDeleted).not.toHaveBeenCalled();
+  });
+
+  it('a non-gone failure marks nothing deleted', async () => {
+    const { svc, gateway } = build();
+    findLink.mockResolvedValue(sentLink() as never);
+    gateway.mention.mockRejectedValueOnce(new Error('rate limited'));
+    await svc.postClosingLine(5, 'bye', 'k');
+    expect(markLinkDeleted).not.toHaveBeenCalled();
+    expect(markPlanningDeleted).not.toHaveBeenCalled();
   });
 });
