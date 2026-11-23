@@ -31,7 +31,7 @@ export function resolveDelivery(
 
 /**
  * Delivery for one input. A `skipDiscord` caller gets a hidden row only when
- * it sends its own DM with the returned id (`callerSendsDm`: GG delivery; member invites deliberately do not);
+ * it sends its own DM with the returned id (`callerSendsDm`: invite, GG);
  * any other `skipDiscord` caller has no DM path, so bell off = 'none' (no row,
  * null return) and its "non-null = reached the member" meaning holds.
  */

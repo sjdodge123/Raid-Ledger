@@ -206,8 +206,8 @@ export async function emitMemberInvite(
     title: MEMBER_INVITE_TITLE,
     message: `${inviterName} invited you to "${event.title}"`,
     payload: { eventId, invitedBy: inviterName },
-    // No `callerSendsDm`: bell off means no invite at all (ROK-2290 ruling).
     skipDiscord: true,
+    callerSendsDm: true,
   });
   if (notification) {
     emitInviteCreated(eventEmitter, event, eventId, discordId, notification.id);
