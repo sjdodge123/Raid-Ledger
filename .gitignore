@@ -77,6 +77,9 @@ scripts/*
 !scripts/clone-prod-to-env.spec.mjs
 !scripts/clone-prod-measure-migration.sh
 !scripts/clone-prod-measure-migration.spec.mjs
+# ROK-2309: background PR watcher the Lead runs instead of a watcher lane.
+!scripts/pr-watch.sh
+!scripts/pr-watch.spec.mjs
 !scripts/rl-encrypt-setting.mjs
 !scripts/rl-reencrypt-settings.mjs
 !scripts/rl-reencrypt-settings.spec.mjs
