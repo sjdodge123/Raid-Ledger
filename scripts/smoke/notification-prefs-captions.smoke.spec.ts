@@ -5,28 +5,36 @@
  * are separate, and each row reads "Discord DM only" (bell off + Discord on) or
  * "Muted" (every visible channel off).
  *
- * The browser session is the shared admin storage state. Whether the Discord
- * column renders depends on the env (admin has Discord linked AND the bot is
- * up), so the spec reads `GET /notifications/channels` and asserts the caption
- * that is reachable: "Discord DM only" with the column, "Muted" without it.
+ * Fixtures: every test seeds its OWN member (`seed-non-guild-user`, Discord DMs
+ * muted) and signs the page in as that member. `PATCH /notifications/preferences`
+ * replaces the user's whole merged channel matrix, so the parallel desktop /
+ * mobile / tablet projects (and CI shards) must never share one preference row —
+ * a per-test user is the only race-free setup. The member is deleted in
+ * `finally`, which takes its preference row with it; no shared state is touched.
  *
- * Fixtures: each project owns one notification type so the parallel desktop /
- * mobile / tablet projects never flip the same row. The spec sets the row to
- * bell on / push off / Discord on through the API first and restores the
- * row's original switches afterwards.
+ * The Discord column renders only when `GET /notifications/channels` reports
+ * Discord available (a linked Discord id AND the bot up). GitHub CI has no bot,
+ * so the spec fixtures that endpoint with `page.route` to "available": the
+ * column always renders and bell off + Discord on must read "Discord DM only".
  */
 import { test, expect } from './base';
-import { getAdminToken, apiGet, apiPatch } from './api-helpers';
+import { getAdminToken, apiGet, apiPatch, apiPost, apiDelete } from './api-helpers';
+import { signInOnboardedMember } from './browser-session';
 
 type ChannelPrefs = { inApp: boolean; push: boolean; discord: boolean };
 
-/** One notification type (and its row label) per project, so parallel projects never collide. */
-const TYPE_BY_PROJECT: Record<string, { type: string; label: string }> = {
-    desktop: { type: 'gg_ready', label: 'Your GG of the year' },
-    mobile: { type: 'calendar_needs_reconnect', label: 'Calendar needs reconnecting' },
-    tablet: { type: 'lfg_invite', label: 'LFG group forming' },
-};
-const FALLBACK = { type: 'gg_ready', label: 'Your GG of the year' };
+const ROW = { type: 'gg_ready', label: 'Your GG of the year' };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+}
+
+async function createMember(adminToken: string): Promise<number> {
+    const body: unknown = await apiPost(adminToken, '/admin/test/seed-non-guild-user', { quietDms: true });
+    const id = isRecord(body) ? body['userId'] : undefined;
+    if (typeof id !== 'number') throw new Error(`seed-non-guild-user: ${JSON.stringify(body)}`);
+    return id;
+}
 
 async function readPrefs(token: string, type: string): Promise<ChannelPrefs | undefined> {
     const res = (await apiGet(token, '/notifications/preferences')) as
@@ -36,55 +44,43 @@ async function readPrefs(token: string, type: string): Promise<ChannelPrefs | un
     return res?.channelPrefs?.[type];
 }
 
-async function discordColumnShown(token: string): Promise<boolean> {
-    const res = (await apiGet(token, '/notifications/channels')) as { discord?: { available?: boolean } } | null;
-    return res?.discord?.available ?? false;
-}
-
 test.describe('Notification settings captions', () => {
-    let token = '';
-    let row = FALLBACK;
-    let original: ChannelPrefs | undefined;
-
-    test.beforeEach(async ({}, testInfo) => {
-        token = await getAdminToken();
-        row = TYPE_BY_PROJECT[testInfo.project.name] ?? FALLBACK;
-        original = await readPrefs(token, row.type);
-        await apiPatch(token, '/notifications/preferences', {
-            channelPrefs: { [row.type]: { inApp: true, push: false, discord: true } },
-        });
-    });
-
-    test.afterEach(async () => {
-        if (token && original) {
-            await apiPatch(token, '/notifications/preferences', { channelPrefs: { [row.type]: original } });
-        }
-    });
-
     test('the hint line renders and turning the bell off captions the row', async ({ page }) => {
-        const discordShown = await discordColumnShown(token);
-        await page.goto(`/profile/notifications#notif-${row.type}`);
+        const adminToken = await getAdminToken();
+        const userId = await createMember(adminToken);
+        try {
+            const jwt = await signInOnboardedMember(page, userId);
+            await apiPatch(jwt, '/notifications/preferences', {
+                channelPrefs: { [ROW.type]: { inApp: true, push: false, discord: true } },
+            });
+            await expect.poll(async () => (await readPrefs(jwt, ROW.type))?.inApp, {
+                message: 'the bell-on setup must reach the API before the page loads',
+            }).toBe(true);
+            await page.route('**/notifications/channels', (route) =>
+                route.fulfill({ json: { discord: { available: true } } }),
+            );
+            await page.goto(`/profile/notifications#notif-${ROW.type}`);
+            await expect(page.getByTestId('notif-channels-hint'), 'the hint line must render under the subtitle')
+                .toContainText('The bell and Discord switches are separate', { timeout: 15_000 });
 
-        await expect(page.getByTestId('notif-channels-hint'), 'the hint line must render under the subtitle')
-            .toContainText('The bell and Discord switches are separate', { timeout: 15_000 });
+            const rowEl = page.locator(`#notif-${ROW.type}`);
+            await expect(rowEl, 'the notification-type row must render').toBeVisible({ timeout: 15_000 });
+            const caption = rowEl.getByTestId('notif-row-caption');
+            await expect(caption, 'a bell-on row carries no caption').toHaveCount(0);
 
-        const rowEl = page.locator(`#notif-${row.type}`);
-        await expect(rowEl, 'the notification-type row must render').toBeVisible({ timeout: 15_000 });
-        const caption = rowEl.getByTestId('notif-row-caption');
-        await expect(caption, 'a bell-on row carries no caption').toHaveCount(0);
+            const patched = page.waitForResponse(
+                (r) => r.url().includes('/notifications/preferences') && r.request().method() === 'PATCH',
+            );
+            await rowEl.getByRole('button', { name: `Disable ${ROW.label} inApp notifications` }).click();
+            expect((await patched).ok(), 'the bell toggle PATCH must succeed').toBe(true);
 
-        const patched = page.waitForResponse(
-            (r) => r.url().includes('/notifications/preferences') && r.request().method() === 'PATCH',
-        );
-        await rowEl.getByRole('button', { name: `Disable ${row.label} inApp notifications` }).click();
-        expect((await patched).ok(), 'the bell toggle PATCH must succeed').toBe(true);
-
-        // With the Discord column shown, bell off + Discord on reads "Discord DM only".
-        // Without it, the only visible channels (bell, push) are both off, so the row reads "Muted".
-        const expected = discordShown ? 'Discord DM only' : 'Muted';
-        await expect(caption, `bell off must caption the row "${expected}"`).toHaveText(expected);
-        await expect.poll(async () => (await readPrefs(token, row.type))?.inApp, {
-            message: 'the bell-off switch must reach the API',
-        }).toBe(false);
+            await expect(caption, 'bell off + Discord on must caption the row "Discord DM only"')
+                .toHaveText('Discord DM only');
+            await expect.poll(async () => (await readPrefs(jwt, ROW.type))?.inApp, {
+                message: 'the bell-off switch must reach the API',
+            }).toBe(false);
+        } finally {
+            await apiDelete(adminToken, `/users/${userId}`).catch(() => undefined);
+        }
     });
 });
