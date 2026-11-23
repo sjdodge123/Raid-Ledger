@@ -39,8 +39,9 @@ const IGNORED = [
   /\.md$/,
 ];
 
-/** The target one path maps to, or null when it is not a known surface. */
-function targetFor(path) {
+/** The target one path maps to, or null when it is not a known surface.
+ *  Also used by scripts/lane-check-plan.mjs (ROK-2310). */
+export function targetFor(path) {
   if (/^api\//.test(path)) return 'api';
   // The bundle budget only runs for a web target, so its own config maps there.
   if (/^web\//.test(path) || /^scripts\/(bundle-budget\.config|check-bundle-size)\.mjs$/.test(path)) return 'web';
