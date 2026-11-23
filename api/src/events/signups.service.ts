@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -34,6 +33,7 @@ import * as signupRowH from './signups-row.helpers';
 import * as statusH from './signups-status.helpers';
 import { activatedAtPatch } from './signup-activated-at.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { loadActiveUserRow } from '../users/discord-account-status.helpers';
 
 /** Service for managing event signups (FR-006), character confirmation (ROK-131), and anonymous Discord signups (ROK-137). */
 @Injectable()
@@ -70,11 +70,8 @@ export class SignupsService {
   ): Promise<SignupResponseDto> {
     const eventRow = await cancelH.fetchEventOrThrow(this.db, eventId);
     if (!opts?.skipEndedCheck) cancelH.assertEventAcceptingSignups(eventRow);
-    const [user] = await this.db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.id, userId))
-      .limit(1);
+    // ROK-2298: a banned/deactivated account is refused for every caller.
+    const user = await loadActiveUserRow(this.db, userId);
     if (dto?.characterId)
       await cancelH.verifyCharacterOwnership(this.db, dto.characterId, userId);
     const result = await this.db.transaction((tx) =>
