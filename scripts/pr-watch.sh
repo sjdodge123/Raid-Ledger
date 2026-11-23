@@ -70,16 +70,21 @@ for i in "${!prs[@]}"; do
 done
 
 # One jq pass per PR → unit-separator (\x1f) joined, since tab IFS collapses empty fields: state, mergeState, auto, failing, running.
-# Failing = a check run concluded FAILURE / TIMED_OUT / ACTION_REQUIRED, or a
-# commit status is FAILURE / ERROR. CANCELLED is deliberately NOT a failure:
-# GitHub cancels a superseded run every time a branch is pushed or rebased, so
-# treating it as red would fire on routine churn; the replacement run reports.
+# Failing = a check run concluded FAILURE / TIMED_OUT / ACTION_REQUIRED /
+# STARTUP_FAILURE, or a commit status is FAILURE / ERROR. Any OTHER non-empty
+# conclusion outside the known non-failures counts as failed too, named with its
+# conclusion ("name (X)"), so a new GitHub state cannot leave us waiting out the
+# timeout. CANCELLED is deliberately NOT a failure (nor SKIPPED / NEUTRAL /
+# SUCCESS): GitHub cancels a superseded run every time a branch is pushed or
+# rebased, so treating it as red would fire on routine churn; the replacement run reports.
 JQ_FILTER='
   (.statusCheckRollup // []) as $c |
   [ .state, (.mergeStateStatus // "UNKNOWN"), (.autoMergeRequest != null | tostring),
-    ([ $c[] | select(((.conclusion // "") | test("^(FAILURE|TIMED_OUT|ACTION_REQUIRED)$"))
-                     or ((.state // "") | test("^(FAILURE|ERROR)$")))
-         | (.name // .context // "?") ] | unique | join(", ")),
+    ([ $c[] | (.conclusion // "") as $k | (.name // .context // "?") as $n |
+         if ($k | test("^(FAILURE|TIMED_OUT|ACTION_REQUIRED|STARTUP_FAILURE)$"))
+            or ((.state // "") | test("^(FAILURE|ERROR)$")) then $n
+         elif $k != "" and ($k | test("^(CANCELLED|SKIPPED|NEUTRAL|SUCCESS)$") | not) then "\($n) (\($k))"
+         else empty end ] | unique | join(", ")),
     ([ $c[] | select((.__typename == "CheckRun" and (.status // "COMPLETED") != "COMPLETED")
                      or ((.state // "") | test("^(PENDING|EXPECTED)$"))) ] | length | tostring)
   ] | join("\u001f")'

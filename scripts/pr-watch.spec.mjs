@@ -144,3 +144,25 @@ test('usage errors exit 64', () => {
     assert.match(r.stderr, /^usage:/);
   }
 });
+
+test('a STARTUP_FAILURE check is a failure and exits 1 at once', () => {
+  const r = watch({ '3.json': pr(3, 'OPEN', 'BLOCKED', [run('build', 'STARTUP_FAILURE')]) }, ['3', '--minutes', '1']);
+  assert.equal(r.code, 1, r.stderr);
+  assert.equal(r.lines[0], 'FAILED #3: build');
+});
+
+test('an unknown conclusion counts as failed and is named with its conclusion', () => {
+  const r = watch({ '4.json': pr(4, 'OPEN', 'BLOCKED', [run('odd', 'WEIRD')]) }, ['4', '--minutes', '1']);
+  assert.equal(r.code, 1, r.stderr);
+  assert.equal(r.lines[0], 'FAILED #4: odd (WEIRD)');
+});
+
+test('SKIPPED and NEUTRAL checks are not failures', () => {
+  const files = {
+    '5.1.json': pr(5, 'OPEN', 'BLOCKED', [run('a', 'SKIPPED'), run('b', 'NEUTRAL')]),
+    '5.json': pr(5, 'MERGED', 'UNKNOWN', [run('a', 'SKIPPED'), run('b', 'NEUTRAL')]),
+  };
+  const r = watch(files, ['5']);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.lines[0], 'ALL MERGED');
+});

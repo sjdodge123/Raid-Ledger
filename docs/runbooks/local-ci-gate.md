@@ -131,7 +131,7 @@ Each cycle it reads `gh pr view <n> --json number,state,mergeStateStatus,autoMer
 | First line | Exit | Meaning |
 |---|---|---|
 | `ALL MERGED` | 0 | every PR merged |
-| `FAILED #n: <checks>` | 1 | a check concluded FAILURE / TIMED_OUT / ACTION_REQUIRED (CANCELLED is ignored: a superseded run is cancelled on every push) |
+| `FAILED #n: <checks>` | 1 | a check concluded FAILURE / TIMED_OUT / ACTION_REQUIRED / STARTUP_FAILURE, or any unknown conclusion (named `check (X)`); CANCELLED, SKIPPED and NEUTRAL are ignored (a superseded run is cancelled on every push) |
 | `CLOSED #n` | 1 | closed without merging |
 | `STUCK #n: BEHIND\|DIRTY for >M min` | 1 | BEHIND or DIRTY with no checks running for M minutes (DIRTY never clears by itself) |
 | `ERROR #n: <gh error>` | 1 | three consecutive failed reads of that PR (one blip is retried) |
