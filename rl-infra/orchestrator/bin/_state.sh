@@ -71,6 +71,14 @@ RL_CLAIM_DURATION_SECONDS="${RL_CLAIM_DURATION_SECONDS:-86400}"
 # Default matches the docker-compose.yml default profile (2 runners). Override
 # via .env to 4 when the `extra-slots` compose profile is enabled.
 RUNNER_SLOTS="${RUNNER_SLOTS:-2}"
+# ROK-2289: RUNNER_SLOTS feeds `jq --argjson` and `seq` everywhere; a typo in
+# .env would make `status` error and `claim` treat every slot as busy with no
+# message. Fail loudly once, here, for every script that sources this file.
+if ! [[ "$RUNNER_SLOTS" =~ ^[1-9][0-9]*$ ]]; then
+    jq -nc --arg v "$RUNNER_SLOTS" '{ok:false, error:"invalid_runner_slots",
+        message:"RUNNER_SLOTS must be a positive integer (check /srv/rl-infra/.env)", value:$v}' >&2
+    exit 2
+fi
 mkdir -p "$RL_LOCK_DIR" "$RL_TASKS_DIR" "$RL_LEASE_QUEUE_DIR"
 
 # Portability shim: flock(1) lives in util-linux on the VM, but macOS test
@@ -86,6 +94,18 @@ if ! command -v flock >/dev/null 2>&1; then
         return 0
     }
 fi
+
+# ROK-2289 — the claims.json rows a caller may be OFFERED. RUNNER_SLOTS is the
+# single source of truth for how many runners exist; claims.json can hold more
+# rows (state::init never shrinks it, and slots 3-4 were rowed when the
+# `extra-slots` profile was once on), and a free row above RUNNER_SLOTS is a
+# slot with no rl-runner-N container — every claim/dispatch on it dies (the
+# runner-dir check's exit 96). So a free row above the cap is hidden; a CLAIMED
+# one stays visible, so its holder and the operator still see it until release.
+state::offered_claims() {
+    jq -c --argjson max "$RUNNER_SLOTS" \
+        '[.[] | select(.slot <= $max or .claimed == true)]' "$RL_CLAIMS_FILE"
+}
 
 # Initialize state files if missing. Safe to call repeatedly.
 state::init() {

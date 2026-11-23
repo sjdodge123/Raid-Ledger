@@ -438,3 +438,22 @@ test('AC-M3-elapsed: elapsed_seconds derived correctly per status', async () => 
   // Future-started: clamped to 0.
   assert.equal(byId.future03.elapsed_seconds, 0);
 });
+
+// ROK-2289: /api/state hides a FREE claims.json row above RUNNER_SLOTS (no
+// runner behind it) but keeps a CLAIMED one visible until release.
+test('ROK-2289: /api/state caps free slots at RUNNER_SLOTS, keeps claimed rows', async () => {
+  const prev = process.env.RUNNER_SLOTS;
+  process.env.RUNNER_SLOTS = '2';
+  try {
+    await bootFreshFixture({
+      claims: [
+        { slot: 1, claimed: false }, { slot: 2, claimed: false },
+        { slot: 3, claimed: false }, { slot: 4, claimed: true, agent_id: 'holder-4' },
+      ],
+    });
+    const body = await (await fetch(`${ctx.srv.base}/api/state`)).json();
+    assert.deepEqual(body.slots.map((s) => `${s.slot}:${s.claimed}`), ['1:false', '2:false', '4:true']);
+  } finally {
+    if (prev === undefined) delete process.env.RUNNER_SLOTS; else process.env.RUNNER_SLOTS = prev;
+  }
+});
