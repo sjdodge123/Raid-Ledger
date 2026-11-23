@@ -1333,8 +1333,8 @@ operator's terminal.
   log_tail (~6KB), elapsed_s, waited_s, poll_again_hint}`. Narrate it to the
   operator, then **re-call `rl_task_wait` with the SAME `task_id`** to keep
   waiting — each call is a fresh snapshot. (The old `{error:'timed_out'}` shape is
-  gone.) Prefer `rl_task_status` for a cheap non-blocking one-shot poll every
-  60–90s. **There is no walk-away blocking wait** — to walk away, use the
+  gone.) Agents: an ops lane keeps re-calling `rl_task_wait` until the task is
+  terminal and the Lead never polls; `rl_task_status` is for a one-off read. **There is no walk-away blocking wait** — to walk away, use the
   background push-notify pattern below (`npx rl-task-wait <task_id>` in a
   `run_in_background: true` Bash call, or a backgrounded `rl … wait`), never a
   blocking MCP call.

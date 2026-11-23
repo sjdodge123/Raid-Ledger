@@ -120,3 +120,24 @@ A scoped PASS is a valid pre-push result for the mapped surfaces; GitHub still b
 3. "Strict mode" = selector matches 2+ elements (new DOM from your changes collided with existing selectors).
 4. "Timeout" with a correct selector = CI runner is slow; increase timeout or add retry.
 5. **NEVER re-run CI hoping it passes** — investigate the failure first.
+
+## Waiting on PRs: `scripts/pr-watch.sh`
+
+Once a PR is pushed with auto-merge on, the wait is ONE background script the Lead starts with `run_in_background` — never a watcher lane, never Lead polling turns (ROK-2309). It covers several PRs in one process and exits once, which wakes the Lead exactly once.
+
+```
+scripts/pr-watch.sh [--minutes N=60] [--interval S=60] [--stuck-minutes M=20] <pr>...
+```
+
+Each cycle it reads `gh pr view <n> --json number,state,mergeStateStatus,autoMergeRequest,statusCheckRollup` per PR. The first output line is why it stopped:
+
+| First line | Exit | Meaning |
+|---|---|---|
+| `ALL MERGED` | 0 | every PR merged |
+| `FAILED #n: <checks>` | 1 | a check concluded FAILURE / TIMED_OUT / ACTION_REQUIRED / STARTUP_FAILURE, or any unknown conclusion (named `check (X)`); CANCELLED, SKIPPED and NEUTRAL are ignored (a superseded run is cancelled on every push) |
+| `CLOSED #n` | 1 | closed without merging |
+| `STUCK #n: BEHIND\|DIRTY for >M min` | 1 | BEHIND or DIRTY with no checks running for M minutes (DIRTY never clears by itself) |
+| `ERROR #n: <gh error>` | 1 | three consecutive failed reads of that PR (one blip is retried) |
+| `TIMEOUT` | 2 | `--minutes` elapsed; usage errors exit 64 |
+
+Then one line per PR (`#n STATE MERGE_STATE auto=true|false failing=<names|->`) and a UTC timestamp. **It only reports:** it never reruns CI, updates a branch or merges — triage the reason it prints (memory `feedback_babysit_prs_and_cleanup`). Spec: `node --test scripts/pr-watch.spec.mjs` (fake `gh` via `GH_BIN`).

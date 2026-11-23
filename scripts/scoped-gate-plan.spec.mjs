@@ -8,7 +8,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { planScopedGate } from './scoped-gate-plan.mjs';
@@ -119,4 +120,13 @@ test('validate-ci.sh wires --scoped to this selector and rejects conflicting tie
     assert.equal(r.status, 2, `--scoped ${flag}: expected exit 2, got ${r.status}: ${r.stderr}`);
     assert.match(r.stderr, /--scoped/);
   }
+});
+
+test('the CLI still prints a plan when the script path contains a space', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'scoped gate '));
+  const copy = join(dir, 'scoped-gate-plan.mjs');
+  copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'scoped-gate-plan.mjs'), copy);
+  const run = spawnSync(process.execPath, [copy], { input: 'api/src/a.ts\n', encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout.trim(), 'api');
 });

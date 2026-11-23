@@ -13,7 +13,7 @@ Arguments: none → Phase A. `--resume <path to NIGHT-PLAN>` → skip to **Resum
 
 ## Phase A — plan the night (operator awake, aim for ≤30 min, ≤6 Lead turns)
 
-1. **Boot** exactly as `/lead` §1, in one batched turn. Add: `rl_status` disk/memory, open PRs with their CI state, envs and their death times (created + 24 h), open approvals via `rl_approval_list` (interim `pending-approval/INDEX.md` only if the dashboard is unreachable).
+1. **Boot** exactly as `/lead` §1, in one batched turn. Fold the previous night's `project_overnight_<date>.md` into `project_overnight_archive.md` (append its body under a `## <date>` heading, delete the per-night file, keep ONE index line for the archive) so the memory index does not grow a line per night. Add: `rl_status` disk/memory, open PRs with their CI state, envs and their death times (created + 24 h), open approvals via `rl_approval_list` (interim `pending-approval/INDEX.md` only if the dashboard is unreachable).
 2. **Draft `planning-artifacts/NIGHT-PLAN-YYYY-MM-DD.md`** in the MAIN checkout (format: `NIGHT-PLAN-2026-10-24.md`). Sections:
    - **Window:** start → operator wake time (ask in step 3 if unknown), and a wind-down mark at wake − 45 min.
    - **§1 Ranking:** every candidate with a verdict: **RUN to PR** / **RUN to gate** (no PR) / **spec + mockup only** / **DEFER**, and a one-line why. Candidates come from the live state, in sprint order (fix → tech-debt → small → feature unless the state files say otherwise). A story may be RUN only if nothing in it waits on a ruling the operator has not given tonight. Unruled design work = spec + mockup only (submitted with `rl_approval_submit`).
@@ -41,7 +41,7 @@ Arguments: none → Phase A. `--resume <path to NIGHT-PLAN>` → skip to **Resum
   - **Park** the story (move to the next ranked item) when it is product scope, a new or changed contract/schema/migration not already specced, permissions/roles, anything destructive or irreversible, security posture, or an external message. Log it under §7 as `WAIT` with the question and a recommendation.
 - **Merges.** PRs with green CI auto-merge (squash) as by day. Prod pulls are the operator's: never trigger Watchtower. **Infra never merges overnight**: `rl-infra/**`, `Dockerfile*`, `nginx/**`, `docker-entrypoint*` PRs open with auto-merge OFF and go to the morning batch.
 - **Never overnight:** send messages/emails/posts as the operator, destroy data other than this night's own fleet envs, force-push, change settings/permissions, touch prod, delete in Linear, or run a full fleet Playwright suite (`/lead` gate rules still hold).
-- **No idle turns and no polling from the Lead.** Waiting = a background watcher that exits once, or an ops lane that replies once. If everything RUN is blocked, take the stretch list, then spec-only work, then backlog investigation (reproduce-first for flakes).
+- **No idle turns and no polling from the Lead.** Waiting on PRs = `scripts/pr-watch.sh <prs>` run by the Lead with `run_in_background`, one process for all open PRs, never a watcher lane; waiting on fleet tasks = the one ops lane that runs the gate and replies once. If everything RUN is blocked, take the stretch list, then spec-only work, then backlog investigation (reproduce-first for flakes).
 - **Red is investigated, not retried.** A red gate or CI run gets a root-cause lane; three failed attempts on one story → park it with the evidence and move on.
 - **Envs:** destroy each story's own env as soon as its work is done and every plan step is ruled (standing rule). An env holding an `OPERATOR` step stays; recreate it ~2 h before it dies if the step is still open at wind-down.
 
@@ -56,7 +56,7 @@ Arguments: none → Phase A. `--resume <path to NIGHT-PLAN>` → skip to **Resum
 
 Measure, don't guess: sum `usage` from this session's transcript under `~/.claude/projects/`. At the first seam past **~300k** context:
 
-1. Finish the turn's bookkeeping. **Do not spawn new lanes.** Wait for running lanes to report (they report to this session). A long fleet task may keep going: note its task id; the next Lead reads it with `rl_task_status`.
+1. Finish the turn's bookkeeping. **Do not spawn new lanes.** Do not relay while lanes are still running: wait for them to report (they report to this session). Only a long fleet task tracked by task id may keep going: note its task id; the next Lead reads it with `rl_task_status`. Never forward a lane's report to another Lead. A `scripts/pr-watch.sh` still running at relay time is restarted by the new Lead from the handover's PR list.
 2. Write `planning-artifacts/LEAD-HANDOVER-YYYY-MM-DD-overnight-N.md` (≤60 lines: in flight with task ids, worktrees, slots/envs, what is next in the plan, traps hit tonight) and update NIGHT-PLAN §6/§7 and `CURRENT-STATE.md`.
 3. `SendMessage` the next unused standby in the chain (see **Standby chain** below), `to: "local_…"` (its session id from §6): `RELAY: you are relay N — run /overnight --resume planning-artifacts/NIGHT-PLAN-YYYY-MM-DD.md, handover planning-artifacts/LEAD-HANDOVER-YYYY-MM-DD-overnight-N.md`. Confirm the send succeeded.
 4. Append `HH:MMZ — relayed to standby N (<session link>)` to §6 and stop: no further tool calls in this session except acknowledging lanes that were already running.
