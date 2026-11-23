@@ -276,7 +276,7 @@ git push --force-with-lease origin <branch>
 gh pr merge <number> --auto --squash
 ```
 
-**Monitor CI:** `scripts/pr-watch.sh <number>` with `run_in_background` (exits once: `ALL MERGED` / `FAILED #n` / `CLOSED #n` / `STUCK #n` / `TIMEOUT`; it only reports).
+**Monitor CI:** `scripts/pr-watch.sh <number>` with `run_in_background` (exits once: `ALL MERGED` / `FAILED #n` / `CLOSED #n` / `STUCK #n` / `TIMEOUT` / `ERROR #n` = three `gh` errors in a row for one PR, exit 1; it only reports).
 
 ### 3-alt-f: Wait for Merge, Update Main
 

@@ -47,7 +47,7 @@ Then: finish anything in flight (running gates, open PRs, pending test plans) be
 
 Follow CLAUDE.md "Lead context discipline" (hand over at a seam at the measured threshold; never poll from the Lead; batch tool calls; keep bulk out). The operator may lift the handover threshold for a session — honour that for that session only. Practical rules:
 - Never read a whole large file, a Codex report, or a lane transcript. `grep`/`tail`/`sed -n` the slice you need; lanes write reports to files and reply in ≤250 words.
-- Waiting on something: PRs = `scripts/pr-watch.sh <pr>...` run by the Lead with `run_in_background`, **one process for all open PRs**, which exits once (`ALL MERGED` / `FAILED #n` / `CLOSED #n` / `STUCK #n` / `TIMEOUT`) and only reports — never a watcher lane. Fleet tasks stay with the one ops lane that runs the gate. A known wall-clock event: a background timer. Never a "still running" turn.
+- Waiting on something: PRs = `scripts/pr-watch.sh <pr>...` run by the Lead with `run_in_background`, **one process for all open PRs**, which exits once (`ALL MERGED` / `FAILED #n` / `CLOSED #n` / `STUCK #n` / `TIMEOUT` / `ERROR #n` = three `gh` errors in a row for one PR, exit 1) and only reports — never a watcher lane. Fleet tasks stay with the one ops lane that runs the gate. A known wall-clock event: a background timer. Never a "still running" turn.
 
 ## 4. The pipeline (per story)
 
