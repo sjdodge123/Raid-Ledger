@@ -103,6 +103,32 @@ async function openEventAndGoBack(page: Page, card: Locator, s: Seeded): Promise
     await expect(page).toHaveURL(/\/calendar(\?|$)/);
 }
 
+/** After Back: the Day grid on the same date, at the saved offset, with the tapped card on screen. */
+async function expectDayRestored(page: Page, s: Seeded, savedY: number): Promise<void> {
+    await expect(page.locator('.schedule-view'), 'Back from a Day-view event must not land in Schedule').toHaveCount(0);
+    await expect(page.locator('.rbc-time-view'), 'Back from a Day-view event shows the Day grid').toBeVisible({ timeout: 15_000 });
+    expect(viewParam(page), 'Back URL keeps ?view=day').toBe('day');
+    expect(dateParam(page), 'Back URL keeps the Day view date').toBe(s.date);
+    await expect.poll(() => page.evaluate(() => window.scrollY), {
+        message: `window scrollY after Back is within ${SCROLL_TOLERANCE_PX}px of ${savedY} (the offset at the tap)`, timeout: 10_000,
+    }).toBeGreaterThanOrEqual(savedY - SCROLL_TOLERANCE_PX);
+    const restoredY = await page.evaluate(() => window.scrollY);
+    expect(restoredY, `window scrollY after Back is within ${SCROLL_TOLERANCE_PX}px of ${savedY}`).toBeLessThanOrEqual(savedY + SCROLL_TOLERANCE_PX);
+    expect(restoredY, 'Back did not reset the window to the top').toBeGreaterThan(0);
+    await expect(cardFor(page, s.title), 'the tapped card is on screen after Back').toBeInViewport();
+}
+
+/** Phone: seed the late event, open its Day, centre the card and return the saved scrollY. */
+async function phoneDayAtLateCard(page: Page, testInfo: TestInfo, s: Seeded): Promise<{ card: Locator; savedY: number }> {
+    await openPhoneDay(page, s.date);
+    const card = cardFor(page, s.title);
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    const savedY = await scrollCardToCentre(card);
+    expect(savedY, `the ${LATE_HOUR}:00 card is below the fold, so the window had to scroll (${testInfo.project.name})`).toBeGreaterThan(0);
+    await expect(card).toBeInViewport();
+    return { card, savedY };
+}
+
 test.describe('Calendar — Back from an event returns to the Day view (ROK-2303)', () => {
     test('phone: Back restores the Day view, its date and the scroll that showed the card', async ({ page, world }, testInfo) => {
         test.skip(!isMobile(testInfo), 'phone layout only (< 768px); wider viewports are the desktop test');
@@ -113,26 +139,34 @@ test.describe('Calendar — Back from an event returns to the Day view (ROK-2303
         expect(viewParam(page), 'Schedule carries no ?view= in the URL').toBeNull();
         try {
             const s = await seedLateEvent(token, page, testInfo, world.uid('rok-2303-late'), ids);
-            await openPhoneDay(page, s.date);
-            const card = cardFor(page, s.title);
-            await expect(card).toBeVisible({ timeout: 15_000 });
-            const savedY = await scrollCardToCentre(card);
-            expect(savedY, `the ${LATE_HOUR}:00 card is below the fold, so the window had to scroll`).toBeGreaterThan(0);
-            await expect(card).toBeInViewport();
+            const { card, savedY } = await phoneDayAtLateCard(page, testInfo, s);
 
             await openEventAndGoBack(page, card, s);
 
-            await expect(page.locator('.schedule-view'), 'Back from a Day-view event must not land in Schedule').toHaveCount(0);
-            await expect(page.locator('.rbc-time-view'), 'Back from a Day-view event shows the Day grid').toBeVisible({ timeout: 15_000 });
-            expect(viewParam(page), 'Back URL keeps ?view=day').toBe('day');
-            expect(dateParam(page), 'Back URL keeps the Day view date').toBe(s.date);
-            await expect.poll(() => page.evaluate(() => window.scrollY), {
-                message: `window scrollY after Back is within ${SCROLL_TOLERANCE_PX}px of ${savedY} (the offset at the tap)`, timeout: 10_000,
-            }).toBeGreaterThanOrEqual(savedY - SCROLL_TOLERANCE_PX);
-            const restoredY = await page.evaluate(() => window.scrollY);
-            expect(restoredY, `window scrollY after Back is within ${SCROLL_TOLERANCE_PX}px of ${savedY}`).toBeLessThanOrEqual(savedY + SCROLL_TOLERANCE_PX);
-            expect(restoredY, 'Back did not reset the window to the top').toBeGreaterThan(0);
-            await expect(cardFor(page, s.title), 'the tapped card is on screen after Back').toBeInViewport();
+            await expectDayRestored(page, s, savedY);
+        } finally {
+            for (const id of ids) await apiDelete(token, `/events/${id}`);
+        }
+    });
+
+    test('phone: the in-app "Back to Calendar" button also restores the Day view and its scroll', async ({ page, world }, testInfo) => {
+        test.skip(!isMobile(testInfo), 'phone layout only (< 768px)');
+        const token = await getAdminToken();
+        const ids: number[] = [];
+        await page.goto('/calendar');
+        try {
+            const s = await seedLateEvent(token, page, testInfo, world.uid('rok-2303-btn'), ids);
+            const { card, savedY } = await phoneDayAtLateCard(page, testInfo, s);
+
+            await card.click();
+            await expect(page).toHaveURL(new RegExp(`/events/${s.id}(\\?|$)`));
+            // EventDetailTopbar: aria-label "Go back", text "← Back to Calendar" when opened from the calendar.
+            const backButton = page.getByRole('button', { name: 'Go back' });
+            await expect(backButton).toHaveText(/Back to Calendar/, { timeout: 15_000 });
+            await backButton.click();
+            await expect(page).toHaveURL(/\/calendar(\?|$)/);
+
+            await expectDayRestored(page, s, savedY);
         } finally {
             for (const id of ids) await apiDelete(token, `/events/${id}`);
         }
