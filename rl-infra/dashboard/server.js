@@ -38,6 +38,11 @@ const MAX_ACTIVE_TASKS = 200;
 const KNOWN_TASK_STATUSES = new Set(['running', 'succeeded', 'failed', 'cancelled']);
 const TASK_ID_RE = /^[a-z0-9]{8,32}$/;
 const PORT = parseInt(process.env.PORT || '8080', 10);
+// ROK-2289 — mirrors orchestrator _state.sh: a FREE claims.json row above
+// RUNNER_SLOTS (read from the shared .env) has no runner, so /api/state hides
+// it; a claimed one stays visible until release. Invalid value → no filter.
+const RUNNER_SLOTS_RAW = process.env.RUNNER_SLOTS || '2';
+const RUNNER_SLOTS = /^[1-9][0-9]*$/.test(RUNNER_SLOTS_RAW) ? parseInt(RUNNER_SLOTS_RAW, 10) : Infinity;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB; phone screenshots are typically <2 MB.
 
 // ROK-1331 M7 — fleet-health thresholds. Match the gc-sweeper's heartbeat
@@ -419,7 +424,7 @@ const handleApiState = async (res) => {
       readFile(join(STATE_DIR, 'claims.json'), 'utf-8'),
       readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8'),
     ]);
-    const slots = JSON.parse(claims);
+    const slots = JSON.parse(claims).filter((s) => s && (s.claimed === true || s.slot <= RUNNER_SLOTS));
     const [probedSlots, planSummaries, activeTasks, leaseQueues] = await Promise.all([
       enrichSlotsWithProbes(slots),
       collectPlanSummaries(),
