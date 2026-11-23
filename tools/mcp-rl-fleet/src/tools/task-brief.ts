@@ -105,6 +105,10 @@ export const BRIEF_FIELDS = [
   'started_at',
   'playwright_verified',
   'playwright_sentinel',
+  // ROK-2205 review m1: the gate verdict and why it was refused.
+  'gate_verified',
+  'gate_tier',
+  'gate_error',
   // A3-B credential contract + the deploy result fields. One line each, and
   // dropping them would make the withheld-password signal vanish silently on a
   // running local- deploy (review MAJOR 2). `admin_password` itself is NOT here:
