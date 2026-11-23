@@ -40,6 +40,7 @@
 //   rows for the shell runner (see lane-check.sh).
 
 import { existsSync, readFileSync } from 'node:fs';
+import { realpathSync as realpathForCli } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { targetFor } from './scoped-gate-plan.mjs';
@@ -233,4 +234,14 @@ async function main() {
 
 // fileURLToPath, not a `file://` string compare: the URL is percent-encoded, so
 // a repo path with a space never matched and the planner printed nothing.
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
+// node resolves the entry script's symlinks (macOS /var → /private/var, a
+// symlinked checkout), so compare real paths or the CLI silently prints nothing.
+function realCliPath(argvPath) {
+  try {
+    return realpathForCli(argvPath);
+  } catch {
+    return resolve(argvPath);
+  }
+}
+
+if (process.argv[1] && realCliPath(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

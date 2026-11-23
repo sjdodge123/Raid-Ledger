@@ -97,7 +97,17 @@ async function main() {
   process.stdout.write(`${plan.targets.length ? plan.targets.join(' ') : 'none'}\n`);
 }
 
-// pathToFileURL, not a hand-built `file://` string: a repo path with a space
+// fileURLToPath, not a hand-built `file://` string: a repo path with a space
 // (or any character a URL escapes) never matched, and the CLI printed nothing.
-const { pathToFileURL } = await import('node:url');
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
+// realpath as well: node resolves the entry script's symlinks (macOS /var →
+// /private/var, a symlinked checkout), so the raw argv path never matched either.
+const { fileURLToPath } = await import('node:url');
+const { realpathSync } = await import('node:fs');
+function isCliEntry(argvPath) {
+  try {
+    return realpathSync(argvPath) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+if (process.argv[1] && isCliEntry(process.argv[1])) await main();

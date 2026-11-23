@@ -13,6 +13,7 @@
 // A missing dir prints one line and exits 0 (CI runners have no memory folder).
 // Read-only: this script never writes anywhere.
 import { execFileSync } from 'node:child_process';
+import { realpathSync as realpathForCli } from 'node:fs';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -116,6 +117,16 @@ function main() {
   return 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// node resolves the entry script's symlinks (macOS /var → /private/var, a
+// symlinked checkout), so compare real paths or the CLI silently prints nothing.
+function realCliPath(argvPath) {
+  try {
+    return realpathForCli(argvPath);
+  } catch {
+    return resolve(argvPath);
+  }
+}
+
+if (process.argv[1] && realCliPath(process.argv[1]) === fileURLToPath(import.meta.url)) {
   process.exitCode = main();
 }
