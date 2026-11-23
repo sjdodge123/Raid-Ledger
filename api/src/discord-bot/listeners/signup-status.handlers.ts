@@ -59,11 +59,11 @@ async function replyExistingTentative(
   deps: SignupInteractionDeps,
 ): Promise<void> {
   // ROK-1769: a departed/declined linked member re-signs first (re-slot +
-  // signup_reactivated), then goes tentative. ROK-2298: blocked → refused.
-  const linkedUser = isCancelledStatus(existingSignup.status)
-    ? await findActiveLinkedUser(interaction, deps)
-    : null;
-  if (linkedUser === false) return;
+  // signup_reactivated), then goes tentative. ROK-2298: a blocked account is
+  // refused even on a live row (a status write, not cleanup).
+  const account = await findActiveLinkedUser(interaction, deps);
+  if (account === false) return;
+  const linkedUser = isCancelledStatus(existingSignup.status) ? account : null;
   // ROK-2097: a row this Discord id may see but not manage is not-found.
   const marked = await runOrReplyNotSignedUp(interaction, () =>
     markExistingTentative(eventId, existingSignup, linkedUser, deps),
