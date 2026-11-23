@@ -18,6 +18,13 @@ import {
   type LivePollThread,
   type PollSyncRow,
 } from './poll-discussion.queries';
+import { pollTitleWithin } from './poll-discussion.title';
+
+export {
+  followupEventTitle,
+  pollSubjectTitle,
+  rescheduledEvent,
+} from './poll-discussion.title';
 
 /** A decided / cancelled poll stays writable for 1 h (R1/R2). */
 export const POLL_CLOSE_GRACE_MS = 3_600_000;
@@ -86,18 +93,6 @@ export function pollThreadRootBody(poll: PollSyncRow): string {
 }
 
 /**
- * ROK-2295: the event a reschedule poll is for, or null (unlinked, gone,
- * produced by this poll at lock-in, or an empty title).
- */
-export function rescheduledEvent(
-  poll: Pick<PollSyncRow, 'linkedEventId' | 'linkedEventTitle'>,
-): { title: string } | null {
-  const title = poll.linkedEventTitle?.trim() ?? '';
-  if (poll.linkedEventId === null || title.length === 0) return null;
-  return { title };
-}
-
-/**
  * Close deadline: open ⇒ none; ended ⇒ the stored one if any (the first
  * sync that saw the end stamped it), else `pollEndedAt + 1 h`.
  */
@@ -111,23 +106,10 @@ export function pollWriteClosesAt(
   return stored ?? new Date(ended.getTime() + POLL_CLOSE_GRACE_MS);
 }
 
-/**
- * ROK-2295: the poll's goal. A reschedule poll (linked event) ⇒
- * `Reschedule: <event title>`; any other poll ⇒ its game. A standalone poll's
- * storage lineup title is synthetic ("Standalone Scheduling Poll") and never
- * surfaces. Callers add the ` — Poll` suffix and cut to their own limit.
- */
-export function pollSubjectTitle(
-  poll: Pick<PollSyncRow, 'linkedEventId' | 'linkedEventTitle' | 'gameName'>,
-): string {
-  const event = rescheduledEvent(poll);
-  return event ? `Reschedule: ${event.title}` : poll.gameName;
-}
-
 /** The fields the poll dictates on its thread. */
 function derived(poll: PollSyncRow, stored: Date | null, now: Date) {
   return {
-    title: pollThreadTitle(pollSubjectTitle(poll)),
+    title: pollTitleWithin(poll, TITLE_MAX, pollThreadTitle),
     body: pollThreadRootBody(poll),
     writeClosesAt: pollWriteClosesAt(poll, stored, now),
   };

@@ -198,6 +198,7 @@ function makeDeps(
     standalonePollService: { create },
     notificationService: { createMany },
     settingsService: { getClientUrl },
+    eventEmitter: { emit: jest.fn() },
     logger: new Logger('pef-test'),
     create,
     createMany,

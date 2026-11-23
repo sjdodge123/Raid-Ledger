@@ -22,6 +22,7 @@ function poll(over: Partial<PollSyncRow> = {}): PollSyncRow {
     phaseDeadline: null,
     linkedEventId: null,
     linkedEventTitle: null,
+    followupOfEventTitle: null,
     guildId: null,
     visibility: 'public',
     creatorId: 1,

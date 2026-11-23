@@ -34,7 +34,7 @@ export type SchedulingPollStatus =
 export interface SchedulingPollEmbedData {
   matchId: number;
   lineupId: number;
-  /** ROK-1461: links the title to `/games/:id`. */
+  /** ROK-2301: drives the `Game page ↗` link (`/games/:id`) on the link line. */
   gameId?: number;
   gameName: string;
   gameCoverUrl?: string | null;

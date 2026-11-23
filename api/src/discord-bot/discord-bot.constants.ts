@@ -323,6 +323,22 @@ export const POST_EVENT_FOLLOWUP_BUTTON_IDS = {
   POLL: 'pef_poll',
 } as const;
 
+/**
+ * ROK-2301: app events of the post-event follow-up flow. `POLL_LINKED` fires
+ * once `post_event_followup_sent.match_id` names the poll the prompt opened,
+ * so the forum listeners re-derive the poll's thread and post names (they
+ * read `<game> — Poll (after <event>)` only once that row exists).
+ */
+export const POST_EVENT_FOLLOWUP_EVENTS = {
+  POLL_LINKED: 'post-event-followup.poll-linked',
+} as const;
+
+/** Payload of {@link POST_EVENT_FOLLOWUP_EVENTS.POLL_LINKED}. */
+export interface FollowupPollLinkedPayload {
+  matchId: number;
+  endedEventId: number;
+}
+
 export const SIGNUP_BUTTON_IDS = {
   SIGNUP: 'signup',
   TENTATIVE: 'tentative',
