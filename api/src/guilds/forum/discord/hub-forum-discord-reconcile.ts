@@ -14,13 +14,19 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as Sentry from '@sentry/nestjs';
 import { eq } from 'drizzle-orm';
-import { DISCORD_BOT_EVENTS } from '../../../discord-bot/discord-bot.constants';
+import {
+  DISCORD_BOT_EVENTS,
+  POST_EVENT_FOLLOWUP_EVENTS,
+} from '../../../discord-bot/discord-bot.constants';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { payloadId } from '../subject-discussion/poll-discussion.listener';
 import { syncPollDiscussion } from '../subject-discussion/poll-discussion.sync';
 import {
   catchUpPollTitles,
+  findLivePollPostLink,
   findLivePollThreads,
+  renamablePost,
 } from './hub-forum-discord-poll-titles';
 import {
   HubForumDiscordInboundIngest,
@@ -109,6 +115,26 @@ export class HubForumDiscordReconcileService {
       onError: (matchId, err) =>
         this.logger.warn(`Poll ${matchId} title catch-up: ${describe(err)}`),
     });
+  }
+
+  /**
+   * ROK-2301: a follow-up prompt recorded this poll after its hub post was
+   * named `<game> — Poll`. One `thread.updated` re-drive renames it (the
+   * gateway skips a matching name before it spends the rename budget). No
+   * post yet: its create reads the derived name. Never throws.
+   */
+  @OnEvent(POST_EVENT_FOLLOWUP_EVENTS.POLL_LINKED, { async: true })
+  async onFollowupPollLinked(payload: unknown): Promise<void> {
+    const matchId = payloadId(payload, 'matchId');
+    if (matchId === null || !this.gateway.isOnline()) return;
+    try {
+      const link = await findLivePollPostLink(this.db, matchId, this.now());
+      if (renamablePost(link))
+        await this.outbound.retry(link, 'thread.updated');
+    } catch (err) {
+      this.logger.warn(`Poll ${matchId} follow-up rename: ${describe(err)}`);
+      Sentry.captureException(err, { tags: { hub_forum: 'poll-linked' } });
+    }
   }
 
   /** Replay every active post of every bound forum. */

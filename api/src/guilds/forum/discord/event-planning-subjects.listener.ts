@@ -10,7 +10,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import * as Sentry from '@sentry/nestjs';
-import { DISCORD_BOT_EVENTS } from '../../../discord-bot/discord-bot.constants';
+import {
+  DISCORD_BOT_EVENTS,
+  POST_EVENT_FOLLOWUP_EVENTS,
+} from '../../../discord-bot/discord-bot.constants';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import {
   LINEUP_EVENTS,
@@ -71,6 +74,12 @@ export class EventPlanningSubjectsListener {
   @OnEvent(LINEUP_MATCH_EVENTS.ENTERED_SCHEDULING, { async: true })
   onEnteredScheduling(payload: unknown): Promise<void> {
     return this.syncPoll('entered-scheduling', payload);
+  }
+
+  /** ROK-2301: a follow-up prompt recorded this poll; re-derive its post name. */
+  @OnEvent(POST_EVENT_FOLLOWUP_EVENTS.POLL_LINKED, { async: true })
+  onFollowupLinked(payload: unknown): Promise<void> {
+    return this.syncPoll('followup-linked', payload);
   }
 
   @OnEvent(LINEUP_EVENTS.DECIDED, { async: true })

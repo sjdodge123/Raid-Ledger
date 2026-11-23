@@ -11,7 +11,16 @@
  * refresh skips an unchanged row, and the gateway rename skips a matching
  * name before it spends the 2-per-10-minutes rename budget.
  */
-import { and, desc, eq, gt, isNotNull, isNull, or } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  isNotNull,
+  isNull,
+  or,
+  type SQL,
+} from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import { syncEach } from './event-planning-posts.reconcile';
 import {
@@ -29,6 +38,16 @@ export interface LivePollThread {
   link: ForumLink | null;
 }
 
+/** The header's "live" filter on `hub_forum_threads`. */
+function livePollThread(now: Date): SQL | undefined {
+  const t = schema.hubForumThreads;
+  return and(
+    isNotNull(t.matchId),
+    isNull(t.eventDetachedAt),
+    or(isNull(t.writeClosesAt), gt(t.writeClosesAt, now)),
+  );
+}
+
 /** Live poll threads (see the header), newest first, with their post link. */
 export async function findLivePollThreads(
   db: ForumDiscordDb,
@@ -41,18 +60,29 @@ export async function findLivePollThreads(
     .select({ matchId: t.matchId, link: k })
     .from(t)
     .leftJoin(k, and(eq(k.threadId, t.id), eq(k.kind, 'thread')))
-    .where(
-      and(
-        isNotNull(t.matchId),
-        isNull(t.eventDetachedAt),
-        or(isNull(t.writeClosesAt), gt(t.writeClosesAt, now)),
-      ),
-    )
+    .where(livePollThread(now))
     .orderBy(desc(t.id))
     .limit(limit);
   return rows.flatMap((r) =>
     r.matchId === null ? [] : [{ matchId: r.matchId, link: r.link }],
   );
+}
+
+/** The post link of one poll's live thread, or null (no thread or no post). */
+export async function findLivePollPostLink(
+  db: ForumDiscordDb,
+  matchId: number,
+  now: Date,
+): Promise<ForumLink | null> {
+  const t = schema.hubForumThreads;
+  const k = schema.hubForumDiscordLinks;
+  const [row] = await db
+    .select({ link: k })
+    .from(t)
+    .innerJoin(k, and(eq(k.threadId, t.id), eq(k.kind, 'thread')))
+    .where(and(eq(t.matchId, matchId), livePollThread(now)))
+    .limit(1);
+  return row?.link ?? null;
 }
 
 /** A post the catch-up may rename: sent, RL-origin, not deleted or locked. */

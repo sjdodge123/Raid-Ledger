@@ -5,7 +5,7 @@
  * is its lineup's `guild_id` (spec §3.1). Thread rows reuse
  * `event_detached_at` / `write_closes_at` for the poll subject (R8).
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import * as schema from '../../../drizzle/schema';
 import type { DbOrTx } from '../event-discussion/event-discussion.queries';
@@ -60,7 +60,8 @@ export interface LivePollThread {
 
 const m = schema.communityLineupMatches;
 const l = schema.communityLineups;
-const followup = schema.postEventFollowupSent;
+/** Aliased so the newest-row subquery below can name the outer row. */
+const followup = alias(schema.postEventFollowupSent, 'poll_followup');
 /** The follow-up prompt's source event (`events` is joined for the link). */
 const followupEvent = alias(schema.events, 'poll_followup_event');
 
@@ -83,6 +84,18 @@ const pollColumns = {
   override: l.phaseDurationOverride,
 };
 
+/**
+ * Review MINOR-1: `post_event_followup_sent.match_id` has no unique
+ * constraint, so join only the NEWEST follow-up row naming the match. The
+ * poll is one row per match id either way; this keeps the title stable.
+ */
+function newestFollowupOf(matchId: typeof m.id): SQL | undefined {
+  return and(
+    eq(followup.matchId, matchId),
+    sql`not exists (select 1 from post_event_followup_sent newer where newer.match_id = ${followup.matchId} and newer.id > ${followup.id})`,
+  );
+}
+
 /** The poll row, or null when the match (or its lineup) is gone. */
 export async function findPollForSync(
   db: DbOrTx,
@@ -94,7 +107,7 @@ export async function findPollForSync(
     .innerJoin(l, eq(l.id, m.lineupId))
     .innerJoin(schema.games, eq(schema.games.id, m.gameId))
     .leftJoin(schema.events, eq(schema.events.id, m.linkedEventId))
-    .leftJoin(followup, eq(followup.matchId, m.id))
+    .leftJoin(followup, newestFollowupOf(m.id))
     .leftJoin(followupEvent, eq(followupEvent.id, followup.eventId))
     .where(eq(m.id, matchId))
     .limit(1);
