@@ -28,7 +28,19 @@ export function resolveDelivery(
   type: NotificationType,
   prefs: NotificationPreferencesDto | undefined,
 ): Delivery {
-  const channels = resolveChannelPrefs(prefs?.channelPrefs)[type];
+  return resolveStoredDelivery(type, prefs?.channelPrefs);
+}
+
+/**
+ * `resolveDelivery` over a raw stored `channel_prefs` value (callers that read
+ * the column directly). Pre-checks that skip a member must skip only 'none' —
+ * bell off with Discord on still delivers the DM.
+ */
+export function resolveStoredDelivery(
+  type: NotificationType,
+  storedChannelPrefs: unknown,
+): Delivery {
+  const channels = resolveChannelPrefs(storedChannelPrefs)[type];
   if (channels.inApp) return 'both';
   return channels.discord ? 'dm-only' : 'none';
 }
