@@ -210,9 +210,9 @@ The script auto-detects scope (migration files, Dockerfile changes) and runs the
 
 **When you DID run `--full` (Step 7):** it auto-runs Playwright + Discord smoke when the diff touches their surface AND the dev env is up (`:3000/health` + `:5173`). What you do then depends on what Step 7 produced:
 
-1. **Step 7 summary shows `Playwright (desktop + mobile): PASS`** — e2e is already covered. If that PASS came from a **fleet** run (`rl_validate_ci`), the sentinel is **already written** — the MCP server writes `/tmp/.playwright-verified-<surfacehash>` itself on a terminal task whose Playwright row is PASS, and returns `gate_verified: true` + `gate_sentinel: <path>` (`null` for a `nosurface` branch — no file is needed, the hook allows it outright) + `gate_tier` + `surface_hash` in the tool result (`playwright_verified` / `playwright_sentinel` remain as aliases; operator ruling 2026-09-12). Since ROK-1565 a green `--static` run writes it too (`gate_tier: 'static'`), and the row may read `Playwright (desktop + mobile, scoped: N specs)` when the tier ran scoped. Nothing to do — **the agent pushes itself**. Only for a **local** run do you touch it by hand — the name is the WEB-SURFACE hash, not HEAD (ROK-1566), and the body may be empty:
+1. **Step 7 summary shows `Playwright (desktop + mobile): PASS`** — e2e is already covered. If that PASS came from a **fleet** run (`rl_validate_ci`), the sentinel is **already written** — the MCP server writes `/tmp/.playwright-verified-<surfacehash>` itself on a terminal task whose Playwright row is PASS, and returns `gate_verified: true` + `gate_sentinel: <path>` (`null` for a `nosurface` branch — no file is needed, the hook allows it outright) + `gate_tier` + `surface_hash` in the tool result (`playwright_verified` / `playwright_sentinel` remain as aliases; operator ruling 2026-09-12). Since ROK-1565 a green `--static` run writes it too (`gate_tier: 'static'`), and the row may read `Playwright (desktop + mobile, scoped: N specs)` when the tier ran scoped. Nothing to do — **the agent pushes itself**. Only for a **local** run do you touch it by hand — the name is the WEB-SURFACE hash, not HEAD (ROK-1566), and since ROK-2205 the body MUST record `gate_verified: true` (the hook refuses an empty or `{}` body):
    ```bash
-   touch "/tmp/.playwright-verified-$(bash scripts/smoke/surface-hash.sh)"
+   echo '{"gate_verified":true,"tier":"local-playwright"}' > "/tmp/.playwright-verified-$(bash scripts/smoke/surface-hash.sh)"
    ```
 
 2. **Step 7 summary shows `Playwright: SKIPPED — No Playwright-relevant files changed`** — the diff is backend-only. Just continue.
@@ -222,7 +222,7 @@ The script auto-detects scope (migration files, Dockerfile changes) and runs the
      ```bash
      ./scripts/deploy_dev.sh --ci         # acquire env lock first if needed
      ./scripts/validate-ci.sh --only-e2e --with-e2e
-     touch "/tmp/.playwright-verified-$(bash scripts/smoke/surface-hash.sh)"   # surface hash, not HEAD (ROK-1566); empty body is fine
+     echo '{"gate_verified":true,"tier":"local-playwright"}' > "/tmp/.playwright-verified-$(bash scripts/smoke/surface-hash.sh)"   # surface hash, not HEAD (ROK-1566); body must record gate_verified (ROK-2205)
      ```
      A **red or SKIPPED** Playwright tier means **fix it or stop** — "push-ready for the operator" is no longer a valid terminal state for a web branch (operator ruling 2026-09-12); handing a web branch off unpushed just routes it around the gate.
    - **If branch is API-only:** continue without the sentinel.
