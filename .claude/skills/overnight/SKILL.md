@@ -43,7 +43,7 @@ Arguments: none → Phase A. `--resume <path to NIGHT-PLAN>` → skip to **Resum
 - **Never overnight:** send messages/emails/posts as the operator, destroy data other than this night's own fleet envs, force-push, change settings/permissions, touch prod, delete in Linear, or run a full fleet Playwright suite (`/lead` gate rules still hold).
 - **No idle turns and no polling from the Lead.** Waiting = a background watcher that exits once, or an ops lane that replies once. If everything RUN is blocked, take the stretch list, then spec-only work, then backlog investigation (reproduce-first for flakes).
 - **Red is investigated, not retried.** A red gate or CI run gets a root-cause lane; three failed attempts on one story → park it with the evidence and move on.
-- **Envs:** destroy each story's own env as soon as its work is done and every plan step is ruled (standing rule). An env holding an `OPERATOR` step stays; recreate it ~2 h before it dies if the step is still open at wind-down.
+- **Envs:** destroy each story's own env as soon as its work is done and every plan step is ruled (standing rule). An env holding an `OPERATOR` step stays; recreate it ~2 h before it dies if the step is still open at wind-down. **Except a design-only step (operator ruling 2026-11-23, after one design question held the only usable slot for 9 hours):** an `OPERATOR` step that is a design or product question the operator can answer from screenshots never holds an env. Save its screenshots to `brief-media/`, put the question in §7 and the morning questions, mark the step as ruled-from-screens in the log, and destroy the env. Only a step that needs the operator's own account or a real device keeps it.
 
 ## Phase B — run the night
 
