@@ -107,3 +107,43 @@ test('scripts: a .mjs runs its sibling spec, a spec runs itself, a .sh gets bash
   assert.deepEqual(plan.shellParse, ['scripts/b.sh']);
   assert.deepEqual(plan.skipped, ['scripts/c.mjs: no spec or parse check']);
 });
+
+test('removedStrings counts the text of a deleted source file', () => {
+  const diff = [
+    'diff --git a/web/src/components/Foo.tsx b/web/src/components/Foo.tsx',
+    'deleted file mode 100644',
+    '--- a/web/src/components/Foo.tsx',
+    '+++ /dev/null',
+    '@@ -1,2 +0,0 @@',
+    "-export const Foo = () => <p>{'Nothing scheduled yet'}</p>;",
+  ].join('\n');
+  assert.deepEqual(removedStrings(diff), ['Nothing scheduled yet']);
+});
+
+test('a removed `-- ` content line is not read as a file header', () => {
+  const diff = [
+    'diff --git a/api/src/x/a.ts b/api/src/x/a.ts',
+    '--- a/api/src/x/a.ts', '+++ b/api/src/x/a.ts',
+    '@@ -1,3 +1,1 @@',
+    '--- a comment line that looks like a header',
+    "-  reply('Gone from the api reply');",
+  ].join('\n');
+  assert.deepEqual(removedStrings(diff), ['Gone from the api reply']);
+});
+
+test('bundle-budget scripts select the web typecheck and their spec, never a web eslint target', () => {
+  const plan = planLaneCheck(['scripts/check-bundle-size.mjs', 'scripts/bundle-budget.config.mjs'],
+    { exists: (p) => p !== 'scripts/bundle-budget.config.spec.mjs' });
+  assert.deepEqual(plan.typecheck, ['web']);
+  assert.deepEqual(plan.eslint, {});
+  assert.deepEqual(plan.nodeTests, ['scripts/check-bundle-size.spec.mjs']);
+});
+
+test('smoke-string candidates are capped and the overflow is reported', async () => {
+  const { MAX_SMOKE_STRINGS } = await import('./lane-check-plan.mjs');
+  const lines = Array.from({ length: MAX_SMOKE_STRINGS + 3 }, (_, i) => `-  reply('Removed message number ${i}');`);
+  const diff = ['--- a/api/src/x/a.ts', '+++ b/api/src/x/a.ts', ...lines].join('\n');
+  const plan = planLaneCheck(['api/src/x/a.ts'], { diff });
+  assert.equal(plan.smokeStrings.length, MAX_SMOKE_STRINGS);
+  assert.deepEqual(plan.skipped, [`3 more removed strings not grepped (cap ${MAX_SMOKE_STRINGS})`]);
+});

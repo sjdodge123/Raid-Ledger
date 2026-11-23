@@ -40,7 +40,8 @@
 //   rows for the shell runner (see lane-check.sh).
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { targetFor } from './scoped-gate-plan.mjs';
 
 const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
@@ -49,6 +50,9 @@ const TEST_FILE = /(\.(spec|test)\.[cm]?[jt]sx?$)|(^|\/)(__tests__|test|tests|sm
 const WS_ROOTS = { api: 'api/src', web: 'web/src' };
 const ESLINT_WS = { api: 'api', web: 'web', 'tool:test-bot': 'tools/test-bot' };
 const MIN_LEN = 8;
+// lane-check.sh runs one `git grep` per candidate; past this many, the rest are
+// reported as one skipped row instead.
+export const MAX_SMOKE_STRINGS = 200;
 
 /** Workspace of a path: contract | api | web | smoke | scripts | tool:<x> | null. */
 export function workspaceOf(path) {
@@ -83,7 +87,7 @@ function selectTests(plan, ws, path) {
 
 function addLint(plan, ws, path) {
   const base = ESLINT_WS[ws];
-  if (!base || !/\.(ts|tsx|js|jsx|mjs)$/.test(path)) return;
+  if (!base || !path.startsWith(`${base}/`) || !/\.(ts|tsx|js|jsx|mjs)$/.test(path)) return;
   (plan.eslint[ws] ??= []).push(path.slice(base.length + 1));
 }
 
@@ -104,6 +108,9 @@ function addWorkspace(plan, typecheck, ws, path, exists) {
   }
   if (ws === 'scripts') return void addScript(plan, path, exists);
   typecheck.add(ws);
+  // scripts/check-bundle-size.mjs etc. map to web for the typecheck, but are
+  // scripts: their sibling spec runs, and they are never web eslint targets.
+  if (path.startsWith('scripts/')) return void addScript(plan, path, exists);
   if (ws.startsWith('tool:') && !plan.toolTests.includes(ws.slice(5))) plan.toolTests.push(ws.slice(5));
   if (!exists(path)) return;
   if (ws === 'api' || ws === 'web') selectTests(plan, ws, path);
@@ -128,7 +135,11 @@ export function planLaneCheck(files, { diff = '', exists = () => true } = {}) {
   plan.vitest = collapseFolders(plan.vitest);
   plan.typecheck = [...typecheck].sort();
   plan.nodeTests = [...new Set(plan.nodeTests)];
-  plan.smokeStrings = removedStrings(diff);
+  const strings = removedStrings(diff);
+  plan.smokeStrings = strings.slice(0, MAX_SMOKE_STRINGS);
+  if (strings.length > MAX_SMOKE_STRINGS) {
+    plan.skipped.push(`${strings.length - MAX_SMOKE_STRINGS} more removed strings not grepped (cap ${MAX_SMOKE_STRINGS})`);
+  }
   return plan;
 }
 
@@ -172,10 +183,18 @@ export function removedStrings(diff) {
   const removed = new Set();
   const added = new Set();
   let file = null;
+  let inHeader = true; // a diff with no `diff --git` line starts in a header
   for (const line of diff.split('\n')) {
-    const header = /^\+\+\+ (?:b\/)?(.*)$/.exec(line);
-    if (header) { file = header[1] === '/dev/null' ? null : header[1]; continue; }
-    if (line.startsWith('--- ')) { file = /^--- (?:a\/)?(.*)$/.exec(line)?.[1] ?? null; continue; }
+    if (line.startsWith('diff --git ')) { inHeader = true; continue; }
+    if (line.startsWith('@@')) { inHeader = false; continue; }
+    // Only header lines name files: a removed `-- SQL comment` is content.
+    if (inHeader && line.startsWith('--- ')) { file = /^--- (?:a\/)?(.*)$/.exec(line)?.[1] ?? null; continue; }
+    if (inHeader && line.startsWith('+++ ')) {
+      const to = /^\+\+\+ (?:b\/)?(.*)$/.exec(line)?.[1] ?? null;
+      // A deleted file (+++ /dev/null) keeps its --- path: its text is removed too.
+      if (to !== '/dev/null') file = to;
+      continue;
+    }
     if (line.startsWith('+')) literalsOf(line.slice(1)).forEach((s) => added.add(s));
     else if (line.startsWith('-') && countsForSmoke(file)) literalsOf(line.slice(1)).forEach((s) => removed.add(s));
   }
@@ -207,7 +226,11 @@ async function main() {
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
   const plan = planLaneCheck(input.split('\n'), { diff, exists: existsSync });
-  process.stdout.write(args.includes('--lines') ? `${toLines(plan)}\n` : `${JSON.stringify(plan, null, 2)}\n`);
+  // --lines ends with an `end` row so the runner can tell an empty plan from a
+  // planner that printed nothing.
+  process.stdout.write(args.includes('--lines') ? `${toLines(plan)}\nend\tplan\n` : `${JSON.stringify(plan, null, 2)}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main();
+// fileURLToPath, not a `file://` string compare: the URL is percent-encoded, so
+// a repo path with a space never matched and the planner printed nothing.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
