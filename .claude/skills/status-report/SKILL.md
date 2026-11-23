@@ -229,7 +229,7 @@ The Step 2.5 trace already enumerated the gaps. Pick them up directly.
 Halts inside this case:
 
 - Architectural decision, missing creds, or operator approval needed → stop, do not invent. Re-invoke; BLOCKERS will surface it.
-- `validate-ci.sh` fails on something *outside* the gap you implemented → stop. Do not stack fixes (memory `feedback_one_fix_per_outage.md`).
+- `validate-ci.sh` fails on something *outside* the gap you implemented → stop. Do not stack fixes (memory `feedback_infrastructure_changes.md`).
 - Gap touches infrastructure (Dockerfile, entrypoints, nginx) → stop. Memory `feedback_infrastructure_changes.md` requires its own PR + local container validation; this skill is not the vehicle.
 
 **If post-downgrade Phase is `Validating` (ACs delivered, e2e missing/unrun):**
