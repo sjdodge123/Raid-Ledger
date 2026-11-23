@@ -54,6 +54,23 @@ under their own node-environment Vitest config (`packages/contract/vitest.config
 which includes `src/**` only so the compiled `dist/` copies never run twice). CI's
 `unit-tests-contract` job and `validate-ci.sh --full` both run them.
 
+### Before a lane reports: `scripts/lane-check.sh`
+
+A lane that ran only the spec it wrote misses three things CI then catches: an untouched neighbour spec in the same folder, a type error in its own spec (ts-jest does not typecheck), and a smoke spec still asserting the text it changed. `scripts/lane-check.sh` (from the worktree root, no arguments) reads the branch's diff against `origin/main` (merge-base, plus uncommitted and untracked files) and runs, one after another:
+
+1. the typecheck of every touched workspace, specs included (`api/tsconfig.json`, `web/tsconfig.test.json`, contract, smoke, tools);
+2. jest/vitest on each **whole touched folder** (not just the changed spec), contract and tool tests, `node --test` for touched `scripts/*.mjs`;
+3. eslint on the changed files, `bash -n` on changed shell scripts;
+4. a grep of `scripts/smoke/**` and `tools/test-bot/src/smoke/**` for each string literal the diff removed from non-test source (a hit = FAIL).
+
+It ends with one table (`Step | Target | Result | Seconds`) and `RESULT: PASS|FAIL`, printing the last 40 log lines of any failed step above it. Quote that table in the lane's report. `--plan` prints the selection as JSON without running anything; `LANE_CHECK_ONLY=typecheck,tests,lint,smoke` limits the phases; `LANE_CHECK_WORKERS` (default 2) and `LANE_CHECK_BASE` tune it.
+
+**Replayed (2026-11-23)** against three misses: it FAILs ROK-2298's untouched `signup-not-found.helpers.spec.ts` (jest folder row), ROK-2301's `HubLink` fixture type error (api typecheck row) and ROK-2301's factory spec asserting the old link line (jest folder row). It did **not** flag the ROK-2301 smoke test: that one broke on a reordered line (`endsWith(...)`), not on a removed literal, which the string grep cannot see.
+
+**Memory:** 45–100 s per run; peak RSS 3.8–4.7 GB, set by the api `tsc` (it runs with an 8 GB heap cap). **One lane-check at a time per laptop** — the typecheck is serial by design; two lanes running it together approach 10 GB.
+
+If `tools/test-bot` has no `node_modules`, the test-bot rows FAIL with `run (cd tools/test-bot && npm ci)` — that is setup, not a repo failure.
+
 ## Coverage Thresholds
 
 Coverage is enforced in CI. Thresholds are set as a regression floor — they prevent coverage from *dropping*, not mandate a target. The floor is pinned to **(current coverage − 1%)** at the time of the most recent ratchet, so a small unrelated coverage shift does not break CI but a real regression does.
