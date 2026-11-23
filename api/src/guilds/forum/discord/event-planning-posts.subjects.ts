@@ -9,6 +9,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import type { EventPlanningPostSelect } from '../../../drizzle/schema/event-planning-posts';
+import type { ForumStarterCard } from '../../../discord-bot/services/event-embed-message.editor';
+import { SchedulingPollForumCard } from '../../../lineups/scheduling/scheduling-poll-forum-card';
+import { SchedulingPollEmbedQueueService } from '../../../lineups/scheduling/scheduling-poll-embed.queue';
 import { getClientUrl } from '../../../settings/settings-bot.helpers';
 import { SettingsService } from '../../../settings/settings.service';
 import { findLineupForSync } from '../subject-discussion/lineup-discussion.queries';
@@ -52,6 +55,10 @@ export class EventPlanningSubjectPosts {
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly settings: SettingsService,
     private readonly creator: EventPlanningPostCreator,
+    /** ROK-2295: a poll post opens with the live poll embed. */
+    private readonly pollCards: SchedulingPollForumCard,
+    /** Codex P2: the coalesced poll-card sync, re-run once a post exists. */
+    private readonly embedSync: SchedulingPollEmbedQueueService,
   ) {}
 
   /** The poll's live post, created on first need; null when it gets none. */
@@ -63,6 +70,7 @@ export class EventPlanningSubjectPosts {
     if (live) return toPlanningPostRef(live);
     const poll = await findPollForSync(this.db, matchId);
     if (!poll || !pollEligible(poll, now)) return null;
+    const card = await this.pollCard(matchId);
     const made = await this.creator.create({
       kind: 'poll',
       subjectId: matchId,
@@ -73,9 +81,15 @@ export class EventPlanningSubjectPosts {
         matchId,
       }),
       closesAt: null,
+      ...(card ? { card } : {}),
     });
-    // The poll may have ended while the create ran, unseen (no row yet).
-    if (made?.created) await this.syncPoll(matchId, new Date());
+    if (made?.created) {
+      // The poll may have ended while the create ran, unseen (no row yet).
+      await this.syncPoll(matchId, new Date());
+      // Codex P2: a vote / lock-in during the create ran its embed sync
+      // before the post was recorded, so the card can be stale: one more.
+      await this.embedSync.enqueue(matchId);
+    }
     return made?.ref ?? null;
   }
 
@@ -206,6 +220,16 @@ export class EventPlanningSubjectPosts {
   ): Promise<void> {
     if (post.closesAt?.getTime() === closesAt?.getTime()) return;
     await setPlanningPostClosesAt(this.db, post.id, closesAt);
+  }
+
+  /** Best effort: a render failure falls back to the text body. */
+  private async pollCard(matchId: number): Promise<ForumStarterCard | null> {
+    try {
+      return await this.pollCards.build(matchId);
+    } catch (err) {
+      this.warn(`starter card of poll ${matchId}`, err);
+      return null;
+    }
   }
 
   private warn(what: string, err: unknown): void {

@@ -1,4 +1,5 @@
 import { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
+import { SchedulingPollForumCard } from '../../../lineups/scheduling/scheduling-poll-forum-card';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ThreadRenameBudget } from '../../../discord-bot/lfg-board/lfg-board-thread.helpers';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
@@ -67,9 +68,11 @@ export class HubForumDiscordOutboundService {
     private readonly gateway: HubForumDiscordOutboundGateway,
     private readonly settings: SettingsService,
     starters: EventForumStarterCards,
+    pollCards: SchedulingPollForumCard,
   ) {
     this.events = new EventPostOutbound({
       starters,
+      pollCards,
       db,
       gateway,
       now: () => this.now(),
@@ -243,7 +246,7 @@ export class HubForumDiscordOutboundService {
     const { guildId, threadId } = job.change;
     const link = await links.findThreadLink(this.db, threadId);
     // A locked (archived) event post rejects edits (50083); reopen re-drives.
-    if (!link || !this.editable(link) || link.discordLockedAt) return;
+    if (!link || !links.isEditableLink(link) || link.discordLockedAt) return;
     const record = await findThread(this.db, guildId, threadId);
     if (!record) return;
     const url = await outboundUrl(this.settings, { guildId, threadId });
@@ -253,7 +256,10 @@ export class HubForumDiscordOutboundService {
     };
     const { name, content } = await this.events.postView(record.thread, url);
     // ROK-2292 D6: a carded starter is never overwritten by the text body.
-    const carded = await hasForumStarterCard(this.db, ref.threadId);
+    // ROK-2295: a poll post opens with (and keeps) the live poll embed.
+    const carded =
+      this.events.isPollThread(record.thread) ||
+      (await hasForumStarterCard(this.db, ref.threadId));
     await this.attempt(link, async () => {
       const edited = carded
         ? 'ok'
@@ -271,7 +277,7 @@ export class HubForumDiscordOutboundService {
     const { guildId, threadId, replyId } = job.change;
     if (replyId === undefined) return;
     const link = await links.findReplyLink(this.db, replyId);
-    if (!link || !this.editable(link)) return;
+    if (!link || !links.isEditableLink(link)) return;
     const record = await findReply(this.db, { guildId, threadId, replyId });
     if (!record) return;
     const url = await outboundUrl(this.settings, {
@@ -325,15 +331,6 @@ export class HubForumDiscordOutboundService {
       if (!links.isUnsent(link)) await run();
       await links.markDeleted(this.db, link.id, this.now());
     });
-  }
-
-  /** R3: only RL-origin, sent, still-present rows are pushed on edit. */
-  private editable(link: links.ForumLink): boolean {
-    return (
-      link.origin === 'raidledger' &&
-      !link.discordDeletedAt &&
-      !links.isUnsent(link)
-    );
   }
 
   private async attempt(

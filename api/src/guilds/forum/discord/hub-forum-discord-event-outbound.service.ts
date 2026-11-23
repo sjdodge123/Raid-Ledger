@@ -15,7 +15,9 @@ import { Logger } from '@nestjs/common';
  * poll or lineup thread posts lazily too, titled `<title> — Poll|Lineup`
  * and tagged with its kind tag. Retitle (item 2) stays event-only (F5).
  */
+import type { ForumStarterCard } from '../../../discord-bot/services/event-embed-message.editor';
 import type { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
+import type { SchedulingPollForumCard } from '../../../lineups/scheduling/scheduling-poll-forum-card';
 import {
   discordThreadName,
   forumThreadUrl,
@@ -66,6 +68,8 @@ export interface EventPostDeps {
   redrive: (link: links.ForumLink) => Promise<unknown>;
   /** ROK-2292 D2: an event post opens with its tracked signup card. */
   starters: Pick<EventForumStarterCards, 'build' | 'track'>;
+  /** ROK-2295: a poll post opens with the live poll embed. */
+  pollCards: Pick<SchedulingPollForumCard, 'build'>;
 }
 
 /** Where a post goes: the bound forum and the hub's shared tag, if any. */
@@ -129,6 +133,11 @@ export class EventPostOutbound {
   /** True for a subject (event / poll / lineup) thread: posted lazily. */
   isSubjectThread(thread: SubjectColumns): boolean {
     return subjectOf(thread) !== null;
+  }
+
+  /** ROK-2295: a poll thread's starter is the live poll embed (no text). */
+  isPollThread(thread: SubjectColumns): boolean {
+    return subjectOf(thread)?.kind === 'poll';
   }
 
   /**
@@ -206,8 +215,9 @@ export class EventPostOutbound {
     });
     const view = await this.subjectView(src, url, clientUrl);
     const eventId = src.kind === 'event' ? src.eventId : null;
-    const card =
+    const eventCard =
       eventId === null ? null : await this.deps.starters.build(eventId);
+    const card = eventCard ?? (await this.pollCard(src));
     const post = {
       title: view.name,
       content: view.content,
@@ -219,15 +229,32 @@ export class EventPostOutbound {
       const sent = await gateway.createPost(to.target, post, ROOT_AUTHOR);
       await links.markSent(db, link.id, sent, this.deps.now());
       await links.rehomeReplies(db, link.threadId, sent.threadId);
-      if (card && eventId !== null) {
+      if (eventCard && eventId !== null) {
         await trackSentStarter(
           this.deps.starters,
           eventId,
           sent.threadId,
-          card.state,
+          eventCard.state,
         );
       }
     });
+  }
+
+  /**
+   * ROK-2295: a poll post's starter card. Best effort — a render failure
+   * falls back to the text body rather than failing the post.
+   */
+  private async pollCard(
+    src: SubjectPostSource,
+  ): Promise<ForumStarterCard | null> {
+    if (src.kind !== 'poll') return null;
+    try {
+      return await this.deps.pollCards.build(src.id);
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      starterLogger.warn(`poll ${src.id} starter card failed: ${why}`);
+      return null;
+    }
   }
 
   /** What a subject post looks like: `send` and `postView` share it. */

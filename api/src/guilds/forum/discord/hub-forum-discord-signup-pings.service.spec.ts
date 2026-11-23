@@ -142,7 +142,7 @@ function setup(pinged: string[] = [], online = true) {
   };
   const gateway = {
     isOnline: jest.fn(() => online),
-    mention: jest.fn(() => Promise.resolve()),
+    mention: jest.fn(() => Promise.resolve('signup-msg')),
     removeThreadMembers: jest.fn((_post: string, ids: string[]) =>
       Promise.resolve(ids),
     ),

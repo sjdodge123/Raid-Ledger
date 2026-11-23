@@ -6,6 +6,8 @@
  * again, a second voter gets their own ping, a cleared tap pings nothing.
  * The service is driven directly (listener routing is unit-tested); every
  * poll has a real match in `scheduling` and real vote rows.
+ * ROK-2295 lane C: the line lists the voter's `yes` slots and a later
+ * refresh edits it in place (a `no` slot is never listed).
  */
 import { randomBytes } from 'crypto';
 import { eq } from 'drizzle-orm';
@@ -28,6 +30,7 @@ import {
   type FakeOutbound,
 } from './hub-forum-discord-outbound.test-fixtures';
 import { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pings.service';
+import { PollVoterLines } from './poll-voter-lines.refresh';
 import {
   FAKE_DISCORD_GUILD,
   snowflake,
@@ -114,16 +117,48 @@ async function newPoll(guildId: number | null, voters: number[]) {
       .insert(schema.communityLineupScheduleVotes)
       .values({ slotId: slot.id, userId });
   }
-  return { lineupId: l.id, matchId: m.id };
+  return { lineupId: l.id, matchId: m.id, slotAt: slot.proposedTime };
 }
 
 const voteBy = (
   poll: { lineupId: number; matchId: number },
   userId: number,
   stance: PollVotedPayload['stance'] = 'yes',
-): PollVotedPayload => ({ ...poll, userId, stance });
+): PollVotedPayload => ({
+  lineupId: poll.lineupId,
+  matchId: poll.matchId,
+  userId,
+  stance,
+});
 
-const pingLine = (id: string) => `\u{1F5F3} <@${id}> voted`;
+/** `<t:…:f>` of one slot, as the embed and the voted line print it. */
+const ts = (at: Date) => `<t:${Math.floor(at.getTime() / 1000)}:f>`;
+const pingLine = (id: string, ...at: Date[]) =>
+  `\u{1F5F3} <@${id}> voted: ${at.map(ts).join(', ')}`;
+
+/** One more slot on the match that `userId` answers with `stance`. */
+async function answerSlot(
+  matchId: number,
+  userId: number,
+  hoursAhead: number,
+  stance: 'yes' | 'no',
+): Promise<Date> {
+  const [slot] = nonEmpty(
+    await db()
+      .insert(schema.communityLineupScheduleSlots)
+      .values({
+        matchId,
+        proposedTime: new Date(Date.now() + hoursAhead * HOUR),
+        suggestedBy: 'user',
+      })
+      .returning(),
+    'extra slot',
+  );
+  await db()
+    .insert(schema.communityLineupScheduleVotes)
+    .values({ slotId: slot.id, userId, stance });
+  return slot.proposedTime;
+}
 
 /** Every mention so far as [discordThreadId, content, userIds]. */
 const mentions = () => out.spies.mention.mock.calls;
@@ -155,7 +190,7 @@ describe('ROK-2272 S10 voter pings — hub poll', () => {
     expect(mentions()).toHaveLength(1);
     const [[thread, line, users]] = nonEmpty(mentions(), 'mention');
     expect([line, users]).toEqual([
-      pingLine(discordIds.signed),
+      pingLine(discordIds.signed, poll.slotAt),
       [discordIds.signed],
     ]);
 
@@ -168,7 +203,7 @@ describe('ROK-2272 S10 voter pings — hub poll', () => {
     expect(mentions()).toHaveLength(2);
     expect(mentions()[1]).toEqual([
       thread,
-      pingLine(discordIds.bench),
+      pingLine(discordIds.bench, poll.slotAt),
       [discordIds.bench],
     ]);
     expect(out.spies.createPost).toHaveBeenCalledTimes(1);
@@ -226,7 +261,11 @@ describe('ROK-2272 S10 voter pings — non-hub poll (registry post)', () => {
     expect(createPost).toHaveBeenCalledTimes(1);
     const row = await postRow(poll.matchId);
     expect(mentions()).toEqual([
-      [row.discordThreadId, pingLine(discordIds.signed), [discordIds.signed]],
+      [
+        row.discordThreadId,
+        pingLine(discordIds.signed, poll.slotAt),
+        [discordIds.signed],
+      ],
     ]);
 
     expect(await pings.planningVote(voteBy(poll, ctx.ids.signed))).toBe(
@@ -238,10 +277,34 @@ describe('ROK-2272 S10 voter pings — non-hub poll (registry post)', () => {
     expect(mentions()).toHaveLength(2);
     expect(mentions()[1]).toEqual([
       row.discordThreadId,
-      pingLine(discordIds.bench),
+      pingLine(discordIds.bench, poll.slotAt),
       [discordIds.bench],
     ]);
     expect(createPost).toHaveBeenCalledTimes(1);
+  });
+
+  it('ROK-2295: a later yes is added to the line in place; a no is never listed', async () => {
+    const poll = await newPoll(null, [ctx.ids.signed]);
+    expect(await pings.planningVote(voteBy(poll, ctx.ids.signed))).toBe(
+      'pinged',
+    );
+    const row = await postRow(poll.matchId);
+    const [sent] = nonEmpty(out.spies.mention.mock.results, 'sent line');
+    const messageId = await sent.value;
+    const later = await answerSlot(poll.matchId, ctx.ids.signed, 48, 'yes');
+    await answerSlot(poll.matchId, ctx.ids.signed, 72, 'no');
+    const voterLines = app().get(PollVoterLines);
+    await voterLines.refreshVoterLines(poll.matchId, row.discordThreadId);
+    expect(out.spies.editBotMessage.mock.calls).toEqual([
+      [
+        row.discordThreadId,
+        messageId,
+        pingLine(discordIds.signed, poll.slotAt, later),
+      ],
+    ]);
+    await voterLines.refreshVoterLines(poll.matchId, row.discordThreadId);
+    expect(out.spies.editBotMessage).toHaveBeenCalledTimes(1);
+    expect(mentions()).toHaveLength(1);
   });
 
   it('a cleared tap creates no post and pings nobody', async () => {
