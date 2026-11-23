@@ -108,6 +108,13 @@ describe('follow-up title limits (ROK-2301)', () => {
     expect(title).toBe(`${HEAD}${'🐉'.repeat(room)}…)`);
   });
 
+  it('keeps an emoji-heavy Discord name within 100 UTF-16 units', () => {
+    const name = pollPostTitle(followup('🐉'.repeat(200)));
+    expect(name.length).toBeLessThanOrEqual(100);
+    expect(name.startsWith(`${HEAD}🐉`)).toBe(true);
+    expect(name.endsWith('🐉…)')).toBe(true);
+  });
+
   it('a title that fits exactly is used whole, without an ellipsis', () => {
     const event = 'x'.repeat(120 - size(HEAD) - 1);
     expect(followupPollTitle(GAME, event, 120)).toBe(`${HEAD}${event})`);
