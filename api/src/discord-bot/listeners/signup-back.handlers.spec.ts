@@ -7,6 +7,7 @@ import {
   routeSignupBack,
 } from './signup-back.handlers';
 import { createMockDeps } from './signup-handlers.spec-helpers';
+import { ACCOUNT_BLOCKED_REPLY } from '../../users/discord-account-status.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 
 type SentRow = { components: Array<{ custom_id?: string }> };
@@ -153,6 +154,38 @@ describe('handleSignupCharacterBack (ROK-2228)', () => {
     );
 
     expect(firstEdit(interaction).content).toBe('Event not found.');
+  });
+});
+
+describe('handleSignupCharacterBack — blocked account (ROK-2298, A8)', () => {
+  it('replies the blocked copy and renders no character list', async () => {
+    const deps = createMockDeps();
+    (deps.db.select as jest.Mock).mockReturnValueOnce(
+      selectChain([
+        {
+          id: 42,
+          discordId: 'discord-1',
+          bannedAt: new Date(),
+          deactivatedAt: null,
+        },
+      ]),
+    );
+    const interaction = backInteraction('char_back:char_select:10');
+    // discord.js flips `deferred` on deferUpdate; the helper reads it.
+    Object.assign(interaction, { deferred: false });
+    (interaction.deferUpdate as jest.Mock).mockImplementation(() => {
+      Object.assign(interaction, { deferred: true });
+      return Promise.resolve(undefined);
+    });
+
+    await handleSignupCharacterBack(
+      interaction,
+      { charSelectPrefix: 'char_select', eventId: 10 },
+      deps,
+    );
+
+    expect(firstEdit(interaction).content).toBe(ACCOUNT_BLOCKED_REPLY);
+    expect(deps.charactersService.findAllForUser).not.toHaveBeenCalled();
   });
 });
 

@@ -22,7 +22,12 @@ jest.mock('./signup-interaction.helpers', () => {
     ),
   };
 });
-import { findLinkedUser } from './signup-interaction.helpers';
+import {
+  findActiveLinkedUser,
+  findLinkedUser,
+} from './signup-interaction.helpers';
+import { ACCOUNT_BLOCKED_REPLY } from '../../users/discord-account-status.helpers';
+
 const mockFindLinkedUser = findLinkedUser as jest.Mock;
 
 const ORGANIZER_ID = 77;
@@ -123,6 +128,45 @@ describe('PostEventFollowupInteractionListener', () => {
   beforeEach(setup);
   afterEach(async () => {
     await testModule.close();
+  });
+
+  describe('blocked account (ROK-2298, A16)', () => {
+    it('a blocked organizer gets the blocked reply and no follow-up link', async () => {
+      const real = jest.requireActual<{
+        findActiveLinkedUser: typeof findActiveLinkedUser;
+      }>('./signup-interaction.helpers');
+      (findActiveLinkedUser as jest.Mock).mockImplementationOnce(
+        real.findActiveLinkedUser,
+      );
+      const client = makeFakeClient();
+      mockClientService.getClient.mockReturnValue(client);
+      listener.onBotConnected();
+      const interaction = Object.assign(
+        makeButtonInteraction(`pef_schedule:${EVENT_ID}`),
+        { deferred: false },
+      );
+      interaction.deferReply.mockImplementation(() => {
+        interaction.deferred = true;
+        return Promise.resolve(undefined);
+      });
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: ORGANIZER_ID,
+          discordId: interaction.user.id,
+          bannedAt: new Date(),
+          deactivatedAt: null,
+        },
+      ]);
+      client.emit('interactionCreate', interaction);
+      await interaction.settled;
+      await flush();
+
+      expect(interaction.editReply).toHaveBeenCalledTimes(1);
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({ content: ACCOUNT_BLOCKED_REPLY }),
+      );
+      expect(loggedLines()).toContain('outcome=blocked');
+    });
   });
 
   describe('Regression: ROK-1425 — attach lifecycle', () => {

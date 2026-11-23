@@ -28,7 +28,14 @@ jest.mock('./signup-interaction.helpers', () => {
     ),
   };
 });
-import { findLinkedUser } from './signup-interaction.helpers';
+import {
+  findActiveLinkedUser,
+  findLinkedUser,
+} from './signup-interaction.helpers';
+import {
+  ACCOUNT_BLOCKED_REPLY,
+  accountBlockedError,
+} from '../../users/discord-account-status.helpers';
 import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 const mockFindLinkedUser = findLinkedUser as jest.Mock;
 
@@ -393,6 +400,75 @@ describe('RunningLateInteractionListener', () => {
       expect(mockRunningLateService.setRunningLate).not.toHaveBeenCalled();
       expect(interaction.editReply).toHaveBeenCalledWith({
         content: 'Event not found.',
+      });
+    });
+  });
+
+  describe('blocked account (ROK-2298)', () => {
+    const realHelpers = jest.requireActual<{
+      findActiveLinkedUser: typeof findActiveLinkedUser;
+    }>('./signup-interaction.helpers');
+    const banned = (discordId: string) => ({
+      id: HOST_ID,
+      discordId,
+      bannedAt: new Date(),
+      deactivatedAt: null,
+    });
+    const useRealLookup = () =>
+      (findActiveLinkedUser as jest.Mock).mockImplementationOnce(
+        realHelpers.findActiveLinkedUser,
+      );
+
+    it('A12 Running late: blocked reply, no late flag', async () => {
+      const interaction = makeButtonInteraction(
+        `${RUNNING_LATE_BUTTON_IDS.LATE}:${EVENT_ID}`,
+      );
+      await interaction.deferReply();
+      mockDb.limit.mockResolvedValueOnce([banned(interaction.user.id)]);
+      useRealLookup();
+      await listener.handleLateClick(interaction, EVENT_ID);
+      expect(mockRunningLateService.setRunningLate).not.toHaveBeenCalled();
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({ content: ACCOUNT_BLOCKED_REPLY }),
+      );
+    });
+
+    it('A14 delay confirm: a blocked host cannot delay the event', async () => {
+      const interaction = makeButtonInteraction(
+        `${RUNNING_LATE_BUTTON_IDS.DELAY}:${EVENT_ID}:15`,
+      );
+      await interaction.deferUpdate();
+      mockDb.limit.mockResolvedValueOnce([banned(interaction.user.id)]);
+      useRealLookup();
+      await listener.handleDelayConfirm(interaction, EVENT_ID, 15);
+      expect(mockEventsService.delayEvent).not.toHaveBeenCalled();
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({ content: ACCOUNT_BLOCKED_REPLY }),
+      );
+    });
+
+    it("AC4 I'm here still clears the flag for a blocked user", async () => {
+      mockFindLinkedUser.mockResolvedValue({ id: ATTENDEE_ID });
+      const interaction = makeButtonInteraction(
+        `${RUNNING_LATE_BUTTON_IDS.HERE}:${EVENT_ID}`,
+      );
+      await listener.handleHereClick(interaction, EVENT_ID);
+      expect(mockRunningLateService.clearRunningLate).toHaveBeenCalledWith(
+        EVENT_ID,
+        ATTENDEE_ID,
+      );
+    });
+
+    it('maps a service ACCOUNT_BLOCKED refusal to the blocked reply', async () => {
+      (findActiveLinkedUser as jest.Mock).mockRejectedValueOnce(
+        accountBlockedError(),
+      );
+      const interaction = makeButtonInteraction(
+        `${RUNNING_LATE_BUTTON_IDS.LATE}:${EVENT_ID}`,
+      );
+      await listener.handleButtonInteraction(interaction);
+      expect(interaction.editReply).toHaveBeenCalledWith({
+        content: ACCOUNT_BLOCKED_REPLY,
       });
     });
   });
