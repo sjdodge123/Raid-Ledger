@@ -68,7 +68,8 @@ async function flushFrames(): Promise<void> {
     await vi.runAllTimersAsync();
 }
 
-describe('useDayViewScrollRestore', () => {
+/** Fake frames, a scrollTo spy that records offsets, and a 375px phone scrolled to 640. */
+function installHookHarness(): void {
     const originalWidth = window.innerWidth;
     beforeEach(() => {
         sessionStorage.clear();
@@ -92,6 +93,10 @@ describe('useDayViewScrollRestore', () => {
         setWidth(originalWidth);
         setScrollY(0);
     });
+}
+
+describe('useDayViewScrollRestore — restores', () => {
+    installHookHarness();
 
     it('restores the saved offset when Back returns to the same date in Day view', async () => {
         rememberDayViewScroll('2026-03-10');
@@ -103,6 +108,33 @@ describe('useDayViewScrollRestore', () => {
         expect(scrollCalls).toContain(640);
         expect(window.scrollY).toBe(640);
     });
+
+    it('restores when the event page\'s "Back to Calendar" button (a flagged PUSH) returns to the same Day', async () => {
+        rememberDayViewScroll('2026-03-10');
+        setScrollY(0);
+
+        render(<LinkFromEvent date="2026-03-10" flagged />);
+        await flushFrames();
+
+        expect(window.scrollY).toBe(640);
+    });
+
+    it('waits for the grid to finish loading, then restores on the final layout', async () => {
+        rememberDayViewScroll('2026-03-10');
+        setScrollY(0);
+
+        const view = render(<BackFromEvent date="2026-03-10" isDayView ready={false} />);
+        await flushFrames();
+        expect(scrollCalls, 'no restore while the loading block is still above the grid').toEqual([]);
+
+        view.rerender(<BackFromEvent date="2026-03-10" isDayView ready />);
+        await flushFrames();
+        expect(window.scrollY).toBe(640);
+    });
+});
+
+describe('useDayViewScrollRestore — does not restore', () => {
+    installHookHarness();
 
     it('does not restore on a fresh (PUSH) visit, and drops the saved offset', async () => {
         rememberDayViewScroll('2026-03-10');
@@ -132,29 +164,6 @@ describe('useDayViewScrollRestore', () => {
         rememberDayViewScroll('2026-03-10');
 
         expect(sessionStorage.length).toBe(0);
-    });
-
-    it('restores when the event page\'s "Back to Calendar" button (a flagged PUSH) returns to the same Day', async () => {
-        rememberDayViewScroll('2026-03-10');
-        setScrollY(0);
-
-        render(<LinkFromEvent date="2026-03-10" flagged />);
-        await flushFrames();
-
-        expect(window.scrollY).toBe(640);
-    });
-
-    it('waits for the grid to finish loading, then restores on the final layout', async () => {
-        rememberDayViewScroll('2026-03-10');
-        setScrollY(0);
-
-        const view = render(<BackFromEvent date="2026-03-10" isDayView ready={false} />);
-        await flushFrames();
-        expect(scrollCalls, 'no restore while the loading block is still above the grid').toEqual([]);
-
-        view.rerender(<BackFromEvent date="2026-03-10" isDayView ready />);
-        await flushFrames();
-        expect(window.scrollY).toBe(640);
     });
 
     it('does not restore when the width is no longer a phone width at restore time', async () => {
