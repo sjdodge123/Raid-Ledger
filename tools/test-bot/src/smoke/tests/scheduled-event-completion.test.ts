@@ -22,10 +22,7 @@ import {
   releaseScheduledEvents,
   releaseScheduledEventsAndRethrow,
 } from '../scheduled-events-toggle.js';
-import {
-  describeBlockingEvent,
-  pickBlockingEvent,
-} from '../scheduled-event-blocker.js';
+import { blockerSuffixFor } from '../scheduled-event-blocker-lookup.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 /** Force-set event times to the past via test endpoint (bypasses Zod validation). */
@@ -117,9 +114,13 @@ async function assertOwnOutcomeOk(
       `code=${own.errorCode ?? 'none'} message=${own.errorMessage ?? 'none'}`
     : `was not reached by the completion pass (reason=${result.reason ?? 'none'}, ` +
       `success=${result.success}, outcomes=${JSON.stringify(result.outcomes ?? [])})`;
+  // Name a foreign Active event on our SE's channel: it blocks the
+  // Scheduled -> Active step (TECH-DEBT-BACKLOG 2026-11-21). Empty on no
+  // blocker or a failed lookup, so the message below is never masked.
+  const blocker = await blockerSuffixFor(seId);
   throw new Error(
     `ROK-944: completing event ${eventId} (SE ${seId}) ${detail}; ` +
-      `SE is ${GuildScheduledEventStatus[status]}, not Completed`,
+      `SE is ${GuildScheduledEventStatus[status]}, not Completed${blocker}`,
   );
 }
 
@@ -138,29 +139,16 @@ async function findScheduledEventByTitle(
 }
 
 /**
- * Wait for this test's Scheduled Event to appear. Each poll reads the guild's
- * events once; when ours is missing and a foreign event is Active on the
- * default voice channel the API uses (`ctx.voiceChannels[0]`, set by
- * setup.ts), throw at once naming it instead of timing out after
- * `timeoutMs` with no cause (TECH-DEBT-BACKLOG 2026-11-21).
+ * Wait for this test's Scheduled Event to appear. Just the poll: an Active
+ * event elsewhere on the channel never blocks creation, and sibling tests
+ * legitimately hold one there, so nothing here fails on its account.
  */
 async function waitForOwnScheduledEvent(
   ctx: TestContext,
   title: string,
 ): Promise<{ id: string; status: GuildScheduledEventStatus }> {
-  const channelId = ctx.voiceChannels[0]?.id;
   return pollForCondition(
-    async () => {
-      const events = await getGuild().scheduledEvents.fetch();
-      const own = events.find((se) => se.name.includes(title));
-      if (own) return { id: own.id, status: own.status };
-      if (!channelId) return null;
-      const blocker = pickBlockingEvent(events.values(), channelId, title);
-      if (blocker) {
-        throw new Error(describeBlockingEvent(blocker, channelId, title));
-      }
-      return null;
-    },
+    () => findScheduledEventByTitle(title),
     ctx.config.timeoutMs,
     { intervalMs: 2000 },
   );
