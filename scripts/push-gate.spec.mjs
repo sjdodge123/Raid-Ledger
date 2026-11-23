@@ -72,9 +72,12 @@ function withRepo(webChange, fn) {
   }
 }
 
-test('allows when a fresh sentinel names this web surface', () => {
+// ROK-2205: the body the MCP server writes on a gate_verified run.
+const VERIFIED_BODY = '{"gate_verified":true,"sha":"8fd1f515","tier":"static"}\n';
+
+test('allows when a fresh gate_verified sentinel names this web surface', () => {
   withRepo(true, (dir, sentinels) => {
-    writeFileSync(join(sentinels, `.playwright-verified-${surfaceHash(dir)}`), '{}\n');
+    writeFileSync(join(sentinels, `.playwright-verified-${surfaceHash(dir)}`), VERIFIED_BODY);
     const verdict = run(dir, sentinels);
     assert.equal(verdict.continue, true);
     assert.equal(verdict.matched, 'surface');
@@ -97,6 +100,64 @@ test('denies on a fresh sha-named sentinel — the legacy sha key is retired', (
   });
 });
 
+// ROK-2205: a sentinel written before gate_verified was recorded (an empty
+// body, `{}`, or an explicit false) fails closed and names the fix.
+for (const [label, body] of [
+  ['an empty (legacy) body', ''],
+  ['a body without gate_verified', '{"sha":"8fd1f515","tier":"static"}\n'],
+  ['gate_verified: false', '{"gate_verified":false,"tier":"static"}\n'],
+]) {
+  test(`denies a fresh sentinel with ${label}, naming the fix`, () => {
+    withRepo(true, (dir, sentinels) => {
+      writeFileSync(join(sentinels, `.playwright-verified-${surfaceHash(dir)}`), body);
+      const verdict = run(dir, sentinels);
+      assert.ok(denied(verdict), `a sentinel with ${label} must not unlock the push`);
+      const reason = verdict.hookSpecificOutput.permissionDecisionReason;
+      assert.match(reason, /gate_verified: true/);
+      assert.match(reason, /log_tail_bytes:3000/);
+    });
+  });
+}
+
+// ROK-2205 review M2: a body an OLDER MCP server wrote (it has task_id but no
+// gate_verified key) is rewritten the same way by that server on every re-run,
+// so the deny must name the real fix — update the checkout and restart the
+// session — or agents loop on fleet gates.
+test('denies a sentinel from a pre-ROK-2205 MCP server, naming the restart fix', () => {
+  withRepo(true, (dir, sentinels) => {
+    const oldBody = '{"sha":"8fd1f515","surface":"x","tier":"static","task_id":"ab12cd34ef56"}\n';
+    writeFileSync(join(sentinels, `.playwright-verified-${surfaceHash(dir)}`), oldBody);
+    const verdict = run(dir, sentinels);
+    assert.ok(denied(verdict), 'an old-server sentinel must not unlock the push');
+    const reason = verdict.hookSpecificOutput.permissionDecisionReason;
+    assert.match(reason, /ROK-2205/);
+    assert.match(reason, /restart the Claude session/);
+    assert.match(reason, /pull main/);
+  });
+});
+
+// Review m4: only a TOP-LEVEL leading `"gate_verified": true` counts.
+for (const [label, body] of [
+  ['a nested true behind a top-level false', '{"gate_verified":false,"prev":{"gate_verified":true}}\n'],
+  ['a true that is not a JSON true', '{"gate_verified":trueX}\n'],
+]) {
+  test(`denies a fresh sentinel with ${label}`, () => {
+    withRepo(true, (dir, sentinels) => {
+      writeFileSync(join(sentinels, `.playwright-verified-${surfaceHash(dir)}`), body);
+      assert.ok(denied(run(dir, sentinels)), `a sentinel with ${label} must not unlock the push`);
+    });
+  });
+}
+
+// Review n2: a hand-written /push body with spaces is still a verified body.
+test('allows a gate_verified body written with spaces', () => {
+  withRepo(true, (dir, sentinels) => {
+    const body = '{ "gate_verified" : true, "tier": "local-playwright" }\n';
+    writeFileSync(join(sentinels, `.playwright-verified-${surfaceHash(dir)}`), body);
+    assert.equal(run(dir, sentinels).matched, 'surface');
+  });
+});
+
 test('denies when no sentinel exists, naming the surface hash', () => {
   withRepo(true, (dir, sentinels) => {
     const verdict = run(dir, sentinels);
@@ -111,7 +172,7 @@ test('denies when no sentinel exists, naming the surface hash', () => {
 test('denies on a sentinel older than the 24h age guard', () => {
   withRepo(true, (dir, sentinels) => {
     const path = join(sentinels, `.playwright-verified-${surfaceHash(dir)}`);
-    writeFileSync(path, '{}\n');
+    writeFileSync(path, VERIFIED_BODY);
     execFileSync('touch', ['-t', '202001010000', path]);
     assert.ok(denied(run(dir, sentinels)));
   });
