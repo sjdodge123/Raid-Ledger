@@ -361,12 +361,12 @@ const pollEmbedUsesLinkNotButton: SmokeTest = {
       // suffix is asserted exactly: a card that lost it would silently turn
       // every Discord-initiated vote into a `web` one.
       const attributedHref = `${voteHref}?src=discord`;
-      if (
-        !last.startsWith("[Vote now \u2197](") ||
-        !last.endsWith(`${attributedHref})`)
-      ) {
+      // ROK-2301: the last line is the link line. The vote link leads it and
+      // a "Game page" link may follow after " \u00b7 ".
+      const voteLink = last.split(" \u00b7 ")[0] ?? "";
+      if (voteLink !== `[Vote now \u2197](${attributedHref})`) {
         throw new Error(
-          `Expected the description to end with the "Vote now" masked link to ${attributedHref}, got "${last}"`,
+          `Expected the last line to start with the "Vote now" masked link to ${attributedHref}, got "${last}"`,
         );
       }
       if (embed.color !== ANNOUNCEMENT_CYAN) {
