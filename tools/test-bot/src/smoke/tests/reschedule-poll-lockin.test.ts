@@ -364,7 +364,11 @@ const pollEmbedUsesLinkNotButton: SmokeTest = {
       // ROK-2301: the last line is the link line. The vote link leads it and
       // a "Game page" link may follow after " \u00b7 ".
       const voteLink = last.split(" \u00b7 ")[0] ?? "";
-      if (voteLink !== `[Vote now \u2197](${attributedHref})`) {
+      // `voteHref` is a path; the card's link is the web origin plus it.
+      if (
+        !voteLink.startsWith("[Vote now \u2197](") ||
+        !voteLink.endsWith(`${attributedHref})`)
+      ) {
         throw new Error(
           `Expected the last line to start with the "Vote now" masked link to ${attributedHref}, got "${last}"`,
         );
