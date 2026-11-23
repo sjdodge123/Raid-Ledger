@@ -4593,3 +4593,12 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 ### 2026-11-23 — fix/rok-2299-day-view-card-clip (surfaced during the ROK-2299 e2e root cause)
 
 - **med** — `web/src/components/calendar/calendar-styles.css:711-729` (Day-view rules at >=769px): on desktop/tablet a Day card is held at its 100px min-height by react-big-calendar's `.rbc-day-slot .rbc-event-content { flex: 1 1 0 }`, so `.day-event-block` (overflow visible) outgrows `.rbc-event` and a back-to-back later card paints over the earlier card's description (measured at 1280px: later card starts at y=460, description spans 465-501). Pre-existing: these rules are unchanged from main (ROK-2299 only wrapped them in `@media (min-width: 769px)`; the phone layout is what that story fixes). Suggested: size the desktop card from its content, or clip / gap back-to-back cards as on the phone.
+
+### 2026-11-21 — overnight run (surfaced during PR #2277/#2279 discord-smoke failures)
+
+- ~~**[med]** `tools/test-bot/src/smoke/tests/scheduled-event-completion.test.ts:146-150` — when the slot's voice channel already has a foreign Active Scheduled Event, the smoke `pollForCondition` waits out its 300s `ctx.config.timeoutMs` and goes red with no clear cause (ROK-944/ROK-2201 failures on slot 0, voice channel 1480010709155971193).~~ — **Fixed 2026-11-23, PR #2298** (the failure message now names the foreign Active event; no early fail, by design).
+  Suggested: fail fast with a message naming the stuck event and the channel.
+
+### 2026-11-23 — fix/rok-2298-blocked-discord-signups (surfaced during PR #2300 CI triage)
+
+- **med** `.github/workflows/ci.yml` (`Typecheck (full project, incl. tests)`, `npx tsc --noEmit -p api/tsconfig.json`) — `FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory` (exit 134) at ~4030 MB on run 45212481531 (PR #2300, b08ea9667). Pre-existing growth, not the branch: the same command is clean on the laptop at that commit and four other PRs on the same base passed minutes earlier; the lint step hit the same wall on 2026-10-27. Fixed for now by `NODE_OPTIONS=--max-old-space-size=8192` on the step. Suggested: split the api typecheck into src and spec projects (project references) before it nears 8 GB; `scripts/validate-ci.sh:838` runs the same command with no heap flag and will hit it on a runner with a 4 GB default.

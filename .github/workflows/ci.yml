@@ -211,7 +211,12 @@ jobs:
       # so test-file tsc errors fail the PR instead of leaking to main.
       # ROK-1161: noUncheckedIndexedAccess is on in api/tsconfig.json itself,
       # so this step gates specs + test infra under it as well as shipped code.
+      # 2026-11-23: the full api program (src + specs) reached Node's default
+      # ~4 GB heap here too (PR #2300 died at 4030 MB, exit 134, while four
+      # other PRs on the same base passed); same headroom as the lint step.
       - name: Typecheck (full project, incl. tests)
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
         run: npx tsc --noEmit -p api/tsconfig.json
 
       # Playwright transpiles the smoke specs without typechecking them, so a
