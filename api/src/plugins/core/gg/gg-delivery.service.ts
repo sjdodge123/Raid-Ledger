@@ -255,9 +255,10 @@ export class GgDeliveryService {
    * dispatched here and AWAITED: the promise settles once the durable BullMQ
    * job is added (retried by the queue). A disconnect or a failed enqueue
    * throws, which releases this row's claim instead of stamping `dm_sent_at`.
-   * The in-app row is once per (user, year): a retry reuses it. A `null` row
-   * means the player turned in-app gg_ready off — no DM either, exactly as
-   * `create` behaves for every other caller.
+   * The in-app row is once per (user, year): a retry reuses it (hidden from the
+   * bell when gg_ready in-app is off but Discord is on, ROK-2290). A `null`
+   * row means the player turned gg_ready off on BOTH channels — no DM either,
+   * exactly as `create` behaves for every other caller.
    */
   private async notifyReady(userId: number, year: number): Promise<void> {
     if (!this.bot.isConnected()) {
@@ -282,7 +283,7 @@ export class GgDeliveryService {
     }
   }
 
-  /** The year's existing `gg_ready` row, else a new one (null = in-app off). */
+  /** The year's existing `gg_ready` row, else a new one (null = both channels off). */
   private async readyRowId(
     ready: Omit<CreateNotificationInput, 'skipDiscord'>,
     year: number,
