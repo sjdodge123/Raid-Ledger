@@ -1,8 +1,8 @@
 /**
- * ROK-2290 operator ruling 2026-11-23 — invites keep the old rule: the
- * `new_event` bell off means no invite at all (no row, so no invite DM),
- * whatever the Discord switch says. Bell on → visible row whose id drives the
- * DM. The lock + pending check (ROK-2217) are mocked here.
+ * ROK-2290 — a member invite follows the member's `new_event` switches the
+ * way `NotificationService.create` does: bell on → visible row; bell off +
+ * Discord on → hidden row (its id still drives the invite DM); both off → no
+ * row, no DM. The lock + pending check (ROK-2217) are mocked here.
  */
 import { claimMemberInvite } from './event-invite-claim.helpers';
 import { hasPendingMemberInvite } from './event-invite-state.helpers';
@@ -48,12 +48,15 @@ function prefsService(newEvent: { inApp: boolean; discord: boolean }) {
 describe('claimMemberInvite — bell vs Discord (ROK-2290)', () => {
   beforeEach(() => pending.mockResolvedValue(false));
 
-  it('bell off + Discord on writes nothing and returns a null id (no invite DM)', async () => {
+  it('bell off + Discord on writes a HIDDEN row and returns its id', async () => {
     const { db, values } = fakeDb();
     const svc = prefsService({ inApp: false, discord: true });
     const claim = await claimMemberInvite(db, svc, NOTICE);
-    expect(claim).toEqual({ claimed: true, notificationId: null });
-    expect(values).not.toHaveBeenCalled();
+    expect(claim).toEqual({ claimed: true, notificationId: 'n-1' });
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ inAppHidden: true, type: 'new_event' }),
+    );
+    expect(values.mock.calls[0]?.[0]?.expiresAt).toBeInstanceOf(Date);
   });
 
   it('both switches off writes nothing and returns a null id', async () => {
@@ -64,15 +67,14 @@ describe('claimMemberInvite — bell vs Discord (ROK-2290)', () => {
     expect(values).not.toHaveBeenCalled();
   });
 
-  it('bell on writes a visible new_event row with no expiry and returns its id', async () => {
+  it('bell on writes a visible row with no expiry (unchanged)', async () => {
     const { db, values } = fakeDb();
     const svc = prefsService({ inApp: true, discord: false });
     const claim = await claimMemberInvite(db, svc, NOTICE);
     expect(claim).toEqual({ claimed: true, notificationId: 'n-1' });
-    const row = values.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(row).toMatchObject({ type: 'new_event', userId: 42 });
-    expect(row.inAppHidden).not.toBe(true);
-    expect(row.expiresAt ?? null).toBeNull();
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ inAppHidden: false, expiresAt: null }),
+    );
   });
 
   it('a pending invite is not claimed and writes nothing', async () => {
