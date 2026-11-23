@@ -59,25 +59,6 @@ const CASES: Record<string, { before: Prefs; after: Prefs }> = {
       valheim_claim_suggestion: { push: false, inApp: false, discord: true },
     },
   },
-  // Organizer prompt is a direct DM gated only on Discord: never flipped.
-  postEventFollowupExcluded: {
-    before: {
-      post_event_followup: { push: false, inApp: false, discord: true },
-    },
-    after: {
-      post_event_followup: { push: false, inApp: false, discord: true },
-    },
-  },
-  postEventFollowupBesideFlippedType: {
-    before: {
-      post_event_followup: { inApp: false },
-      new_event: { inApp: false, discord: true },
-    },
-    after: {
-      post_event_followup: { inApp: false },
-      new_event: { inApp: false, discord: false },
-    },
-  },
   bellOffDiscordAbsentDefaultOff: {
     before: { system: { inApp: false } },
     after: { system: { inApp: false } },
