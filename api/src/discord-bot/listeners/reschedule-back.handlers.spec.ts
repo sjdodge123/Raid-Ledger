@@ -45,6 +45,9 @@ function mockDeps(): RescheduleDeps {
         ],
       }),
     },
+    settingsService: {
+      getTrustedClientUrl: jest.fn().mockResolvedValue(null),
+    },
     emojiService: {
       getRoleEmojiComponent: jest.fn().mockReturnValue(undefined),
       getClassEmojiComponent: jest.fn().mockReturnValue(undefined),

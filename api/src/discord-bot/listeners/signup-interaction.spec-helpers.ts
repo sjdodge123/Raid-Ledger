@@ -51,6 +51,7 @@ export interface SignupInteractionMocks {
   mockSettingsService: {
     getBranding: jest.Mock;
     getClientUrl: jest.Mock;
+    getTrustedClientUrl: jest.Mock;
     getDefaultTimezone: jest.Mock;
   };
   mockDb: Record<'select', jest.Mock>;
@@ -186,6 +187,10 @@ function createSecondaryCoreServiceMocks(
       }),
       // Mirrors the real settings fallback to the env var when unset.
       getClientUrl: jest.fn(() =>
+        Promise.resolve(process.env.CLIENT_URL ?? null),
+      ),
+      // ROK-2294: the import link reads the trusted URL (null when unset).
+      getTrustedClientUrl: jest.fn(() =>
         Promise.resolve(process.env.CLIENT_URL ?? null),
       ),
       getDefaultTimezone: jest.fn().mockResolvedValue(null),

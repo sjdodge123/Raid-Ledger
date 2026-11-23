@@ -18,6 +18,7 @@ import {
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
+import { SettingsService } from '../../settings/settings.service';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
 import type { EventRow, RescheduleDeps } from './reschedule-response.helpers';
 import {
@@ -78,6 +79,7 @@ export class RescheduleResponseListener {
     private readonly emojiService: DiscordEmojiService,
     private readonly activityLog: ActivityLogService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly settingsService: SettingsService,
   ) {}
 
   private get deps(): RescheduleDeps {
@@ -90,6 +92,7 @@ export class RescheduleResponseListener {
       activityLog: this.activityLog,
       eventEmitter: this.eventEmitter,
       logger: this.logger,
+      settingsService: this.settingsService,
     };
   }
 
