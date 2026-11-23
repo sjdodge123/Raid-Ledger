@@ -9,6 +9,9 @@ ALTER TABLE "notifications" ADD COLUMN "in_app_hidden" boolean DEFAULT false NOT
 -- (defaults inlined from DEFAULT_CHANNEL_PREFS so this stays self-contained).
 -- A type missing from the row resolves to its default bell ON, so it never
 -- matches. valheim_claim_suggestion is excluded: it was always a DM-only type.
+-- post_event_followup is excluded too (Lead ruling 2026-11-23, review MAJOR):
+-- the organizer prompt is a direct DM gated only on its Discord switch, so an
+-- organizer with that bell off gets it today; flipping Discord would stop it.
 -- Other keys of an entry, other types and other rows are left untouched.
 -- AND does not fix evaluation order and jsonb_each raises on a non-object, so
 -- every jsonb_each argument and the per-entry rewrite are guarded by CASE.
@@ -26,7 +29,7 @@ SET "channel_prefs" = (
           'tentative_displaced', 'member_returned', 'recruitment_reminder',
           'role_gap_alert', 'lineup_steam_nudge', 'community_lineup',
           'user_deactivated_discord', 'user_reactivated_discord',
-          'post_event_followup', 'lfg_invite', 'lfg_player_invite',
+          'lfg_invite', 'lfg_player_invite',
           'hub_leader_post', 'hub_event_tagged', 'hub_proposal_submitted',
           'hub_proposal_reviewed', 'gg_ready', 'calendar_needs_reconnect',
           'system')
@@ -53,7 +56,7 @@ WHERE jsonb_typeof(p."channel_prefs") = 'object'
     SELECT 1
     FROM jsonb_each(CASE WHEN jsonb_typeof(p."channel_prefs") = 'object'
     THEN p."channel_prefs" ELSE '{}'::jsonb END) AS m
-    WHERE m.key <> 'valheim_claim_suggestion'
+    WHERE m.key NOT IN ('valheim_claim_suggestion', 'post_event_followup')
       AND jsonb_typeof(m.value) = 'object'
       AND m.value -> 'inApp' = 'false'::jsonb
       AND (
