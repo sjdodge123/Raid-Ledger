@@ -215,7 +215,7 @@ export interface NominateButtonDeps {
   addInterest(userId: number, gameId: number): Promise<void>;
   findLinkedUser(
     discordId: string,
-  ): Promise<{ id: number; blocked?: boolean } | null>;
+  ): Promise<{ id: number; blocked: boolean } | null>;
   setAutoNominatePref(userId: number, enabled: boolean): Promise<void>;
 }
 
