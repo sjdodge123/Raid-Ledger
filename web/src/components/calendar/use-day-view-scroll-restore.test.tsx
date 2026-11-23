@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
-import { useEffect, type JSX } from 'react';
+import { StrictMode, useEffect, type JSX } from 'react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { rememberDayViewScroll, restoreWindowScroll, useDayViewScrollRestore } from './use-day-view-scroll-restore';
 import { RESTORE_DAY_SCROLL_STATE } from './day-scroll-restore-flag';
@@ -288,5 +288,31 @@ describe('restoreWindowScroll — the retry loop', () => {
 
             expect(scrollCalls, `${type} ends the restore after one frame`).toHaveLength(1);
         }
+    });
+});
+
+describe('useDayViewScrollRestore — under React StrictMode (effects run, clean up, re-run)', () => {
+    installHookHarness();
+
+    it('restores exactly once when the grid is already ready at mount (cached data)', async () => {
+        rememberDayViewScroll('2026-03-10');
+        setScrollY(0);
+
+        render(<StrictMode><BackFromEvent date="2026-03-10" isDayView /></StrictMode>);
+        await flushFrames();
+
+        expect(scrollCalls).toEqual([640]);
+        expect(window.scrollY).toBe(640);
+    });
+
+    it('still does not restore on a fresh (unflagged PUSH) mount', async () => {
+        rememberDayViewScroll('2026-03-10');
+        setScrollY(0);
+
+        render(<StrictMode><LinkFromEvent date="2026-03-10" /></StrictMode>);
+        await flushFrames();
+
+        expect(scrollCalls).toEqual([]);
+        expect(sessionStorage.getItem('rl:calendar-day-scroll')).toBeNull();
     });
 });

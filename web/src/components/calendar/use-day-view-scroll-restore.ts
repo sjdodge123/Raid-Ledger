@@ -49,9 +49,14 @@ function takeSavedDayScroll(): SavedDayScroll | null {
 /**
  * Scrolls the window to `y` on the next frames until it sticks (the grid may
  * still be growing) or the frame budget runs out. The first touch or wheel
- * ends it, so it never fights a user who starts scrolling. Returns a cancel.
+ * ends it, so it never fights a user who starts scrolling. `onApplied` runs
+ * once, when the first frame has scrolled. Returns a cancel.
  */
-export function restoreWindowScroll(y: number, maxFrames: number = MAX_RESTORE_FRAMES): () => void {
+export function restoreWindowScroll(
+    y: number,
+    maxFrames: number = MAX_RESTORE_FRAMES,
+    onApplied?: () => void,
+): () => void {
     let frame = 0;
     let handle = 0;
     const stop = (): void => {
@@ -61,6 +66,7 @@ export function restoreWindowScroll(y: number, maxFrames: number = MAX_RESTORE_F
     const step = (): void => {
         window.scrollTo(window.scrollX, y);
         frame += 1;
+        if (frame === 1) onApplied?.();
         if (Math.abs(window.scrollY - y) <= 1 || frame >= maxFrames) { stop(); return; }
         handle = window.requestAnimationFrame(step);
     };
@@ -102,7 +108,9 @@ function usePendingDayScroll(date: string, isDayView: boolean): MutableRefObject
  * entry is consumed on mount. The restore waits for `ready` (the grid's loading
  * block gone) so it lands on the final layout; a date or view change, or a
  * user scroll, before then cancels it for good. Skipped if the width is no
- * longer a phone's.
+ * longer a phone's. The target is held until the first restore frame has
+ * scrolled, so an effect cleanup + re-run (React StrictMode) before that frame
+ * reschedules it instead of losing it; once applied it is never replayed.
  */
 export function useDayViewScrollRestore(date: string, isDayView: boolean, ready: boolean = true): void {
     const targetRef = usePendingDayScroll(date, isDayView);
@@ -111,7 +119,8 @@ export function useDayViewScrollRestore(date: string, isDayView: boolean, ready:
         if (target === null) return undefined;
         if (!isDayView || target.date !== date) { targetRef.current = null; return undefined; }
         if (!ready) return undefined;
-        targetRef.current = null;
-        return isPhoneCalendarWidth() ? restoreWindowScroll(target.y) : undefined;
+        if (!isPhoneCalendarWidth()) { targetRef.current = null; return undefined; }
+        const applied = (): void => { if (targetRef.current === target) targetRef.current = null; };
+        return restoreWindowScroll(target.y, MAX_RESTORE_FRAMES, applied);
     }, [ready, date, isDayView, targetRef]);
 }
