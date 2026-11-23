@@ -18,6 +18,7 @@ import { SeriesNotSignedUpSlot, SeriesSignedUpActions } from '../../components/e
 import type { useEventDetailHandlers } from './use-event-detail-handlers';
 import { isRosterShownSignup } from './event-detail-helpers';
 import { RESTORE_DAY_SCROLL_STATE } from '../../components/calendar/day-scroll-restore-flag';
+import { isPhoneCalendarWidth } from '../../components/calendar/phone-calendar-width';
 
 /** Omits an absent character name instead of carrying the key as `undefined`. */
 type AttendeeCharacter = { gameId: number | string; name?: string; avatarUrl: string | null };
@@ -125,7 +126,9 @@ function resolveBackNavigation(fromCalendar: boolean, navState: { calendarDate?:
         const params = new URLSearchParams();
         if (navState?.calendarDate) params.set('date', navState.calendarDate);
         if (navState?.calendarView) params.set('view', navState.calendarView);
-        navigate(`/calendar?${params.toString()}`, { state: RESTORE_DAY_SCROLL_STATE });
+        // ROK-2303: only a return to the phone Day view keeps its scroll; every other return scrolls to top as before.
+        const keepDayScroll = navState?.calendarView === 'day' && isPhoneCalendarWidth();
+        navigate(`/calendar?${params.toString()}`, keepDayScroll ? { state: RESTORE_DAY_SCROLL_STATE } : {});
     } else if (hasHistory) { navigate(-1); }
     else { navigate('/calendar'); }
 }

@@ -57,7 +57,7 @@ import './App.css';
 import { hasRestoreDayScrollFlag } from './components/calendar/day-scroll-restore-flag';
 
 /** Scroll to top on PUSH navigations */
-function ScrollToTop() {
+export function ScrollToTop() {
   const { pathname, state } = useLocation();
   const navigationType = useNavigationType();
   // ROK-2303: "Back to Calendar" is a PUSH whose Day-view scroll the calendar restores itself.

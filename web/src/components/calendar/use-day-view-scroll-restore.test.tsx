@@ -178,6 +178,62 @@ describe('useDayViewScrollRestore — does not restore', () => {
     });
 });
 
+/** Review MINOR-2: a restore still waiting for the grid must not land late. */
+describe('useDayViewScrollRestore — a pending restore is cancelled for good', () => {
+    installHookHarness();
+
+    it('drops the pending restore when the user touches or scrolls during the loading wait', async () => {
+        for (const type of ['touchstart', 'wheel']) {
+            scrollCalls = [];
+            rememberDayViewScroll('2026-03-10');
+            setScrollY(0);
+            const view = render(<BackFromEvent date="2026-03-10" isDayView ready={false} />);
+            await flushFrames();
+            window.dispatchEvent(new Event(type));
+
+            view.rerender(<BackFromEvent date="2026-03-10" isDayView ready />);
+            await flushFrames();
+
+            expect(scrollCalls, `${type} while loading cancels the restore`).toEqual([]);
+            view.unmount();
+        }
+    });
+
+    it('drops the pending restore when the date changes during the wait, even if it comes back', async () => {
+        rememberDayViewScroll('2026-03-10');
+        setScrollY(0);
+        const view = render(<BackFromEvent date="2026-03-10" isDayView ready={false} />);
+        view.rerender(<BackFromEvent date="2026-03-11" isDayView ready={false} />);
+        view.rerender(<BackFromEvent date="2026-03-10" isDayView ready />);
+        await flushFrames();
+
+        expect(scrollCalls).toEqual([]);
+    });
+
+    it('drops the pending restore when the view leaves Day during the wait', async () => {
+        rememberDayViewScroll('2026-03-10');
+        setScrollY(0);
+        const view = render(<BackFromEvent date="2026-03-10" isDayView ready={false} />);
+        view.rerender(<BackFromEvent date="2026-03-10" isDayView={false} ready={false} />);
+        view.rerender(<BackFromEvent date="2026-03-10" isDayView ready />);
+        await flushFrames();
+
+        expect(scrollCalls).toEqual([]);
+    });
+
+    it('removes its gesture listeners on unmount during the wait', async () => {
+        const removeSpy = vi.spyOn(window, 'removeEventListener');
+        rememberDayViewScroll('2026-03-10');
+        const view = render(<BackFromEvent date="2026-03-10" isDayView ready={false} />);
+        await flushFrames();
+
+        view.unmount();
+
+        const removed = removeSpy.mock.calls.map((call) => call[0]);
+        expect(removed).toEqual(expect.arrayContaining(['touchstart', 'wheel']));
+    });
+});
+
 describe('restoreWindowScroll — the retry loop', () => {
     beforeEach(() => {
         scrollCalls = [];

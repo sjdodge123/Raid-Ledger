@@ -182,4 +182,15 @@ describe('CalendarPage — phone deep links and Back (<768px)', () => {
 
         expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'day', date: '2026-03-10' });
     });
+
+    it('re-picks Schedule on a PUSH to /calendar with no view while mounted in Day, and a PUSH to ?view=day picks Day', () => {
+        atPhone(['/calendar?view=day&date=2026-03-10']);
+        expect(gridView()).toBe('day');
+
+        go('/calendar');
+        expect(gridView()).toBe('schedule');
+
+        go('/calendar?view=day&date=2026-04-02');
+        expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'day', date: '2026-04-02' });
+    });
 });

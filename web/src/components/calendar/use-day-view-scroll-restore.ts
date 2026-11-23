@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import { NavigationType, useLocation, useNavigationType } from 'react-router-dom';
 import { safeSessionGetItem, safeSessionRemoveItem, safeSessionSetItem } from '../../lib/safe-storage';
 import { isPhoneCalendarWidth } from './phone-calendar-width';
@@ -70,28 +70,48 @@ export function restoreWindowScroll(y: number, maxFrames: number = MAX_RESTORE_F
 }
 
 /**
- * Restores the saved Day-view offset when this mount came from Back (or the
- * flagged "Back to Calendar" button) onto the same date in Day view. The saved
- * entry is consumed on mount, so later date or view changes never restore. The
- * restore waits for `ready` (the grid's loading block gone) so it lands on the
- * final layout, and is skipped if the width is no longer a phone's.
+ * Decides on mount whether this mount returns to the saved Day (Back, or the
+ * flagged "Back to Calendar" button) and holds that target until it is applied.
+ * While it waits, the user's first touch or wheel drops it for good.
  */
-export function useDayViewScrollRestore(date: string, isDayView: boolean, ready: boolean = true): void {
+function usePendingDayScroll(date: string, isDayView: boolean): MutableRefObject<SavedDayScroll | null> {
     const navigationType = useNavigationType();
     const { state } = useLocation();
-    const targetRef = useRef<number | null>(null);
+    const targetRef = useRef<SavedDayScroll | null>(null);
     const decidedRef = useRef(false);
     useEffect(() => {
         if (decidedRef.current) return;
         decidedRef.current = true;
         const saved = takeSavedDayScroll();
         const returning = navigationType === NavigationType.Pop || hasRestoreDayScrollFlag(state);
-        if (saved && returning && isDayView && saved.date === date) targetRef.current = saved.y;
+        if (saved && returning && isDayView && saved.date === date) targetRef.current = saved;
     }, []); // eslint-disable-line react-hooks/exhaustive-deps -- mount only, by design
     useEffect(() => {
-        const y = targetRef.current;
-        if (!ready || y === null) return undefined;
+        if (targetRef.current === null) return undefined;
+        const drop = (): void => { targetRef.current = null; remove(); };
+        const remove = (): void => { for (const type of USER_SCROLL_EVENTS) window.removeEventListener(type, drop); };
+        for (const type of USER_SCROLL_EVENTS) window.addEventListener(type, drop, { passive: true });
+        return remove;
+    }, []);
+    return targetRef;
+}
+
+/**
+ * Restores the saved Day-view offset when this mount came from Back (or the
+ * flagged "Back to Calendar" button) onto the same date in Day view. The saved
+ * entry is consumed on mount. The restore waits for `ready` (the grid's loading
+ * block gone) so it lands on the final layout; a date or view change, or a
+ * user scroll, before then cancels it for good. Skipped if the width is no
+ * longer a phone's.
+ */
+export function useDayViewScrollRestore(date: string, isDayView: boolean, ready: boolean = true): void {
+    const targetRef = usePendingDayScroll(date, isDayView);
+    useEffect(() => {
+        const target = targetRef.current;
+        if (target === null) return undefined;
+        if (!isDayView || target.date !== date) { targetRef.current = null; return undefined; }
+        if (!ready) return undefined;
         targetRef.current = null;
-        return isPhoneCalendarWidth() ? restoreWindowScroll(y) : undefined;
-    }, [ready]);
+        return isPhoneCalendarWidth() ? restoreWindowScroll(target.y) : undefined;
+    }, [ready, date, isDayView, targetRef]);
 }
