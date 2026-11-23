@@ -124,6 +124,12 @@ export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
   /** Path of the sentinel written on a pass; null otherwise. */
   playwright_sentinel?: string | null;
   /**
+   * ROK-2205 — the pre-push gate verdict. An upstream `false` (or a stale
+   * sync) means no sentinel is written; `gate_error` says why.
+   */
+  gate_verified?: boolean;
+  gate_error?: string;
+  /**
    * ROK-1566 — the web-surface diff hash recorded at dispatch: what the
    * Playwright tier actually verified, and what the sentinel is named after.
    * `nosurface` means the branch changed nothing Playwright exercises.
