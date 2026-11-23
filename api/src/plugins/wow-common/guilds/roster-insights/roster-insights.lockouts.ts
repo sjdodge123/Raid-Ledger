@@ -47,7 +47,7 @@ export function computeLockouts(
       if (l.resetAt * 1000 <= nowMs) continue;
       const key = `${l.instanceId}:${l.difficultyId}`;
       const g = groups.get(key) ?? newGroup(l);
-      addMember(g, { ...row, characterId: row.characterId }, l);
+      addMember(g, { characterId: row.characterId, name: row.name }, l);
       groups.set(key, g);
     }
   }

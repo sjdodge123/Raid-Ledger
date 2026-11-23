@@ -14,7 +14,11 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { applyTrustProxy } from '../main.helpers';
 import { CSP_REPORT_ROUTE } from '../csp-report/csp-report.constants';
-import { applyCorsPolicy, type CorsEnv } from './cors-auto-policy';
+import {
+  applyCorsPolicy,
+  CORS_EXPOSED_HEADERS,
+  type CorsEnv,
+} from './cors-auto-policy';
 
 const PROD = 'raid.gamernight.net';
 const SIBLING = 'https://slot-1.gamernight.net';
@@ -116,7 +120,7 @@ async function buildApp(
     app.enableCors({
       origin: legacyOriginFn(isProduction, env.corsOrigin, auto),
       credentials: true,
-      exposedHeaders: ['Content-Disposition'],
+      exposedHeaders: CORS_EXPOSED_HEADERS,
     });
   }
   await app.init();
@@ -280,7 +284,7 @@ describe('enforce mode', () => {
     expect(res.headers['access-control-allow-origin']).toBe(`https://${PROD}`);
     expect(res.headers['access-control-allow-credentials']).toBe('true');
     expect(res.headers['access-control-expose-headers']).toBe(
-      'Content-Disposition',
+      'Content-Disposition,X-Export-Truncated,X-Export-Row-Cap',
     );
     expect(ran).toBe(true);
   });

@@ -33,6 +33,7 @@ import {
   type BumpSyncInput,
 } from './embed-sync-bump.helpers';
 import { editTrackedEmbed } from './embed-sync-edit.helpers';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 import { markEmbedSyncRetry } from './embed-sync-retry.helpers';
 
 /**
@@ -63,6 +64,7 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     private readonly scheduledEventService: ScheduledEventService,
     private readonly channelResolver: ChannelResolverService,
     private readonly queueHealth: QueueHealthService,
+    private readonly messageEditor: EventEmbedMessageEditor,
   ) {
     super();
   }
@@ -303,7 +305,8 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     bump: Omit<BumpSyncInput, 'record'>,
   ): Promise<Error | null> {
     const deps = { clientService: this.clientService, logger: this.logger };
-    const edit = await editTrackedEmbed(deps, record, built, eventId);
+    const editDeps = { editor: this.messageEditor, logger: this.logger };
+    const edit = await editTrackedEmbed(editDeps, record, built, eventId);
     if (edit !== 'edited') return edit === 'gone' ? null : edit;
     try {
       await this.persistState(record.id, bump.newState);

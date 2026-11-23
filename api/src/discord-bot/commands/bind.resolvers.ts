@@ -5,6 +5,11 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schemaType from '../../drizzle/schema';
 import * as schema from '../../drizzle/schema';
 import type { ChannelType as BindingChannelType } from '@raid-ledger/contract';
+import {
+  isKickExpired,
+  kickCooldownMessage,
+  suspendedMessage,
+} from '../../auth/auth-status.helpers';
 
 /** Resolved channel info from a command interaction. */
 export interface ResolvedChannel {
@@ -120,12 +125,83 @@ export async function lookupEvent(
   return event ?? null;
 }
 
+/** The acting caller's role and account state, looked up by Discord id. */
+interface ActingUser {
+  id: number;
+  role: string;
+  bannedAt?: Date | null;
+  banReason?: string | null;
+  kickedAt?: Date | null;
+  deactivatedAt?: Date | null;
+}
+
+/** Copy for a deactivated caller (matches the `/login` refusal). */
+export const BIND_DEACTIVATED_REPLY =
+  'Your account is inactive — rejoin the Discord server, then try again.';
+
+/** Look up the caller's linked user row (role + account state). */
+async function findActingUser(
+  db: PostgresJsDatabase<typeof schemaType>,
+  discordId: string,
+): Promise<ActingUser | undefined> {
+  const [user] = await db
+    .select({
+      id: schema.users.id,
+      role: schema.users.role,
+      bannedAt: schema.users.bannedAt,
+      banReason: schema.users.banReason,
+      kickedAt: schema.users.kickedAt,
+      deactivatedAt: schema.users.deactivatedAt,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.discordId, discordId))
+    .limit(1);
+  return user;
+}
+
+/**
+ * The refusal copy for a banned, kick-cooldown or deactivated caller, or null
+ * when the account may act. Same order as `/login` (ban → kick → deactivated);
+ * truthiness, so a row without the state fields counts as active. An expired
+ * kick passes — Discord never auto-clears it (the next web login does).
+ */
+export function inactiveAccountReply(user: ActingUser): string | null {
+  if (user.bannedAt) return suspendedMessage(user.banReason ?? null);
+  if (user.kickedAt && !isKickExpired(user.kickedAt)) {
+    return kickCooldownMessage(user.kickedAt);
+  }
+  if (user.deactivatedAt) return BIND_DEACTIVATED_REPLY;
+  return null;
+}
+
+/**
+ * Resolve the caller and refuse an unlinked or inactive account — before any
+ * role test, so a banned admin is refused too. Returns the user when allowed.
+ */
+async function resolveActiveCaller(
+  db: PostgresJsDatabase<typeof schemaType>,
+  interaction: ChatInputCommandInteraction,
+): Promise<ActingUser | null> {
+  const user = await findActingUser(db, interaction.user.id);
+  if (!user) {
+    await interaction.editReply('You need a linked Raid Ledger account.');
+    return null;
+  }
+  const refusal = inactiveAccountReply(user);
+  if (refusal) {
+    await interaction.editReply(refusal);
+    return null;
+  }
+  return user;
+}
+
 /**
  * Check if the interaction user may change this guild's channel bindings.
  *
  * ROK-1628: a channel binding is guild-wide notification routing, so the
  * channel paths of `/bind` and `/unbind` take the same operator/admin check
  * the event paths take. The web equivalent sits behind the admin guard.
+ * A banned, kick-cooldown or deactivated caller is refused first.
  *
  * @param db - Drizzle database handle.
  * @param interaction - The already-deferred command interaction.
@@ -135,15 +211,8 @@ export async function checkBindingPermission(
   db: PostgresJsDatabase<typeof schemaType>,
   interaction: ChatInputCommandInteraction,
 ): Promise<boolean> {
-  const [user] = await db
-    .select({ id: schema.users.id, role: schema.users.role })
-    .from(schema.users)
-    .where(eq(schema.users.discordId, interaction.user.id))
-    .limit(1);
-  if (!user) {
-    await interaction.editReply('You need a linked Raid Ledger account.');
-    return false;
-  }
+  const user = await resolveActiveCaller(db, interaction);
+  if (!user) return false;
   if (user.role !== 'admin' && user.role !== 'operator') {
     await interaction.editReply(
       'Changing channel bindings needs operator/admin permissions.',
@@ -153,21 +222,18 @@ export async function checkBindingPermission(
   return true;
 }
 
-/** Check if the interaction user has permission to modify an event. */
+/**
+ * Check if the interaction user has permission to modify an event: the
+ * creator or an operator/admin, and not banned, kick-cooling-down or
+ * deactivated.
+ */
 export async function checkEventPermission(
   db: PostgresJsDatabase<typeof schemaType>,
   interaction: ChatInputCommandInteraction,
   creatorId: number,
 ): Promise<boolean> {
-  const [user] = await db
-    .select({ id: schema.users.id, role: schema.users.role })
-    .from(schema.users)
-    .where(eq(schema.users.discordId, interaction.user.id))
-    .limit(1);
-  if (!user) {
-    await interaction.editReply('You need a linked Raid Ledger account.');
-    return false;
-  }
+  const user = await resolveActiveCaller(db, interaction);
+  if (!user) return false;
   const isAdmin = user.role === 'admin' || user.role === 'operator';
   if (creatorId !== user.id && !isAdmin) {
     await interaction.editReply(

@@ -11,6 +11,7 @@ import { SettingsModule } from '../../settings/settings.module';
 import { NotificationModule } from '../../notifications/notification.module';
 import { CronJobModule } from '../../cron-jobs/cron-job.module';
 import { LineupsModule } from '../lineups.module';
+import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { SchedulingController } from './scheduling.controller';
 import { SchedulingBannerController } from './scheduling-banner.controller';
 import { SchedulingService } from './scheduling.service';
@@ -39,6 +40,8 @@ import { SchedulingLockInRecoveryController } from './scheduling-lockin-recovery
     // Supplies CronJobService for the recurring poll-nudge cron.
     CronJobModule,
     forwardRef(() => LineupsModule),
+    // ROK-2212: GuildAccessService — kind-aware hub membership (voter flags).
+    forwardRef(() => GuildsCoreModule),
     // ROK-1549: debounced, retried poll-card re-render.
     BullModule.registerQueue({ name: SCHEDULING_POLL_EMBED_QUEUE }),
   ],

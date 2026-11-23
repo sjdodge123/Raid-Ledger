@@ -29,6 +29,14 @@ export function guildHref(guildId: number): string {
 }
 
 /**
+ * ROK-2132 — the hub page with the gate's "open Add character on the Guild roster tab"
+ * flag: the hub directory's and (ROK-2212) the poll page's claim-to-join link.
+ */
+export function claimRosterHref(hubId: number): string {
+    return `${guildHref(hubId)}?claim=roster`;
+}
+
+/**
  * The viewer's hubs WITH the query state, for callers that must tell an empty
  * answer apart from an unsettled or failed one (`useMyGuilds` cannot).
  */

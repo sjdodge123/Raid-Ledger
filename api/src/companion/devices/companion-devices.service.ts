@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   CompanionDeviceRenameRequestSchema,
   CompanionDeviceSelfSchema,
@@ -14,6 +15,10 @@ import {
 } from './companion-device-link.errors';
 import type { CompanionDeviceAuth } from './companion-device-request';
 import { CompanionDevicesRepository } from './companion-devices.repository';
+import {
+  COMPANION_DEVICE_REVOKED_EVENT,
+  type CompanionDeviceRevokedPayload,
+} from './companion-device-revoked.listener';
 
 /**
  * ROK-1955 D-12 / D-13: the signed-in user's Devices list (owner-only
@@ -23,7 +28,10 @@ import { CompanionDevicesRepository } from './companion-devices.repository';
  */
 @Injectable()
 export class CompanionDevicesService {
-  constructor(private readonly repo: CompanionDevicesRepository) {}
+  constructor(
+    private readonly repo: CompanionDevicesRepository,
+    private readonly events: EventEmitter2,
+  ) {}
 
   /** Live devices first, then those revoked in the last 30 days. */
   async list(userId: number): Promise<CompanionDeviceListResponse> {
@@ -44,9 +52,14 @@ export class CompanionDevicesService {
     return toCompanionDeviceDto(row);
   }
 
-  /** Soft-revoke: the guard refuses the token from the next request on. */
+  /**
+   * Soft-revoke: the guard refuses the token from the next request on. Then
+   * (ROK-2099 D6) the device's withdrawn data is deleted before the 204.
+   */
   async revoke(userId: number, deviceId: number): Promise<void> {
     if (!(await this.repo.revoke(userId, deviceId))) throw deviceNotFound();
+    const payload: CompanionDeviceRevokedPayload = { userId, deviceId };
+    await this.events.emitAsync(COMPANION_DEVICE_REVOKED_EVENT, payload);
   }
 
   /** The authenticated device's identity (the app's start-up check). */

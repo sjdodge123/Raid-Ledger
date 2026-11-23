@@ -9,10 +9,8 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { RescheduleEventDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
-import {
-  notifyReschedule,
-  resetSignupConfirmations,
-} from '../../events/event-lifecycle.helpers';
+import { notifyReschedule } from '../../events/event-lifecycle.helpers';
+import type { EventsService } from '../../events/events.service';
 import type { NotificationService } from '../../notifications/notification.service';
 import type { Caller } from './standalone-poll-auth.helpers';
 
@@ -21,6 +19,8 @@ type Db = PostgresJsDatabase<typeof schema>;
 /** What the recovery needs from the lock-in's deps. */
 export interface RescheduleRecoveryDeps {
   db: Db;
+  /** ROK-2271: owns the reset and its thread signal. */
+  eventsService: Pick<EventsService, 'resetConfirmations'>;
   notificationService: NotificationService;
   logger: Pick<Logger, 'error'>;
 }
@@ -45,7 +45,7 @@ export async function finishMovedReschedule(
   const { db } = deps;
   const { eventId, caller, before, dto } = moved;
   try {
-    await resetSignupConfirmations(db, eventId, caller.id);
+    await deps.eventsService.resetConfirmations(eventId, caller.id);
     if (await rescheduleNotified(db, before, dto.startTime)) return;
     await notifyReschedule(
       db,

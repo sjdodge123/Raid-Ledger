@@ -97,3 +97,40 @@ describe('shareForumTags — lone hub', () => {
     expect(tag).toBe('old');
   });
 });
+
+describe('shareForumTags — a 2nd hub joins (ROK-2258)', () => {
+  it("re-tags the 1st hub's posts with the tag it got while alone", async () => {
+    const { gw, gateway } = fakeGateway([{ id: 't-a', name: 'Alpha' }]);
+    q.listForumBindings.mockResolvedValue([
+      { guildId: 2, tagId: 't-a', hubName: 'Alpha' },
+    ]);
+    q.linkedThreadIds.mockResolvedValue(['post-a']);
+    const tag = await shareForumTags(db, gateway, {
+      guildId: 1,
+      forum: forumRow(false),
+      info: info({ tags: [{ id: 't-a', name: 'Alpha' }] }),
+    });
+    expect(tag).toBe('tag:Night Owls');
+    expect(q.linkedThreadIds).toHaveBeenCalledWith(db, 2);
+    expect(gw.applyTag).toHaveBeenCalledWith('c1', ['post-a'], 't-a');
+    expect(gw.requireTags).toHaveBeenCalledWith('c1');
+  });
+
+  it('leaves tagged hubs alone when a 3rd hub joins (Require tags is already on)', async () => {
+    const tags = [
+      { id: 't-a', name: 'Alpha' },
+      { id: 't-b', name: 'Beta' },
+    ];
+    const { gw, gateway } = fakeGateway(tags);
+    q.listForumBindings.mockResolvedValue([
+      { guildId: 2, tagId: 't-a', hubName: 'Alpha' },
+      { guildId: 3, tagId: 't-b', hubName: 'Beta' },
+    ]);
+    await shareForumTags(db, gateway, {
+      guildId: 1,
+      forum: forumRow(true),
+      info: info({ tags, requireTag: true }),
+    });
+    expect(gw.applyTag).not.toHaveBeenCalled();
+  });
+});

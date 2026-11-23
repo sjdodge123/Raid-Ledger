@@ -228,6 +228,8 @@ export async function completeStandalonePoll(
   conflict?: true;
   linkedEventId?: number;
   linkedEventCancelled?: boolean;
+  /** ROK-2272 S6: the standalone carrier lineup this flip archived. */
+  archivedLineupId?: number;
 }> {
   const match = await selectCompletionTarget(db, matchId);
   if (!match) return { ok: false };
@@ -247,6 +249,7 @@ export async function completeStandalonePoll(
       ? { linkedEventId: match.linkedEventId }
       : {}),
     linkedEventCancelled: match.linkedEventCancelled,
+    ...(match.standalone ? { archivedLineupId: match.lineupId } : {}),
   };
 }
 

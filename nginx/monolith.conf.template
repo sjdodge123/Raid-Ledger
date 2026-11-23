@@ -28,6 +28,20 @@ map "$scheme:$http_x_forwarded_proto" $csp_upgrade {
     "~https" "; upgrade-insecure-requests";
 }
 
+# ROK-1813: the signed-out public guild card (/p/guild/:slug) and the public
+# GG summary (/w/:slug, N6) must not be
+# indexed. Its HTML is the SPA shell: try_files internally redirects to
+# /index.html, and a location's add_header does not survive that redirect, so
+# the header is set in `location = /index.html` keyed on the ORIGINAL request
+# URI ($request_uri is unchanged by internal redirects). nginx drops an
+# add_header whose value is empty, so every other page is unaffected. The API
+# JSON and the page <meta name="robots"> already carry noindex (ROK-1813 app PR).
+map $request_uri $public_noindex {
+    default "";
+    "~^/p/guild/[^/?]+(\?.*)?$" "noindex, nofollow";
+    "~^/w/[^/?]+(\?.*)?$" "noindex, nofollow";
+}
+
 server {
     listen ${NGINX_PORT};
     server_name localhost;
@@ -200,6 +214,7 @@ server {
         # Re-include: an add_header here kills inheritance of the server-scope ones.
         include /etc/nginx/snippets/security-headers.conf;
         add_header Cache-Control "no-cache" always;
+        add_header X-Robots-Tag $public_noindex always;
     }
 
     # SPA fallback - serve index.html for all routes

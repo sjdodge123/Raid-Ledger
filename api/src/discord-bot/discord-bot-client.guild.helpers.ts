@@ -4,6 +4,7 @@
  */
 import { ChannelType, type Guild } from 'discord.js';
 import { isPerfEnabled, perfLog } from '../common/perf-logger';
+import { fetchGuildMembers } from './game-roles/game-role-discord.helpers';
 
 /** Search guild members by username query. */
 export async function searchGuildMembers(
@@ -95,15 +96,45 @@ export type GuildMemberAvatars = Map<string, string | null>;
  * avatar hash (ROK-1282, ROK-1714). Keys drive GuildReconciliationService's
  * membership diff; values refresh `users.avatar`. Uses `m.user.avatar`, never
  * the guild-specific `m.avatar` — the `/avatars/<userId>/<hash>` CDN path
- * only serves global hashes. Returns null when the bot is disconnected
- * (caller should treat as a no-op, not an error).
+ * only serves global hashes. Pages the REST list endpoint
+ * (`fetchGuildMembers`), NOT the no-arg gateway op-8 `guild.members.fetch()`,
+ * which Discord limits to ~1 per 30s per guild. Returns null when the bot is
+ * disconnected (caller should treat as a no-op, not an error).
  */
 export async function listAllGuildMemberAvatars(
   guild: Guild | null,
 ): Promise<GuildMemberAvatars | null> {
   if (!guild) return null;
-  const members = await guild.members.fetch();
+  const members = await fetchGuildMembers(guild);
   return new Map(members.map((m) => [m.user.id, m.user.avatar ?? null]));
+}
+
+/** One guild member as the sign-in reminder job sees it (ROK-2284). */
+export interface ReminderRosterMember {
+  discordId: string;
+  isBot: boolean;
+  /** When they joined this guild; null when Discord did not say. */
+  joinedAt: Date | null;
+}
+
+/**
+ * Every guild member with the bot flag and join date (ROK-2284). Pages the
+ * REST list endpoint (`fetchGuildMembers`, one rate-limit retry), NOT the
+ * no-arg `guild.members.fetch()`: that is a gateway op-8 request Discord
+ * limits to ~1 per 30s per guild, so a pass landing near any other full
+ * fetch threw `GatewayRateLimitError` (CI discord-smoke, PR #2278). Needs
+ * the Guild Members intent. Null when the bot is disconnected — a no-op tick.
+ */
+export async function listGuildMembersForReminders(
+  guild: Guild | null,
+): Promise<ReminderRosterMember[] | null> {
+  if (!guild) return null;
+  const members = await fetchGuildMembers(guild);
+  return members.map((m) => ({
+    discordId: m.user.id,
+    isBot: m.user.bot,
+    joinedAt: m.joinedAt ?? null,
+  }));
 }
 
 /** ROK-1352: List category channels (parents for ephemeral voice channels). */

@@ -13,6 +13,11 @@ import type { HubForumActor, HubForumOwnedRow } from '../hub-forum.helpers';
 /** §12: reply without a writable signup. */
 export const FORUM_NOT_SIGNED_UP =
   'Sign up for the event to join its discussion';
+/** R7: reply to a scheduling-poll thread without a vote / match membership. */
+export const FORUM_NOT_POLL_VOTER = 'Vote on the poll to join its discussion';
+/** R7: reply to a lineup thread without a nomination or vote. */
+export const FORUM_NOT_LINEUP_PARTICIPANT =
+  'Nominate or vote in the lineup to join its discussion';
 /** §12: reply (409) or edit (403) once the thread is read-only. */
 export const FORUM_THREAD_READ_ONLY = 'This discussion is read-only';
 /** §5.5: PATCH/DELETE of an event thread itself. */
@@ -86,9 +91,25 @@ export function eventThreadLock(
   return null;
 }
 
-/** §5.5: the thread itself is lifecycle-owned (nobody edits or removes it). */
-export function assertNotEventThread(thread: { eventId: number | null }): void {
-  if (thread.eventId !== null) {
+/** The subject columns of a thread row (event, scheduling poll, lineup). */
+export interface ThreadSubjectRef {
+  eventId: number | null;
+  matchId?: number | null;
+  lineupId?: number | null;
+}
+
+/** A thread owned by a subject's lifecycle (event, poll or lineup). */
+export function isSubjectThread(thread: ThreadSubjectRef): boolean {
+  return (
+    thread.eventId !== null ||
+    (thread.matchId ?? null) !== null ||
+    (thread.lineupId ?? null) !== null
+  );
+}
+
+/** §5.5: a subject thread is lifecycle-owned (nobody edits or removes it). */
+export function assertNotEventThread(thread: ThreadSubjectRef): void {
+  if (isSubjectThread(thread)) {
     throw new ForbiddenException(FORUM_EVENT_THREAD_MANAGED);
   }
 }
@@ -101,9 +122,17 @@ export function assertNotEventThread(thread: { eventId: number | null }): void {
 export function assertCanReply(
   canReply: boolean,
   lock: HubForumLock | null,
+  thread: ThreadSubjectRef = { eventId: null },
 ): void {
   if (lock !== null) throw new ConflictException(FORUM_THREAD_READ_ONLY);
-  if (!canReply) throw new ForbiddenException(FORUM_NOT_SIGNED_UP);
+  if (!canReply) throw new ForbiddenException(notWritableCopy(thread));
+}
+
+/** The 403 copy for a viewer who may read but not write this subject thread. */
+function notWritableCopy(thread: ThreadSubjectRef): string {
+  if ((thread.matchId ?? null) !== null) return FORUM_NOT_POLL_VOTER;
+  if ((thread.lineupId ?? null) !== null) return FORUM_NOT_LINEUP_PARTICIPANT;
+  return FORUM_NOT_SIGNED_UP;
 }
 
 /**
@@ -115,8 +144,9 @@ export function assertEventEditable(
   who: { userId: number; canReply: boolean },
   row: HubForumOwnedRow,
   lock: HubForumLock | null,
+  thread: ThreadSubjectRef = { eventId: null },
 ): void {
   if (row.authorId !== who.userId || row.deletedAt !== null) return;
   if (lock !== null) throw new ForbiddenException(FORUM_THREAD_READ_ONLY);
-  if (!who.canReply) throw new ForbiddenException(FORUM_NOT_SIGNED_UP);
+  if (!who.canReply) throw new ForbiddenException(notWritableCopy(thread));
 }

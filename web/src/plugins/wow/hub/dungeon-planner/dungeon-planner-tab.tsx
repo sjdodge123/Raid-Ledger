@@ -4,10 +4,12 @@
  * five roster characters, their level fit and the dungeon's quests in the event
  * page's grouping — plus Copy link, Wowhead and Create event. Two columns at
  * ≥1024px (§4.18), stacked below with the Create-event set in a sticky bar.
+ * ROK-2212: the "Suggested groups" section below; Open in planner loads a
+ * group into the plan (the URL) and scrolls back up to it.
  */
-import { useMemo, type JSX } from 'react';
+import { useMemo, useRef, type JSX, type ReactNode, type RefObject } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { DungeonPlanDto, EnrichedDungeonQuestDto, WowInstanceDto } from '@raid-ledger/contract';
+import type { DungeonPlanDto, EnrichedDungeonQuestDto, SuggestedGroupDto, WowInstanceDto } from '@raid-ledger/contract';
 import type { HubCtx } from '../../../hub-module';
 import { useMediaQuery } from '../../../../hooks/use-media-query';
 import { useRosterInsights } from '../../hub-widgets/use-roster-insights';
@@ -20,6 +22,8 @@ import { DungeonSection, FactionPill, QuestSection } from './planner-sections';
 import { createEventUrl, shareUrl } from './planner-url';
 import { usePlannerState, type PlannerState } from './use-planner-state';
 import { useDungeonPlan } from './use-dungeon-plan';
+import { groupTokens } from '../suggested-groups/suggested-groups-links';
+import { SuggestedGroupsSection } from './suggested-groups-section';
 
 const VARIANT = 'wow_forever';
 
@@ -69,10 +73,29 @@ function PlannerColumns({ s, instances, plan, marks, desktop, enriched, enriched
     );
 }
 
+/** Open in planner: load the group into the plan (the URL), then scroll up to the planner. */
+function useOpenGroup(s: PlannerState): { root: RefObject<HTMLDivElement | null>; openGroup: (g: SuggestedGroupDto) => void } {
+    const root = useRef<HTMLDivElement>(null);
+    const openGroup = (g: SuggestedGroupDto): void => {
+        s.load(g.instance.id, groupTokens(g));
+        root.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+    };
+    return { root, openGroup };
+}
+
+/** Phone Create-event bar, docked above the bottom tab bar while the planner is on screen. */
+function PlannerMobileBar({ children }: { children: ReactNode }): JSX.Element {
+    return (
+        <div data-testid="planner-mobile-actions"
+            className="sticky bottom-[var(--bottom-nav-clearance)] z-10 -mx-4 border-y border-edge bg-surface p-3 md:bottom-0">{children}</div>
+    );
+}
+
 /** The tab body (default export: `dungeonPlannerTab` lazy-loads it). */
 export default function DungeonPlannerTab({ page }: Pick<HubCtx, 'page'>): JSX.Element {
     const desktop = useMediaQuery('(min-width: 1024px)');
     const s = usePlannerState(useRosterInsights(page.guild.id).data);
+    const { root, openGroup } = useOpenGroup(s);
     const instances = useWowInstances(VARIANT, 'dungeon').data?.data ?? [];
     const plan = useDungeonPlan(page.guild.id, s.instanceId, s.characterIds);
     const enriched = useEnrichedQuests(s.instanceId === null ? [] : [s.instanceId], VARIANT);
@@ -81,22 +104,23 @@ export default function DungeonPlannerTab({ page }: Pick<HubCtx, 'page'>): JSX.E
     const share = shareUrl(window.location.origin, page.guild.id, { instanceId: s.instanceId, tokens: s.linkTokens });
     const actions = <CreateEventButtons links={links} />;
     return (
-        <div className="rounded-lg border border-edge bg-surface p-4" data-testid="dungeon-planner">
-            <div className={`space-y-4 ${desktop ? '' : 'pb-6'}`}>
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-semibold text-foreground">Dungeon planner</h2>
-                        <FactionPill plan={plan.data} />
+        <div ref={root} className="scroll-mt-4 rounded-lg border border-edge bg-surface p-4" data-testid="dungeon-planner">
+            {/* The phone bar's containing block: it sticks only while the planner itself is on screen. */}
+            <div>
+                <div className={`space-y-4 ${desktop ? '' : 'pb-6'}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-lg font-semibold text-foreground">Dungeon planner</h2>
+                            <FactionPill plan={plan.data} />
+                        </div>
+                        <div className="flex flex-wrap items-start gap-2"><CopyLinkButton url={share} />{desktop && actions}</div>
                     </div>
-                    <div className="flex flex-wrap items-start gap-2"><CopyLinkButton url={share} />{desktop && actions}</div>
+                    <PlannerColumns s={s} instances={instances} plan={plan} marks={marks} desktop={desktop}
+                        enriched={s.instanceId === null ? undefined : enriched.data?.get(s.instanceId)} enrichedError={enriched.isError} />
                 </div>
-                <PlannerColumns s={s} instances={instances} plan={plan} marks={marks} desktop={desktop}
-                    enriched={s.instanceId === null ? undefined : enriched.data?.get(s.instanceId)} enrichedError={enriched.isError} />
+                {!desktop && <PlannerMobileBar>{actions}</PlannerMobileBar>}
             </div>
-            {!desktop && (
-                <div data-testid="planner-mobile-actions"
-                    className="sticky bottom-[var(--bottom-nav-clearance)] -mx-4 -mb-4 border-t border-edge bg-surface p-3 md:bottom-0">{actions}</div>
-            )}
+            <div className="mt-4"><SuggestedGroupsSection page={page} onOpenInPlanner={openGroup} /></div>
         </div>
     );
 }

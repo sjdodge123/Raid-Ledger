@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "envelopeVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "contract": {
+      "type": "string",
+      "const": "wow-addon-errors"
+    },
+    "contractVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "capturedAt": {
+      "type": "string",
+      "maxLength": 24,
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "appVersion": {
+      "type": "string",
+      "maxLength": 48,
+      "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,4}(-[0-9A-Za-z.-]{1,32})?$"
+    },
+    "collectorVersion": {
+      "type": "string",
+      "maxLength": 48,
+      "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,4}(-[0-9A-Za-z.-]{1,32})?$"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "buggrabber"
+          ]
+        },
+        "sourceVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$",
+          "not": {
+            "pattern": "(?:^|[^A-Za-z0-9])[A-Za-z]:[\\\\/]|[\\\\/][Uu][Ss][Ee][Rr][Ss][\\\\/]"
+          }
+        },
+        "accountKey": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "characterHint": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 24,
+              "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
+            },
+            "realm": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48,
+              "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
+            }
+          },
+          "required": [
+            "name",
+            "realm"
+          ],
+          "additionalProperties": false
+        },
+        "wowFlavor": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]{1,32}$"
+        },
+        "records": {
+          "minItems": 1,
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "addon": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$",
+                "not": {
+                  "pattern": "(?:^|[^A-Za-z0-9])[A-Za-z]:[\\\\/]|[\\\\/][Uu][Ss][Ee][Rr][Ss][\\\\/]"
+                }
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]+$",
+                "not": {
+                  "pattern": "(?:^|[^A-Za-z0-9])[A-Za-z]:[\\\\/]|[\\\\/][Uu][Ss][Ee][Rr][Ss][\\\\/]"
+                }
+              },
+              "stack": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "^[^\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]+$",
+                "not": {
+                  "pattern": "(?:^|[^A-Za-z0-9])[A-Za-z]:[\\\\/]|[\\\\/][Uu][Ss][Ee][Rr][Ss][\\\\/]"
+                }
+              },
+              "firstSeenAt": {
+                "type": "string",
+                "maxLength": 24,
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "lastSeenAt": {
+                "type": "string",
+                "maxLength": 24,
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "session": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              }
+            },
+            "required": [
+              "addon",
+              "message",
+              "firstSeenAt",
+              "lastSeenAt",
+              "count"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "source",
+        "sourceVersion",
+        "accountKey",
+        "records"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "envelopeVersion",
+    "contract",
+    "contractVersion",
+    "capturedAt",
+    "appVersion",
+    "collectorVersion",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "$id": "https://raid.gamernight.net/contracts/companion/wow-addon-errors/v1/schema.json",
+  "title": "RL Companion wow-addon-errors message v1",
+  "description": "GENERATED from WowAddonErrorsMessageSchema (packages/contract/src/companion-wow-addon-errors.schema.ts) — do not edit by hand. Refinements enforced by the Zod schema but not expressible here: a record's firstSeenAt <= lastSeenAt; records are unique by (addon, message, stack); no lone surrogates. The unscrubbed-path refusal IS expressed (not.pattern). The server alone checks the clock and the 262 144-byte body cap; see CONTRACT.md."
+}

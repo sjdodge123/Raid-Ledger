@@ -8,10 +8,50 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
 import { RelayService, RelayStatus, RelaySettings } from './relay.service';
+
+/** Body for PATCH /admin/relay — unknown keys and non-http(s) URLs are rejected. */
+const UpdateRelaySettingsSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    relayUrl: z
+      .string()
+      .trim()
+      .max(2048)
+      .refine(isHttpUrl, 'relayUrl must be an http(s) URL')
+      .optional(),
+  })
+  .strict();
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/** Validate the PATCH body; conditional spreads keep absent keys absent. */
+function parseRelaySettings(body: unknown): Partial<RelaySettings> {
+  const result = UpdateRelaySettingsSchema.safeParse(body);
+  if (!result.success) {
+    const messages = result.error.issues
+      .map((e) => `${e.path.join('.')}: ${e.message}`)
+      .join('; ');
+    throw new BadRequestException(`Validation failed: ${messages}`);
+  }
+  const { enabled, relayUrl } = result.data;
+  return {
+    ...(enabled !== undefined && { enabled }),
+    ...(relayUrl !== undefined && { relayUrl }),
+  };
+}
 
 /**
  * Admin Relay Controller (ROK-273)
@@ -40,9 +80,9 @@ export class RelayController {
   @Patch()
   @HttpCode(HttpStatus.OK)
   async updateRelaySettings(
-    @Body() body: Partial<RelaySettings>,
+    @Body() body: unknown,
   ): Promise<{ success: boolean; message: string }> {
-    await this.relayService.updateSettings(body);
+    await this.relayService.updateSettings(parseRelaySettings(body));
 
     this.logger.log('Relay settings updated via admin UI');
 

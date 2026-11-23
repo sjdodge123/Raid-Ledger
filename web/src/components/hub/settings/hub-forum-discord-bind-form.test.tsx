@@ -1,6 +1,6 @@
 /**
  * ROK-2208 Q10 (option c, RULED) — the unbound "Discord forum" form:
- * shared `#hub-forums` vs the hub's own channel, the preflight Ready /
+ * shared `#event-planning` vs the hub's own channel, the preflight Ready /
  * Missing line (once, for the picked forum too), the acknowledgement
  * reset on every change of channel, the bot-offline state and
  * every bind error code the api answers with.
@@ -52,11 +52,11 @@ async function pickOwn(): Promise<void> {
 }
 
 describe('Discord forum form — shared vs own (Q10 c)', () => {
-    it('preselects the shared #hub-forums and joins it with target shared', async () => {
+    it('preselects the shared #event-planning and joins it with target shared', async () => {
         const calls = serve(forumDiscordPreflight());
         renderForm();
         expect(await screen.findByRole('radio', { name: /Shared server forum/ })).toBeChecked();
-        expect(screen.getByTestId('hub-forum-discord-ack')).toHaveAccessibleName(/#hub-forums/);
+        expect(screen.getByTestId('hub-forum-discord-ack')).toHaveAccessibleName(/#event-planning/);
         await tickAndTurnOn();
         await waitFor(() => expect(calls.puts).toEqual([{ mode: 'create', target: 'shared', ack: true }]));
     });
@@ -174,7 +174,7 @@ describe('Discord forum form — bind errors', () => {
         await pickOwn();
         await tickAndTurnOn();
         await waitFor(() => expect(screen.getByTestId('hub-forum-discord-name')).toHaveAttribute('aria-invalid', 'true'));
-        expect(screen.getByTestId('hub-forum-discord-name')).toHaveAccessibleDescription(/#hub-forums is the shared forum/);
+        expect(screen.getByTestId('hub-forum-discord-name')).toHaveAccessibleDescription(/#event-planning is the shared forum/);
         expect(screen.queryByTestId('hub-forum-discord-bind-error')).not.toBeInTheDocument();
     });
     it.each([

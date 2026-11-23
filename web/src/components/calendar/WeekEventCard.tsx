@@ -1,5 +1,5 @@
 import { format, differenceInMinutes } from 'date-fns';
-import { getGameColors } from '../../constants/game-colors';
+import { cssUrl, getGameColors } from '../../constants/game-colors';
 import { AttendeeAvatars } from './AttendeeAvatars';
 import { SeriesBadge } from '../events/SeriesBadge';
 import type { CalendarEvent } from './CalendarView';
@@ -98,7 +98,7 @@ export function WeekEventCard({ event, eventOverlapsGameTime }: WeekEventCardPro
     return (
         <div className={`week-event-block week-event-block--${tier}`} data-tier={tier} title={hubBlockTitle(event)} style={{
             backgroundImage: coverUrl
-                ? `linear-gradient(180deg, ${colors.bg}f5 0%, ${colors.bg}ee 60%, ${colors.bg}cc 100%), url(${coverUrl})`
+                ? `linear-gradient(180deg, ${colors.bg}f5 0%, ${colors.bg}ee 60%, ${colors.bg}cc 100%), ${cssUrl(coverUrl)}`
                 : `linear-gradient(180deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,
             backgroundSize: 'cover', backgroundPosition: 'center', borderLeft: `3px solid ${colors.border}`,
         }}>

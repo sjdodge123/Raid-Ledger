@@ -3,6 +3,7 @@
  * `data/forever-dungeon-quest-data.json` row, Zod-validated.
  */
 import { z } from 'zod';
+import { INSIDE_DUNGEON_QUEST_IDS } from '../data/dungeon-quest-inside-allowlist';
 import { FOREVER_SEED_ID_BASE } from '../instance-catalogue/instance-catalogue';
 import type {
   ParsedQuest,
@@ -86,7 +87,8 @@ export function toDungeonQuestRow(
     objectives: null,
     classRestriction: null,
     raceRestriction: raceRestriction(zoneRow, parsed),
-    startsInsideDungeon: false,
+    // ROK-2269: same curated allowlist the seeder applies (ROK-2142).
+    startsInsideDungeon: INSIDE_DUNGEON_QUEST_IDS.has(zoneRow.id),
     sharable: parsed.sharable,
     rewardType: (zoneRow.itemchoices ?? []).length > 0 ? 'choice' : 'none',
     rewardXp: zoneRow.xp ?? null,

@@ -53,6 +53,8 @@ const ADJUST_TARGET: Record<NotificationType, AdjustTarget> = {
   valheim_claim_suggestion: 'settings',
   // ROK-2187: the yearly GG DM → its own settings row.
   gg_ready: 'settings',
+  // ROK-1866: the calendar reconnect nudge → its own settings row.
+  calendar_needs_reconnect: 'settings',
   system: 'settings',
 };
 

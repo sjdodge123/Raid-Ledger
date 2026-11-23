@@ -28,6 +28,10 @@ import {
   rethrowForeverViolation,
 } from '../../wow-forever-identity.helpers';
 import { armoryDtoFields } from '../roster-armory-fields';
+import {
+  invalidateRosterInsights,
+  RosterInsightsCache,
+} from '../roster-insights/roster-insights.cache';
 import { copyMemberArmory } from './roster-claim.armory-copy';
 import { loadCandidates, type CandidateRow } from './roster-claim.queries';
 import {
@@ -50,7 +54,8 @@ const EMPTY: RosterClaimListResponseDto = { guilds: [], truncated: false };
 /**
  * ROK-2128 — "Add character → Guild roster" (WoW: Forever only, FLAG 8).
  * Lists the unclaimed roster characters of every claimable guild (FLAG 1).
- * `claim` is the one-click claim (D3–D5), then a best-effort Armory refresh.
+ * `claim` is the one-click claim (D3–D5), then a best-effort Armory refresh,
+ * then the claimed character's roster caches are dropped.
  */
 @Injectable()
 export class RosterClaimService {
@@ -59,6 +64,7 @@ export class RosterClaimService {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly characters: CharactersService,
+    private readonly insightsCache: RosterInsightsCache,
   ) {}
 
   /**
@@ -103,8 +109,12 @@ export class RosterClaimService {
     );
     // ROK-2133 (D4): copy the member's Armory snapshot; never fails the claim.
     const row = await copyMemberArmory(this.db, member, claimed, this.logger);
+    const dto = await this.refreshAfterCommit(row);
+    // ROK-2212 N3: drop the roster insights (and, as their listener, the
+    // suggested groups) of the claimed character's guilds; never throws.
+    await invalidateRosterInsights(this.insightsCache, row.id, this.logger);
     // The claim just wrote its `roster_claimed` audit (admin slot self-filter).
-    return { ...(await this.refreshAfterCommit(row)), rosterClaimed: true };
+    return { ...dto, rosterClaimed: true };
   }
 
   /** The tx; a unique-index backstop violation maps to 409 OUTSIDE it. */

@@ -17,6 +17,7 @@ let mockTiebreaker: unknown = null;
 
 vi.mock('../../hooks/use-lineups', () => ({
     useLineupDetail: () => ({ data: mockLineup, isLoading: false, error: null }),
+    useCommonGround: () => ({ data: undefined }),
     // ROK-1253: hero's "Advance to" CTA wires through this mutation.
     useTransitionLineupStatus: () => ({ mutate: vi.fn() }),
 }));

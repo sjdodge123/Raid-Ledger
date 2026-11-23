@@ -12,6 +12,7 @@ import { createMockRosterInsights, ROSTER_INSIGHTS_URL, rosterInsightsHandler } 
 import DungeonPlannerTab from './dungeon-planner-tab';
 import { INSTANCE, PAGE, makePlan, plannerHandlers } from './dungeon-planner-tab.fixtures';
 import { ROSTER, UUID_A, UUID_B } from './planner-roster.fixtures';
+import { claimed, group, suggestedGroupsHandler, SUGGESTED_GROUPS_FIXTURE, unclaimed } from '../suggested-groups/suggested-groups.fixtures';
 
 const media = vi.hoisted(() => ({ desktop: true }));
 vi.mock('../../../../hooks/use-media-query', () => ({ useMediaQuery: () => media.desktop }));
@@ -145,5 +146,30 @@ describe('DungeonPlannerTab — Create event, quest errors, Copy link and the ph
         const bar = await screen.findByTestId('planner-mobile-actions');
         expect(bar.className).toContain('bottom-[var(--bottom-nav-clearance)]');
         expect(bar.className).toContain('md:bottom-0');
+    });
+
+    it('stops the phone Create-event bar where the planner ends, above Suggested groups', async () => {
+        media.desktop = false;
+        renderTab();
+        const bar = await screen.findByTestId('planner-mobile-actions');
+        const groups = await screen.findByTestId('suggested-groups-section');
+        expect(bar.className).toContain('z-10');
+        expect(bar.parentElement?.contains(groups), 'groups sit outside the bar\'s sticky containing block').toBe(false);
+        expect(bar.compareDocumentPosition(groups) & Node.DOCUMENT_POSITION_FOLLOWING, 'groups follow the bar').toBeTruthy();
+    });
+
+    it('ROK-2212: Open in planner on a suggested group loads its dungeon and picks in place', async () => {
+        const g = group(INSTANCE.id, INSTANCE.name, { members: [
+            claimed(UUID_A, 'Tanky', 'tank', 20, 1), claimed(UUID_B, 'Blinky', 'healer', 12, 2),
+            unclaimed(12, 'Lurky', 'dps', 18), unclaimed(98, 'Gone', 'dps', 18), unclaimed(99, 'Away', 'dps', 18),
+        ] });
+        server.use(suggestedGroupsHandler({ ...SUGGESTED_GROUPS_FIXTURE, groups: [g] }));
+        renderTab(plannerHandlers(), '/hubs/7#dungeon-planner');
+        const card = await screen.findByRole('article', { name: `${INSTANCE.name} group` });
+        expect(screen.queryByTestId(`planner-chip-${UUID_A}`), 'nothing picked before').toBeNull();
+        fireEvent.click(within(card).getByRole('button', { name: `Open in planner: ${INSTANCE.name} group` }));
+        for (const key of [UUID_A, UUID_B, 'm12']) expect(await screen.findByTestId(`planner-chip-${key}`), `chip ${key} loaded`).toBeInTheDocument();
+        expect(await screen.findByRole('link', { name: 'Create event ▸' }), 'the group\'s dungeon is picked')
+            .toHaveAttribute('href', '/events/new?gameId=3&guildId=7&contentInstanceIds=101');
     });
 });

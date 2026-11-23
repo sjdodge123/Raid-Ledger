@@ -8,7 +8,11 @@ import {
   rescheduleEvent,
   resetSignupConfirmations,
 } from './event-lifecycle.helpers';
-import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
+import {
+  APP_EVENT_EVENTS,
+  SIGNUP_CONFIRMATIONS_RESET,
+  SIGNUP_CONFIRMATIONS_RESETTING,
+} from '../discord-bot/discord-bot.constants';
 import {
   buildPlaintextContent,
   formatEpoch,
@@ -24,6 +28,12 @@ function createMockNotificationService() {
 }
 
 /** Drizzle chain methods shared across all mock DB builders. */
+/** ROK-2271: the confirmation-reset signal's emitter. */
+const RESET_EMITTER = {
+  emit: jest.fn(),
+  emitAsync: jest.fn().mockResolvedValue([]),
+};
+
 const CHAIN_METHODS = [
   'select',
   'from',
@@ -129,6 +139,7 @@ describe('Regression: ROK-828', () => {
       creatorId,
       true,
       { startTime: newStartISO, endTime: newEndISO },
+      RESET_EMITTER,
     );
 
     expect(mockNotifSvc.createMany).toHaveBeenCalled();
@@ -145,6 +156,7 @@ describe('Regression: ROK-828', () => {
       creatorId,
       true,
       { startTime: newStartISO, endTime: newEndISO },
+      RESET_EMITTER,
     );
 
     const call = mockNotifSvc.createMany.mock.calls[0][0][0];
@@ -169,6 +181,7 @@ describe('Regression: ROK-828', () => {
       creatorId,
       true,
       { startTime: newStartISO, endTime: newEndISO },
+      RESET_EMITTER,
     );
     const call = mockNotifSvc.createMany.mock.calls[0][0][0];
     const abs = formatEpoch(expectedUnix, 'America/New_York');
@@ -196,6 +209,7 @@ describe('Regression: ROK-828', () => {
       creatorId,
       true,
       { startTime: newStartISO, endTime: newEndISO },
+      RESET_EMITTER,
     );
 
     const call = mockNotifSvc.createMany.mock.calls[0][0][0];
@@ -213,6 +227,7 @@ describe('Regression: ROK-828', () => {
       creatorId,
       true,
       { startTime: newStartISO, endTime: newEndISO },
+      RESET_EMITTER,
     );
 
     const call = mockNotifSvc.createMany.mock.calls[0][0][0];
@@ -238,6 +253,7 @@ describe('Regression: ROK-828', () => {
       creatorId,
       true,
       { startTime: newStartISO, endTime: newEndISO },
+      RESET_EMITTER,
     );
     expect(multiNotif.create).not.toHaveBeenCalled();
     expect(multiNotif.createMany).toHaveBeenCalledTimes(1);
@@ -420,7 +436,7 @@ function buildResetMockDb() {
 describe('Regression: ROK-1269 — resetSignupConfirmations excludes rescheduler', () => {
   it('passes a where() predicate to UPDATE when reschedulerId is provided', async () => {
     const { mockDb, updateWhereCalls } = buildResetMockDb();
-    await resetSignupConfirmations(mockDb as any, 42, 7);
+    await resetSignupConfirmations(mockDb as any, 42, 7, RESET_EMITTER);
     expect(updateWhereCalls).toHaveLength(1);
     // Drizzle's `and(...)` returns an SQL chunk; the captured arg should
     // be a non-null object representing the combined predicate.
@@ -431,7 +447,7 @@ describe('Regression: ROK-1269 — resetSignupConfirmations excludes rescheduler
 
   it('still passes a predicate when reschedulerId is null', async () => {
     const { mockDb, updateWhereCalls } = buildResetMockDb();
-    await resetSignupConfirmations(mockDb as any, 42, null);
+    await resetSignupConfirmations(mockDb as any, 42, null, RESET_EMITTER);
     expect(updateWhereCalls).toHaveLength(1);
     const predicate = (updateWhereCalls[0] as unknown[])[0];
     expect(predicate).toBeDefined();
@@ -439,7 +455,7 @@ describe('Regression: ROK-1269 — resetSignupConfirmations excludes rescheduler
 
   it('issues DELETE for reminders before UPDATE for signups', async () => {
     const { mockDb } = buildResetMockDb();
-    await resetSignupConfirmations(mockDb as any, 42, 7);
+    await resetSignupConfirmations(mockDb as any, 42, 7, RESET_EMITTER);
     expect(mockDb.delete).toHaveBeenCalled();
     expect(mockDb.update).toHaveBeenCalled();
   });
@@ -451,12 +467,81 @@ describe('Regression: ROK-1269 — resetSignupConfirmations excludes rescheduler
     const mockNotifSvc = createMockNotificationService();
     // Reuse the multi-where reschedule mock to drive the full path.
     const mockDb = buildRescheduleMockDb(event, [{ userId: 2 }]);
-    await rescheduleEvent(mockDb as any, mockNotifSvc as any, 99, 1, true, {
-      startTime: '2026-04-01T00:00:00Z',
-      endTime: '2026-04-01T02:00:00Z',
-    });
+    await rescheduleEvent(
+      mockDb as any,
+      mockNotifSvc as any,
+      99,
+      1,
+      true,
+      {
+        startTime: '2026-04-01T00:00:00Z',
+        endTime: '2026-04-01T02:00:00Z',
+      },
+      RESET_EMITTER,
+    );
     // At least one UPDATE issued with a where() — exact predicate shape
     // is asserted via the integration test against a real Postgres.
     expect(mockDb.update).toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2271 fix round 2 — resetSignupConfirmations signals around the write', () => {
+  function trace() {
+    const order: string[] = [];
+    const emitter = {
+      emit: jest.fn((name: string) => {
+        order.push(`emit:${name}`);
+        return true;
+      }),
+      emitAsync: jest.fn((name: string, p: { aborted?: boolean }) => {
+        order.push(`emitAsync:${name}${p.aborted === true ? ':aborted' : ''}`);
+        return Promise.resolve([]);
+      }),
+    };
+    return { order, emitter };
+  }
+
+  it('flags the reset BEFORE the write, then signals LANDED after it', async () => {
+    const { order, emitter } = trace();
+    const mockDb = {
+      delete: () => ({ where: () => Promise.resolve() }),
+      update: () => {
+        order.push('db:update');
+        return { set: () => ({ where: () => Promise.resolve() }) };
+      },
+    };
+    await resetSignupConfirmations(mockDb as never, 42, 7, emitter);
+    expect(order).toEqual([
+      `emitAsync:${SIGNUP_CONFIRMATIONS_RESETTING}`,
+      'db:update',
+      `emit:${SIGNUP_CONFIRMATIONS_RESET}`,
+    ]);
+  });
+
+  it('clears the flag and rethrows when the write throws', async () => {
+    const { order, emitter } = trace();
+    const mockDb = {
+      delete: () => ({ where: () => Promise.resolve() }),
+      update: () => {
+        throw new Error('db down');
+      },
+    };
+    await expect(
+      resetSignupConfirmations(mockDb as never, 42, 7, emitter),
+    ).rejects.toThrow('db down');
+    expect(order).toEqual([
+      `emitAsync:${SIGNUP_CONFIRMATIONS_RESETTING}`,
+      `emitAsync:${SIGNUP_CONFIRMATIONS_RESETTING}:aborted`,
+    ]);
+  });
+
+  it('leaves every signal to a transaction caller (signalledByCaller)', async () => {
+    const { mockDb } = buildResetMockDb();
+    const { emitter } = trace();
+    await resetSignupConfirmations(mockDb as never, 42, 7, emitter, {
+      signalledByCaller: true,
+    });
+    expect(emitter.emit).not.toHaveBeenCalled();
+    expect(emitter.emitAsync).not.toHaveBeenCalled();
   });
 });

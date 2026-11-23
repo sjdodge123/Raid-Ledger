@@ -7,6 +7,7 @@ import {
 } from './auth-storage-keys';
 import { clearAccessToken } from './access-token-store';
 import { clearCapturedQueryToken } from '../query-token-capture';
+import { safeRemoveItem } from '../safe-storage';
 
 /**
  * ROK-1753: a deactivated user's session is terminal. The API answers every
@@ -63,7 +64,7 @@ function goTo(path: string): void {
  */
 export function endDeactivatedSession(redirect: (path: string) => void = goTo): boolean {
   clearAccessToken();
-  for (const key of SESSION_KEYS) localStorage.removeItem(key);
+  for (const key of SESSION_KEYS) safeRemoveItem(key);
   // ROK-1839: terminal session — an unredeemed join token must not survive it.
   clearCapturedQueryToken();
   if (window.location.pathname !== '/login') {

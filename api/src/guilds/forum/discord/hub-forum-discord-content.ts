@@ -3,6 +3,7 @@
  * the 2000-char cut with the "read the rest" link (R6), the 100-char post
  * title, the webhook username rules and an absolute avatar URL.
  */
+import type { HubForumReplyKind } from '@raid-ledger/contract';
 import { DISCORD_THREAD_NAME_MAX } from '../../../discord-bot/lfg-board/lfg-board.constants';
 
 /** Discord's message content limit. */
@@ -79,4 +80,19 @@ export function absoluteAvatarUrl(
   if (ABSOLUTE.test(url)) return url;
   if (!url.startsWith('/') || !ABSOLUTE.test(clientUrl)) return null;
   return `${clientUrl.replace(/\/+$/, '')}${url}`;
+}
+
+/**
+ * Rows the inbound lane wrote carry a Discord author: never echo them out.
+ * ROK-2274 sync loop 1: a signup line (system text) is never mirrored either.
+ * ROK-2297: a copied row (or its header) is new to the TARGET thread's post,
+ * so it IS mirrored even when its author came from Discord.
+ */
+export function notMirrored(row: {
+  authorDiscordId: string | null;
+  kind?: HubForumReplyKind;
+  copiedFromThreadId?: number | null;
+}): boolean {
+  if (row.copiedFromThreadId != null) return false;
+  return row.authorDiscordId !== null || row.kind === 'signup_line';
 }

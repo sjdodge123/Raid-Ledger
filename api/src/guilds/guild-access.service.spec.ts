@@ -118,6 +118,21 @@ describe('GuildAccessService access matrix', () => {
     db.limit.mockResolvedValueOnce([]);
     expect(await service.isMember(42, GUILD)).toBe(false);
   });
+  it('ROK-2212: areMembers asks the kind once and keeps only its members', async () => {
+    const memberUserIds = jest.fn(() => Promise.resolve([42, 50]));
+    build({ ...stubHub('member'), memberUserIds });
+    guildOfKind('wow_guild');
+    const members = await service.areMembers([42, 7, 50], GUILD);
+    expect([...members].sort((a, b) => a - b)).toEqual([42, 50]);
+    expect(memberUserIds).toHaveBeenCalledTimes(1);
+    expect(memberUserIds).toHaveBeenCalledWith(GUILD);
+  });
+
+  it('ROK-2212: areMembers of nobody, or of a missing guild, is empty', async () => {
+    expect((await service.areMembers([], GUILD)).size).toBe(0);
+    db.limit.mockResolvedValueOnce([]);
+    expect((await service.areMembers([42], GUILD)).size).toBe(0);
+  });
 });
 
 describe('ROK-1814 GuildAccessService.canEditCrest (ruling 2026-10-30)', () => {

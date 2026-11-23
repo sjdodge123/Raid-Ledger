@@ -1,0 +1,194 @@
+/**
+ * ROK-2271 — the read behind signup lines: each member's CURRENT
+ * line-relevant state for one event (status, roster role / bench, character,
+ * running-late (ROK-1379 `running_late_at` + `late_minutes`), roach-out
+ * timing (ROK-421 `roached_out_at` vs the event start)), keyed by the real
+ * Discord id the line is about. One Drizzle-builder query.
+ */
+import { and, eq, inArray, or, type SQL } from 'drizzle-orm';
+import * as schema from '../../../drizzle/schema';
+import type { SignupLineState } from './hub-forum-discord-signup-lines';
+import { UNKNOWN_MEMBER_NAME } from './hub-forum-discord-signup-lines.copy';
+import type { ForumDiscordDb } from './hub-forum-discord.queries';
+
+const signups = schema.eventSignups;
+const users = schema.users;
+const roster = schema.rosterAssignments;
+const chars = schema.characters;
+const events = schema.events;
+
+/** The roster slot role that means "benched". */
+const BENCH_ROLE = 'bench';
+const HOUR_MS = 60 * 60 * 1000;
+const REAL_DISCORD_ID = /^\d+$/;
+
+/** One member as a line names them, plus their state now. */
+export interface SignupLineMember {
+  discordId: string;
+  displayName: string;
+  state: SignupLineState;
+}
+
+/**
+ * ROK-2274 — a member as a Raid Ledger thread line names them, keyed by
+ * `signupMemberKey` (local accounts included: they have no Discord id).
+ */
+export interface KeyedSignupLineMember {
+  memberKey: string;
+  /** The account the line is about; null for a Discord guest. */
+  userId: number | null;
+  /**
+   * The member's real Discord id (account's, else the signup's), null when
+   * none — Codex P2-4: how a claimed guest's `d:` history is found.
+   */
+  discordId: string | null;
+  displayName: string;
+  state: SignupLineState;
+}
+
+/** Anything that runs the loader's select: the db or a transaction. */
+type SelectDb = Pick<ForumDiscordDb, 'select'>;
+
+type Row = Awaited<ReturnType<typeof selectRows>>[number];
+
+function selectRows(db: SelectDb, where: SQL | undefined) {
+  return db
+    .select({
+      status: signups.status,
+      userId: signups.userId,
+      userDiscordId: users.discordId,
+      discordUserId: signups.discordUserId,
+      displayName: users.displayName,
+      username: users.username,
+      discordUsername: signups.discordUsername,
+      rosterRole: roster.role,
+      charName: chars.name,
+      charClass: chars.class,
+      charSpec: chars.spec,
+      runningLateAt: signups.runningLateAt,
+      lateMinutes: signups.lateMinutes,
+      roachedOutAt: signups.roachedOutAt,
+      duration: events.duration,
+    })
+    .from(signups)
+    .innerJoin(events, eq(events.id, signups.eventId))
+    .leftJoin(users, eq(users.id, signups.userId))
+    .leftJoin(
+      roster,
+      and(eq(roster.eventId, signups.eventId), eq(roster.signupId, signups.id)),
+    )
+    .leftJoin(chars, eq(chars.id, signups.characterId))
+    .where(where)
+    .orderBy(signups.id);
+}
+
+/** Hours from the roach-out to the event start (never negative). */
+export function roachedHoursBefore(
+  start: Date,
+  at: Date | null,
+): number | null {
+  if (at === null) return null;
+  return Math.max(0, (start.getTime() - at.getTime()) / HOUR_MS);
+}
+
+function toState(row: Row): SignupLineState {
+  const bench = row.rosterRole === BENCH_ROLE;
+  return {
+    status: row.status,
+    role: bench ? null : row.rosterRole,
+    bench,
+    character:
+      row.charName === null
+        ? null
+        : { name: row.charName, className: row.charClass, spec: row.charSpec },
+    late: row.runningLateAt !== null,
+    lateMinutes: row.lateMinutes,
+    roachedHoursBefore: roachedHoursBefore(row.duration[0], row.roachedOutAt),
+  };
+}
+
+function displayNameOf(row: Row): string {
+  return (
+    row.displayName ??
+    row.username ??
+    row.discordUsername ??
+    UNKNOWN_MEMBER_NAME
+  );
+}
+
+/** The signer's real Discord id (account's first), or null. */
+function realDiscordIdOf(row: Row): string | null {
+  const id = row.userDiscordId ?? row.discordUserId;
+  return id !== null && REAL_DISCORD_ID.test(id) ? id : null;
+}
+
+function toMember(row: Row): SignupLineMember | null {
+  const discordId = realDiscordIdOf(row);
+  if (discordId === null) return null;
+  return { discordId, displayName: displayNameOf(row), state: toState(row) };
+}
+
+/**
+ * ROK-2274 — `u:<userId>` for an account, `d:<discordId>` for a Discord
+ * guest (no account); null when the signup has neither.
+ */
+export function signupMemberKey(
+  userId: number | null,
+  guestDiscordId: string | null,
+): string | null {
+  if (userId !== null) return `u:${userId}`;
+  if (guestDiscordId === null || !REAL_DISCORD_ID.test(guestDiscordId)) {
+    return null;
+  }
+  return `d:${guestDiscordId}`;
+}
+
+/**
+ * Every signup of `eventId` (any status) whose signer has a real Discord id,
+ * keyed by that id. `discordIds` narrows it to those members (an empty list
+ * reads nothing). A member absent from the map has no signup row — pass
+ * `current: null` for them to the line diff.
+ */
+export async function loadSignupLineStates(
+  db: ForumDiscordDb,
+  eventId: number,
+  discordIds?: readonly string[],
+): Promise<Map<string, SignupLineMember>> {
+  if (discordIds !== undefined && discordIds.length === 0) return new Map();
+  const ids = discordIds === undefined ? null : [...discordIds];
+  const where = and(
+    eq(signups.eventId, eventId),
+    ids === null
+      ? undefined
+      : or(inArray(users.discordId, ids), inArray(signups.discordUserId, ids)),
+  );
+  const out = new Map<string, SignupLineMember>();
+  for (const row of await selectRows(db, where)) {
+    const member = toMember(row);
+    if (member && !out.has(member.discordId)) out.set(member.discordId, member);
+  }
+  return out;
+}
+
+/**
+ * ROK-2274 — every signup of `eventId` (any status) keyed by member key,
+ * accounts without a Discord id included. Runs on the db or a transaction.
+ */
+export async function loadSignupLineStatesByMemberKey(
+  db: SelectDb,
+  eventId: number,
+): Promise<Map<string, KeyedSignupLineMember>> {
+  const out = new Map<string, KeyedSignupLineMember>();
+  for (const row of await selectRows(db, eq(signups.eventId, eventId))) {
+    const memberKey = signupMemberKey(row.userId, row.discordUserId);
+    if (memberKey === null || out.has(memberKey)) continue;
+    out.set(memberKey, {
+      memberKey,
+      userId: row.userId,
+      discordId: realDiscordIdOf(row),
+      displayName: displayNameOf(row),
+      state: toState(row),
+    });
+  }
+  return out;
+}

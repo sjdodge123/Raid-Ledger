@@ -14,6 +14,7 @@ import { LineupsModule } from '../lineups.module';
 import { SchedulingModule } from '../scheduling/scheduling.module';
 import { EventsModule } from '../../events/events.module';
 import { DiscordBotModule } from '../../discord-bot/discord-bot.module';
+import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { StandalonePollController } from './standalone-poll.controller';
 import { StandalonePollService } from './standalone-poll.service';
 import { StandalonePollLockInService } from './standalone-poll-lock-in.service';
@@ -28,6 +29,8 @@ import { HubPollsController } from './hub-polls.controller';
     DrizzleModule,
     NotificationModule,
     SettingsModule,
+    // ROK-2212: GuildAccessService — hub membership by the hub's kind.
+    forwardRef(() => GuildsCoreModule),
     SchedulingModule,
     EventsModule,
     CronJobModule,

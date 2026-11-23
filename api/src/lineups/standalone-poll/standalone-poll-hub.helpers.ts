@@ -1,16 +1,17 @@
 /**
  * ROK-1893 P3 — hub-tagged scheduling polls.
  *
- * A poll may be tagged to a community hub (`community_lineups.guild_id`). The
- * tag is only honoured while the hub is VISIBLE: a `game_community` hub that
- * is `active` and not hidden. A hidden / archived hub drops out of every read
- * (poll page, active list, hub list) without the stored id being cleared.
+ * A poll may be tagged to a hub (`community_lineups.guild_id`). The tag is
+ * only honoured while the hub is VISIBLE: a `game_community` hub — or, since
+ * ROK-2212 (operator ruling 2026-11-17), a `wow_guild` hub — that is `active`
+ * and not hidden. A hidden / archived hub drops out of every read (poll page,
+ * active list, hub list) without the stored id being cleared.
  */
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { and, eq, isNull, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, isNull, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { GuildKind } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
-import { findMembership } from '../../guilds/community/community-membership.queries';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -21,6 +22,8 @@ export interface PollHub {
   gameId: number;
   /** `guilds.member_count` (live members, kept current by the hub writes). */
   memberCount: number;
+  /** ROK-2212: membership is the kind's call (`HubMemberCheck`). */
+  kind: GuildKind;
 }
 
 const g = schema.guilds;
@@ -30,12 +33,26 @@ const pollHubColumns = {
   name: g.name,
   gameId: g.gameId,
   memberCount: g.memberCount,
+  kind: g.kind,
 };
 
-/** The "visible community hub" predicate on `guilds`. */
+/** ROK-2212: the hub kinds a poll may be tagged to. */
+export const POLL_HUB_KINDS = ['game_community', 'wow_guild'] as const;
+
+/**
+ * Membership as the hub's kind defines it (`GuildAccessService.isMember`):
+ * a community hub's live `hub_community_members` row, a guild hub's live
+ * linked roster row. Injected so this core helper never imports a plugin.
+ */
+export type HubMemberCheck = (
+  userId: number,
+  hubId: number,
+) => Promise<boolean>;
+
+/** The "visible poll hub" predicate on `guilds`. */
 export function visibleCommunityHubWhere(): SQL | undefined {
   return and(
-    eq(g.kind, 'game_community'),
+    inArray(g.kind, [...POLL_HUB_KINDS]),
     eq(g.status, 'active'),
     isNull(g.hiddenAt),
   );
@@ -54,26 +71,18 @@ export async function findVisiblePollHub(
   return row ?? null;
 }
 
-/** True when the user is a live (not left, not banned) member of the hub. */
-export async function isLiveHubMember(
-  db: Db,
-  guildId: number,
-  userId: number,
-): Promise<boolean> {
-  const row = await findMembership(db, guildId, userId);
-  return row !== null && row.leftAt === null && row.bannedAt === null;
-}
-
 /**
- * True when the user is a live member of the hub or staff (operator/admin) —
- * the P1 membership rule (`leftAt`/`bannedAt` null) with the staff bypass.
+ * True when the user is a member of the hub by its kind (`isMember`, the
+ * same check the poll tag uses) or staff (operator/admin). ROK-2212: a guild
+ * hub's members are its live linked roster, not `hub_community_members`.
  */
-export async function isLiveHubMemberOrStaff(
+export async function isHubMemberOrStaff(
   db: Db,
   guildId: number,
   userId: number,
+  isMember: HubMemberCheck,
 ): Promise<boolean> {
-  if (await isLiveHubMember(db, guildId, userId)) return true;
+  if (await isMember(userId, guildId)) return true;
   const [user] = await db
     .select({ role: schema.users.role })
     .from(schema.users)
@@ -83,24 +92,25 @@ export async function isLiveHubMemberOrStaff(
 }
 
 /**
- * D15: a poll may be tagged to a hub only when the hub is a visible community
- * hub for the poll's game, and the caller is a live member or staff.
+ * D15: a poll may be tagged to a hub only when the hub is a visible poll hub
+ * for the poll's game, and the caller is a member (by the hub's kind) or staff.
  */
 export async function assertCanTagPollToHub(
   db: Db,
-  hubId: number,
-  gameId: number,
-  userId: number,
-  isStaff: boolean,
+  hub: { hubId: number; gameId: number },
+  caller: { userId: number; isStaff: boolean },
+  isMember: HubMemberCheck,
 ): Promise<void> {
-  const hub = await findVisiblePollHub(db, hubId);
-  if (!hub) {
+  const { hubId, gameId } = hub;
+  const { userId, isStaff } = caller;
+  const found = await findVisiblePollHub(db, hubId);
+  if (!found) {
     throw new BadRequestException('That hub is not open for polls');
   }
-  if (hub.gameId !== gameId) {
+  if (found.gameId !== gameId) {
     throw new BadRequestException("The poll's game must match the hub's game");
   }
-  if (!isStaff && !(await isLiveHubMember(db, hubId, userId))) {
+  if (!isStaff && !(await isMember(userId, hubId))) {
     throw new ForbiddenException(
       'Only members of this hub can tag a poll to it',
     );
@@ -135,14 +145,15 @@ export async function findEventVisibleHubId(
 export async function resolvePollHubId(
   db: Db,
   input: { gameId: number; hubId?: number; linkedEventId?: number },
-  userId: number,
-  isStaff: boolean,
+  caller: { userId: number; isStaff: boolean },
+  isMember: HubMemberCheck,
 ): Promise<number | null> {
   if (input.linkedEventId !== undefined) {
     return findEventVisibleHubId(db, input.linkedEventId, input.gameId);
   }
   if (input.hubId === undefined) return null;
-  await assertCanTagPollToHub(db, input.hubId, input.gameId, userId, isStaff);
+  const hub = { hubId: input.hubId, gameId: input.gameId };
+  await assertCanTagPollToHub(db, hub, caller, isMember);
   return input.hubId;
 }
 

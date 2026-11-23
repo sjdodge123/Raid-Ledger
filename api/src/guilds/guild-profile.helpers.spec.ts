@@ -48,6 +48,8 @@ function row(over: Partial<GuildProfileSelect>): GuildProfileSelect {
     recruitment: null,
     recruitmentUpdatedAt: null,
     recruitmentUpdatedBy: null,
+    publicCardEnabled: false,
+    publicCardSlug: null,
     createdAt: NOW,
     updatedAt: NOW,
     ...over,

@@ -30,7 +30,7 @@ interface NominateModalProps {
      * search results. Undefined = unknown, so no warning is shown. Never
      * blocks a nomination.
      */
-    participantCount?: number;
+    participantCount?: number | undefined;
 }
 
 /** Search-result row shape, incl. the ROK-1400 co-op capacity fields. */
@@ -65,8 +65,12 @@ function SearchResultItem({ game, onSelect, participantCount }: {
             ) : (
                 <div className="w-8 h-10 bg-panel rounded flex items-center justify-center text-dim text-xs">?</div>
             )}
-            <span className="text-sm text-foreground truncate">{game.name}</span>
-            <CoopFitHints game={game} participantCount={participantCount} />
+            {/* Below `sm` the co-op badge + group warning wrap under the name so
+                a phone row never squeezes the name to "R.." (TD 2026-11-19). */}
+            <span className="flex min-w-0 flex-1 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3">
+                <span className="max-w-full text-sm text-foreground truncate">{game.name}</span>
+                <CoopFitHints game={game} participantCount={participantCount} />
+            </span>
         </button>
     );
 }

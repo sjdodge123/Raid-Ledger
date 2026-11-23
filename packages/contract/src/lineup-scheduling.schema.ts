@@ -3,6 +3,7 @@ import {
   LineupScheduleSlotSchema,
   MatchDetailResponseSchema,
 } from './lineup-match.schema.js';
+import { GuildKindSchema } from './guilds.schema.js';
 
 // ============================================================
 // Request Schemas (ROK-965)
@@ -345,6 +346,12 @@ export const SchedulePollPageResponseSchema = z.object({
       name: z.string(),
       memberCount: z.number().int().nonnegative(),
       viewerIsMember: z.boolean(),
+      /**
+       * ROK-2212: the hub's kind. Only a `game_community` hub has a "Join hub"
+       * button — a `wow_guild` hub is joined by claiming a roster character on
+       * its hub page. Absent (an older server) ⇒ `game_community`.
+       */
+      kind: GuildKindSchema.optional(),
     })
     .nullable()
     .optional(),

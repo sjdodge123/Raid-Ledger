@@ -15,6 +15,11 @@
  * ROK-1893 P3: opened from a hub's Events tab with `hubId` + `initialGameId`
  * the game is locked to the hub's game, a "Tagged to <hub>" line replaces
  * the search, and the request carries `hubId`.
+ *
+ * ROK-2212: `initialMemberUserIds` pre-fills the members once per open (a
+ * Forever suggested group's players); that seed is the form's clean state.
+ * ROK-2256: `initialMembers` names them, so the picker's Selected chips can
+ * show members who are not on its first page.
  */
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +30,7 @@ import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { Button } from '../ui/button';
 import { useCreateSchedulingPoll } from '../../hooks/use-standalone-poll';
 import { MemberPicker } from './member-picker-modal';
+import type { MemberOption } from './member-picker-names';
 import { PollGameSearch } from './poll-game-search';
 import { DurationPicker } from './duration-picker';
 import { DEFAULT_DURATION_HOURS } from './duration-options';
@@ -34,6 +40,7 @@ import { CreatePollVisibility } from './create-poll-visibility';
 import { CreatePollSuccess, CreatePollSuccessFooter } from './create-poll-success';
 import { CreatePollHubLine } from './create-poll-hub-line';
 import { resolvePollHubLock, type PollHubLock } from './create-poll-hub-lock';
+import { sameIds, useMemberBaseline, useSeedMembersOnOpen } from './create-poll-seed';
 
 interface CreatePollModalProps {
   isOpen: boolean;
@@ -43,6 +50,10 @@ interface CreatePollModalProps {
   /** ROK-1893 P3: tag the poll to this community hub. */
   hubId?: number;
   hubName?: string;
+  /** ROK-2212: members picked when the modal opens (seeded once per open). */
+  initialMemberUserIds?: number[];
+  /** ROK-2256: display names for (some of) the seeded members — names only, never seeds. */
+  initialMembers?: readonly MemberOption[];
 }
 
 /** A created private poll, shown in the success state. */
@@ -66,21 +77,23 @@ function useCreatePollForm() {
     if (ids.length > 0) setMinVoteThreshold(ids.length);
   }, []);
 
+  const { baseMembers, setBaseMembers, seedMembers } = useMemberBaseline(setMemberIds);
   const reset = useCallback(() => {
     setSelectedGame(null);
+    setBaseMembers([]);
     setMemberIdsRaw([]);
     setMinVoteThreshold(DEFAULT_MIN_VOTE_THRESHOLD);
     setDurationHours(DEFAULT_DURATION_HOURS);
     setVisibility('public');
-  }, []);
+  }, [setBaseMembers]);
   const isDirty = selectedGame !== null
-    || memberIds.length > 0
-    || minVoteThreshold !== DEFAULT_MIN_VOTE_THRESHOLD
+    || !sameIds(memberIds, baseMembers)
+    || minVoteThreshold !== (baseMembers.length > 0 ? baseMembers.length : DEFAULT_MIN_VOTE_THRESHOLD)
     || durationHours !== DEFAULT_DURATION_HOURS
     || visibility !== 'public';
   return {
     selectedGame, setSelectedGame,
-    memberIds, setMemberIds,
+    memberIds, setMemberIds, seedMembers,
     minVoteThreshold, setMinVoteThreshold,
     durationHours, setDurationHours,
     visibility, setVisibility,
@@ -132,8 +145,9 @@ function useSubmitPoll(form: ReturnType<typeof useCreatePollForm>, close: () => 
  * Modal for creating a standalone scheduling poll.
  * Contains a game picker (search) and an optional member picker.
  */
-export function CreatePollModal({ isOpen, onClose, initialGameId, hubId, hubName }: CreatePollModalProps) {
+export function CreatePollModal({ isOpen, onClose, initialGameId, hubId, hubName, initialMemberUserIds, initialMembers }: CreatePollModalProps) {
   const form = useCreatePollForm();
+  useSeedMembersOnOpen(isOpen, initialMemberUserIds, form.seedMembers);
   const lock = resolvePollHubLock(hubId, initialGameId, hubName);
   const { reset } = form;
   const handleClose = useCallback(() => {
@@ -160,7 +174,7 @@ export function CreatePollModal({ isOpen, onClose, initialGameId, hubId, hubName
     >
       {created
         ? <CreatePollSuccess token={created.shareToken} />
-        : <CreatePollFormBody form={form} lock={lock} />}
+        : <CreatePollFormBody form={form} lock={lock} knownMembers={initialMembers} />}
     </Modal>
   );
 }
@@ -177,9 +191,10 @@ function useThresholdSliderMax(pickedCount: number): number {
 }
 
 /** Form body extracted to stay within function line limits. */
-function CreatePollFormBody({ form, lock }: {
+function CreatePollFormBody({ form, lock, knownMembers }: {
   form: ReturnType<typeof useCreatePollForm>;
   lock: PollHubLock | null;
+  knownMembers: readonly MemberOption[] | undefined;
 }) {
   const sliderMax = useThresholdSliderMax(form.memberIds.length);
   return (
@@ -190,6 +205,7 @@ function CreatePollFormBody({ form, lock }: {
       <MemberPicker
         selectedIds={form.memberIds}
         onChange={form.setMemberIds}
+        {...(knownMembers ? { knownMembers } : {})}
       />
       <CreatePollVisibility value={form.visibility} onChange={form.setVisibility} />
       <DurationPicker

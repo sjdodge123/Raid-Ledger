@@ -40,6 +40,10 @@ export const GgLatestRedirect = lazyWithRetry(() =>
 export const GgPublicPage = lazyWithRetry(() =>
     import('./pages/gg/gg-public-page').then((m) => ({ default: m.GgPublicPage })),
 );
+/** ROK-1813: signed-out WoW guild visitor card — a plugin page on a core lazy route. */
+export const PublicGuildCardPage = lazyWithRetry(() =>
+    import('./plugins/wow/public-card/public-guild-card-page').then((m) => ({ default: m.PublicGuildCardPage })),
+);
 /** ROK-1893: community-hub invite link landing (`/h/:token`). */
 export const HubInvitePage = lazyWithRetry(() =>
     import('./pages/hub-invite-page').then((m) => ({ default: m.HubInvitePage })),
@@ -135,6 +139,9 @@ export const UserProfilePage = lazyWithRetry(() =>
 );
 export const ClaimPage = lazyWithRetry(() =>
     import('./pages/claim/claim-page').then((m) => ({ default: m.ClaimPage })),
+);
+export const SigninLinkPage = lazyWithRetry(() =>
+    import('./pages/signin-link-page').then((m) => ({ default: m.SigninLinkPage })),
 );
 export const OnboardingWizardPage = lazyWithRetry(() =>
     import('./pages/onboarding-wizard-page').then((m) => ({ default: m.OnboardingWizardPage })),
@@ -256,6 +263,10 @@ export const BackupsPanel = lazyWithRetry(() =>
 );
 export const LogsPanel = lazyWithRetry(() =>
     import('./pages/admin/logs-panel').then((m) => ({ default: m.LogsPanel })),
+);
+/** ROK-2099: Admin → General → Addon errors — a `blizzard` plugin page on a core lazy route (ROK-1836 pattern). */
+export const AddonErrorsPage = lazyWithRetry(() =>
+    import('./plugins/wow/admin/addon-errors-page').then((m) => ({ default: m.AddonErrorsPage })),
 );
 /** ROK-1870 — Admin → Hubs queue. */
 export const HubsPanel = lazyWithRetry(() =>

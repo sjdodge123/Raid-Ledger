@@ -42,7 +42,20 @@ function report(plan: Plan, added: number): void {
   for (const d of plan.skipped) {
     console.log(`  skipped ${d.itemId} ${d.name} (source: ${d.source})`);
   }
+  for (const [source, n] of skippedBySource(plan)) {
+    console.log(`  unmatched source: ${source} (${n} rows)`);
+  }
   console.log(`  new rows: ${added}`);
+}
+
+/** ROK-2270: skipped rows per Wowhead source, so unmatched bosses stand out. */
+function skippedBySource(plan: Plan): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const d of plan.skipped) {
+    const source = d.source ?? '(none)';
+    out.set(source, (out.get(source) ?? 0) + 1);
+  }
+  return out;
 }
 
 const rowKey = (r: LootRow): string =>

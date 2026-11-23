@@ -17,6 +17,7 @@ import { Test } from '@nestjs/testing';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 import { SchedulingService } from './scheduling.service';
+import { GuildAccessService } from '../../guilds/guild-access.service';
 import { StandalonePollLockInService } from '../standalone-poll/standalone-poll-lock-in.service';
 import { StandalonePollService } from '../standalone-poll/standalone-poll.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -290,6 +291,10 @@ describe('SchedulingService.createEventFromSlot — re-renders the poll (AC3)', 
           provide: SchedulingUnanimousService,
           useValue: { checkMatch: jest.fn().mockResolvedValue(0) },
         },
+        {
+          provide: GuildAccessService,
+          useValue: { isMember: jest.fn(), areMembers: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(SchedulingService);
@@ -359,6 +364,7 @@ describe('StandalonePollService.complete — re-renders the poll (AC3)', () => {
       pollEmbed as never,
       events as never,
       lockIn,
+      { isMember: jest.fn(), areMembers: jest.fn() } as never,
     );
 
     await expect(
@@ -470,9 +476,12 @@ describe('SchedulingPollEmbedService — debounced sync (ROK-1549/1551)', () => 
   });
 
   it('emits schedule-changed even when the poll has no Discord card', async () => {
-    mockDb.limit.mockResolvedValueOnce([
-      { id: MATCH_ID, lineupId: LINEUP_ID, embedMessageId: null },
-    ]);
+    // ROK-2295: a card-less poll still renders (its forum post's starter
+    // shows the same embed), so the lineup + game reads are queued too.
+    queueRows(
+      { status: 'scheduling', embedMessageId: null, embedChannelId: null },
+      { status: 'decided', phaseDeadline: null },
+    );
     await service.syncEmbed(MATCH_ID);
     expect(sync.emitScheduleChanged).toHaveBeenCalledWith(LINEUP_ID, MATCH_ID);
     expect(sync.editEmbed).not.toHaveBeenCalled();

@@ -167,4 +167,38 @@ describe('canFor', () => {
     const orphan = row({ authorId: null });
     expect(canFor(member, orphan, thread).delete).toBe(false);
   });
+
+  // ROK-2274 D9: a signup line is system text (a reply: never pinnable).
+  const asReply = { now: SOON, pinnable: false };
+  it('never lets anyone edit a signup line; only a moderator deletes it', () => {
+    const line = row({ authorId: null, kind: 'signup_line' });
+    expect(canFor(member, line, asReply)).toEqual({
+      edit: false,
+      delete: false,
+      pin: false,
+    });
+    expect(canFor(officer, line, asReply)).toEqual({
+      edit: false,
+      delete: true,
+      pin: false,
+    });
+  });
+
+  it('gives no ownership of a line even if it names the viewer', () => {
+    const line = row({ kind: 'signup_line' });
+    expect(canFor(author, line, asReply)).toEqual({
+      edit: false,
+      delete: false,
+      pin: false,
+    });
+  });
+
+  it('ROK-2297: a copy header is a system line too (no ownership)', () => {
+    const header = row({ kind: 'copy_header' });
+    expect(canFor(author, header, asReply)).toEqual({
+      edit: false,
+      delete: false,
+      pin: false,
+    });
+  });
 });

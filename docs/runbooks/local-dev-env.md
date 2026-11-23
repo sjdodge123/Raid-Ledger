@@ -21,7 +21,13 @@ Ensures Docker is up, runs migrations, seeds data, starts API + web in watch mod
 
 ## Clone prod → local
 
-`./scripts/clone-prod-to-local.sh` triggers a sanitized prod backup, downloads it, restores into the local DB, resets the local admin password, and preserves your local `app_settings` (API keys) across clones. Destructive — operator-authorized only. Full runbook (`.env.clone` format, settings-cache bounce, verification): memory `reference_clone_prod_runbook.md`.
+`./scripts/clone-prod-to-local.sh` triggers a sanitized prod backup, downloads it to a temp dir, and restores it **straight into the `raid-ledger-db` container with `pg_restore`** — the local API does **not** need to be running, and it works the same whichever worktree `deploy_dev.sh` last ran from. It then resets the local admin password from `--tree <path>` (default: the git top-level of your current directory; a failed reset prints a `WARN` and the recovery command but does not fail the clone) and preserves your local `app_settings` (API keys). Destructive — operator-authorized only. A safety `pg_dump` of the local DB goes to `~/.cache/raid-ledger/pre-clone/` first (last 3 kept).
+
+- **Env file** — first found wins: `$RL_ENV_CLONE_FILE` → **`~/.config/raid-ledger/env.clone`** (recommended: one file for every tree) → `<tree>/.env.clone` → the main checkout's `.env.clone`. Needs `PROD_URL`, `DATABASE_URL` (exactly `postgres[ql]://[user[:pass]@]localhost|127.0.0.1|[::1][:port]/<db>`, optionally `?sslmode=disable|allow|prefer|require`; any other query key, a unix-socket URL, a second `@`, a host list or a control character is refused, as are a non-local `PGHOST`/`PGHOSTADDR` and any `PGSERVICE`/`PGSERVICEFILE`) and **`PROD_BACKUP_TOKEN=rlbx_…`**, minted in prod Admin → Backups → Clone access tokens (it can only list, create and download backups). `PROD_BEARER_TOKEN` (short-lived JWT) and `PROD_ADMIN_EMAIL` + `PROD_ADMIN_PASSWORD` still work for one release with a deprecation warning. `LOCAL_URL` / `LOCAL_ADMIN_EMAIL` are no longer required.
+- **Migration journal** — the restore keeps prod's `drizzle.__drizzle_migrations`, so a branch migration is pending afterwards and runs for real on the cloned data at the next `npm run db:migrate -w api` (or API boot) from your tree. The script warns when a branch migration is older than prod's newest and would be skipped.
+- `./scripts/clone-prod-to-env.sh <slug> [--tree <path>]` runs the same clone, then pushes the local DB into a fleet env.
+
+Settings-cache bounce and verification: memory `reference_clone_prod_runbook.md`.
 
 ## Env lock — the acquire/release cycle
 

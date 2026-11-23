@@ -13,8 +13,8 @@
  *   grep -rn "references(() => users.id" api/src/drizzle/schema/
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
-import { eq, inArray, or } from 'drizzle-orm';
+import type { PgTable } from 'drizzle-orm/pg-core';
+import { eq, or } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { endMarkersInvolvingUser } from '../auth/impersonation/impersonation-markers.db';
 import { Logger } from '@nestjs/common';
@@ -23,6 +23,11 @@ import {
   selectUserScreenshotPaths,
 } from '../feedback/feedback-screenshot-user.helpers';
 import { releaseValheimClaimsForDeletedUser } from './users-delete-valheim.helpers';
+import { deleteUserLineups } from './users-delete-lineups.helpers';
+import {
+  WIPE_BEARER_SECRETS,
+  type WipeTarget,
+} from './users-delete-secrets.manifest';
 import { wipeCommunityHubData } from '../guilds/community/community-user-wipe.helpers';
 import {
   auditGuidReleases,
@@ -33,11 +38,7 @@ const logger = new Logger('UserDelete');
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** A user-owned table deleted by a single `<column> = userId` predicate. */
-export interface WipeTarget {
-  table: PgTable;
-  column: AnyPgColumn;
-}
+export type { WipeTarget };
 
 /**
  * WIPE bucket — user-owned rows deleted by `<column> = userId`.
@@ -200,16 +201,8 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   },
   // ROK-1893: hub join prompts are personal UI state (CASCADE).
   { table: schema.hubJoinPrompts, column: schema.hubJoinPrompts.userId },
-  // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
-  { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
-  // ROK-1955: Companion device tokens (CASCADE) — bearer secrets, so a
-  // ban+wipe must revoke them. Links the user decided go first: their
-  // `device_id` is SET NULL, but deleting them keeps no stale approval trail.
-  {
-    table: schema.companionDeviceLinks,
-    column: schema.companionDeviceLinks.decidedBy,
-  },
-  { table: schema.companionDevices, column: schema.companionDevices.userId },
+  // Bearer secrets (ICS link, Companion devices, backup-export tokens).
+  ...WIPE_BEARER_SECRETS,
   // ROK-1956: Companion ingest payloads, blob refs and blob rows (CASCADE) —
   // the user's own uploaded data. Refs carry no FK to blobs; order is free.
   {
@@ -235,6 +228,12 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   { table: schema.bg3CampaignKeys, column: schema.bg3CampaignKeys.userId },
   { table: schema.bg3UserDefaults, column: schema.bg3UserDefaults.userId },
   { table: schema.bg3Saves, column: schema.bg3Saves.uploaderUserId },
+  // ROK-2099: the user's own uploaded WoW addon errors (CASCADE) — personal
+  // diagnostic data; a ban+wipe removes it like the other companion uploads.
+  {
+    table: schema.wowAddonErrorRecords,
+    column: schema.wowAddonErrorRecords.userId,
+  },
 ];
 
 /**
@@ -382,25 +381,7 @@ async function deleteUserOwnedData(tx: Db, userId: number): Promise<void> {
     await tx.delete(table).where(eq(column, userId));
   }
   await deleteDualUserOwnedRows(tx, userId);
-  // `community_lineup_entries.carried_over_from` is the ONLY non-cascade (RESTRICT)
-  // back-reference to community_lineups.id: carryOverFromLastDecided() inserts
-  // entries in a NEWER lineup pointing at an older one. If the user created that
-  // older lineup, a surviving newer lineup's entry would RESTRICT-block the delete
-  // below. Null those back-refs first (nullable; only feeds a display boolean).
-  const userLineupIds = tx
-    .select({ id: schema.communityLineups.id })
-    .from(schema.communityLineups)
-    .where(eq(schema.communityLineups.createdBy, userId));
-  await tx
-    .update(schema.communityLineupEntries)
-    .set({ carriedOverFrom: null })
-    .where(
-      inArray(schema.communityLineupEntries.carriedOverFrom, userLineupIds),
-    );
-  // Deleting the lineup cascades all of its children (child→lineup FKs cascade).
-  await tx
-    .delete(schema.communityLineups)
-    .where(eq(schema.communityLineups.createdBy, userId));
+  await deleteUserLineups(tx, userId);
 }
 
 /** Reassign a user's PUG slots to another user (null the claim, move ownership). */

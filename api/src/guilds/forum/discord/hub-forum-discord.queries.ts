@@ -1,4 +1,4 @@
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import { findLfgBoardBindingChannelId } from '../../../discord-bot/lfg-board/lfg-board-channel.db-helpers';
@@ -104,16 +104,34 @@ export async function deleteForumRow(
   await db.delete(forums).where(eq(forums.id, forumId));
 }
 
-/** How many hubs bind each channel, keyed by Discord channel id. */
+/** A channel's bound hubs, and how many of them still have no tag. */
+export interface ChannelBindingCount {
+  hubs: number;
+  untagged: number;
+}
+
+/**
+ * How many hubs bind each channel (and how many lack a tag — ROK-2258's tag
+ * budget reserves a slot for each), keyed by Discord channel id.
+ */
 export async function bindingCountsByChannel(
   db: ForumDiscordDb,
-): Promise<Map<string, number>> {
+): Promise<Map<string, ChannelBindingCount>> {
   const rows = await db
-    .select({ channelId: forums.channelId, n: count(bindings.guildId) })
+    .select({
+      channelId: forums.channelId,
+      hubs: count(bindings.guildId),
+      untagged:
+        sql<number>`count(*) filter (where ${bindings.tagId} is null)`.mapWith(
+          Number,
+        ),
+    })
     .from(forums)
     .innerJoin(bindings, eq(bindings.forumId, forums.id))
     .groupBy(forums.channelId);
-  return new Map(rows.map((r) => [r.channelId, r.n]));
+  return new Map(
+    rows.map((r) => [r.channelId, { hubs: r.hubs, untagged: r.untagged }]),
+  );
 }
 
 /** Channel ids of the forums the bot made in this Discord guild. */

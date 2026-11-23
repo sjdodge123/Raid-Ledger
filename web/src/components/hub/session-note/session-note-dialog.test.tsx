@@ -12,7 +12,7 @@ import {
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import HubSessionNoteWidget from './hub-session-note-widget';
 import { sessionNoteKey } from './hub-session-note-query';
-import SessionNoteDialog, { CONFLICT_COPY } from './session-note-dialog';
+import SessionNoteDialog, { CLEARED_CONFLICT_COPY, CONFLICT_COPY } from './session-note-dialog';
 import { useSessionNoteDialog } from './session-note-dialog-store';
 import { ARMED_CLEAR_AFTER_COPY } from './session-note-form';
 import { formatClearAfter } from './session-note.helpers';
@@ -75,7 +75,19 @@ describe('SessionNoteDialog save (T-W4)', () => {
         fireEvent.click(await screen.findByTestId('session-note-save'));
         expect(await screen.findByTestId('session-note-conflict')).toHaveTextContent(CONFLICT_COPY);
         expect(itemInput(0).value).toBe('My edit');
+        expect(screen.getByTestId('session-note-load-theirs')).toHaveTextContent('Load their version');
         expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('a 409 whose note was cleared says "This note was cleared." instead of "someone else changed it"', async () => {
+        server.use(http.put(SESSION_NOTE_URL, () =>
+            HttpResponse.json({ statusCode: 409, message: 'Note changed', note: null }, { status: 409 })));
+        await renderDialog(editorResponse(buildSessionNote()));
+        type(0, 'My edit');
+        fireEvent.click(await screen.findByTestId('session-note-save'));
+        const banner = await screen.findByTestId('session-note-conflict');
+        expect(banner).toHaveTextContent(CLEARED_CONFLICT_COPY);
+        expect(banner).not.toHaveTextContent(CONFLICT_COPY);
     });
 
     it('"Load their version" confirms, replaces the draft and rebases the next save on their updatedAt', async () => {
@@ -92,6 +104,27 @@ describe('SessionNoteDialog save (T-W4)', () => {
         await waitFor(() => expect(bodies).toHaveLength(2));
         expect(bodies[1]?.baseUpdatedAt).toBe('2026-10-27T12:30:00.654321Z');
         expect(bodies[1]?.items).toEqual([{ id: 3, text: 'Their row, edited' }]);
+    });
+});
+
+describe('SessionNoteDialog cleared conflict (ROK-2265)', () => {
+    it('ROK-2265: a cleared 409 offers "Start from empty" and confirms "Start from empty?"', async () => {
+        server.use(http.put(SESSION_NOTE_URL, () =>
+            HttpResponse.json({ statusCode: 409, message: 'Note changed', note: null }, { status: 409 })));
+        await renderDialog(editorResponse(buildSessionNote()));
+        type(0, 'My edit');
+        fireEvent.click(await screen.findByTestId('session-note-save'));
+        const button = await screen.findByTestId('session-note-load-theirs');
+        expect(button).toHaveTextContent('Start from empty');
+        expect(button).not.toHaveTextContent('Load their version');
+        fireEvent.click(button);
+        expect(await screen.findByText('Start from empty?')).toBeInTheDocument();
+        expect(screen.queryByText('Load their version?')).toBeNull();
+        expect(screen.getByTestId('discard-changes-keep')).toHaveTextContent('Keep editing');
+        expect(screen.getByTestId('discard-changes-discard')).toHaveTextContent('Start from empty');
+        fireEvent.click(screen.getByTestId('discard-changes-discard'));
+        await waitFor(() => expect(screen.queryByTestId('session-note-item-input-0'), 'the draft starts from the empty server note').toBeNull());
+        expect(screen.queryByTestId('session-note-conflict')).toBeNull();
     });
 });
 

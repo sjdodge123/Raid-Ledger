@@ -2,13 +2,17 @@
  * ROK-1965 — "Add picture" (approved mockup frames A–C, G): a `FilePicker`
  * (§3, rule: every file upload is one) for one PNG / JPEG / WebP per pick,
  * which uploads at once — no caption step (ruling 4). While uploading it is
- * disabled and reads "Uploading… 40%". `compact` shows "Add" (phone header);
+ * disabled and reads "Preparing…" until the first progress report (the
+ * client-side shrink runs at 0%), then "Uploading… 40%". `compact` shows "Add" (phone header);
  * the accessible name stays "Add picture" either way.
  */
 import type { JSX } from 'react';
 import { HUB_MEDIA_UPLOAD_ACCEPT } from '../../../lib/hub-media-upload-copy';
 import { FilePicker } from '../../ui/file-picker';
 import { useHubGalleryUpload } from './use-hub-gallery-upload';
+
+/** Shown while the pick is shrunk client-side (and before the first byte is reported). */
+export const PREPARING_COPY = 'Preparing…';
 
 export interface HubGalleryAddPictureProps {
     guildId: number;
@@ -42,7 +46,7 @@ export function HubGalleryAddPictureView({
             {...(className !== undefined ? { className } : {})}
             inputProps={{ 'data-testid': inputTestId }}>
             {uploading
-                ? <span data-testid="hub-gallery-upload-progress">Uploading… {progress}%</span>
+                ? <span data-testid="hub-gallery-upload-progress">{progress === 0 ? PREPARING_COPY : `Uploading… ${progress}%`}</span>
                 : <><span aria-hidden="true">＋</span>{compact ? <><span aria-hidden="true">Add</span><span className="sr-only">Add picture</span></> : 'Add picture'}</>}
         </FilePicker>
     );

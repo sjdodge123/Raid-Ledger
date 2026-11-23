@@ -9,7 +9,7 @@ import type { HubDirectoryEntry } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { buttonClass } from '../ui/button-classes';
 import { StatusChip } from '../ui/status-chip';
-import { guildHref } from '../layout/hub-nav/my-hubs-queries';
+import { claimRosterHref, guildHref } from '../layout/hub-nav/my-hubs-queries';
 import { hubCopy } from './hub-copy';
 
 /** One hub row's action inputs: the hub, the inline Join and whether it is in flight. */
@@ -25,11 +25,6 @@ function ViewLink({ hub }: { hub: HubDirectoryEntry }): JSX.Element {
             View
         </Link>
     );
-}
-
-/** ROK-2132 — the hub page with the gate's "open Add character on the Guild roster tab" flag. */
-function claimRosterHref(hubId: number): string {
-    return `${guildHref(hubId)}?claim=roster`;
 }
 
 /** ROK-2132 Ruling 9 — a non-member's way into a hub whose membership comes from a claimed roster character. */

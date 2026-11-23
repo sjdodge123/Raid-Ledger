@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import type { BossEncounterDto } from '@raid-ledger/contract';
+import type { BossEncounterDto, BossLootDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { BossLootPanel } from './boss-loot-panel';
@@ -108,5 +108,42 @@ describe('BossLootPanel — boss with no loot (ROK-2209)', () => {
     it('a failed loot request says it could not load, not "not captured"', async () => {
         await expandBossWithNoLoot('world-of-warcraft-forever', "Couldn't load loot.", 500);
         expect(screen.queryByText(FOREVER_COPY), 'an error must not read as uncaptured loot').toBeNull();
+    });
+});
+
+describe('BossLootPanel — Classic loot fallback on Forever (ROK-2270)', () => {
+    const NOTICE = 'Classic loot, Forever drops not captured';
+    const FOREVER_COPY = "Forever loot for this boss isn't captured yet.";
+
+    function lootItem(expansion: BossLootDto['expansion']): BossLootDto {
+        return {
+            id: 11, bossId: 1, itemId: 6460, itemName: 'Cobrahn\'s Grasp', slot: 'Waist', quality: 'Rare',
+            itemLevel: 23, dropRate: null, expansion, classRestrictions: null, iconUrl: null, itemSubclass: 'Leather',
+            tooltip: null,
+        };
+    }
+
+    async function expandBossWithLoot(gameSlug: string, expansion: BossLootDto['expansion']) {
+        serveBosses({ [DEADMINES.id]: [boss(DEADMINES.id)] });
+        server.use(http.get(`${API}/plugins/wow-classic/bosses/:id/loot`, () => HttpResponse.json([lootItem(expansion)])));
+        renderPanel([DEADMINES], gameSlug);
+        await userEvent.setup().click(await screen.findByText('Edwin VanCleef'));
+        await screen.findByText("Cobrahn's Grasp");
+    }
+
+    it('labels Classic rows on a Forever event as Classic loot', async () => {
+        await expandBossWithLoot('world-of-warcraft-forever', 'classic');
+        expect(screen.getByRole('note')).toHaveTextContent(NOTICE);
+        expect(screen.queryByText(FOREVER_COPY), 'a fallback list is not "not captured"').toBeNull();
+    });
+
+    it('shows no label when the Forever rows are real Forever loot', async () => {
+        await expandBossWithLoot('world-of-warcraft-forever', 'forever');
+        expect(screen.queryByText(NOTICE), 'real Forever rows must not be labelled Classic').toBeNull();
+    });
+
+    it('shows no label for Classic rows on a Classic event', async () => {
+        await expandBossWithLoot('world-of-warcraft-classic', 'classic');
+        expect(screen.queryByText(NOTICE), 'a Classic event reads its own rows').toBeNull();
     });
 });

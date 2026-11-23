@@ -10,6 +10,7 @@ import {
   ConflictException,
   Optional,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -44,6 +45,7 @@ import {
 import { fireCreateFanout } from './standalone-poll-create-fanout.helpers';
 import { insertInvitees } from './standalone-poll-share-query.helpers';
 import { resolvePollHubId } from './standalone-poll-hub.helpers';
+import { GuildAccessService } from '../../guilds/guild-access.service';
 import { assertCanCompleteWithBench } from './standalone-poll-bench-pick.helpers';
 import { StandalonePollLockInService } from './standalone-poll-lock-in.service';
 
@@ -99,7 +101,9 @@ export class StandalonePollService {
     private readonly schedulingPollEmbed: SchedulingPollEmbedService,
     private readonly eventsService: EventsService,
     private readonly lockIn: StandalonePollLockInService,
+    private readonly guildAccess: GuildAccessService,
     @Optional() private readonly nudge?: GameActivityNudge,
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   /** List the active standalone polls the caller may see (ROK-1750). */
@@ -175,7 +179,12 @@ export class StandalonePollService {
         isAdmin,
       );
     }
-    const hubId = await resolvePollHubId(this.db, input, userId, isAdmin);
+    const hubId = await resolvePollHubId(
+      this.db,
+      input,
+      { userId, isStaff: isAdmin },
+      (u, h) => this.guildAccess.isMember(u, h),
+    );
     const phaseDeadline = this.computeDeadline(input.durationHours);
     const lineup = await insertDecidedLineup(
       this.db,
@@ -221,6 +230,7 @@ export class StandalonePollService {
         notifications: this.notifications,
         pollEmbed: this.schedulingPollEmbed,
         nudge: this.nudge,
+        events: this.events,
       },
       game,
       { lineupId: lineup.id, matchId: match.id, creatorId: userId },

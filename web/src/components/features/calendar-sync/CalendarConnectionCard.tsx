@@ -31,7 +31,7 @@ import { CalendarConnectionRead } from './CalendarConnectionRead';
 import { readGranted } from './use-read-rules';
 import { GrantRead } from './CalendarGrantRead';
 import { AppleConnectSheet } from './AppleConnectSheet';
-import { CALENDARS_COPY as C, PROVIDER_DISPLAY, READ_COPY as R, readStatusLine } from './calendar-sync.copy';
+import { CALENDARS_COPY as C, PROVIDER_DISPLAY, READ_COPY as R, isCalendarRemoved, readStatusLine } from './calendar-sync.copy';
 
 const TONE: Record<CalendarConnection['status'], string> = {
     active: 'text-success', needs_reconnect: 'text-danger', error: 'text-warning', disconnecting: 'text-warning',
@@ -81,7 +81,8 @@ function ConnectionText({ connection, showAccount, desktop, fixFailed }: {
             {showAccount && connection.accountLabel && (
                 <p className="truncate text-xs text-muted" data-testid="calendar-connection-account">{connection.accountLabel}</p>
             )}
-            <p className={`truncate text-xs ${TONE[connection.status]}`} data-testid="calendar-connection-status">
+            <p className={`truncate text-xs ${isCalendarRemoved(connection) ? 'text-warning' : TONE[connection.status]}`}
+                data-testid="calendar-connection-status">
                 {readStatusLine(statusInput, desktop)}
             </p>
             {fixFailed && connection.provider !== 'apple' && (

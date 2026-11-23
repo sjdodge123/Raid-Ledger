@@ -53,3 +53,46 @@ describe('GameRoleReconcileService.reconcileCron tracking', () => {
     await expect(trackedOutcome(false)).resolves.toBe(false);
   });
 });
+
+/** ROK-2261: the role follows the game the session was credited to. */
+describe('GameRoleReconcileService.grantForOpens', () => {
+  const FOREVER = 11;
+  const ANNIV = 22;
+  const CLASSIC = 'World of Warcraft Classic';
+
+  async function grantsFor(
+    opens: Parameters<GameRoleReconcileService['grantForOpens']>[0],
+  ): Promise<unknown[][]> {
+    const svc = new GameRoleReconcileService(
+      {} as GameRoleDb,
+      {} as CronJobService,
+      {} as DiscordBotClientService,
+    );
+    const grant = jest.spyOn(svc, 'grantNow').mockResolvedValue(true);
+    svc.grantForOpens(opens, new Map([[CLASSIC, ANNIV]]));
+    // grantForOpens is fire-and-forget: let its sequential grants settle.
+    await new Promise((resolve) => setImmediate(resolve));
+    return grant.mock.calls;
+  }
+
+  it('grants the attributed game, never the name-resolved one', async () => {
+    const calls = await grantsFor([
+      { userId: 1, discordActivityName: CLASSIC, attributedGameId: FOREVER },
+    ]);
+    expect(calls).toEqual([[1, FOREVER]]);
+  });
+
+  it('grants nothing when the attribution withheld the credit', async () => {
+    const calls = await grantsFor([
+      { userId: 1, discordActivityName: CLASSIC, attributedGameId: null },
+    ]);
+    expect(calls).toEqual([]);
+  });
+
+  it('falls back to the name-resolved game when nothing was attributed', async () => {
+    const calls = await grantsFor([
+      { userId: 2, discordActivityName: CLASSIC },
+    ]);
+    expect(calls).toEqual([[2, ANNIV]]);
+  });
+});

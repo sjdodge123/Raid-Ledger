@@ -5,6 +5,7 @@
  * app holds (never a `jest.mock` — it would not reach the app).
  * Excluded from `nest build` by the `*.test-fixtures.ts` pattern.
  */
+import { HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME } from '@raid-ledger/contract';
 import type { TestApp } from '../../../common/testing/test-app';
 import {
   HubForumDiscordGateway,
@@ -25,7 +26,7 @@ export const snowflake = (): string =>
 export function fakeForum(over: Partial<ForumInfo> = {}): ForumInfo {
   return {
     id: snowflake(),
-    name: 'hub-forums',
+    name: HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME,
     tags: [],
     missing: [],
     canManage: true,
@@ -90,6 +91,10 @@ function writeSpies(gw: HubForumDiscordGateway, forums: Forums) {
     }),
     requireTags: jest.spyOn(gw, 'requireTags').mockResolvedValue(undefined),
     applyTag: jest.spyOn(gw, 'applyTag').mockResolvedValue(undefined),
+    // ROK-2258: the fake forum has no default reaction, so 👍 is set.
+    setDefaultReactionIfUnset: jest
+      .spyOn(gw, 'setDefaultReactionIfUnset')
+      .mockResolvedValue(true),
     deleteForum: jest.spyOn(gw, 'deleteForum').mockImplementation((ch) => {
       forums.delete(ch);
       return Promise.resolve();

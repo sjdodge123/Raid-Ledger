@@ -307,14 +307,23 @@ export class GameRoleReconcileService {
   /**
    * Fire-and-forget hook for `GameActivityService.flush`: one `grantNow`
    * per distinct (user, linked game) among the opened sessions, in sequence.
+   * ROK-2261: the game is the one the session was credited to — a plugin
+   * attribution (`attributedGameId`, `null` = no credit) wins over the name.
    */
   grantForOpens(
-    opens: readonly { userId: number; discordActivityName: string }[],
+    opens: readonly {
+      userId: number;
+      discordActivityName: string;
+      attributedGameId?: number | null;
+    }[],
     gameIdByName: ReadonlyMap<string, number | null>,
   ): void {
     const pairs = new Map<string, [number, number]>();
     for (const o of opens) {
-      const gameId = gameIdByName.get(o.discordActivityName);
+      const gameId =
+        o.attributedGameId !== undefined
+          ? o.attributedGameId
+          : gameIdByName.get(o.discordActivityName);
       if (gameId == null) continue;
       pairs.set(`${o.userId}:${gameId}`, [o.userId, gameId]);
     }

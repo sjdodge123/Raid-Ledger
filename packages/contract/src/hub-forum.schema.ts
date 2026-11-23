@@ -119,6 +119,10 @@ export const HubForumThreadSummarySchema = z
     ...discordSyncFields,
     /** ROK-2226: the discussed event; null/absent for a normal thread. */
     event: HubForumThreadEventSchema.nullable().optional(),
+    /** ROK-2272: the discussed scheduling poll (lineup match) id; null/absent otherwise. */
+    matchId: id.nullable().optional(),
+    /** ROK-2272: the discussed lineup id; null/absent otherwise. */
+    lineupId: id.nullable().optional(),
     /** ROK-2226: read-only state of an event thread; null/absent otherwise. */
     lock: HubForumLockSchema.nullable().optional(),
     /**
@@ -161,10 +165,23 @@ export const HubForumThreadQuerySchema = z
   .strict();
 export type HubForumThreadQuery = z.infer<typeof HubForumThreadQuerySchema>;
 
+/**
+ * ROK-2274: a member reply, or a system signup line (absent = reply).
+ * ROK-2297: `copy_header` — the system line above chat copied in from another
+ * thread ("Earlier chat from …").
+ */
+export const HubForumReplyKindSchema = z.enum([
+  'reply',
+  'signup_line',
+  'copy_header',
+]);
+export type HubForumReplyKind = z.infer<typeof HubForumReplyKindSchema>;
+
 /** A flat reply, oldest first. */
 export const HubForumReplySchema = z
   .object({
     id,
+    kind: HubForumReplyKindSchema.optional(),
     /** '' when deleted. */
     body: z.string(),
     author: HubPostPersonSchema.nullable(),

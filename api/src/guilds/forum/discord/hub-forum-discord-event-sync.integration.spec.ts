@@ -225,7 +225,7 @@ function lockSpies() {
     .spyOn(app.get(DiscordBotClientService), 'isConnected')
     .mockReturnValue(true);
   const gw = app.get(HubForumDiscordEventLockGateway);
-  const set = jest.spyOn(gw, 'setReadOnly').mockResolvedValue(undefined);
+  const set = jest.spyOn(gw, 'setReadOnly').mockResolvedValue('ok');
   const sweep = app.get(HubForumDiscordEventLockSweep);
   const callsFor = (id: string) =>
     set.mock.calls.filter((c) => c[0] === id).map((c) => c[1]);
@@ -265,6 +265,17 @@ describe('AC18 — read-only lock sweep (R12)', () => {
     await endEvent(ctx, eventId);
     await sweep.sweep(new Date());
     expect(callsFor(post.id)).toEqual([]);
+  });
+
+  it('ROK-2272: ended 59 min ago is still open; ended 61 min ago is due for lock', async () => {
+    const { post, eventId } = await linkedScene();
+    const { sweep, callsFor } = lockSpies();
+    await endEvent(ctx, eventId, 59 * 60_000);
+    await sweep.sweep(new Date());
+    expect(callsFor(post.id)).toEqual([]);
+    await endEvent(ctx, eventId, 61 * 60_000);
+    await sweep.sweep(new Date());
+    expect(callsFor(post.id)).toEqual([true]);
   });
 
   it('locks a detached (untagged) event thread', async () => {

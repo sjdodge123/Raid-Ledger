@@ -190,7 +190,7 @@ describe('questRewardIdsQuery (ROK-2186)', () => {
   it('unnests rewards_json of classic/sod/forever quests only', () => {
     const { sql, params } = questRewardIdsQuery().toSQL();
     expect(sql).toMatch(
-      /jsonb_array_elements_text\(CASE WHEN jsonb_typeof\("wow_classic_dungeon_quests"\."rewards_json"\) = 'array' THEN "wow_classic_dungeon_quests"\."rewards_json" ELSE '\[\]'::jsonb END\)\)::int as "item_id" from "wow_classic_dungeon_quests"/,
+      /\(substring\(jsonb_array_elements_text\(CASE WHEN jsonb_typeof\("wow_classic_dungeon_quests"\."rewards_json"\) = 'array' THEN "wow_classic_dungeon_quests"\."rewards_json" ELSE '\[\]'::jsonb END\) from '\^\[0-9\]\{1,9\}\$'\)\)::int as "item_id" from "wow_classic_dungeon_quests"/,
     );
     expect(sql).toMatch(
       /"wow_classic_dungeon_quests"\."expansion" in \(\$1, \$2, \$3\)/,
@@ -201,7 +201,7 @@ describe('questRewardIdsQuery (ROK-2186)', () => {
   it('also unnests the Blizzard overlay reward_items ids (Codex P2)', () => {
     const { sql } = questRewardIdsQuery().toSQL();
     expect(sql).toMatch(
-      /\) union \(select \(jsonb_array_elements\(CASE WHEN jsonb_typeof\("wow_dungeon_quest_blizzard"\."reward_items"\) = 'array' THEN "wow_dungeon_quest_blizzard"\."reward_items" ELSE '\[\]'::jsonb END\) ->> 'id'\)::int as "item_id" from "wow_dungeon_quest_blizzard"/,
+      /\) union \(select \(substring\(jsonb_array_elements\(CASE WHEN jsonb_typeof\("wow_dungeon_quest_blizzard"\."reward_items"\) = 'array' THEN "wow_dungeon_quest_blizzard"\."reward_items" ELSE '\[\]'::jsonb END\) ->> 'id' from '\^\[0-9\]\{1,9\}\$'\)\)::int as "item_id" from "wow_dungeon_quest_blizzard"/,
     );
   });
 });
@@ -215,6 +215,16 @@ describe('questRewardDueQuery (ROK-2186, Codex P1)', () => {
     );
     const outer = sql.slice(sql.lastIndexOf(') "quest_rewards"'));
     expect(outer).not.toMatch(/[^.]"item_id"/);
+  });
+
+  it('drops NULL ids (a non-numeric reward id casts to NULL, never to an error)', () => {
+    const { sql } = questRewardIdsQuery().toSQL();
+    expect(sql).not.toMatch(/END\)\)::int|'id'\)::int/);
+    const due = questRewardDueQuery(drizzle.mock({ schema }), 5).toSQL().sql;
+    const outer = due.slice(due.lastIndexOf(') "quest_rewards"'));
+    expect(outer).toMatch(
+      /where \("quest_rewards"\."item_id" is not null and /,
+    );
   });
 });
 

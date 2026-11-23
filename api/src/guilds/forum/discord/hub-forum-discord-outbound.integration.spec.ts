@@ -168,13 +168,16 @@ describe('ROK-2208 outbound RL → Discord', () => {
     expect(link.discordMessageId).toMatch(/^\d+$/);
   });
 
-  it('an unshared forum posts with no tag; edit → edited + renamed', async () => {
+  it("an unshared forum posts with the lone hub's own tag; edit → edited + renamed", async () => {
     const g = await newHub(ctx);
     await bind(g, { mode: 'create' });
+    // ROK-2258 ruling: a hub alone on its forum still gets (and posts with) its tag.
+    const { tagId } = await forumOf(g);
+    expect(tagId).not.toBeNull();
     const threadId = await newThread(g);
     await synced();
     const [[, post]] = nonEmpty(out.spies.createPost.mock.calls, 'createPost');
-    expect(post.tagIds).toEqual([]);
+    expect(post.tagIds).toEqual([tagId]);
     const [link] = nonEmpty(await linkRows(threadId), 'link');
     const edit = { title: 'Raid night moved', body: 'Now Friday' };
     expect(
@@ -242,6 +245,40 @@ describe('ROK-2208 outbound RL → Discord', () => {
     expect(out.spies.deleteThread).toHaveBeenCalledWith(thread.discordThreadId);
   });
 
+  it('ROK-2297 review MAJOR-2: re-driving reply.created for a linked reply sends nothing again', async () => {
+    const g = await newHub(ctx);
+    await bind(g, { mode: 'create' });
+    const threadId = await newThread(g);
+    await synced();
+    const res = await as(
+      'officerA',
+      'post',
+      `/guilds/${g}/forum/${threadId}/replies`,
+      { body: 'Copied once' },
+    );
+    expect(res.status).toBe(201);
+    const replyId = idOf(res);
+    await synced(2);
+    expect(out.spies.createReply).toHaveBeenCalledTimes(1);
+
+    // What a retried chat-copy job does for a row it already mirrored.
+    await out.service.apply({
+      guildId: g,
+      op: 'reply.created',
+      threadId,
+      replyId,
+      actorId: 0,
+    });
+
+    expect(out.spies.createReply).toHaveBeenCalledTimes(1);
+    const l = schema.hubForumDiscordLinks;
+    const rows = await ctx.testApp.db
+      .select({ id: l.id })
+      .from(l)
+      .where(eq(l.replyId, replyId));
+    expect(rows).toHaveLength(1);
+  });
+
   it('a failed send leaves a retryable failed link row', async () => {
     const g = await newHub(ctx);
     await bind(g, { mode: 'create' });
@@ -274,6 +311,43 @@ describe('ROK-2208 outbound RL → Discord', () => {
     ).resolves.toBeUndefined();
     expect(out.spies.createPost).not.toHaveBeenCalled();
     expect(await linkRows(threadId)).toEqual([]);
+  });
+
+  it('ROK-2274 loop 1: a signup line is never mirrored to Discord', async () => {
+    const g = await newHub(ctx);
+    await bind(g, { mode: 'create' });
+    const threadId = await newThread(g);
+    await synced();
+    const [line] = nonEmpty(
+      await ctx.testApp.db
+        .insert(schema.hubForumReplies)
+        .values({
+          threadId,
+          guildId: g,
+          authorId: null,
+          kind: 'signup_line',
+          body: '✅ Mirelle signed up',
+        })
+        .returning(),
+      'line',
+    );
+    // Lines never emit; even a stray reply.created for one sends nothing.
+    await expect(
+      out.service.apply({
+        guildId: g,
+        op: 'reply.created',
+        threadId,
+        replyId: line.id,
+        actorId: 0,
+      }),
+    ).resolves.toBeUndefined();
+    expect(out.spies.createReply).not.toHaveBeenCalled();
+    const l = schema.hubForumDiscordLinks;
+    const rows = await ctx.testApp.db
+      .select()
+      .from(l)
+      .where(eq(l.replyId, line.id));
+    expect(rows).toEqual([]);
   });
 
   it('a Discord-origin thread is never echoed back out', async () => {

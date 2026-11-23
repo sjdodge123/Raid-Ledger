@@ -6,7 +6,8 @@
  * (ROK-1915), `withPulls` (ROK-1917), `withInstalledAddons` (ROK-2147),
  * `withArmorySnapshots` (ROK-2149), `withRecruitment` (ROK-1789) and
  * `withActivity` (ROK-1789 B9 — runs after the pulls half, whose wipe it relies on)
- * and `withDungeonPlan` (ROK-2216).
+ * `withDungeonPlan` (ROK-2216), `withSuggestedGroup` (ROK-2212) and
+ * `withPublicCard` (ROK-1813, after the recruitment half).
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
@@ -35,6 +36,8 @@ import { seedGuildDings } from './demo-test-guild-dings.helpers';
 import { seedGuildPresence } from './demo-test-guild-presence.helpers';
 import { seedGuildActivity } from './demo-test-guild-activity.helpers';
 import { seedDungeonPlanHalf } from './demo-test-guild-dungeon-plan.helpers';
+import { seedSuggestedGroupHalf } from './demo-test-guild-suggested-groups.helpers';
+import { seedPublicCardHalf } from './demo-test-guild-public-card.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Users = Record<SeedGuildRole, SeedGuildUser>;
@@ -76,8 +79,22 @@ export async function seedOptionalHalves(
     ...activity,
     ...installed,
     ...(await seedArmoryHalf(db, input, unlinked, ctx.now)),
-    ...(await seedRecruitmentHalf(db, input, ctx.guildId, gm, ctx.now)),
+    ...(await recruitmentHalves(db, input, ctx, gm)),
     ...(await seedDungeonPlanHalf(db, input, ctx, roster)),
+    ...(await seedSuggestedGroupHalf(db, input, ctx)),
+  };
+}
+
+/** `withRecruitment`, then `withPublicCard` (ROK-1813) — the card shows that recruitment. */
+async function recruitmentHalves(
+  db: Db,
+  input: Pick<SeedGuildInput, 'withRecruitment' | 'withPublicCard'>,
+  ctx: RosterCtx,
+  gmUserId: number,
+): Half {
+  return {
+    ...(await seedRecruitmentHalf(db, input, ctx.guildId, gmUserId, ctx.now)),
+    ...(await seedPublicCardHalf(db, input, ctx.guildId)),
   };
 }
 

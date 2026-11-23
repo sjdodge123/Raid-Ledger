@@ -38,6 +38,8 @@ export interface RawSeedFlags {
   withRecruitment?: unknown;
   withActivity?: unknown;
   withDungeonPlan?: unknown;
+  withSuggestedGroup?: unknown;
+  withPublicCard?: unknown;
   asCaller?: unknown;
   memberCount?: unknown;
 }
@@ -107,7 +109,12 @@ function parseBaseFlags(
       raw.withArmorySnapshots,
       'withArmorySnapshots',
     ),
-    withRecruitment: boolFlag(raw.withRecruitment, 'withRecruitment'),
+    // ROK-1813: a public card shows recruitment, so it implies withRecruitment.
+    withRecruitment:
+      boolFlag(raw.withPublicCard, 'withPublicCard') ||
+      boolFlag(raw.withRecruitment, 'withRecruitment'),
+    withPublicCard: boolFlag(raw.withPublicCard, 'withPublicCard'),
     withDungeonPlan: boolFlag(raw.withDungeonPlan, 'withDungeonPlan'),
+    withSuggestedGroup: boolFlag(raw.withSuggestedGroup, 'withSuggestedGroup'),
   };
 }

@@ -5,6 +5,8 @@
  * job kind and the sync's `afterBlocks` hook, with `runCalendarDerive` mocked.
  */
 import { WORKER_METADATA } from '@nestjs/bullmq/dist/bull.constants';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { CALENDAR_NEEDS_RECONNECT_EVENT } from '../calendar-needs-reconnect.events';
 import { UnrecoverableError, type Job, type Queue } from 'bullmq';
 import type { QueueHealthService } from '../../queue/queue-health.service';
 import type { SettingsService } from '../../settings/settings.service';
@@ -66,6 +68,7 @@ function setup(enabled = true) {
   };
   const registry = { getReadProviderForConnection: () => Promise.resolve({}) };
   const invalidate = jest.fn();
+  const emitter = { emit: jest.fn() };
   const queue = {
     add: jest.fn().mockResolvedValue(undefined),
     getJob: jest.fn().mockResolvedValue(undefined),
@@ -78,8 +81,9 @@ function setup(enabled = true) {
     { invalidateUserCache: invalidate } as unknown as GameTimeService,
     queue as unknown as Queue,
     {} as QueueHealthService,
+    emitter as unknown as EventEmitter2,
   );
-  return { processor, sets, invalidate, queue };
+  return { processor, sets, invalidate, queue, emitter };
 }
 
 function job(attemptsMade: number): Job<CalendarReadJobData> {
@@ -111,6 +115,26 @@ describe('CalendarReadProcessor failures', () => {
       { kind: 'derive', userId: CONN.userId },
       expect.objectContaining({ jobId: `cal-derive-${CONN.userId}` }),
     );
+  });
+
+  it('ROK-1866: auth error → emits the reconnect nudge for the connection', async () => {
+    const { processor, emitter } = setup();
+    runSync.mockRejectedValue(new ProviderAuthError());
+    await expect(processor.process(job(0))).rejects.toBeInstanceOf(
+      UnrecoverableError,
+    );
+    expect(emitter.emit).toHaveBeenCalledWith(CALENDAR_NEEDS_RECONNECT_EVENT, {
+      connectionId: CONN.id,
+    });
+  });
+
+  it('ROK-1866: a non-auth failure emits no reconnect nudge', async () => {
+    const { processor, emitter } = setup();
+    runSync.mockRejectedValue(new ProviderAuthError('scope'));
+    await expect(processor.process(job(0))).rejects.toBeInstanceOf(
+      UnrecoverableError,
+    );
+    expect(emitter.emit).not.toHaveBeenCalled();
   });
 
   it('403 scope → read_access_granted=false, read off, no retry', async () => {

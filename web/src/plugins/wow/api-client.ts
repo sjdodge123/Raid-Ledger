@@ -27,6 +27,10 @@ import type {
     IngameTextFieldKey,
     GuildContributionsDto,
     DungeonPlanDto,
+    SuggestedGroupsDto,
+    BnetProbeRegion,
+    BnetProbeStateDto,
+    BnetProbeStartResponseDto,
 } from '@raid-ledger/contract';
 import {
     GuildIngameTextSchema,
@@ -37,8 +41,11 @@ import {
     ForeverProbeStateSchema,
     EventQuestPrereqsResponseSchema,
     ForeverProbeResultSchema,
+    BnetProbeStateSchema,
+    BnetProbeStartResponseSchema,
     WowForeverRealmRulesetsSchema,
     DungeonPlanSchema,
+    SuggestedGroupsSchema,
 } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api-client';
 
@@ -230,6 +237,18 @@ export async function updateForeverProbeConfig(dto: ForeverProbeConfigDto): Prom
     return fetchApi(`${FOREVER_PROBE_PATH}/config`, { method: 'PUT', body: JSON.stringify(dto) }, ForeverProbeStateSchema);
 }
 
+const BNET_PROBE_PATH = '/admin/plugins/blizzard/bnet-account-probe';
+
+/** Admin (DEMO_MODE): the Battle.net account probe's redirect URI + its latest keys-only result (ROK-2129). */
+export async function getBnetProbeState(): Promise<BnetProbeStateDto> {
+    return fetchApi(BNET_PROBE_PATH, {}, BnetProbeStateSchema);
+}
+
+/** Admin (DEMO_MODE): start the Battle.net account probe; returns the Blizzard authorize URL to navigate to (ROK-2129). */
+export async function startBnetProbe(region: BnetProbeRegion): Promise<BnetProbeStartResponseDto> {
+    return fetchApi(`${BNET_PROBE_PATH}/start`, { method: 'POST', body: JSON.stringify({ region }) }, BnetProbeStartResponseSchema);
+}
+
 const FOREVER_REALM_RULESETS_PATH = '/admin/plugins/blizzard/forever/realm-rulesets';
 
 /** Admin: the WoW Forever realm → ruleset map (ROK-1739). */
@@ -256,6 +275,17 @@ export async function fetchDungeonPlan(guildId: number, instanceId: number, char
     const params = new URLSearchParams({ instanceId: String(instanceId) });
     if (characterIds.length > 0) params.set('characterIds', characterIds.join(','));
     return fetchApi(`/plugins/wow/guilds/${guildId}/dungeon-plan?${params}`, {}, DungeonPlanSchema);
+}
+
+/**
+ * ROK-2212 — the Forever guild's suggested groups of five: `top` = the best
+ * group of each of the 3 best dungeons (hub widget), `all` = up to 10 per
+ * dungeon (planner-tab section), optionally narrowed to one dungeon.
+ */
+export async function fetchSuggestedGroups(guildId: number, scope: 'top' | 'all' = 'top', instanceId?: number): Promise<SuggestedGroupsDto> {
+    const params = new URLSearchParams({ scope });
+    if (instanceId !== undefined) params.set('instanceId', String(instanceId));
+    return fetchApi(`/plugins/wow/guilds/${guildId}/suggested-groups?${params}`, {}, SuggestedGroupsSchema);
 }
 
 const guildIngameTextPath = (guildId: number): string => `/plugins/wow/guilds/${guildId}/ingame-text`;

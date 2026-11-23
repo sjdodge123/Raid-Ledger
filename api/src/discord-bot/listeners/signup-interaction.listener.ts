@@ -23,7 +23,7 @@ import {
   DiscordEmbedFactory,
   type EmbedContext,
 } from '../services/discord-embed.factory';
-import { embedComponents } from '../services/discord-embed.factory';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { withEventHubLink } from '../channel-lifecycle/embed-event-context.helpers';
 import { SettingsService } from '../../settings/settings.service';
@@ -78,6 +78,7 @@ export class SignupInteractionListener {
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly emojiService: DiscordEmojiService,
     private readonly settingsService: SettingsService,
+    private readonly messageEditor: EventEmbedMessageEditor,
     private readonly activityLog: ActivityLogService,
   ) {}
 
@@ -321,12 +322,7 @@ export class SignupInteractionListener {
       const built = this.embedFactory.buildEventEmbed(eventData, context, {
         state: currentState,
       });
-      await this.clientService.editEmbed(
-        record.channelId,
-        record.messageId,
-        built.embed,
-        embedComponents(built),
-      );
+      await this.messageEditor.edit(record, built);
     } catch (err) {
       this.logger.warn(
         `Failed to update embed message ${record.messageId}: ${err instanceof Error ? err.message : 'Unknown'}`,

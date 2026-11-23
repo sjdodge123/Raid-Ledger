@@ -58,16 +58,21 @@ export function isEventThread(thread: Pick<HubForumThreadSummary, 'event' | 'loc
     return thread.event != null || thread.lock != null;
 }
 
+/** A lifecycle-owned subject thread: event (above), scheduling poll or lineup (ROK-2272 S7), as the api's `isSubjectThread`. */
+export function isSubjectThread(thread: Pick<HubForumThreadSummary, 'event' | 'lock' | 'matchId' | 'lineupId'>): boolean {
+    return isEventThread(thread) || thread.matchId != null || thread.lineupId != null;
+}
+
 /**
  * A list row's "⋯" rights. Summaries carry no `can`, so this mirrors the api's
  * `canFor` (`hub-forum.helpers.ts`): edit = live + own + inside 24 h; delete =
- * live + (own or moderator); pin = live + moderator. An event thread's root is
- * lifecycle-owned (§5.5, `hub-forum.service.ts` view): no edit or delete, pin
- * unchanged. The server still decides.
+ * live + (own or moderator); pin = live + moderator. A subject thread's root (event,
+ * poll or lineup) is lifecycle-owned (§5.5, `hub-forum.service.ts` view): no
+ * edit or delete, pin unchanged. The server still decides.
  */
 export function forumRowCan(thread: HubForumThreadSummary, viewer: ForumViewer, now: number = Date.now()): HubForumCan {
     const live = thread.deleted === null;
-    const editable = live && !isEventThread(thread);
+    const editable = live && !isSubjectThread(thread);
     const own = viewer.canWrite && viewer.userId !== null && thread.author?.userId === viewer.userId;
     const fresh = now - Date.parse(thread.createdAt) < HUB_FORUM_EDIT_WINDOW_MS;
     return { edit: editable && own && fresh, delete: editable && (own || viewer.canModerate), pin: live && viewer.canModerate };

@@ -71,8 +71,11 @@ function unixSeconds(iso: string): number {
   return Math.floor(new Date(iso).getTime() / 1000);
 }
 
-/** Format a slot time as a Discord timestamp (description surface only). */
-function formatSlotTimestamp(iso: string): string {
+/**
+ * Format a slot time as a Discord timestamp (description surface only).
+ * ROK-2295: exported so a poll's voted lines use the embed's one format.
+ */
+export function formatSlotTimestamp(iso: string): string {
   return `<t:${unixSeconds(iso)}:f>`;
 }
 

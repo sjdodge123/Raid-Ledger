@@ -20,6 +20,7 @@ jest.mock('./signup-interaction.helpers', () => ({
   findLinkedUser: jest.fn(),
 }));
 import { findLinkedUser } from './signup-interaction.helpers';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 const mockFindLinkedUser = findLinkedUser as jest.Mock;
 
 /** Test-friendly view exposing the private members the specs drive. */
@@ -128,6 +129,7 @@ async function setup() {
   testModule = await Test.createTestingModule({
     providers: [
       RunningLateInteractionListener,
+      EventEmbedMessageEditor,
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       { provide: DiscordBotClientService, useValue: mockClientService },
       { provide: RunningLateService, useValue: mockRunningLateService },

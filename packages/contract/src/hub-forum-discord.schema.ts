@@ -14,8 +14,16 @@ const snowflake = z
   .string()
   .regex(/^\d{17,20}$/, "channelId must be a Discord channel id");
 
-/** Name of the forum channel the bot creates (operator ruling, Q10 Q2). */
-export const HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME = "hub-forums";
+/**
+ * Name of the shared forum channel the bot creates (ROK-2272: operator ruling
+ * 2026-11-20, was `hub-forums` per ROK-2208 Q10 Q2).
+ */
+export const HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME = "event-planning";
+/**
+ * Earlier names of the shared forum. Still read as "the shared forum" until
+ * the bot renames a managed one (ROK-2272 §3.4); default name always first.
+ */
+export const HUB_FORUM_DISCORD_LEGACY_CHANNEL_NAMES = ["hub-forums"] as const;
 /** Discord's tag cap per forum channel; a full forum cannot take a new hub. */
 export const HUB_FORUM_DISCORD_TAG_LIMIT = 20;
 /** Discord's message cap; longer RL bodies are truncated with a link. */
@@ -27,7 +35,7 @@ export type HubForumDiscordMode = z.infer<typeof HubForumDiscordModeSchema>;
 
 /**
  * What `create` makes (Q10 option c): `own` (the default) = a new forum for
- * this hub alone; `shared` = join the bot's shared `#hub-forums`, created the
+ * this hub alone; `shared` = join the bot's shared `#event-planning`, created the
  * first time a hub picks it and reused after (never a second one).
  */
 export const HubForumDiscordTargetSchema = z.enum(["own", "shared"]);
@@ -116,7 +124,7 @@ export type HubForumDiscordChannelOptions = z.infer<
   typeof HubForumDiscordChannelOptionsSchema
 >;
 
-/** The shared `#hub-forums` as the form's "Shared server forum" option. */
+/** The shared `#event-planning` as the form's "Shared server forum" option. */
 export const HubForumDiscordSharedOptionSchema = z
   .object({
     /** null = it does not exist yet; the bot creates it on bind. */

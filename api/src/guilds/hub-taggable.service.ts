@@ -52,13 +52,22 @@ export class HubTaggableService {
     };
   }
 
+  /** L3884: one membership read per hub kind, not a ladder query per hub. */
   private async filterEditable(
     actor: GuildActor,
     rows: schema.GuildSelect[],
   ): Promise<schema.GuildSelect[]> {
-    const rights = await Promise.all(
-      rows.map((r) => this.access.canEditOfKind(actor, r.id, r.kind)),
+    const kinds = [...new Set(rows.map((r) => r.kind))];
+    const editable = await Promise.all(
+      kinds.map((kind) =>
+        this.access.editableIdsOfKind(
+          actor,
+          kind,
+          rows.filter((r) => r.kind === kind).map((r) => r.id),
+        ),
+      ),
     );
-    return rows.filter((_, i) => rights[i] === true);
+    const ids = new Set(editable.flatMap((set) => [...set]));
+    return rows.filter((r) => ids.has(r.id));
   }
 }

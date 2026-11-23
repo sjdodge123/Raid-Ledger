@@ -87,7 +87,7 @@ export async function findActiveStandalonePolls(
     JOIN community_lineups l ON l.id = m.lineup_id
     JOIN games g ON g.id = m.game_id
     LEFT JOIN guilds hg ON hg.id = l.guild_id
-      AND hg.kind = 'game_community' AND hg.status = 'active'
+      AND hg.kind IN ('game_community', 'wow_guild') AND hg.status = 'active'
       AND hg.hidden_at IS NULL
     LEFT JOIN (SELECT match_id, COUNT(*)::int AS cnt FROM community_lineup_match_members GROUP BY match_id) mem ON mem.match_id = m.id
     LEFT JOIN (SELECT match_id, COUNT(*)::int AS cnt FROM community_lineup_schedule_slots GROUP BY match_id) sl ON sl.match_id = m.id

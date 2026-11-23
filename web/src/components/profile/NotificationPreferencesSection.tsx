@@ -91,6 +91,12 @@ const NOTIFICATION_TYPE_META: {
         description: 'When your yearly GG story is ready to open',
     },
     {
+        // ROK-1866 — the one-per-episode reconnect nudge.
+        type: 'calendar_needs_reconnect',
+        label: 'Calendar needs reconnecting',
+        description: 'When a connected calendar stops syncing and needs you to reconnect it',
+    },
+    {
         type: 'community_lineup',
         label: 'Community Lineup',
         description: 'Updates about community lineup voting, matches, and scheduling',

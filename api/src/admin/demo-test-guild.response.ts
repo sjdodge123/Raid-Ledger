@@ -20,6 +20,7 @@ import type { SeededGuildPulls } from './demo-test-guild-pulls.helpers';
 import type { SeededInstalledAddons } from './demo-test-guild-installed-addons.helpers';
 import type { SeededGuildActivity } from './demo-test-guild-activity.helpers';
 import type { SeededDungeonPlan } from './demo-test-guild-dungeon-plan.helpers';
+import type { SeededSuggestedGroup } from './demo-test-guild-suggested-groups.cast';
 
 export interface RosterCtx {
   guildId: number;
@@ -76,6 +77,10 @@ export interface SeedGuildResponse {
   activity?: SeededGuildActivity;
   /** Present only when the body sent `withDungeonPlan: true` (ROK-2216). */
   dungeonPlan?: SeededDungeonPlan;
+  /** Present only when the body sent `withSuggestedGroup: true` (ROK-2212). */
+  suggestedGroup?: SeededSuggestedGroup;
+  /** Present only when the body sent `withPublicCard: true` (ROK-1813): the `/p/guild/:slug` slug. */
+  publicCardSlug?: string;
 }
 
 /** The opt-in halves `seedOptional` adds to the response. */
@@ -92,6 +97,8 @@ export type SeedGuildExtras = Pick<
   | 'recruitment'
   | 'activity'
   | 'dungeonPlan'
+  | 'suggestedGroup'
+  | 'publicCardSlug'
 >;
 
 export interface SeededRoster {

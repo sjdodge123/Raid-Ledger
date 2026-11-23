@@ -42,4 +42,16 @@ describe('splitByLocation', () => {
         expect(ids(before)).toEqual([201, 202, 204]);
         expect(ids(inside)).toEqual([203, 205]);
     });
+
+    it('puts a quest with no start evidence only in "Location not confirmed" (ROK-2276)', () => {
+        const NO_EVIDENCE = createQuest({ questId: 206, startLocationUnconfirmed: true });
+        const split = splitByLocation([...ALL, NO_EVIDENCE]);
+        expect(ids(split.unconfirmed)).toEqual([206]);
+        expect(ids(split.before)).toEqual([201, 202, 204]);
+        expect(ids(split.inside)).toEqual([203, 205]);
+    });
+
+    it('leaves allowlisted inside quests and flag-less quests out of the unconfirmed group', () => {
+        expect(splitByLocation(ALL).unconfirmed).toEqual([]);
+    });
 });

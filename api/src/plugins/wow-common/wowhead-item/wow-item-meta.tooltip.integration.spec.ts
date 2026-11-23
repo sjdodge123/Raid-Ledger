@@ -311,6 +311,9 @@ async function seedQuest(
   });
 }
 
+type OverlayRewards =
+  (typeof schema.wowDungeonQuestBlizzard.$inferInsert)['rewardItems'];
+
 async function seedOverlay(questId: number, ids: number[]): Promise<void> {
   await testApp.db.insert(schema.wowDungeonQuestBlizzard).values({
     questId,
@@ -337,6 +340,23 @@ describe('quest reward tooltip backfill (ROK-2186)', () => {
     await expect(questRewardBackfillIds(testApp.db, 1)).resolves.toHaveLength(
       1,
     );
+  });
+
+  it('a non-numeric or out-of-int-range reward id is skipped, never aborting the run (TD batch 5)', async () => {
+    await seedQuest(9004, 'classic', [60005, 'abc', '12a', 99999999999]);
+    await testApp.db.insert(schema.wowDungeonQuestBlizzard).values({
+      questId: 9004,
+      areaId: 1,
+      title: 'Overlay 9004',
+      rewardItems: [{ id: 'xyz', name: 'Bad id' }] as unknown as OverlayRewards,
+      raw: {},
+      fetchedAt: new Date(),
+      runId: 'run-1',
+    });
+
+    await expect(questRewardBackfillIds(testApp.db, 100)).resolves.toEqual([
+      60005,
+    ]);
   });
 });
 

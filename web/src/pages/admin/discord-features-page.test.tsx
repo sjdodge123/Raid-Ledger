@@ -30,6 +30,7 @@ vi.mock('./ephemeral-voice-section', () => ({ EphemeralVoiceSection: () => null 
 vi.mock('./weekly-digest-section', () => ({ WeeklyDigestSection: () => null }));
 vi.mock('./game-roles-section', () => ({ GameRolesSection: () => null }));
 vi.mock('./join-post-section', () => ({ JoinPostSection: () => null }));
+vi.mock('../../components/admin/SigninReminderSettingsForm', () => ({ SigninReminderSettingsForm: () => null }));
 // ROK-1940: the real Voice attendance card renders, so the raw-hue scan covers it.
 vi.mock('../../hooks/admin/use-voice-attendance-settings', () => ({
     useVoiceAttendanceSettings: () => ({
