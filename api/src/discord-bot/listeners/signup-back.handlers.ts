@@ -79,16 +79,8 @@ async function rerenderCharacterList(
   const { eventId } = target;
   const ctx = await loadBackContext(interaction, eventId, deps);
   if (ctx === false) return;
-  if (ctx === 'not_found') {
-    await interaction.editReply({
-      content: 'Event not found.',
-      components: [],
-    });
-    return;
-  }
-  if (!ctx || ctx.characters.length === 0) {
-    const content = 'No characters to pick from. Please sign up again.';
-    await interaction.editReply({ content, components: [], embeds: [] });
+  if (ctx === 'not_found' || !ctx || ctx.characters.length === 0) {
+    await replyNoCharacterList(interaction, ctx === 'not_found');
     return;
   }
   await showCharacterSelect(
@@ -101,6 +93,22 @@ async function rerenderCharacterList(
     await buildReplyEmbed(eventId, deps),
     ctx.gameId,
   );
+}
+
+/** The Back target has no list to show: the event is gone or no characters. */
+async function replyNoCharacterList(
+  interaction: ButtonInteraction,
+  eventMissing: boolean,
+): Promise<void> {
+  if (eventMissing) {
+    await interaction.editReply({
+      content: 'Event not found.',
+      components: [],
+    });
+    return;
+  }
+  const content = 'No characters to pick from. Please sign up again.';
+  await interaction.editReply({ content, components: [], embeds: [] });
 }
 
 /**

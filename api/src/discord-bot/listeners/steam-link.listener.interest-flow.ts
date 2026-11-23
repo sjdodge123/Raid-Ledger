@@ -66,6 +66,23 @@ export function parseSteamInterestButtonId(
   return { action, gameId };
 }
 
+/** The clicker's RL user id, or null after replying why it cannot act. */
+async function resolveActingUserId(
+  db: Db,
+  interaction: ButtonInteraction,
+): Promise<number | null> {
+  const user = await findLinkedRlUser(db, interaction.user.id);
+  if (!user) {
+    await replaceDmWithText(interaction, 'Could not find your linked account.');
+    return null;
+  }
+  if (user.blocked) {
+    await replaceDmWithText(interaction, ACCOUNT_BLOCKED_REPLY);
+    return null;
+  }
+  return user.id;
+}
+
 /**
  * Handle a heart-flow button click by updating the DM in place.
  * Returns true when the click was handled (regardless of action).
@@ -83,22 +100,15 @@ export async function handleInterestButtonClick(
     return true;
   }
 
-  const user = await findLinkedRlUser(db, interaction.user.id);
-  if (!user) {
-    await replaceDmWithText(interaction, 'Could not find your linked account.');
-    return true;
-  }
-  if (user.blocked) {
-    await replaceDmWithText(interaction, ACCOUNT_BLOCKED_REPLY);
-    return true;
-  }
+  const userId = await resolveActingUserId(db, interaction);
+  if (userId === null) return true;
 
   if (action === STEAM_INTEREST_BUTTON_IDS.HEART) {
-    await addDiscordInterest(db, user.id, gameId);
+    await addDiscordInterest(db, userId, gameId);
     await replaceDmWithText(interaction, 'Marked as interested!');
   } else if (action === STEAM_INTEREST_BUTTON_IDS.AUTO) {
-    await addDiscordInterest(db, user.id, gameId);
-    await setAutoHeartSteamUrlsPref(db, user.id, true);
+    await addDiscordInterest(db, userId, gameId);
+    await setAutoHeartSteamUrlsPref(db, userId, true);
     await replaceDmWithText(
       interaction,
       'Auto-interest enabled for future Steam URLs!',
