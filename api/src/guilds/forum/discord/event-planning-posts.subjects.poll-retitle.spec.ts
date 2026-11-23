@@ -7,6 +7,7 @@
  * stop the rest.
  */
 import { Logger } from '@nestjs/common';
+import { DiscordAPIError } from 'discord.js';
 import type { EventPlanningPostSelect } from '../../../drizzle/schema/event-planning-posts';
 import type { SchedulingPollForumCard } from '../../../lineups/scheduling/scheduling-poll-forum-card';
 import type { SchedulingPollEmbedQueueService } from '../../../lineups/scheduling/scheduling-poll-embed.queue';
@@ -17,7 +18,9 @@ import type { EventPlanningPostsGateway } from './event-planning-posts.discord';
 import {
   findLivePlanningPost,
   markPlanningPostDeleted,
+  setPlanningPostClosesAt,
 } from './event-planning-posts.queries';
+import { pollWriteClosesAt } from '../subject-discussion/poll-discussion.sync';
 import { liveOpenPollPosts } from './event-planning-posts.reconcile';
 import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
 import { pollOnPlanningPath } from './event-planning-posts.subjects.rules';
@@ -53,6 +56,17 @@ jest.mock('./hub-forum-discord-subject', () => ({
 }));
 
 const NEW_NAME = 'WoW — Poll (after Thursday Raid)';
+
+function discordError(code: number): DiscordAPIError {
+  return new DiscordAPIError(
+    { code, message: `code ${String(code)}` },
+    code,
+    400,
+    'PATCH',
+    '/channels/900',
+    {},
+  );
+}
 
 function post(over: Partial<EventPlanningPostSelect> = {}) {
   return {
@@ -154,6 +168,55 @@ describe('ROK-2301 syncPoll renames an existing non-hub poll post', () => {
       expect.any(Date),
     );
   });
+
+  it('NIT-1: a gone post is marked deleted at the caller-supplied now', async () => {
+    const { subjects, discord } = setup();
+    const now = new Date('2026-01-02T03:04:05Z');
+    discord.renameThread.mockResolvedValueOnce('gone' as never);
+    await subjects.syncPoll(7, now);
+    expect(markPlanningPostDeleted).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      now,
+    );
+  });
+});
+
+describe('ROK-2301 MINOR-2: renaming an auto-archived post (50083)', () => {
+  function spies() {
+    return {
+      warn: jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined),
+      debug: jest
+        .spyOn(Logger.prototype, 'debug')
+        .mockImplementation(() => undefined),
+    };
+  }
+
+  it('is skipped quietly: no throw, no warn, one debug line, closes_at still written', async () => {
+    const log = spies();
+    const closesAt = new Date('2026-02-01T00:00:00Z');
+    jest.mocked(pollWriteClosesAt).mockReturnValueOnce(closesAt);
+    const { subjects, discord } = setup();
+    discord.renameThread.mockRejectedValueOnce(discordError(50083));
+    await expect(subjects.syncPoll(7)).resolves.toBeUndefined();
+    expect(setPlanningPostClosesAt).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      closesAt,
+    );
+    expect(log.warn).not.toHaveBeenCalled();
+    expect(log.debug).toHaveBeenCalledTimes(1);
+    expect(markPlanningPostDeleted).not.toHaveBeenCalled();
+  });
+
+  it('a different Discord error still fails the poll as before', async () => {
+    spies();
+    const { subjects, discord } = setup();
+    discord.renameThread.mockRejectedValueOnce(discordError(50013));
+    await expect(subjects.syncPoll(7)).rejects.toThrow('code 50013');
+  });
 });
 
 describe('ROK-2301 resyncLivePollPosts (bot-connect catch-up)', () => {
@@ -186,6 +249,19 @@ describe('ROK-2301 resyncLivePollPosts (bot-connect catch-up)', () => {
     discord.renameThread.mockRejectedValueOnce(new Error('429'));
     expect(await subjects.resyncLivePollPosts()).toBe(1);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('poll 7'));
+    expect(discord.renameThread).toHaveBeenCalledWith('910', NEW_NAME);
+  });
+
+  it('MINOR-2: an archived post counts as synced and is never warned', async () => {
+    twoPosts();
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
+    const { subjects, discord } = setup();
+    discord.renameThread.mockRejectedValueOnce(discordError(50083));
+    expect(await subjects.resyncLivePollPosts()).toBe(2);
+    expect(warn).not.toHaveBeenCalled();
     expect(discord.renameThread).toHaveBeenCalledWith('910', NEW_NAME);
   });
 });

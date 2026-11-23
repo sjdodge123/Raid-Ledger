@@ -24,6 +24,7 @@ import {
   type EventPlanningPostRef,
 } from './event-planning-posts.create';
 import { EventPlanningPostsGateway } from './event-planning-posts.discord';
+import { isArchivedError } from './hub-forum-discord-outbound.discord';
 import {
   findLivePlanningPost,
   findOpenPlanningPollPosts,
@@ -170,7 +171,7 @@ export class EventPlanningSubjectPosts {
     const poll = await findPollForSync(this.db, matchId);
     if (!poll || !pollOnPlanningPath(poll)) return this.closeNow(post, now);
     await this.writeClosesAt(post, pollWriteClosesAt(poll, post.closesAt, now));
-    if (post.discordLockedAt === null) await this.retitlePoll(post, poll);
+    if (post.discordLockedAt === null) await this.retitlePoll(post, poll, now);
   }
 
   /**
@@ -245,17 +246,22 @@ export class EventPlanningSubjectPosts {
   /**
    * Rename through the planning gateway, which skips a matching name; a
    * post deleted on Discord is marked gone. Offline: skipped (the reconnect
-   * catch-up replays it).
+   * catch-up replays it). An auto-archived post (50083) is skipped quietly,
+   * not unarchived (that would bump an idle post): a later pass renames it.
    */
   private async retitlePoll(
     post: EventPlanningPostSelect,
     poll: PollSyncRow,
+    now: Date,
   ): Promise<void> {
     if (!this.discord.isOnline()) return;
     const name = pollPostTitle(poll);
-    const res = await this.discord.renameThread(post.discordThreadId, name);
-    if (res === 'gone') {
-      await markPlanningPostDeleted(this.db, post.id, new Date());
+    try {
+      const res = await this.discord.renameThread(post.discordThreadId, name);
+      if (res === 'gone') await markPlanningPostDeleted(this.db, post.id, now);
+    } catch (err) {
+      if (!isArchivedError(err)) throw err;
+      this.logger.debug(`Rename of archived poll post ${post.id} skipped`);
     }
   }
 
