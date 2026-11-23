@@ -4589,3 +4589,7 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 
 ### 2026-11-22 — rok-2294-import-character-link (surfaced during ROK-2294 review)
 - **low** `web/src/components/auth/AuthGuard.tsx:38-46` — a first-time (not yet onboarded) non-admin who follows the Discord "Import it" link (`/profile/gaming/characters?game=<id>`) is sent to `/onboarding`, which never reads the saved auth redirect, so `?game=` is dropped. Pre-existing for every deep link. Suggested: `/onboarding` finishes by calling `consumeAuthRedirect()`.
+
+### 2026-11-23 — fix/rok-2299-day-view-card-clip (surfaced during the ROK-2299 e2e root cause)
+
+- **med** — `web/src/components/calendar/calendar-styles.css:711-729` (Day-view rules at >=769px): on desktop/tablet a Day card is held at its 100px min-height by react-big-calendar's `.rbc-day-slot .rbc-event-content { flex: 1 1 0 }`, so `.day-event-block` (overflow visible) outgrows `.rbc-event` and a back-to-back later card paints over the earlier card's description (measured at 1280px: later card starts at y=460, description spans 465-501). Pre-existing: these rules are unchanged from main (ROK-2299 only wrapped them in `@media (min-width: 769px)`; the phone layout is what that story fixes). Suggested: size the desktop card from its content, or clip / gap back-to-back cards as on the phone.
