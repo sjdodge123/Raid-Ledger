@@ -2,11 +2,12 @@ import { create } from 'zustand';
 import { updatePreference } from '../lib/api-client';
 import { getAuthToken } from '../hooks/use-auth';
 import { safeGetItem, safeRemoveItem, safeSetItem } from '../lib/safe-storage';
+import { isPhoneCalendarWidth } from '../components/calendar/phone-calendar-width';
 
 export type CalendarViewPref = 'schedule' | 'week' | 'month' | 'day';
 
 const DEFAULT_VIEW: CalendarViewPref =
-    typeof window !== 'undefined' && window.innerWidth < 768 ? 'schedule' : 'week';
+    typeof window !== 'undefined' && isPhoneCalendarWidth() ? 'schedule' : 'week';
 const LS_KEY = 'raid_ledger_calendar_view';
 const LEGACY_KEY = 'calendar-view';
 
