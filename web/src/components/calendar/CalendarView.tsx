@@ -264,8 +264,12 @@ function useCalendarInteractions(
     }, [navigate, view, currentDate, isScheduleView, setCurrentDate, setView]);
 
     const eventPropGetter = useCallback((event: GridEvent) => (isLayerEvent(event) ? { className: 'rl-layer-window', style: {} } : { style: getCalendarEventStyle(event.resource?.game?.slug || 'default') }), []);
-    // ROK-2303: the Day card stops propagation, so it opens through handleSelectEvent itself.
-    const wrappers = useEventWrappers(eventOverlapsGameTime, handleMonthChipClick, handleSelectEvent);
+    // ROK-2303: the Day card stops propagation, so on a phone it opens through handleSelectEvent
+    // itself. Wider screens keep the card's own plain open (the event page's Back stays history-back).
+    const handleDayCardOpen = useCallback((event: GridEvent) => {
+        if (isPhoneCalendarWidth()) handleSelectEvent(event); else navigate(`/events/${event.id}`);
+    }, [handleSelectEvent, navigate]);
+    const wrappers = useEventWrappers(eventOverlapsGameTime, handleMonthChipClick, handleDayCardOpen);
     return { handleSelectEvent, eventPropGetter, wrappers };
 }
 

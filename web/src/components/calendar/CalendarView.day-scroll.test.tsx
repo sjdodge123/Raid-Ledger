@@ -80,22 +80,26 @@ describe('CalendarView — phone Day-view scroll round trip (ROK-2303)', () => {
         setWindowValue('scrollY', 0);
     });
 
-    it('a tap on the Day card saves the window offset and opens the event from the calendar', () => {
+    it.each([
+        ['a tap', (card: Element) => fireEvent.click(card)],
+        ['Enter', (card: Element) => fireEvent.keyDown(card, { key: 'Enter' })],
+    ])('%s on the Day card saves the window offset and opens the event from the calendar', (_name, open) => {
         const card = renderPhoneDayWithEvent();
 
-        fireEvent.click(card);
+        open(card);
 
         expect(mockNavigate).toHaveBeenCalledWith('/events/42', FROM_CALENDAR_STATE);
         expect(JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? 'null')).toEqual({ date: '2026-02-10', y: 480 });
     });
 
-    it('Enter on the Day card saves the window offset and opens the event from the calendar', () => {
+    it('at 768px and wider a Day card opens the event plainly: no calendar state, nothing saved', () => {
         const card = renderPhoneDayWithEvent();
+        setWindowValue('innerWidth', 1024);
 
-        fireEvent.keyDown(card, { key: 'Enter' });
+        fireEvent.click(card);
 
-        expect(mockNavigate).toHaveBeenCalledWith('/events/42', FROM_CALENDAR_STATE);
-        expect(JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? 'null')).toEqual({ date: '2026-02-10', y: 480 });
+        expect(mockNavigate.mock.calls).toEqual([['/events/42']]);
+        expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
     });
 
     it('restores the saved offset when Back mounts the same phone Day', async () => {
