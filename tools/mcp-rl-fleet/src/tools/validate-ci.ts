@@ -33,6 +33,7 @@ import {
 import * as task from './task.js';
 import { recordTaskSha, shaMapPath } from '../playwright-sentinel.js';
 import { resolveWorktreeShortSha, resolveWorktreeSurfaceHash } from './worktree-sha.js';
+import { verifyGateSync } from '../gate-sync.js';
 import { resolveValidateCiWeight, weightFlag, type TaskWeight } from './task-weight.js';
 import { dispatchWithWeightFallback } from './task-weight-fallback.js';
 import { resolveValidateCiTimeout } from './validate-ci-timeout.js';
@@ -54,7 +55,7 @@ export type { E2eScope } from './validate-ci-target.js';
 
 export const TOOL_NAME = 'rl_validate_ci';
 export const TOOL_DESCRIPTION =
-  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. ROK-1466: fleet:true forwards --fleet — the WHOLE gate in one dispatch (static steps + unit without coverage + sharded integration + e2e), replacing the old three-call dance; it REQUIRES a target, so pass base_url — use the SLOT HTTPS URL https://slot-N.gamernight.net (N = your claimed slot), NEVER the plain-http http://rl-env-<slug>-allinone host: its CSP upgrade-insecure-requests makes the SPA load blank in a browser (curl/health never see CSP), and validate-ci refuses it. Pass against_env_slug ALONGSIDE base_url so the env admin password is still seeded. base_url alone (without fleet) also works and exports BASE_URL + API_URL + HEALTH_URL so Playwright, global setup and the companion bot all drive the same host. Password seeding: a base_url naming an rl-env-<slug>-allinone host seeds automatically; for a slot URL or any other target pass against_env_slug (seeds) or admin_password, else global setup logs in with the literal 'password' and 401s. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call. ROK-1565: e2e_scope ('auto' | 'all' | 'none', default auto) sizes the Playwright tier — auto runs ONLY the specs scripts/smoke/scope-specs.sh maps your branch diff to (the whole suite when it prints ALL), 'all' forces the full desktop+mobile suite, 'none' skips it. ROK-1792: e2e_specs (≤20 repo-relative paths, each scripts/smoke/<name>.spec.ts) runs EXACTLY those specs on desktop + mobile, forwarded as E2E_SPECS — the CLAUDE.md gate is args:['--only-e2e'] + e2e_specs:[<the branch's new/changed specs>] + against_env_slug + base_url (slot URL); it bypasses the changed-files gate, FAILs (never skips) on a down env, writes the playwright-tier sentinel on PASS, and is rejected with e2e_scope other than 'auto' and with --static / --no-e2e. A green --static run is now enough to write the pre-push sentinel (results carry gate_verified / gate_sentinel / gate_tier), so a web branch does NOT need a Playwright tier before you push. 2026-10-22: args:['--scoped'] is the default pre-push gate for a single-workspace diff — build + tsc + lint for the diff's own targets only (scripts/smoke/** → the smoke tsconfig), weight light, writes the sentinel with gate_tier 'scoped'; it exits 2 naming --static or --full when the diff touches packages/contract, migrations, package*.json, Dockerfile/nginx/entrypoint, root config or both api and web. TDB:1452: timeout_seconds (the watchdog budget) defaults to 5400 for fleet:true / --only-e2e / --with-e2e and for an un-narrowed full run (no args, --full, --no-e2e), and to 1800 once --static / --only-unit / --only-integration narrows it; a run the watchdog kills ends failed with script_exit_code 143 and exit_reason set.";
+  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. ROK-1466: fleet:true forwards --fleet — the WHOLE gate in one dispatch (static steps + unit without coverage + sharded integration + e2e), replacing the old three-call dance; it REQUIRES a target, so pass base_url — use the SLOT HTTPS URL https://slot-N.gamernight.net (N = your claimed slot), NEVER the plain-http http://rl-env-<slug>-allinone host: its CSP upgrade-insecure-requests makes the SPA load blank in a browser (curl/health never see CSP), and validate-ci refuses it. Pass against_env_slug ALONGSIDE base_url so the env admin password is still seeded. base_url alone (without fleet) also works and exports BASE_URL + API_URL + HEALTH_URL so Playwright, global setup and the companion bot all drive the same host. Password seeding: a base_url naming an rl-env-<slug>-allinone host seeds automatically; for a slot URL or any other target pass against_env_slug (seeds) or admin_password, else global setup logs in with the literal 'password' and 401s. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call. ROK-1565: e2e_scope ('auto' | 'all' | 'none', default auto) sizes the Playwright tier — auto runs ONLY the specs scripts/smoke/scope-specs.sh maps your branch diff to (the whole suite when it prints ALL), 'all' forces the full desktop+mobile suite, 'none' skips it. ROK-1792: e2e_specs (≤20 repo-relative paths, each scripts/smoke/<name>.spec.ts) runs EXACTLY those specs on desktop + mobile, forwarded as E2E_SPECS — the CLAUDE.md gate is args:['--only-e2e'] + e2e_specs:[<the branch's new/changed specs>] + against_env_slug + base_url (slot URL); it bypasses the changed-files gate, FAILs (never skips) on a down env, writes the playwright-tier sentinel on PASS, and is rejected with e2e_scope other than 'auto' and with --static / --no-e2e. A green --static run is now enough to write the pre-push sentinel (results carry gate_verified / gate_sentinel / gate_tier; ROK-2205: no sentinel at all — any tier — when the result is not gate_verified, e.g. a stale sync, and gate_error says why), so a web branch does NOT need a Playwright tier before you push. 2026-10-22: args:['--scoped'] is the default pre-push gate for a single-workspace diff — build + tsc + lint for the diff's own targets only (scripts/smoke/** → the smoke tsconfig), weight light, writes the sentinel with gate_tier 'scoped'; it exits 2 naming --static or --full when the diff touches packages/contract, migrations, package*.json, Dockerfile/nginx/entrypoint, root config or both api and web. TDB:1452: timeout_seconds (the watchdog budget) defaults to 5400 for fleet:true / --only-e2e / --with-e2e and for an un-narrowed full run (no args, --full, --no-e2e), and to 1800 once --static / --only-unit / --only-integration narrows it; a run the watchdog kills ends failed with script_exit_code 143 and exit_reason set.";
 
 export interface ValidateCiParams {
   /** Extra args to pass to validate-ci.sh. */
@@ -143,6 +144,10 @@ export interface ValidateCiAsyncResult {
   slot?: number | undefined;
   /** ROK-1470 admission weight the run was dispatched with. */
   weight?: TaskWeight | undefined;
+  /** ROK-2205 M1: the sync guard confirmed /workspace matched the worktree HEAD at dispatch. */
+  sync_verified?: boolean | undefined;
+  /** Why it could not — this run will not earn a pre-push sentinel. */
+  sync_warning?: string | undefined;
   error?: string | undefined;
   stderr?: string | undefined;
   message?: string | undefined;
@@ -172,7 +177,10 @@ export async function execute(
   );
 
   // ROK-1793 S2: a parallel gate copies this slot's tree, so it must be OURS.
-  const slot = await resolveSlot(sshUser, sshHost, agentId, { exact: !!(params.parallel || params.fail_fast) });
+  // ROK-2205 r3 m2: every gate resolves exactly — an unclaimed caller passes no
+  // --slot, so task-start fails it with no_slot at dispatch instead of filing
+  // the task under another agent's slot.
+  const slot = await resolveSlot(sshUser, sshHost, agentId, { exact: true });
 
   // Build the inner command. Bug C: bash <script> instead of bare path.
   const extraArgs = resolveArgs(params).map((a) => shellQuote(a)).join(' ');
@@ -226,6 +234,12 @@ export async function execute(
   const innerCmd =
     `${innerEnv}bash /workspace/scripts/validate-ci.sh ${extraArgs}`.trim();
   const taskId = newTaskId();
+  // ROK-2205 M1: run the stale-build sync guard (sync-guard.ts) BEFORE dispatch
+  // and record its verdict for the task — a run on an unverified /workspace
+  // never earns the pre-push sentinel (2026-11-15: all PASS on stale files).
+  // Codex P2: check-only, capped at GATE_SYNC_BUDGET_MS (gate-sync.ts) so the
+  // dispatch never runs a force-resync inside the 120s MCP call.
+  const sync = await verifyGateSync(slot, params.worktree_path);
   // TDB:1452: whole-gate / e2e / un-narrowed full runs default to 5400s;
   // --static / --only-unit / --only-integration runs to 1800s.
   const childS = resolveValidateCiTimeout(resolveArgs(params), params.timeout_seconds);
@@ -299,6 +313,7 @@ export async function execute(
     await resolveWorktreeShortSha(params.worktree_path),
     shaMapPath(),
     await resolveWorktreeSurfaceHash(params.worktree_path),
+    sync,
   );
   const logUrl = `https://${FLEET_DOMAIN}/api/tasks/${finalTaskId}/log`;
 
@@ -312,6 +327,8 @@ export async function execute(
       mcp_runtime_status: 'running',
       slot: slot ?? undefined,
       weight,
+      sync_verified: sync.ok,
+      ...(sync.ok ? {} : { sync_warning: `${sync.message ?? 'unverified'} — run rl_force_resync and re-dispatch; this run cannot write the pre-push sentinel.` }),
     };
   }
 
