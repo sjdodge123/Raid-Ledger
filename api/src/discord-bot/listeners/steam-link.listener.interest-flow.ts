@@ -20,6 +20,7 @@ import {
   setAutoHeartSteamUrlsPref,
 } from './steam-link-interest.helpers';
 import { replaceDmWithText } from './steam-link.listener.nomination-flow';
+import { ACCOUNT_BLOCKED_REPLY } from '../../users/discord-account-status.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -85,6 +86,10 @@ export async function handleInterestButtonClick(
   const user = await findLinkedRlUser(db, interaction.user.id);
   if (!user) {
     await replaceDmWithText(interaction, 'Could not find your linked account.');
+    return true;
+  }
+  if (user.blocked) {
+    await replaceDmWithText(interaction, ACCOUNT_BLOCKED_REPLY);
     return true;
   }
 

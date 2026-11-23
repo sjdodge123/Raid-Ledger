@@ -16,6 +16,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { VISIBILITY_FILTER } from '../../igdb/igdb-visibility.helpers';
 import { STEAM_NOMINATE_BUTTON_IDS } from '../discord-bot.constants';
+import { ACCOUNT_BLOCKED_REPLY } from '../../users/discord-account-status.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -208,7 +209,9 @@ export interface NominateButtonDeps {
   lineupsService?: LineupsNominator;
   findActiveBuildingLineupId(): Promise<number | null>;
   addInterest(userId: number, gameId: number): Promise<void>;
-  findLinkedUser(discordId: string): Promise<{ id: number } | null>;
+  findLinkedUser(
+    discordId: string,
+  ): Promise<{ id: number; blocked?: boolean } | null>;
   setAutoNominatePref(userId: number, enabled: boolean): Promise<void>;
 }
 
@@ -230,6 +233,10 @@ export async function handleNominateButtonClick(
   const user = await deps.findLinkedUser(interaction.user.id);
   if (!user) {
     await replaceDmWithText(interaction, 'Could not find your linked account.');
+    return;
+  }
+  if (user.blocked) {
+    await replaceDmWithText(interaction, ACCOUNT_BLOCKED_REPLY);
     return;
   }
   if (action === STEAM_NOMINATE_BUTTON_IDS.HEART) {
