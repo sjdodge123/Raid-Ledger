@@ -97,4 +97,7 @@ async function main() {
   process.stdout.write(`${plan.targets.length ? plan.targets.join(' ') : 'none'}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main();
+// pathToFileURL, not a hand-built `file://` string: a repo path with a space
+// (or any character a URL escapes) never matched, and the CLI printed nothing.
+const { pathToFileURL } = await import('node:url');
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
