@@ -67,7 +67,9 @@ borrow::try() {
     borrow::memory_ok || return 3
     owner=$(jq -r --argjson s "$owner_slot" '.[] | select(.slot == $s) | .agent_id // ""' "$RL_CLAIMS_FILE")
     branch=$(jq -r --argjson s "$owner_slot" '.[] | select(.slot == $s) | .branch // ""' "$RL_CLAIMS_FILE")
-    for slot in $(jq -r '.[] | select(.claimed == false) | .slot' "$RL_CLAIMS_FILE"); do
+    # ROK-2289: a free row above RUNNER_SLOTS has no runner — never borrow it.
+    for slot in $(jq -r --argjson max "$RUNNER_SLOTS" \
+        '.[] | select(.claimed == false and .slot <= $max) | .slot' "$RL_CLAIMS_FILE"); do
         [[ "$slot" == "$owner_slot" || "$exclude" == *",$slot,"* ]] && continue
         if borrow::_claim_if_free "$slot" "$parent" "$owner" "$branch"; then
             audit::log borrow granted "$(jq -nc --argjson s "$slot" --arg p "$parent" '{slot:$s, parent_task_id:$p}')"

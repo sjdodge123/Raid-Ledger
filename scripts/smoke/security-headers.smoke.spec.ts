@@ -36,6 +36,9 @@ const CSP_REQUIRED_SUBSTRINGS = [
     'wss://*.measurement-lab.org',
     // Wowhead hover tooltips fetch tooltip data from nether.wowhead.com.
     'https://nether.wowhead.com',
+    // Twitch stream picker thumbnails (Helix `thumbnail_url`) load from
+    // Twitch's image CDN; without it in img-src every thumbnail is blocked.
+    'https://static-cdn.jtvnw.net',
 ];
 
 async function assertSecurityHeaders(headers: Record<string, string>) {
