@@ -168,16 +168,33 @@ test.describe('Calendar — Day-view cards never overlap a later event (ROK-2299
             await openDay(page, testInfo, s.date);
             const longCard = cardFor(page, s.longTitle);
             await expect(longCard).toBeVisible({ timeout: 15_000 });
-            const description = longCard.locator('.day-event-description');
-            await expect(description).toBeVisible();
-            await expect.poll(async () => {
-                const card = await longCard.boundingBox();
-                const desc = await description.boundingBox();
-                return card && desc ? Math.round(desc.y + desc.height - (card.y + card.height)) : Number.POSITIVE_INFINITY;
-            }, { message: 'px the description runs past the bottom of its card (content-tall cards: <= 1)', timeout: 15_000 })
-                .toBeLessThanOrEqual(1);
-            const box = await longCard.boundingBox();
-            expect(box?.height ?? 0, 'desktop Day card keeps its 100px minimum height').toBeGreaterThanOrEqual(99);
+            await expect(longCard.locator('.day-event-description')).toBeVisible();
+            // What main (and this branch) does at >= 769px, measured on slot-2 at 1280 and 810:
+            // `.rbc-event` gets `height: auto !important; min-height: 100px; overflow: visible`,
+            // but react-big-calendar's `.rbc-day-slot .rbc-event-content { flex: 1 1 0 }` keeps
+            // the auto height at the 100px minimum, so the `.day-event-block` (which paints the
+            // card's gradient) grows past `.rbc-event` (110px vs 100px) and nothing clips it.
+            // So "unchanged" = nothing clips: the phone rules (time-sized card, overflow hidden,
+            // 2-line clamp) would each fail one of these if they leaked above 768px.
+            await expect.poll(async () => longCard.evaluate((el) => {
+                const block = el.querySelector('.day-event-block');
+                const desc = el.querySelector('.day-event-description');
+                const slot = document.querySelector('.rbc-day-slot .rbc-timeslot-group');
+                if (!block || !desc || !slot) return 'missing block, description or time slot';
+                const hourPx = slot.getBoundingClientRect().height;
+                const card = el.getBoundingClientRect();
+                const b = block.getBoundingClientRect();
+                const d = desc.getBoundingClientRect();
+                const problems: string[] = [];
+                if (card.height < 99) problems.push(`card ${Math.round(card.height)}px < 100px minimum`);
+                if (card.height <= hourPx * 1.5 + 1) problems.push(`card ${Math.round(card.height)}px is time-sized (90 min = ${Math.round(hourPx * 1.5)}px)`);
+                if (getComputedStyle(el).overflow !== 'visible') problems.push(`.rbc-event overflow ${getComputedStyle(el).overflow}`);
+                if (getComputedStyle(block).overflow !== 'visible') problems.push(`.day-event-block overflow ${getComputedStyle(block).overflow}`);
+                if (desc.scrollHeight > desc.clientHeight + 1) problems.push(`description clipped (${desc.scrollHeight} > ${desc.clientHeight})`);
+                if (d.bottom > b.bottom + 1) problems.push(`description ends ${Math.round(d.bottom - b.bottom)}px below the painted block`);
+                return problems.join('; ') || 'content-tall';
+            }), { message: 'desktop/tablet Day card is content-tall and unclipped (phone clip rules must not apply >= 769px)', timeout: 15_000 })
+                .toBe('content-tall');
         } finally {
             for (const id of ids) await apiDelete(token, `/events/${id}`);
         }
