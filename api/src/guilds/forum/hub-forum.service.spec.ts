@@ -95,6 +95,8 @@ function reply(over: Partial<HubForumReplySelect> = {}): HubForumReplySelect {
     guildId: 7,
     authorId: 3,
     kind: 'reply',
+    copiedFromReplyId: null,
+    copiedFromThreadId: null,
     subjectUserId: null,
     body: 'Agreed',
     editedAt: null,

@@ -85,10 +85,14 @@ export function absoluteAvatarUrl(
 /**
  * Rows the inbound lane wrote carry a Discord author: never echo them out.
  * ROK-2274 sync loop 1: a signup line (system text) is never mirrored either.
+ * ROK-2297: a copied row (or its header) is new to the TARGET thread's post,
+ * so it IS mirrored even when its author came from Discord.
  */
 export function notMirrored(row: {
   authorDiscordId: string | null;
   kind?: HubForumReplyKind;
+  copiedFromThreadId?: number | null;
 }): boolean {
+  if (row.copiedFromThreadId != null) return false;
   return row.authorDiscordId !== null || row.kind === 'signup_line';
 }

@@ -79,10 +79,10 @@ export function ForumReplyItem({ guildId, ...rest }: ForumReplyItemProps): JSX.E
 
 export type ForumReplyItemViewProps = Omit<ForumReplyItemProps, 'guildId'> & ForumReplyWrites;
 
-/** The reply row over whichever `ForumReplyWrites` the caller hands it; a signup line gets its own muted row (ROK-2274). */
+/** The reply row over whichever `ForumReplyWrites` the caller hands it; a signup line (ROK-2274) or a copied-chat header (ROK-2297) gets the muted system row. */
 export function ForumReplyItemView(props: ForumReplyItemViewProps): JSX.Element {
     const { threadId, reply, highlighted, remove } = props;
-    if (reply.kind === 'signup_line') return <ForumSignupLine threadId={threadId} reply={reply} highlighted={highlighted} remove={remove} />;
+    if (reply.kind === 'signup_line' || reply.kind === 'copy_header') return <ForumSignupLine threadId={threadId} reply={reply} highlighted={highlighted} remove={remove} />;
     return <ForumPlainReply {...props} />;
 }
 

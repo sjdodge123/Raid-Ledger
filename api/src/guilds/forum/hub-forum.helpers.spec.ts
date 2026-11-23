@@ -192,4 +192,13 @@ describe('canFor', () => {
       pin: false,
     });
   });
+
+  it('ROK-2297: a copy header is a system line too (no ownership)', () => {
+    const header = row({ kind: 'copy_header' });
+    expect(canFor(author, header, asReply)).toEqual({
+      edit: false,
+      delete: false,
+      pin: false,
+    });
+  });
 });

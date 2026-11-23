@@ -256,6 +256,35 @@ describe('ROK-2208 inbound Discord → RL', () => {
     expect((await threadRow(thread.id)).replyCount).toBe(0);
   });
 
+  it('ROK-2297: a Discord delete of a mirrored copy header leaves reply_count alone', async () => {
+    const { channelId } = await boundHub();
+    const { thread, rlThread } = await importPost(channelId);
+    const kept = msg(thread);
+    const header = msg(thread);
+    await ingest.onCreate(kept, thread, noBot);
+    await ingest.onCreate(header, thread, noBot);
+    // Turn the second row into a linked system line, which never counted.
+    const r = schema.hubForumReplies;
+    const t = schema.hubForumThreads;
+    const row = await replyRow(header.id);
+    expect(row).not.toBeNull();
+    await ctx.testApp.db
+      .update(r)
+      .set({ kind: 'copy_header' })
+      .where(eq(r.id, row?.id ?? 0));
+    await ctx.testApp.db
+      .update(t)
+      .set({ replyCount: rlThread.replyCount + 1 })
+      .where(eq(t.id, rlThread.id));
+
+    expect(await ingest.onDelete(header.id, channelId)).toBe('deleted');
+
+    expect(await replyRow(header.id)).toMatchObject({ deletedAs: 'author' });
+    expect((await threadRow(thread.id)).replyCount).toBe(
+      rlThread.replyCount + 1,
+    );
+  });
+
   it('a deleted Discord post soft-deletes the RL thread as moderator', async () => {
     const { channelId } = await boundHub();
     const { thread } = await importPost(channelId);
