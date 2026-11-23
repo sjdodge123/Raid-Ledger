@@ -16,6 +16,10 @@ import {
 } from 'discord.js';
 import type { CharacterDto } from '@raid-ledger/contract';
 import type { DiscordEmojiService } from '../services/discord-emoji.service';
+import {
+  buildCharacterImportButton,
+  buildCharacterImportRow,
+} from './character-import-link.helpers';
 
 export interface CharacterSelectOptions {
   /** The custom ID prefix to use (e.g. SIGNUP_BUTTON_IDS.CHARACTER_SELECT) */
@@ -28,6 +32,8 @@ export interface CharacterSelectOptions {
   customIdSuffix?: string | undefined;
   /** Optional event embed to show alongside the dropdown */
   embed?: EmbedBuilder | undefined;
+  /** ROK-2294: adds a "Don't see your character? Import it" link row. */
+  importUrl?: string | undefined;
 }
 
 export interface RoleSelectOptions {
@@ -48,6 +54,11 @@ export interface RoleSelectOptions {
    * step followed (ROK-2228). Rendered only when `characterId` is set too.
    */
   backCustomId?: string | undefined;
+  /**
+   * ROK-2294: adds the character-import link button — in the Back row when
+   * there is one, else in its own row. Callers pass it on zero-character steps.
+   */
+  importUrl?: string | undefined;
 }
 
 /** Build character dropdown option entries from character data. */
@@ -98,7 +109,9 @@ export async function showCharacterSelect(
   );
   await interaction.editReply({
     content: `Pick a character for **${opts.eventTitle}**`,
-    components: [row],
+    components: opts.importUrl
+      ? [row, buildCharacterImportRow(opts.importUrl)]
+      : [row],
     embeds: opts.embed ? [opts.embed] : [],
   });
 }
@@ -149,25 +162,32 @@ export async function showRoleSelect(
   const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     selectMenu,
   );
-  const backRow = buildBackRow(opts);
+  const buttonRow = buildButtonRow(opts);
   await interaction.editReply({
     content: buildRoleSelectContent(opts),
-    components: backRow ? [row, backRow] : [row],
+    components: buttonRow ? [row, buttonRow] : [row],
     embeds: opts.embed ? [opts.embed] : [],
   });
 }
 
 /**
- * The Back button row under the role menu (ROK-2228): only when the role
- * step followed a character pick, i.e. a characterId and a Back target.
+ * The button row under the role menu: Back (ROK-2228, only when the role
+ * step followed a character pick, i.e. a characterId and a Back target) and
+ * the character-import link (ROK-2294, when `importUrl` is set). Null when
+ * neither applies, so the reply keeps its single select row.
  */
-function buildBackRow(
+function buildButtonRow(
   opts: RoleSelectOptions,
 ): ActionRowBuilder<ButtonBuilder> | null {
-  if (!opts.characterId || !opts.backCustomId) return null;
-  const back = new ButtonBuilder()
-    .setCustomId(opts.backCustomId)
-    .setLabel('Back')
-    .setStyle(ButtonStyle.Secondary);
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(back);
+  const buttons: ButtonBuilder[] = [];
+  if (opts.characterId && opts.backCustomId)
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(opts.backCustomId)
+        .setLabel('Back')
+        .setStyle(ButtonStyle.Secondary),
+    );
+  if (opts.importUrl) buttons.push(buildCharacterImportButton(opts.importUrl));
+  if (buttons.length === 0) return null;
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons);
 }

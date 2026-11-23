@@ -8,10 +8,14 @@ import {
   isActiveSignup,
   signupLines,
   type SignupLine,
+  type SignupLineEmoji,
   type SignupLineState,
 } from './hub-forum-discord-signup-lines';
 import type { SignupLineMember } from './hub-forum-discord-signup-lines.queries';
-import type { PingedSetScope } from './hub-forum-discord-signup-pings';
+import {
+  pingScopeSuffix,
+  type PingedSetScope,
+} from './hub-forum-discord-signup-pings';
 
 /** Hash field marking "seeded / written by C3" — never a Discord id. */
 export const SEEDED_FIELD = '_seeded';
@@ -59,7 +63,7 @@ export interface LineMessage {
 
 /** The Redis hash of last-posted states; same scope as the pinged set. */
 export function postedLinesKey(eventId: number, scope: PingedSetScope): string {
-  return `hub-forum:signup-lines:${eventId}:${scope.guildId}:${scope.threadId}`;
+  return `hub-forum:signup-lines:${eventId}:${pingScopeSuffix(scope)}`;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -119,6 +123,11 @@ export function seedFields(
 /** Statuses a confirmation reset moves to `signed_up` (its only effect). */
 const RESET_FROM = new Set(['tentative', 'roached_out']);
 
+/** True when a reset (not the member) moved `was` → `now` (ROK-2274 reuses it). */
+export function isResetMove(was: string, now: string | undefined): boolean {
+  return now === 'signed_up' && RESET_FROM.has(was);
+}
+
 /**
  * Review MAJOR-1 — after a reschedule reset, a posted member whose STATUS
  * went tentative/roached-out → signed_up (the reset's own effect) is moved
@@ -134,7 +143,9 @@ export function resyncStatusFields(
   const fields: Record<string, string> = {};
   for (const [id, was] of posted) {
     const status = members.get(id)?.state.status;
-    if (status !== 'signed_up' || !RESET_FROM.has(was.state.status)) continue;
+    if (status === undefined || !isResetMove(was.state.status, status)) {
+      continue;
+    }
     const next: PostedMember = { ...was, state: { ...was.state, status } };
     fields[id] = JSON.stringify(next);
   }
@@ -149,6 +160,7 @@ export function planLineFlush(
   pinged: readonly string[],
   posted: ReadonlyMap<string, PostedMember>,
   members: ReadonlyMap<string, SignupLineMember>,
+  emoji: SignupLineEmoji,
 ): LineFlushPlan {
   const was = new Set(pinged);
   const ids = [...new Set([...posted.keys(), ...members.keys()])];
@@ -163,6 +175,7 @@ export function planLineFlush(
       current: members.get(discordId)?.state ?? null,
       mentioned: was.has(discordId),
     })),
+    emoji,
   );
   const remove = pinged.filter(
     (id) => !isActiveSignup(members.get(id)?.state ?? null),

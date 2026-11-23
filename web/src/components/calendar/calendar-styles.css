@@ -708,20 +708,25 @@
     position: relative;
 }
 
-/* Day view: allow event content to expand beyond time-slot height */
-.calendar-view-day .rbc-time-view .rbc-event {
-    overflow: visible;
-    height: auto !important;
-    min-height: 100px;
-}
+/* Day view above the phone layout: event content expands beyond its time-slot
+   height. Below it (max-width: 768px) a card keeps react-big-calendar's
+   time-sized height and clips its content instead, so it never hangs over a
+   later event and takes its taps (ROK-2299) — see "Responsive day view". */
+@media (min-width: 769px) {
+    .calendar-view-day .rbc-time-view .rbc-event {
+        overflow: visible;
+        height: auto !important;
+        min-height: 100px;
+    }
 
-.calendar-view-day .rbc-time-view .rbc-event-content {
-    overflow: visible;
-    height: auto;
-}
+    .calendar-view-day .rbc-time-view .rbc-event-content {
+        overflow: visible;
+        height: auto;
+    }
 
-.calendar-view-day .day-event-block {
-    height: auto;
+    .calendar-view-day .day-event-block {
+        height: auto;
+    }
 }
 
 /* Week event block component */
@@ -1019,14 +1024,39 @@
 
 /* Responsive day view */
 @media (max-width: 768px) {
+    /* ROK-2299: time-sized and clipped on the phone (desktop: content-tall). */
     .day-event-block {
         flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
     }
 
     .day-event-content {
         min-width: auto;
         max-width: 100%;
-        padding: 0.5rem 0.75rem;
+        /* Tight top inset so a 30-minute card (~22px) still shows its pill + title row. */
+        padding: 0.125rem 0.75rem 0.5rem;
+    }
+
+    .day-event-duration {
+        padding: 0.0625rem 0.375rem;
+        line-height: 1.2;
+    }
+
+    .day-event-title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        line-height: 1.2;
+    }
+
+    .day-event-description {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        overflow: hidden;
     }
 
     .day-event-right {

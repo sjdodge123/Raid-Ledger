@@ -32,6 +32,7 @@ import * as discordSignupH from './signups-discord-signup.helpers';
 import * as reconfirmH from './signups-reconfirm.helpers';
 import * as signupRowH from './signups-row.helpers';
 import * as statusH from './signups-status.helpers';
+import { activatedAtPatch } from './signup-activated-at.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 
 /** Service for managing event signups (FR-006), character confirmation (ROK-131), and anonymous Discord signups (ROK-137). */
@@ -111,9 +112,7 @@ export class SignupsService {
       action: 'signup_created',
     });
     this.rosterNotificationBuffer.bufferJoin(eventId, userId);
-    await this.activityLog.log('event', eventId, 'signup_added', userId, {
-      role: dto?.slotRole ?? dto?.preferredRoles?.[0] ?? null,
-    });
+    await statusH.auditSignupAdded(this.activityLog, eventId, userId, dto);
     const character = dto?.characterId
       ? await cancelH.getCharacterById(this.db, dto.characterId)
       : null;
@@ -161,6 +160,7 @@ export class SignupsService {
     const signup = await cancelH.findSignupByIdentifier(this.db, eventId, id);
     const updated = await signupRowH.updateSignupById(this.db, signup.id, {
       status: dto.status,
+      ...activatedAtPatch(dto.status),
     });
     this.emit(SIGNUP_EVENTS.UPDATED, {
       eventId,
@@ -256,7 +256,7 @@ export class SignupsService {
 
   async cancel(eventId: number, userId: number): Promise<void> {
     await this.rosterService.cancel(eventId, userId);
-    await this.activityLog.log('event', eventId, 'signup_cancelled', userId);
+    await statusH.auditSignupCancelled(this.activityLog, eventId, userId);
   }
 
   async selfUnassign(

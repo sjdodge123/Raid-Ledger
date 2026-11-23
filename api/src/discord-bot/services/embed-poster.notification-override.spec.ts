@@ -1,3 +1,4 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 /**
  * ROK-599: Tests that EmbedPosterService threads notificationChannelOverride
  * through to ChannelResolverService.resolveChannelForEvent correctly.
@@ -76,6 +77,7 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
   function buildProvidersCore() {
     return [
       EmbedPosterService,
+      { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       {
         provide: DiscordBotClientService,

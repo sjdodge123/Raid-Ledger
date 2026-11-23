@@ -27,9 +27,17 @@ function makeDeps() {
   set.mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) });
   const editEmbed = jest.fn().mockResolvedValue(undefined);
   const deleteMessage = jest.fn().mockResolvedValue(undefined);
+  // ROK-2292: announcement rows reach the bot edit through the seam.
+  const edit = jest.fn(
+    async (row: { channelId: string; messageId: string }) => {
+      await editEmbed(row.channelId, row.messageId);
+      return 'edited';
+    },
+  );
   const deps = {
     db: { update: jest.fn().mockReturnValue({ set }) },
     clientService: { editEmbed, deleteMessage },
+    messageEditor: { edit },
     embedFactory: {
       buildEventCancelled: jest
         .fn()

@@ -5,6 +5,7 @@
  * otherwise read a stale cached `archived=true` and re-archive it.
  */
 import type { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import type { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 
 function setup() {
@@ -13,7 +14,7 @@ function setup() {
     archived: false,
     locked: false,
     isThread: () => true,
-    send: jest.fn(() => Promise.resolve()),
+    send: jest.fn(() => Promise.resolve({ id: 'sent-1' })),
     setArchived: jest.fn(() => Promise.resolve()),
     members: { remove: jest.fn(() => Promise.resolve()) },
   };
@@ -26,6 +27,9 @@ function setup() {
   };
   const gw = new HubForumDiscordOutboundGateway(
     client as unknown as DiscordBotClientService,
+    {
+      resolve: () => Promise.resolve(null),
+    } as unknown as HubForumDiscordRouteResolver,
   );
   return { gw, fetch };
 }

@@ -15,7 +15,9 @@ import { SignupsService } from '../../events/signups.service';
 import { CharactersService } from '../../characters/characters.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
+import type { CharacterImportSettings } from '../utils/character-import-link.helpers';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
+import { logBestEffort } from '../../activity-log/activity-log-best-effort';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
 
 const STATE_LABELS: Record<string, string> = {
@@ -43,6 +45,8 @@ export interface RescheduleDeps {
   activityLog: ActivityLogService;
   eventEmitter: EventEmitter2;
   logger: Logger;
+  /** ROK-2294: trusted client URL for the character-import link. */
+  settingsService: CharacterImportSettings;
 }
 
 /** Options for signup re-confirmation. */
@@ -237,7 +241,7 @@ export async function safeEditReply(
  * both linked and unlinked (anonymous) ack paths.
  */
 export async function logDiscordAck(
-  deps: RescheduleDeps,
+  deps: { activityLog: Pick<ActivityLogService, 'log'> },
   eventId: number,
   wasPending: boolean,
   updateSet: Record<string, unknown>,
@@ -247,7 +251,8 @@ export async function logDiscordAck(
   const isLinked = 'userId' in actor;
   const metadata: Record<string, unknown> = { reason: 'discord-ack' };
   if (!isLinked) metadata.discordUserId = actor.discordUserId;
-  await deps.activityLog.log(
+  await logBestEffort(
+    deps.activityLog,
     'event',
     eventId,
     'signup_reconfirmed',
@@ -277,13 +282,24 @@ export async function lookupRescheduleEvent(
   return event ?? null;
 }
 
+/** The linked account, with the two flags that block a gateway click. */
+export interface LinkedRescheduleUser {
+  id: number;
+  bannedAt: Date | null;
+  deactivatedAt: Date | null;
+}
+
 /** Resolve the user linked to a Discord account, if any. */
 export async function findLinkedUserByDiscordId(
   db: PostgresJsDatabase<typeof schema>,
   discordId: string,
-): Promise<{ id: number } | null> {
+): Promise<LinkedRescheduleUser | null> {
   const [user] = await db
-    .select()
+    .select({
+      id: schema.users.id,
+      bannedAt: schema.users.bannedAt,
+      deactivatedAt: schema.users.deactivatedAt,
+    })
     .from(schema.users)
     .where(eq(schema.users.discordId, discordId))
     .limit(1);

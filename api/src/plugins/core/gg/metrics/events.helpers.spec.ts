@@ -34,6 +34,7 @@ function row(
     runningLateAt: null,
     lateMinutes: null,
     signedUpAt: new Date(START),
+    activatedAt: new Date(START),
     seriesSignupId: null,
     ...over,
   };

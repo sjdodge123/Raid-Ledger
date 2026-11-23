@@ -4,7 +4,8 @@
  * and ONE roll-up @mention names the new players (ruling 2); tentative and
  * bench are pinged, declined is not (ruling 4); an anonymous Discord signup
  * is pinged; a cancel leaves the post silently and a re-signup pings again
- * (ruling 3); an unbound hub, a detached thread or a closed one does nothing.
+ * (ruling 3); an unbound hub or a closed one does nothing, and a detached
+ * (untagged) event is a non-hub event whose pings go to its registry post.
  * Discord is the in-memory outbound gateway (spies on the app's singleton).
  */
 import { getQueueToken } from '@nestjs/bullmq';
@@ -31,6 +32,7 @@ import {
   type DiscussionCtx,
   type Scene,
 } from '../event-discussion/event-discussion.test-fixtures';
+import { EventPlanningPostsService } from './event-planning-posts.service';
 import {
   stubOutbound,
   type FakeOutbound,
@@ -290,14 +292,34 @@ describe('ROK-2260 signup pings — no-ops', () => {
     expect(await threadLinks(s.threadId)).toEqual([]);
   });
 
-  it('a detached event thread posts and pings nothing', async () => {
+  it('a detached event thread: its hub post gets nothing; the now non-hub event pings into its registry post (ROK-2272 S4)', async () => {
     const s = await bareScene(ctx);
     await bindHub(ctx, s.guildId);
     await signUp(ctx, s.eventId, 'signed', 'signed_up');
     await untagEvent(ctx, s.eventId);
-    expect(await flush(s.eventId)).toBe('unbound');
+    // Untagged = no hub: the flush takes the Discord-only (planning) arm.
+    const registryThread = snowflake();
+    const ensure = jest
+      .spyOn(
+        ctx.posts.testApp.app.get(EventPlanningPostsService),
+        'ensureEventPost',
+      )
+      .mockResolvedValue({
+        postId: 1,
+        forumId: 1,
+        discordThreadId: registryThread,
+      });
+    expect(await flush(s.eventId)).toBe('pinged');
     expect(out.spies.createPost).not.toHaveBeenCalled();
-    expect(out.spies.mention).not.toHaveBeenCalled();
+    expect(await threadLinks(s.threadId)).toEqual([]);
+    expect(ensure.mock.calls).toEqual([[s.eventId]]);
+    expect(out.spies.mention.mock.calls).toEqual([
+      [
+        registryThread,
+        expect.stringContaining(`<@${did.signed}>`),
+        [did.signed],
+      ],
+    ]);
   });
 
   it('a closed thread (write_closes_at passed) creates no post and pings nobody', async () => {
@@ -390,7 +412,7 @@ describe('ROK-2271 signup lines — role, character and status', () => {
     expect(await flush(s.eventId)).toBe('pinged');
     expect(mentioned()).toEqual([[did.signed]]);
     expect(message(0)).toBe(
-      `✅ <@${did.signed}> signed up — Tank · Thrall${s.eventId} (Protection Warrior)`,
+      `✅ <@${did.signed}> signed up — 🛡️ Tank · Thrall${s.eventId} (Protection Warrior)`,
     );
   });
 

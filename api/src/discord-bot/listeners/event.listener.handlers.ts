@@ -1,4 +1,5 @@
 import type { Logger } from '@nestjs/common';
+import { EmbedBuilder } from 'discord.js';
 import { eq, and } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -8,14 +9,19 @@ import type {
   EmbedEventData,
   EmbedContext,
 } from '../services/discord-embed.factory';
-import { embedComponents } from '../services/discord-embed.factory';
+import type { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 import type { EmbedPosterService } from '../services/embed-poster.service';
 import type { ChannelResolverService } from '../services/channel-resolver.service';
 import type { ScheduledEventService } from '../services/scheduled-event.service';
 import { getEphemeralVoiceState } from '../services/ephemeral-voice.db-helpers';
 import { applyEmbedVoice } from '../services/embed-voice.helpers';
+import {
+  findAnnouncementMessage,
+  isForumStarterRow,
+} from '../services/event-message-rows.helpers';
 import type { PlannedVoiceSettingsSource } from '../services/planned-ephemeral-voice.helpers';
 import { EMBED_STATES } from '../discord-bot.constants';
+import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
 import { deleteRecordBump } from '../processors/embed-sync-bump.helpers';
 import type { EventPayload } from './event.listener';
 
@@ -28,6 +34,8 @@ export interface EventListenerDeps {
   channelResolver: ChannelResolverService;
   /** Planned temporary voice channel settings (2026-11-13). */
   settings: PlannedVoiceSettingsSource;
+  /** ROK-2292 D4: routes announcement vs forum-starter rows. */
+  messageEditor: Pick<EventEmbedMessageEditor, 'edit'>;
   logger: Logger;
 }
 
@@ -51,21 +59,21 @@ export async function findEventMessages(
     );
 }
 
+/**
+ * Codex P2: whether the event still lacks its channel announcement. A forum
+ * post's starter row (ROK-2292) is not an announcement, so it must not stop
+ * `event.updated` from posting the missing one.
+ */
+export function lacksAnnouncement(records: readonly MessageRecord[]): boolean {
+  return records.every((record) => isForumStarterRow(record));
+}
+
 /** Look up the Discord message record for game affinity notifications. */
 export async function findDiscordMessageRecord(
   deps: EventListenerDeps,
   eventId: number,
 ): Promise<{ guildId: string; channelId: string; messageId: string } | null> {
-  const [msgRecord] = await deps.db
-    .select({
-      guildId: schema.discordEventMessages.guildId,
-      channelId: schema.discordEventMessages.channelId,
-      messageId: schema.discordEventMessages.messageId,
-    })
-    .from(schema.discordEventMessages)
-    .where(eq(schema.discordEventMessages.eventId, eventId))
-    .limit(1);
-  return msgRecord ?? null;
+  return findAnnouncementMessage(deps.db, eventId);
 }
 
 /** Fetch the event's current reschedulingPollId (ROK-1370). */
@@ -126,13 +134,7 @@ export async function updateEmbedRecord(
   const built = deps.embedFactory.buildEventEmbed(eventData, context, {
     state,
   });
-  await deps.clientService.editEmbed(
-    record.channelId,
-    record.messageId,
-    built.embed,
-    embedComponents(built),
-    built.content,
-  );
+  await deps.messageEditor.edit(record, built, { withContent: true });
   // ROK-1370: persist the resolved state so a RESCHEDULING↔POSTED transition
   // sticks across re-renders (a no-op when state matches the stored value).
   await deps.db
@@ -203,17 +205,17 @@ export async function cancelEmbedRecord(
   eventId: number,
 ): Promise<void> {
   try {
+    // A cancelled card carries no buttons on either row kind (pre-ROK-2292
+    // announcement behaviour), whatever rows the factory would attach.
     const { embed, content } = deps.embedFactory.buildEventCancelled(
       event,
       context,
     );
-    await deps.clientService.editEmbed(
-      record.channelId,
-      record.messageId,
-      embed,
-      undefined,
-      content,
-    );
+    const card = content ? { embed, content } : { embed };
+    const edit = await deps.messageEditor.edit(record, card, {
+      withContent: true,
+    });
+    if (edit === 'gone') return;
     await deps.db
       .update(schema.discordEventMessages)
       .set({ embedState: EMBED_STATES.CANCELLED, updatedAt: new Date() })
@@ -230,19 +232,50 @@ export async function cancelEmbedRecord(
   }
 }
 
-/** Delete a Discord message and remove the DB record. */
+/** The button-free card a deleted event's forum post is left showing. */
+export function removedStarterEmbed(): EmbedBuilder {
+  return createChannelEmbed({ state: EMBED_STATES.CANCELLED, timestamp: false })
+    .setTitle('Event removed')
+    .setDescription('This event was deleted. Signups are closed.');
+}
+
+/**
+ * Delete a Discord message and remove the DB record. A forum post's starter
+ * row (ROK-2292) is never deleted on Discord (that would delete the whole
+ * post; the forum lifecycle closes it): its card is edited to a button-free
+ * "removed" card first so nobody signs up to a deleted event.
+ */
 export async function deleteEmbedRecord(
   deps: EventListenerDeps,
   record: MessageRecord,
   eventId: number,
 ): Promise<void> {
-  await deps.clientService.deleteMessage(record.channelId, record.messageId);
-  deps.logger.log(
-    `Deleted Discord message for event ${eventId} (msg: ${record.messageId})`,
-  );
+  if (isForumStarterRow(record)) {
+    await retireStarterCard(deps, record, eventId);
+  } else {
+    await deps.clientService.deleteMessage(record.channelId, record.messageId);
+    deps.logger.log(
+      `Deleted Discord message for event ${eventId} (msg: ${record.messageId})`,
+    );
+  }
   await deps.db
     .delete(schema.discordEventMessages)
     .where(eq(schema.discordEventMessages.id, record.id));
+}
+
+/** Best effort: a failed edit is logged and the row is still dropped. */
+async function retireStarterCard(
+  deps: EventListenerDeps,
+  record: MessageRecord,
+  eventId: number,
+): Promise<void> {
+  try {
+    await deps.messageEditor.edit(record, { embed: removedStarterEmbed() });
+  } catch (error) {
+    deps.logger.warn(
+      `Failed to retire forum starter for deleted event ${eventId}: ${String(error)}`,
+    );
+  }
 }
 
 /** Update embed state for all records of an event. */
@@ -284,13 +317,7 @@ async function updateSingleEmbedState(
   const built = deps.embedFactory.buildEventEmbed(event, context, {
     state: newState,
   });
-  await deps.clientService.editEmbed(
-    record.channelId,
-    record.messageId,
-    built.embed,
-    embedComponents(built),
-    built.content,
-  );
+  await deps.messageEditor.edit(record, built, { withContent: true });
   await deps.db
     .update(schema.discordEventMessages)
     .set({ embedState: newState, updatedAt: new Date() })

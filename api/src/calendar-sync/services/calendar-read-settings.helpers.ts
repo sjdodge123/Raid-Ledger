@@ -123,7 +123,9 @@ export function planReadUpdate(
 /**
  * Persist a validated plan; a connection left reading gets a sync. Turning
  * read off queues a derive: the connection's blocks stop
- * counting, so its synced away days must go too (Q12).
+ * counting, so its synced away days must go too (Q12). A user edit clears a
+ * read-side `provider_error`, so the card's "calendar removed" line does not
+ * outlive the user's own fix or switch-off (a re-enable's sync rewrites it).
  */
 export async function applyReadUpdate(
   deps: CalendarReadSettingsDeps,
@@ -135,6 +137,9 @@ export async function applyReadUpdate(
     .set({
       readEnabled: plan.readEnabled,
       readCalendarIds: plan.readCalendarIds,
+      ...(row.lastErrorCode === 'provider_error'
+        ? { lastErrorCode: null }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(schema.calendarConnections.id, row.id));

@@ -14,6 +14,8 @@ import { SignupsRosterService } from '../events/signups-roster.service';
 import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grace.queue';
 import { RunningLateService } from '../events/running-late.service';
 import { z } from 'zod';
+import { activatedAtPatch } from '../events/signup-activated-at.helpers';
+import type { SetSignupStatusTestBody } from './demo-test.schemas';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -48,7 +50,7 @@ async function overrideSignupStatus(
 ): Promise<void> {
   await db
     .update(schema.eventSignups)
-    .set({ status })
+    .set({ status, ...activatedAtPatch(status) })
     .where(eq(schema.eventSignups.id, signupId));
 }
 
@@ -117,4 +119,21 @@ export async function setRunningLateForTest(
     ? await svc.clearRunningLate(body.eventId, body.userId)
     : await svc.setRunningLate(body.eventId, body.userId, body.minutes);
   return { changed };
+}
+
+/**
+ * Change any user's signup status through the REAL service call the
+ * `PATCH /events/:id/signup/status` route makes for the caller, so
+ * `SIGNUP_EVENTS.UPDATED` fires (ROK-2275).
+ */
+export async function setSignupStatusForTest(
+  moduleRef: ModuleRef,
+  body: SetSignupStatusTestBody,
+): Promise<SignupResponseDto> {
+  const svc = moduleRef.get(SignupsService, { strict: false });
+  return svc.updateStatus(
+    body.eventId,
+    { userId: body.userId },
+    { status: body.status },
+  );
 }

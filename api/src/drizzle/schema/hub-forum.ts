@@ -11,6 +11,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import type { HubForumReplyKind } from '@raid-ledger/contract';
 import { guilds } from './guilds';
 import { users } from './users';
 
@@ -183,6 +184,50 @@ export const hubForumThreads = pgTable(
 );
 
 /**
+ * ROK-2274: reply kinds; a signup line is system text — never authored.
+ * ROK-2297: so is a copy header ("Earlier chat from …").
+ */
+function replyKindChecks(table: { kind: AnyPgColumn; authorId: AnyPgColumn }) {
+  return [
+    check(
+      'hub_forum_replies_kind',
+      sql`${table.kind} IN ('reply', 'signup_line', 'copy_header')`,
+    ),
+    check(
+      'hub_forum_replies_line_no_author',
+      sql`${table.kind} = 'reply' OR ${table.authorId} IS NULL`,
+    ),
+  ];
+}
+
+/**
+ * ROK-2297: copied chat — a reply copies one ORIGINAL reply into a thread at
+ * most once, and a thread holds one copy header per source thread.
+ */
+function copyIndexes(table: {
+  threadId: AnyPgColumn;
+  kind: AnyPgColumn;
+  copiedFromReplyId: AnyPgColumn;
+  copiedFromThreadId: AnyPgColumn;
+}) {
+  return [
+    uniqueIndex('uq_hub_forum_replies_copy')
+      .on(table.threadId, table.copiedFromReplyId)
+      .where(sql`${table.copiedFromReplyId} IS NOT NULL`),
+    uniqueIndex('uq_hub_forum_replies_copy_header')
+      .on(table.threadId, table.copiedFromThreadId)
+      .where(sql`${table.kind} = 'copy_header'`),
+    // ROK-1157: FK backing indexes.
+    index('idx_hub_forum_replies_copied_from_reply_id').on(
+      table.copiedFromReplyId,
+    ),
+    index('idx_hub_forum_replies_copied_from_thread_id').on(
+      table.copiedFromThreadId,
+    ),
+  ];
+}
+
+/**
  * ROK-1175: flat replies to a forum thread, oldest first. `guild_id` is
  * denormalised so guards and the user-delete sweep need no join.
  */
@@ -199,6 +244,15 @@ export const hubForumReplies = pgTable(
     authorId: integer('author_id').references(() => users.id, {
       onDelete: 'set null',
     }),
+    /** ROK-2274: 'reply' (a member post) or 'signup_line' (system text). */
+    kind: varchar('kind', { length: 16 })
+      .$type<HubForumReplyKind>()
+      .notNull()
+      .default('reply'),
+    /** ROK-2274: the member a signup line is about; null on plain replies. */
+    subjectUserId: integer('subject_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     body: text('body').notNull(),
     editedAt: timestamp('edited_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -207,6 +261,16 @@ export const hubForumReplies = pgTable(
     }),
     deletedAs: varchar('deleted_as', { length: 16 }),
     ...discordGuestColumns(),
+    /** ROK-2297: a copy's ORIGINAL reply (a copy of a copy keeps the root). */
+    copiedFromReplyId: integer('copied_from_reply_id').references(
+      (): AnyPgColumn => hubForumReplies.id,
+      { onDelete: 'set null' },
+    ),
+    /** ROK-2297: the thread a copy (or copy header) was copied from. */
+    copiedFromThreadId: integer('copied_from_thread_id').references(
+      () => hubForumThreads.id,
+      { onDelete: 'set null' },
+    ),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -227,6 +291,7 @@ export const hubForumReplies = pgTable(
       'hub_forum_replies_deleted_pair',
       sql`(${table.deletedAt} IS NULL) = (${table.deletedAs} IS NULL)`,
     ),
+    ...replyKindChecks(table),
     // Reply page: oldest first, id breaks ties.
     index('idx_hub_forum_replies_thread').on(
       table.threadId,
@@ -237,7 +302,9 @@ export const hubForumReplies = pgTable(
     index('idx_hub_forum_replies_guild_id').on(table.guildId),
     index('idx_hub_forum_replies_author_id').on(table.authorId),
     index('idx_hub_forum_replies_deleted_by').on(table.deletedBy),
+    index('idx_hub_forum_replies_subject_user_id').on(table.subjectUserId),
     discordIdIndex('replies', table.authorDiscordId),
+    ...copyIndexes(table),
   ],
 );
 

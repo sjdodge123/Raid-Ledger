@@ -13,6 +13,7 @@ import type { SeriesSignupsService } from '../../events/series-signups.service';
 import type { SignupsService } from '../../events/signups.service';
 import type { CharactersService } from '../../characters/characters.service';
 import type { DiscordEmojiService } from '../services/discord-emoji.service';
+import type { CharacterImportSettings } from '../utils/character-import-link.helpers';
 import { findActiveMembership } from '../../events/series-signups.queries';
 import { SERIES_ERRORS } from '../../events/series-signups-join.helpers';
 import { SERIES_BUTTON_IDS } from '../series-signup/series-signup.constants';
@@ -39,6 +40,8 @@ export interface SeriesInteractionDeps {
   signupsService: Pick<SignupsService, 'cancelByDiscordUser'>;
   charactersService: Pick<CharactersService, 'findAllForUser'>;
   emojiService: DiscordEmojiService;
+  /** ROK-2294: trusted client URL for the character-import link. */
+  settingsService: CharacterImportSettings;
 }
 
 /** Any component interaction the series flow replies to. */

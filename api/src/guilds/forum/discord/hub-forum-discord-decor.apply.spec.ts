@@ -184,7 +184,11 @@ describe('ROK-2258 Codex P2 #1 — a hub tag is never the Event tag', () => {
     ]);
     const t = setup(forumInfo());
     await t.decor.run(1, 'c1');
-    expect(t.gw.addTags).toHaveBeenCalledWith('c1', ['event hub']);
+    expect(t.gw.addTags).toHaveBeenCalledWith('c1', [
+      'event hub',
+      'Poll',
+      'Lineup',
+    ]);
   });
 
   it('skips Event tagging when a hub already owns the "Event" tag (pre-2258 data)', async () => {
@@ -195,5 +199,38 @@ describe('ROK-2258 Codex P2 #1 — a hub tag is never the Event tag', () => {
     const t = setup(forumInfo());
     await t.decor.run(1, 'c1');
     expect(t.gw.applyTag).not.toHaveBeenCalledWith('c1', ['p1'], 't-event');
+  });
+});
+
+describe('ROK-2272 S8 — hub forums get the Poll and Lineup tags', () => {
+  it('creates Poll + Lineup on a forum that only has Event', async () => {
+    const t = setup(forumInfo());
+    await t.decor.run(1, 'c1');
+    expect(t.gw.addTags).toHaveBeenCalledWith('c1', ['Poll', 'Lineup']);
+  });
+
+  it('creates nothing when every kind tag exists (any case)', async () => {
+    const tags = [
+      EVENT_TAG,
+      { id: 't-poll', name: 'poll' },
+      { id: 't-lineup', name: 'LINEUP' },
+    ];
+    const t = setup(forumInfo({ tags }));
+    await t.decor.run(1, 'c1');
+    expect(t.gw.addTags).toHaveBeenCalledWith('c1', []);
+  });
+
+  it('the v2 backfill on a forum dressed under v1 adds exactly Poll + Lineup', async () => {
+    const tags = [
+      { id: 't5', name: 'Alpha' },
+      { id: 't7', name: 'Beta' },
+      EVENT_TAG,
+    ];
+    const t = setup(forumInfo({ tags, requireTag: true }));
+    expect(await t.decor.run(1, 'c1')).toBe('done');
+    expect(t.gw.addTags.mock.calls).toEqual([['c1', ['Poll', 'Lineup']]]);
+    expect(t.gw.applyTag.mock.calls).toEqual([['c1', ['p1'], 't-event']]);
+    expect(q.setBindingTag).not.toHaveBeenCalled();
+    expect(t.gw.requireTags).not.toHaveBeenCalled();
   });
 });

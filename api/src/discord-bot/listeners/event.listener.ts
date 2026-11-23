@@ -11,6 +11,7 @@ import {
 } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import { EmbedPosterService } from '../services/embed-poster.service';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 import { ChannelResolverService } from '../services/channel-resolver.service';
 import { ScheduledEventService } from '../services/scheduled-event.service';
 import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
@@ -33,6 +34,7 @@ import {
   updateEmbedStateForRecords,
   getReschedulingPollId,
   isAdHocEvent,
+  lacksAnnouncement,
   applyEmbedUpdates,
   fireScheduledEventUpdate,
   type EventListenerDeps,
@@ -73,6 +75,7 @@ export class DiscordEventListener {
     private readonly clientService: DiscordBotClientService,
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly embedPoster: EmbedPosterService,
+    private readonly messageEditor: EventEmbedMessageEditor,
     private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
     private readonly scheduledEventService: ScheduledEventService,
@@ -93,6 +96,7 @@ export class DiscordEventListener {
       embedPoster: this.embedPoster,
       channelResolver: this.channelResolver,
       settings: this.settingsService,
+      messageEditor: this.messageEditor,
       logger: this.logger,
     };
   }
@@ -133,8 +137,13 @@ export class DiscordEventListener {
     if (!this.clientService.isConnected()) return;
     if (await this.isAdHoc(payload)) return;
     const records = await findEventMessages(this.deps, payload.eventId);
-    if (records.length === 0) return this.handleMissingEmbedOnUpdate(payload);
-    await this.updateExistingEmbeds(payload, records, isRescheduling);
+    if (records.length > 0) {
+      await this.updateExistingEmbeds(payload, records, isRescheduling);
+    }
+    // Codex P2 (ROK-2292): a forum starter row is not the announcement.
+    if (lacksAnnouncement(records)) {
+      await this.handleMissingEmbedOnUpdate(payload);
+    }
   }
 
   @OnEvent(APP_EVENT_EVENTS.CANCELLED)
@@ -318,13 +327,7 @@ export class DiscordEventListener {
       this.logger.log(
         `Rescheduled event ${payload.eventId} is now within lead-time, posting`,
       );
-      const posted = await this.embedPoster.postEmbed(
-        payload.eventId,
-        payload.event,
-        payload.gameId,
-        payload.recurrenceGroupId,
-        payload.notificationChannelOverride,
-      );
+      const posted = await this.postEmbed(payload);
       if (posted) await this.announceGroup(payload.eventId);
     }
   }

@@ -14,6 +14,7 @@ import { HelpCommand } from './help.command';
 import { PlayingCommand } from './playing.command';
 import { LfgCommand } from './lfg.command';
 import { LfgLeaveCommand } from './lfg-leave.command';
+import { LoginCommand } from './login.command';
 import { REST, Routes } from 'discord.js';
 
 // Mock discord.js REST
@@ -56,6 +57,7 @@ const allCommandBodies = [
   { name: 'playing', description: 'Set what game you are playing' },
   { name: 'lfg', description: 'Raise a hand for a game' },
   { name: 'lfg-leave', description: "Leave an LFG you're in" },
+  { name: 'login', description: 'Get a one-time sign-in link' },
 ];
 
 const commandClassMap: Record<string, unknown> = {
@@ -70,6 +72,7 @@ const commandClassMap: Record<string, unknown> = {
   playing: PlayingCommand,
   lfg: LfgCommand,
   'lfg-leave': LfgLeaveCommand,
+  login: LoginCommand,
 };
 
 function makeProviders(mockRestPut: jest.Mock, mockRestGet?: jest.Mock) {

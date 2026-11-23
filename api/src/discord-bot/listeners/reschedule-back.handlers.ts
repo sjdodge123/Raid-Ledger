@@ -4,7 +4,6 @@
  */
 import type { ButtonInteraction } from 'discord.js';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
-import { showCharacterSelect } from '../utils/signup-dropdown-builders';
 import {
   parseCharacterBackId,
   type CharacterBackTarget,
@@ -16,7 +15,10 @@ import {
   safeEditReply,
   type RescheduleDeps,
 } from './reschedule-response.helpers';
-import { resolveCharacters } from './reschedule-confirm.handlers';
+import {
+  resolveCharacters,
+  showRescheduleCharacterList,
+} from './reschedule-confirm.handlers';
 
 /**
  * Claim a reschedule-flow Back click. Returns false when the button is not
@@ -89,12 +91,11 @@ async function rerenderCharacterList(
     await interaction.editReply({ content, components: [] });
     return;
   }
-  await showCharacterSelect(interaction, {
-    customIdPrefix: RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT,
-    eventId: event.id,
-    eventTitle: event.title,
-    characters: chars.characters,
-    emojiService: deps.emojiService,
-    customIdSuffix: target.suffix,
-  });
+  await showRescheduleCharacterList(
+    interaction,
+    deps,
+    event,
+    chars.characters,
+    target.suffix,
+  );
 }

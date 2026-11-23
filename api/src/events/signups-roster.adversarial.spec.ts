@@ -17,6 +17,7 @@ const baseSignup = {
   discordAvatarHash: null,
   note: 'test note',
   signedUpAt: new Date('2026-03-01T12:00:00Z'),
+  activatedAt: new Date('2026-03-01T12:00:00Z'),
   characterId: null,
   confirmationStatus: 'confirmed',
   status: 'signed_up',

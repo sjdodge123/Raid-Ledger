@@ -7,11 +7,11 @@
  * Connects the companion bot, auto-discovers channels/games from the API,
  * sets up fixtures, runs all smoke tests in parallel, then cleans up.
  */
-import { disconnect, getGuild } from "../client.js";
+import { disconnect } from "../client.js";
 import { isTimeoutError } from "./retry.js";
 import { SMOKE } from "./config.js";
 import { teardownChannelPool } from "./channel-pool.js";
-import { findEphemeralVoiceSince, formatEphemeralLeakReport } from "./ephemeral-leak.js";
+import { reportEphemeralLeaks } from "./ephemeral-leak-report.js";
 import { setup } from "./setup.js";
 import { partitionTests } from "./test-partition.js";
 import type { SmokeTest, TestContext, TestResult } from "./types.js";
@@ -25,6 +25,7 @@ import { interactionFlowTests } from "./tests/interaction-flows.test.js";
 import { rosterCalculationTests } from "./tests/roster-calculation.test.js";
 import { pushContentTests } from "./tests/push-content.test.js";
 import { slashCommandTests } from "./tests/slash-commands.test.js";
+import { loginCommandTests } from "./tests/login-command.test.js";
 import { cdpSlashCommandTests } from "./tests/cdp-slash-commands.test.js";
 import { cdpSteamInterestTests } from "./tests/cdp-steam-interest.test.js";
 import { cdpSteamNominationTests } from "./tests/cdp-steam-nomination.test.js";
@@ -57,6 +58,7 @@ import { recruitmentReminderTests } from "./tests/recruitment-reminder.test.js";
 import { recruitmentBumpSyncTests } from "./tests/recruitment-bump-sync.test.js";
 import { weeklyDigestTests } from "./tests/weekly-digest.test.js";
 import { ggDeliveryTests } from "./tests/gg-delivery.test.js";
+import { signinReminderTests } from "./tests/signin-reminder.test.js";
 import { seriesDualBindingTests } from "./tests/series-dual-binding.test.js";
 import { quickPlayAnnouncementsTests } from "./tests/quick-play-announcements.test.js";
 import { quickPlayOnePerGameTests } from "./tests/quick-play-one-per-game.test.js";
@@ -81,6 +83,7 @@ import { hubPollEmbedTests } from "./tests/hub-poll-embed.test.js";
 import { hubPostRelayTests } from "./tests/hub-post-relay.test.js";
 import { hubProposalNotificationsTests } from "./tests/hub-proposal-notifications.test.js";
 import { valheimClaimDmTests } from "./tests/valheim-claim-dm.test.js";
+import { calendarReconnectDmTests } from "./tests/calendar-reconnect-dm.test.js";
 import { valheimHubWelcomeTests } from "./tests/valheim-hub-welcome.test.js";
 import { hubMediaIngestTests } from "./tests/hub-media-ingest.test.js";
 // ROK-1371 smoke unregistered below (CI-seed recipient flake) — import removed
@@ -198,6 +201,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...suppressionEndSyncTests,
     ...interactionFlowTests,
     ...slashCommandTests,
+    ...loginCommandTests,
     ...cdpSlashCommandTests,
     ...cdpSteamInterestTests,
     ...cdpSteamNominationTests,
@@ -230,6 +234,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...recruitmentBumpSyncTests,
     ...weeklyDigestTests,
     ...ggDeliveryTests,
+    ...signinReminderTests,
     ...seriesDualBindingTests,
     ...quickPlayAnnouncementsTests,
     ...quickPlayOnePerGameTests,
@@ -254,6 +259,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...hubPostRelayTests,
     ...hubProposalNotificationsTests,
     ...valheimClaimDmTests,
+    ...calendarReconnectDmTests,
     ...valheimHubWelcomeTests,
     ...hubMediaIngestTests,
     // ROK-1371 post-event-followup smoke intentionally UNregistered from CI.
@@ -263,27 +269,6 @@ function collectTests(filterCat?: string): SmokeTest[] {
     // `...postEventFollowupTests` once the DM-shard seed guarantees the recipient
     // a linked discord_id. See TECH-DEBT-BACKLOG.md.
   ].filter((t) => !filterCat || t.category === filterCat);
-}
-
-/**
- * Warn — loudly, with a count — about ephemeral voice channels created during
- * this run that are still standing (INV-DEV-GUILD-FLOOD-2026-10-15). A warning,
- * not a failure: a concurrent run sharing the guild can own a live one.
- */
-async function reportEphemeralLeaks(runStartMs: number): Promise<void> {
-  try {
-    const channels = await getGuild().channels.fetch();
-    const typed = [...channels.values()].flatMap((c) =>
-      c ? [{ id: c.id, name: c.name, type: c.type }] : [],
-    );
-    const leaks = findEphemeralVoiceSince(typed, runStartMs);
-    const githubActions = process.env.GITHUB_ACTIONS === "true";
-    for (const line of formatEphemeralLeakReport(leaks, runStartMs, githubActions)) {
-      console.log(line);
-    }
-  } catch (err) {
-    console.warn(`  Ephemeral voice census skipped: ${String(err)}`);
-  }
 }
 
 /** Clean up resources and exit with the appropriate code. */

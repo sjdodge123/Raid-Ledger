@@ -159,13 +159,21 @@ export class HubForumDiscordService {
     await deleteBinding(this.db, guildId);
     this.routes.invalidate(); // D9: an unbound hub stops syncing now
     this.planningForum.invalidate(); // ROK-2272 §3.2: candidates changed
-    if (!deleteForum || !row.forum.managed) return;
     // Review M1: under the bind lock, so a bind that just picked this forum
     // lands (and keeps it) before the "nobody uses it" check runs.
-    const { discordGuildId, id, channelId } = row.forum;
+    const { discordGuildId, id, channelId, managed } = row.forum;
     await this.binds.run(discordGuildId, async () => {
       if ((await listForumBindings(this.db, id)).length > 0) return;
       if (this.gateway.guildId() === null) return;
+      if (!deleteForum || !managed) {
+        // ROK-2296: every webhook reader (outbound, starter edits, inbound
+        // echo check) goes through a binding, and planning posts are
+        // bot-authored — so the last unbind frees the bot's webhooks, which
+        // otherwise count toward the guild's 1000 cap even after the
+        // channel is deleted. Best-effort inside the gateway.
+        await this.gateway.deleteOwnWebhooks(channelId);
+        return;
+      }
       await this.gateway.deleteForum(channelId);
       await deleteForumRow(this.db, id);
     });

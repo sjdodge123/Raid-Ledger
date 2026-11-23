@@ -63,9 +63,12 @@ async function seedEventWithSignup(
       .returning(),
     'inserted event',
   );
-  await testApp.db
-    .insert(schema.eventSignups)
-    .values({ eventId: event.id, userId: user.id });
+  // ROK-2293: an hour-old signup, so the fresh-signup skip never applies.
+  await testApp.db.insert(schema.eventSignups).values({
+    eventId: event.id,
+    userId: user.id,
+    activatedAt: new Date(now.getTime() - 60 * MINUTE),
+  });
   return { eventId: event.id, userId: user.id, start };
 }
 

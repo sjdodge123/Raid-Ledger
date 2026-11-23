@@ -12,19 +12,13 @@
  * `?discussion=1` panel on this page (L4b, OQ-11). Tokens only.
  */
 import type { JSX } from 'react';
+import type { EventResponseDto } from '@raid-ledger/contract';
 import {
-    ChatBubbleLeftRightIcon,
-    LockClosedIcon,
-} from '@heroicons/react/24/outline';
-import type {
-    EventDiscussionReady,
-    EventResponseDto,
-} from '@raid-ledger/contract';
-import { Pill } from '../../components/hub/hub-bits';
-import { replyCountLabel } from '../../components/hub/forum/forum-thread.helpers';
+    DiscussionCardSkeleton,
+    SubjectDiscussionFrame,
+} from '../../components/discussion/discussion-card-parts';
 import {
     DiscussionFoot,
-    DiscussionReplies,
     type DiscussionSignup,
 } from './event-discussion-card-parts';
 import { useEventDiscussion } from './use-event-discussion';
@@ -42,65 +36,6 @@ export interface EventDiscussionCardProps {
     signup?: DiscussionSignup | undefined;
 }
 
-/** The "Closed" pill a locked thread's heading carries. */
-function ClosedPill(): JSX.Element {
-    return (
-        <Pill>
-            <LockClosedIcon className="h-3 w-3" aria-hidden="true" />
-            Closed
-        </Pill>
-    );
-}
-
-/** "Discussion" title (+ Closed pill once locked) and the reply count. */
-function DiscussionHeading({ d }: { d: EventDiscussionReady }): JSX.Element {
-    return (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <h2
-                id="event-discussion-title"
-                className="flex items-center gap-2 text-lg font-semibold text-foreground"
-            >
-                <ChatBubbleLeftRightIcon
-                    className="h-5 w-5 shrink-0"
-                    aria-hidden="true"
-                />
-                Discussion
-                {d.lock !== null && <ClosedPill />}
-            </h2>
-            <span
-                className="text-xs text-muted"
-                data-testid="event-discussion-count"
-            >
-                {replyCountLabel(d.replyCount)}
-            </span>
-        </div>
-    );
-}
-
-function DiscussionFrame({
-    eventId,
-    d,
-    signup,
-}: {
-    eventId: number;
-    d: EventDiscussionReady;
-    signup: DiscussionSignup | undefined;
-}): JSX.Element {
-    return (
-        <section
-            className="mb-6 rounded-xl border border-edge bg-surface p-4"
-            data-testid="event-discussion-card"
-            aria-labelledby="event-discussion-title"
-        >
-            <DiscussionHeading d={d} />
-            {d.can.read && <DiscussionReplies replies={d.latestReplies} />}
-            {d.can.read && (
-                <DiscussionFoot eventId={eventId} d={d} signup={signup} />
-            )}
-        </section>
-    );
-}
-
 /** The event page Discussion card (see file docstring). */
 export function EventDiscussionCard({
     event,
@@ -110,16 +45,18 @@ export function EventDiscussionCard({
     const visible = enabled && event.guildId != null && event.hub != null;
     const query = useEventDiscussion(event.id, visible);
     if (!visible || query.isError) return null;
-    if (query.isPending) {
-        return (
-            <div
-                className="mb-6 h-24 animate-pulse rounded-xl border border-edge bg-panel"
-                aria-busy="true"
-                aria-label="Loading discussion"
-            />
-        );
-    }
+    if (query.isPending) return <DiscussionCardSkeleton />;
     return query.data.state === 'none' ? null : (
-        <DiscussionFrame eventId={event.id} d={query.data} signup={signup} />
+        <SubjectDiscussionFrame
+            kind="event"
+            d={query.data}
+            foot={
+                <DiscussionFoot
+                    eventId={event.id}
+                    d={query.data}
+                    signup={signup}
+                />
+            }
+        />
     );
 }

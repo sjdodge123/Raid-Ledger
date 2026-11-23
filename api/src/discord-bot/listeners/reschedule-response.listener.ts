@@ -18,6 +18,7 @@ import {
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
+import { SettingsService } from '../../settings/settings.service';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
 import type { EventRow, RescheduleDeps } from './reschedule-response.helpers';
 import {
@@ -49,6 +50,13 @@ import {
 import { errorStack } from '../../common/error-format.helpers';
 import { routeRescheduleBack } from './reschedule-back.handlers';
 import { emitSignupUpdated } from './reschedule-signup-emit.helpers';
+import { LFG_BLOCKED_REPLY } from '../commands/lfg.command.helpers';
+
+/** The linked / unlinked handlers of one attending button. */
+interface AttendingHandlers {
+  linked: typeof handleLinkedConfirm;
+  unlinked: typeof handleUnlinkedConfirm;
+}
 
 /**
  * Handles Confirm / Decline button interactions on reschedule DMs (ROK-537).
@@ -71,6 +79,7 @@ export class RescheduleResponseListener {
     private readonly emojiService: DiscordEmojiService,
     private readonly activityLog: ActivityLogService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly settingsService: SettingsService,
   ) {}
 
   private get deps(): RescheduleDeps {
@@ -83,6 +92,7 @@ export class RescheduleResponseListener {
       activityLog: this.activityLog,
       eventEmitter: this.eventEmitter,
       logger: this.logger,
+      settingsService: this.settingsService,
     };
   }
 
@@ -145,34 +155,46 @@ export class RescheduleResponseListener {
     i: ButtonInteraction,
     eventId: number,
   ): Promise<void> {
-    const v = await this.validateSignup(i, eventId);
-    if (!v) return;
-    const linkedUser = await findLinkedUserByDiscordId(this.db, i.user.id);
-    const ctx = {
-      deps: this.deps,
-      interaction: i,
-      event: v.event,
-      editDm: dmEditFor(this.logger),
-    };
-    if (linkedUser) await handleLinkedConfirm(ctx, linkedUser);
-    else await handleUnlinkedConfirm(ctx);
+    await this.respondAttending(i, eventId, {
+      linked: handleLinkedConfirm,
+      unlinked: handleUnlinkedConfirm,
+    });
   }
 
   private async handleTentative(
     i: ButtonInteraction,
     eventId: number,
   ): Promise<void> {
+    await this.respondAttending(i, eventId, {
+      linked: handleLinkedTentative,
+      unlinked: handleUnlinkedTentative,
+    });
+  }
+
+  /**
+   * Confirm / Tentative. TECH-DEBT T5: `NotDeactivatedGuard` guards the HTTP
+   * routes only, so a banned or deactivated account is refused here.
+   */
+  private async respondAttending(
+    i: ButtonInteraction,
+    eventId: number,
+    on: AttendingHandlers,
+  ): Promise<void> {
     const v = await this.validateSignup(i, eventId);
     if (!v) return;
     const linkedUser = await findLinkedUserByDiscordId(this.db, i.user.id);
+    if (linkedUser && (linkedUser.bannedAt || linkedUser.deactivatedAt)) {
+      await i.editReply({ content: LFG_BLOCKED_REPLY });
+      return;
+    }
     const ctx = {
       deps: this.deps,
       interaction: i,
       event: v.event,
       editDm: dmEditFor(this.logger),
     };
-    if (linkedUser) await handleLinkedTentative(ctx, linkedUser);
-    else await handleUnlinkedTentative(ctx);
+    if (linkedUser) await on.linked(ctx, linkedUser);
+    else await on.unlinked(ctx);
   }
 
   private async handleDecline(

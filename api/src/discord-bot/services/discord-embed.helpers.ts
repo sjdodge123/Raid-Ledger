@@ -5,6 +5,7 @@ import {
   ROSTER_NAME_CAP,
   type RosterEntry,
 } from '../embeds/embed-roster.helpers';
+import { SIGNUP_STATE_EMOJI } from '../embeds/signup-state-emoji.constants';
 import type { EmbedEventData } from './discord-embed.factory';
 import type { DiscordEmojiService } from './discord-emoji.service';
 
@@ -141,9 +142,10 @@ function toRosterEntry(
   m: SignupMention,
   emojiService: DiscordEmojiService,
 ): RosterEntry {
-  const tentative = m.status === 'tentative' ? '⏳' : '';
+  const tentative =
+    m.status === 'tentative' ? SIGNUP_STATE_EMOJI.tentative : '';
   // Running late is additive — composes with ⏳ and never strikes through.
-  const late = m.runningLate ? '⏰' : '';
+  const late = m.runningLate ? SIGNUP_STATE_EMOJI.late : '';
   const classEmoji = m.className ? emojiService.getClassEmoji(m.className) : '';
   const marks = [tentative, late, classEmoji].filter(Boolean).join(' ');
   const roleEmojis = roleEmojisFor(m, emojiService);

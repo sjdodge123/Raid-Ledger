@@ -376,3 +376,5 @@ export * from './backup-export-token.schema.js';
 export * from './gg-cards.schema.js';
 export * from './gg.schema.js';
 export * from './event-invite-characters.schema.js';
+// Sign-in reminder DM settings (ROK-2284).
+export * from './signin-reminder.schema.js';

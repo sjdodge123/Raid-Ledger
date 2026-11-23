@@ -18,6 +18,7 @@ import {
   type PostsCtx,
 } from '../../posts/hub-posts.test-fixtures';
 import { HubForumDiscordInboundIngest } from './hub-forum-discord-inbound.ingest';
+import { markDeleted } from './hub-forum-discord-links.queries';
 import { HubForumDiscordNotices } from './hub-forum-discord-notice';
 import {
   stubOutbound,
@@ -45,6 +46,7 @@ const freshId = (): string =>
 
 let ctx: PostsCtx;
 let adminToken: string;
+let adminId: number;
 let ingest: HubForumDiscordInboundIngest;
 let out: FakeOutbound;
 let pinGw: { pinnedPost: jest.SpyInstance; setPinned: jest.SpyInstance };
@@ -63,6 +65,7 @@ beforeAll(async () => {
       .returning(),
     'admin',
   );
+  adminId = u.id;
   adminToken = await signTestAccessToken(ctx.testApp, {
     sub: u.id,
     username: u.username,
@@ -253,6 +256,35 @@ describe('ROK-2208 inbound Discord → RL', () => {
     expect((await threadRow(thread.id)).replyCount).toBe(0);
   });
 
+  it('ROK-2297: a Discord delete of a mirrored copy header leaves reply_count alone', async () => {
+    const { channelId } = await boundHub();
+    const { thread, rlThread } = await importPost(channelId);
+    const kept = msg(thread);
+    const header = msg(thread);
+    await ingest.onCreate(kept, thread, noBot);
+    await ingest.onCreate(header, thread, noBot);
+    // Turn the second row into a linked system line, which never counted.
+    const r = schema.hubForumReplies;
+    const t = schema.hubForumThreads;
+    const row = await replyRow(header.id);
+    expect(row).not.toBeNull();
+    await ctx.testApp.db
+      .update(r)
+      .set({ kind: 'copy_header' })
+      .where(eq(r.id, row?.id ?? 0));
+    await ctx.testApp.db
+      .update(t)
+      .set({ replyCount: rlThread.replyCount + 1 })
+      .where(eq(t.id, rlThread.id));
+
+    expect(await ingest.onDelete(header.id, channelId)).toBe('deleted');
+
+    expect(await replyRow(header.id)).toMatchObject({ deletedAs: 'author' });
+    expect((await threadRow(thread.id)).replyCount).toBe(
+      rlThread.replyCount + 1,
+    );
+  });
+
   it('a deleted Discord post soft-deletes the RL thread as moderator', async () => {
     const { channelId } = await boundHub();
     const { thread } = await importPost(channelId);
@@ -261,6 +293,56 @@ describe('ROK-2208 inbound Discord → RL', () => {
       deletedAs: 'moderator',
       deletedBy: null,
     });
+  });
+
+  it('codex P2: a post stamped by an outbound 404 is still removed by the gateway delete', async () => {
+    const { channelId } = await boundHub();
+    const { thread } = await importPost(channelId);
+    const l = schema.hubForumDiscordLinks;
+    const linkOf = async () =>
+      nonEmpty(
+        await ctx.testApp.db
+          .select()
+          .from(l)
+          .where(eq(l.discordMessageId, thread.id)),
+        'post link',
+      )[0];
+    const stampedAt = new Date(Date.now() - 60_000);
+    await markDeleted(ctx.testApp.db, (await linkOf()).id, stampedAt);
+    expect(await ingest.onThreadDelete(thread)).toBe('deleted');
+    expect(await threadRow(thread.id)).toMatchObject({
+      deletedAs: 'moderator',
+      deletedBy: null,
+    });
+    expect((await linkOf()).discordDeletedAt).toEqual(stampedAt);
+    // The RL thread is now removed: a repeat delete event skips.
+    expect(await ingest.onThreadDelete(thread)).toBe('skipped');
+  });
+
+  it('an RL-side moderator delete survives the gateway thread-delete; the link is stamped', async () => {
+    const { channelId } = await boundHub();
+    const { thread, rlThread } = await importPost(channelId);
+    const t = schema.hubForumThreads;
+    const removedAt = new Date(Date.now() - 60_000);
+    await ctx.testApp.db
+      .update(t)
+      .set({ deletedAt: removedAt, deletedBy: adminId, deletedAs: 'moderator' })
+      .where(eq(t.id, rlThread.id));
+    expect(await ingest.onThreadDelete(thread)).toBe('skipped');
+    expect(await threadRow(thread.id)).toMatchObject({
+      deletedAt: removedAt,
+      deletedBy: adminId,
+      deletedAs: 'moderator',
+    });
+    const l = schema.hubForumDiscordLinks;
+    const [link] = nonEmpty(
+      await ctx.testApp.db
+        .select({ at: l.discordDeletedAt })
+        .from(l)
+        .where(eq(l.discordMessageId, thread.id)),
+      'post link',
+    );
+    expect(link.at).not.toBeNull();
   });
 
   it('AC7/D5: our webhook, our bot and already-linked messages are echoes', async () => {
@@ -279,6 +361,26 @@ describe('ROK-2208 inbound Discord → RL', () => {
     const again = msg(thread, { id: thread.id });
     expect(await ingest.onCreate(again, thread, noBot)).toBe('skipped');
     expect(await threadCount(g)).toBe(1);
+  });
+
+  it('ROK-2274 loop 2: a bot-authored signup line never imports as a reply', async () => {
+    const { channelId } = await boundHub();
+    const { thread, rlThread } = await importPost(channelId);
+    const line = msg(thread, {
+      authorId: 'our-bot',
+      content: '✅ <@123456789012345678> signed up',
+    });
+    expect(await ingest.onCreate(line, thread, { botUserId: 'our-bot' })).toBe(
+      'skipped',
+    );
+    expect(await replyRow(line.id)).toBeNull();
+    const r = schema.hubForumReplies;
+    const rows = await ctx.testApp.db
+      .select({ id: r.id })
+      .from(r)
+      .where(eq(r.threadId, rlThread.id));
+    expect(rows).toEqual([]);
+    expect((await threadRow(thread.id)).replyCount).toBe(0);
   });
 
   it('an unbound channel and a post older than bound_at are ignored (AC13)', async () => {
@@ -362,6 +464,31 @@ describe('ROK-2272 S3: event-planning registry posts stay on Discord', () => {
     expect(await ingest.onCreate(starter, thread, noBot)).toBe('skipped');
     expect(notify).not.toHaveBeenCalled();
     expect(await threadCount(g)).toBe(0);
+  });
+});
+
+describe('ROK-2272 S4 review MAJOR-2: a registry post deleted on Discord', () => {
+  it('thread-delete marks the registry row deleted; imports nothing, DMs nobody', async () => {
+    const { g, channelId } = await boundHub();
+    const notify = jest.spyOn(
+      ctx.testApp.app.get(HubForumDiscordNotices),
+      'notify',
+    );
+    const thread = await registryPost(channelId);
+    expect(await ingest.onThreadDelete(thread)).toBe('deleted');
+    const p = schema.eventPlanningPosts;
+    const [row] = nonEmpty(
+      await ctx.testApp.db
+        .select()
+        .from(p)
+        .where(eq(p.discordThreadId, thread.id)),
+      'registry post',
+    );
+    expect(row.discordDeletedAt).not.toBeNull();
+    expect(await threadCount(g)).toBe(0);
+    expect(notify).not.toHaveBeenCalled();
+    // A repeat delete event finds no live row.
+    expect(await ingest.onThreadDelete(thread)).toBe('skipped');
   });
 });
 

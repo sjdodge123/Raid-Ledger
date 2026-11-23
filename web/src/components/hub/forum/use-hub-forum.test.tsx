@@ -16,6 +16,8 @@ function setup() {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     queryClient.setQueryData(['events', 5, 'discussion', 'u1'], { state: 'none' });
     queryClient.setQueryData(['events', 5, 'detail'], { id: 5 });
+    queryClient.setQueryData(['subject-discussion', 'poll', 31, 'u1'], { state: 'none' });
+    queryClient.setQueryData(['subject-discussion', 'lineup', 9, 'u1'], { state: 'none' });
     const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
     const stale = (key: unknown[]) => queryClient.getQueryState(key)?.isInvalidated;
     return { wrapper, stale };
@@ -41,5 +43,19 @@ describe('hub forum reply writes refresh event discussion cards (ROK-2226)', () 
         result.current.mutate({ threadId: 3, replyId: 9 });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
         expect(stale(['events', 5, 'discussion', 'u1'])).toBe(true);
+    });
+});
+
+describe('hub forum reply writes refresh poll / lineup discussion cards (ROK-2272 S9)', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('posting a reply marks every cached poll and lineup card summary stale', async () => {
+        api.createForumReply.mockResolvedValue({ id: 1 });
+        const { wrapper, stale } = setup();
+        const { result } = renderHook(() => useCreateForumReply(7), { wrapper });
+        result.current.mutate({ threadId: 3, body: 'hi' });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(stale(['subject-discussion', 'poll', 31, 'u1'])).toBe(true);
+        expect(stale(['subject-discussion', 'lineup', 9, 'u1'])).toBe(true);
     });
 });

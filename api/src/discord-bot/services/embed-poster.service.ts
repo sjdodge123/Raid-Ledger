@@ -1,9 +1,11 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EmbedBuilder } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { findAnnouncementMessage } from './event-message-rows.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
   DiscordEmbedFactory,
@@ -33,6 +35,10 @@ import {
   hubLinkPart,
   resolveEventHubLink,
 } from '../channel-lifecycle/embed-hub-link.helpers';
+import {
+  EVENT_ANNOUNCEMENT_POSTED,
+  type EventAnnouncementPostedPayload,
+} from './event-forum-starter.cards';
 
 interface ChannelOpts {
   gameId?: number | null | undefined;
@@ -61,6 +67,7 @@ export class EmbedPosterService {
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /** Post an embed for an event to the appropriate Discord channel. */
@@ -98,12 +105,7 @@ export class EmbedPosterService {
 
   /** Check if an event already has a discord_event_messages row. */
   async hasEmbed(eventId: number): Promise<boolean> {
-    const rows = await this.db
-      .select({ id: schema.discordEventMessages.id })
-      .from(schema.discordEventMessages)
-      .where(eq(schema.discordEventMessages.eventId, eventId))
-      .limit(1);
-    return rows.length > 0;
+    return (await findAnnouncementMessage(this.db, eventId)) !== null;
   }
 
   /** Enrich event data with live roster/signup information from the DB. */
@@ -257,6 +259,9 @@ export class EmbedPosterService {
       return false;
     }
     this.logger.log(`Posted embed for event ${eventId} (msg: ${message.id})`);
+    // ROK-2292 D8: the forum module opens the event's post now (idempotent).
+    const announced: EventAnnouncementPostedPayload = { eventId };
+    this.eventEmitter.emit(EVENT_ANNOUNCEMENT_POSTED, announced);
     return true;
   }
 

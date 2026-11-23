@@ -14,6 +14,7 @@ import { CalendarConnectionsController } from './controllers/calendar-connection
 import { CalendarFeedController } from './controllers/calendar-feed.controller';
 import { CalendarFeedPublicController } from './controllers/calendar-feed-public.controller';
 import { CalendarDemoSeedController } from './controllers/calendar-demo-seed.controller';
+import { CalendarDemoAuthFailureController } from './controllers/calendar-demo-auth-failure.controller';
 import { CalendarOAuthController } from './controllers/calendar-oauth.controller';
 import { CalendarSyncAdminController } from './controllers/calendar-sync-admin.controller';
 import { EventCalendarController } from './controllers/event-calendar.controller';
@@ -91,6 +92,7 @@ const caldavPersister = {
     CalendarOAuthController,
     CalendarAppleController,
     CalendarDemoSeedController,
+    CalendarDemoAuthFailureController,
     CalendarSyncAdminController,
     EventCalendarController,
   ],

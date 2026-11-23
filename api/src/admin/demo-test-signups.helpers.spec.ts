@@ -8,8 +8,10 @@ import {
   cancelSignupForTest,
   triggerDepartureForTest,
   setRunningLateForTest,
+  setSignupStatusForTest,
   RunningLateTestSchema,
 } from './demo-test-signups.helpers';
+import { activatedAtOnReactivation } from '../events/signup-activated-at.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -78,7 +80,10 @@ describe('demo-test-signups.helpers - createSignupForTest', () => {
     });
 
     expect(db.update).toHaveBeenCalled();
-    expect(db.set).toHaveBeenCalledWith({ status: 'tentative' });
+    expect(db.set).toHaveBeenCalledWith({
+      status: 'tentative',
+      activatedAt: activatedAtOnReactivation(), // ROK-2293 conditional re-stamp
+    });
   });
 });
 
@@ -153,5 +158,25 @@ describe('demo-test-signups.helpers - setRunningLateForTest (ROK-2271)', () => {
       RunningLateTestSchema.safeParse({ eventId: 1, userId: 1, minutes: 0 })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('demo-test-signups.helpers - setSignupStatusForTest (ROK-2275)', () => {
+  it('calls SignupsService.updateStatus with the chosen user', async () => {
+    const updateStatus = jest.fn().mockResolvedValue({ id: 5 });
+    const moduleRef = mockModuleRef({ SignupsService: { updateStatus } });
+
+    const res = await setSignupStatusForTest(moduleRef, {
+      eventId: 7,
+      userId: 42,
+      status: 'signed_up',
+    });
+
+    expect(res).toEqual({ id: 5 });
+    expect(updateStatus).toHaveBeenCalledWith(
+      7,
+      { userId: 42 },
+      { status: 'signed_up' },
+    );
   });
 });

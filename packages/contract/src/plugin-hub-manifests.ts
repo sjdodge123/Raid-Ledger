@@ -84,13 +84,17 @@ const core = {
     { id: 'event-discussion', kind: 'event-tagger', label: 'Opens a forum thread for each hub-tagged event' },
     // ROK-2272 S7 — scheduling-poll (and, S7b, lineup) Raid Ledger threads.
     { id: 'poll-discussion', kind: 'event-tagger', label: 'Opens a forum thread for each hub-tagged scheduling poll and lineup' },
+    // ROK-2272 S4a — Discord-only posts for non-hub events, polls and lineups.
+    { id: 'event-planning.discord-posts', kind: 'event-tagger', label: 'Posts non-hub events, polls and lineups into the event-planning Discord forum' },
     { id: 'hub-media.upload', kind: 'ingest-source', label: 'Members upload pictures to the hub Gallery' },
     // ROK-2208 — the hub Forum ↔ Discord forum channel sync.
     { id: 'hub-forum.discord-sync', kind: 'ingest-source', label: 'Syncs the hub Forum with a Discord forum channel' },
     { id: 'HubForumDiscordSync_retrySweep', kind: 'scheduled-job', label: 'Retries hub Forum posts that did not reach Discord every 5 minutes' },
-    { id: 'HubForumDiscordSync_eventLockSweep', kind: 'scheduled-job', label: 'Locks and archives the Discord post of a read-only event thread every 5 minutes' },
+    { id: 'HubForumDiscordSync_eventLockSweep', kind: 'scheduled-job', label: 'Closes event, poll and lineup posts in the Discord forum 1 hour after they end' },
     { id: 'SteamAppStatsProcessor_scheduledRefresh', kind: 'scheduled-job', label: 'Refreshes Steam achievements for game hubs every night' },
     { id: 'GgDeliveryCron_tick', kind: 'scheduled-job', label: 'Delivers GG <year>: the announcement, then paced player DMs' },
+    // ROK-2284 — paced reminder DMs to guild members who never signed in.
+    { id: 'SigninReminderCron_tick', kind: 'scheduled-job', label: 'DMs guild members who have never signed in, every few weeks' },
     ...ggCoreCards,
   ],
   setup: CORE_SETUP,

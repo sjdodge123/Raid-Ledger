@@ -184,7 +184,12 @@ async function writeConfirmationReset(
   }
   await db
     .update(schema.eventSignups)
-    .set({ confirmationStatus: 'pending', status: 'signed_up' })
+    .set({
+      confirmationStatus: 'pending',
+      status: 'signed_up',
+      // ROK-2293: a system restore — activated_at is deliberately NOT
+      // re-stamped, so restored members still get the next reminder window.
+    })
     .where(and(...conditions));
 }
 

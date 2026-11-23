@@ -26,3 +26,11 @@ export const REMINDER_WINDOWS = [
 ] as const;
 
 export type ReminderWindowType = (typeof REMINDER_WINDOWS)[number]['type'];
+
+/**
+ * A recipient whose signup became active this recently gets no DM for the
+ * window being dispatched (ROK-2293): they just signed up and already know
+ * when the event starts. The window's dedup row is still claimed, so that
+ * window never fires later; the next window behaves normally.
+ */
+export const REMINDER_FRESH_SIGNUP_GRACE_MS = 15 * 60 * 1000;
