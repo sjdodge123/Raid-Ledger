@@ -2,7 +2,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { Writable } from 'node:stream';
 import type { Response } from 'express';
-import { BackupController } from './backup.controller';
+import { BackupExportController } from './backup-export.controller';
 import type { BackupService } from './backup.service';
 
 type MockRes = Writable & {
@@ -21,7 +21,7 @@ function createMockRes(): MockRes {
   return res;
 }
 
-describe('BackupController', () => {
+describe('BackupExportController', () => {
   describe('downloadBackup', () => {
     it('destroys the response when the read stream errors (TOCTOU race)', async () => {
       // getBackupFilePath existsSync-validates then returns the path; the file
@@ -34,7 +34,7 @@ describe('BackupController', () => {
       const backupService = {
         getBackupFilePath: jest.fn().mockReturnValue(missingPath),
       } as unknown as BackupService;
-      const controller = new BackupController(backupService);
+      const controller = new BackupExportController(backupService);
 
       const res = createMockRes();
       const destroyed = new Promise<NodeJS.ErrnoException>((resolve) => {
@@ -73,7 +73,7 @@ describe('BackupController', () => {
           },
         ]),
       } as unknown as BackupService;
-      const controller = new BackupController(backupService);
+      const controller = new BackupExportController(backupService);
 
       const res = await controller.createBackup();
 

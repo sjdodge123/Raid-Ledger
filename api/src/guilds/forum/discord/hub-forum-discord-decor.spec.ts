@@ -5,6 +5,11 @@
  */
 import {
   EVENT_TAG_NAME,
+  LINEUP_TAG_NAME,
+  POLL_TAG_NAME,
+  RESERVED_TAG_NAMES,
+  isReservedTagName,
+  findKindTagId,
   findTagId,
   planTagCreates,
   postTagIds,
@@ -89,21 +94,114 @@ describe('ROK-2258 postTagIds', () => {
   const forumTags = [{ id: 'e', name: 'event' }];
 
   it('adds the Event tag to an event post after the hub tag', () => {
-    expect(postTagIds(['h'], true, forumTags)).toEqual(['h', 'e']);
+    expect(postTagIds(['h'], 'event', forumTags)).toEqual(['h', 'e']);
   });
 
   it('leaves a plain post with only the hub tag', () => {
-    expect(postTagIds(['h'], false, forumTags)).toEqual(['h']);
-    expect(postTagIds([], false, forumTags)).toEqual([]);
+    expect(postTagIds(['h'], null, forumTags)).toEqual(['h']);
+    expect(postTagIds([], null, forumTags)).toEqual([]);
   });
 
   it('posts an event without the Event tag when the forum has none', () => {
-    expect(postTagIds([], true, [])).toEqual([]);
+    expect(postTagIds([], 'event', [])).toEqual([]);
   });
 
   it("never repeats a tag and keeps to Discord's 5 per post", () => {
-    expect(postTagIds(['e'], true, forumTags)).toEqual(['e']);
+    expect(postTagIds(['e'], 'event', forumTags)).toEqual(['e']);
     const five = ['a', 'b', 'c', 'd', 'f'];
-    expect(postTagIds(five, true, forumTags)).toEqual(five);
+    expect(postTagIds(five, 'event', forumTags)).toEqual(five);
+  });
+});
+
+describe('ROK-2272 S8 postTagIds kind tags', () => {
+  const forumTags = [
+    { id: 'e', name: 'Event' },
+    { id: 'p', name: 'Poll' },
+    { id: 'l', name: 'Lineup' },
+  ];
+
+  it('adds the Poll tag to a poll post and the Lineup tag to a lineup post', () => {
+    expect(postTagIds(['h'], 'poll', forumTags)).toEqual(['h', 'p']);
+    expect(postTagIds(['h'], 'lineup', forumTags)).toEqual(['h', 'l']);
+  });
+
+  it('F4: a forum without the Poll/Lineup tag gets the hub tag only', () => {
+    const eventOnly = [{ id: 'e', name: 'Event' }];
+    expect(postTagIds(['h'], 'poll', eventOnly)).toEqual(['h']);
+    expect(postTagIds(['h'], 'lineup', eventOnly)).toEqual(['h']);
+  });
+
+  it('never repeats the Poll tag when the hub tag is it', () => {
+    expect(postTagIds(['p'], 'poll', forumTags)).toEqual(['p']);
+  });
+});
+
+describe('ROK-2272 §3.3 Poll + Lineup kind tags', () => {
+  it('reserves Event, Poll and Lineup (any case, trimmed)', () => {
+    expect(RESERVED_TAG_NAMES).toEqual(['Event', 'Poll', 'Lineup']);
+    expect(isReservedTagName(' poll ')).toBe(true);
+    expect(isReservedTagName('LINEUP')).toBe(true);
+    expect(isReservedTagName('Polls')).toBe(false);
+  });
+
+  it('creates a missing Poll tag on demand and reuses an existing Lineup', () => {
+    const existing = [{ id: 'l', name: 'lineup' }];
+    expect(planTagCreates(existing, [POLL_TAG_NAME, LINEUP_TAG_NAME])).toEqual({
+      create: ['Poll'],
+      skipped: [],
+    });
+    expect(findTagId(existing, LINEUP_TAG_NAME)).toBe('l');
+  });
+
+  it('skips a kind tag that does not fit under the 20-tag cap', () => {
+    expect(planTagCreates(tags(20), [POLL_TAG_NAME])).toEqual({
+      create: [],
+      skipped: ['Poll'],
+    });
+  });
+});
+
+describe('ROK-2272 §3.3 findKindTagId (review MINOR 3)', () => {
+  const tags = [
+    { id: 'hub-poll', name: 'Poll' },
+    { id: 'lineup', name: 'Lineup' },
+  ];
+
+  it('never returns a tag a hub named "Poll" owns', () => {
+    expect(findKindTagId(tags, POLL_TAG_NAME, ['hub-poll', null])).toBeNull();
+  });
+
+  it('returns the kind tag when no hub owns it', () => {
+    expect(findKindTagId(tags, LINEUP_TAG_NAME, ['hub-poll'])).toBe('lineup');
+  });
+});
+
+describe('ROK-2272 S8 Codex P2 — postTagIds never takes a hub tag as a kind tag', () => {
+  it("a hub tag named Poll is not used as the Poll kind tag on another hub's poll post", () => {
+    const forumTags = [
+      { id: 'hub-poll', name: 'Poll' },
+      { id: 'h', name: 'Night Owls' },
+    ];
+    expect(postTagIds(['h'], 'poll', forumTags, ['hub-poll', 'h'])).toEqual([
+      'h',
+    ]);
+  });
+
+  it('a hub tag named Lineup is not used as the Lineup kind tag', () => {
+    const forumTags = [{ id: 'hub-lineup', name: 'LINEUP' }];
+    expect(postTagIds(['h'], 'lineup', forumTags, ['hub-lineup'])).toEqual([
+      'h',
+    ]);
+  });
+
+  it('a kind tag no hub owns is still added', () => {
+    const forumTags = [
+      { id: 'p', name: 'Poll' },
+      { id: 'h', name: 'Night Owls' },
+    ];
+    expect(postTagIds(['h'], 'poll', forumTags, ['h', null])).toEqual([
+      'h',
+      'p',
+    ]);
   });
 });

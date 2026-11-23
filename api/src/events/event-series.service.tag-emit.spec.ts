@@ -9,6 +9,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import type { NotificationService } from '../notifications/notification.service';
 import { HUB_NOTIFICATION_EVENTS } from '../notifications/hub-notification.constants';
+import { SIGNUP_CONFIRMATIONS_RESET } from '../discord-bot/discord-bot.constants';
 import { EventSeriesService } from './event-series.service';
 import { findSeriesTagTargets } from './event-group-tag.helpers';
 import { updateSeriesEvents } from './event-series.helpers';
@@ -67,5 +68,25 @@ describe('EventSeriesService.update — hub.event-tagged emit loop', () => {
     const { service, emit } = build();
     await service.update(41, 1, false, 'all', dto);
     expect(taggedEmits(emit)).toEqual([]);
+  });
+});
+
+describe('EventSeriesService.update — ROK-2271 Codex P2-3', () => {
+  beforeEach(() => {
+    targets.mockReset();
+    updated.mockReset();
+  });
+
+  it('a startTime in the dto emits no reset itself (the helper signals a real one)', async () => {
+    targets.mockResolvedValue([]);
+    updated.mockResolvedValue([41, 42]);
+    const { service, emit } = build();
+    await service.update(41, 1, false, 'all', {
+      startTime: '2026-03-10T18:00:00Z',
+    });
+    const resets = emit.mock.calls.filter(
+      (c: unknown[]) => c[0] === SIGNUP_CONFIRMATIONS_RESET,
+    );
+    expect(resets).toEqual([]);
   });
 });

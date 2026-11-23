@@ -50,7 +50,7 @@ export const MAINTENANCE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   },
   GuildReconciliationService_reconcileGuildMembers: {
     description:
-      'Cross-references DB users against Discord guild membership and deactivates users no longer in the guild — daily at 07:00 UTC',
+      "Cross-references DB users against Discord guild membership, deactivates users no longer in the guild and refreshes avatars from each member's global avatar — daily at 07:00 UTC",
     category: 'Maintenance',
   },
   GameRoleReconcileService_reconcile: {

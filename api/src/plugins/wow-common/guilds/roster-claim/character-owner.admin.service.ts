@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   AdminCharacterOwnerRequestSchema,
@@ -12,7 +13,11 @@ import {
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import type * as schema from '../../../../drizzle/schema';
 import { NotificationService } from '../../../../notifications/notification.service';
-import { reassignWithin } from './character-owner.admin.tx';
+import { SIGNUP_EVENTS } from '../../../../discord-bot/discord-bot.constants';
+import {
+  reassignWithin,
+  type ReassignOutcome,
+} from './character-owner.admin.tx';
 import {
   gainedNotice,
   movedNotice,
@@ -33,6 +38,7 @@ export class CharacterOwnerAdminService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly notifications: NotificationService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /** Move `characterId` to the body's `userId`; 400/404/409 per the tx. */
@@ -52,6 +58,7 @@ export class CharacterOwnerAdminService {
         logger: this.logger,
       }),
     );
+    this.afterCommit(adminId, out);
     const { row } = out;
     await sendOwnerNotices(
       this.notifications,
@@ -61,9 +68,28 @@ export class CharacterOwnerAdminService {
       ],
       this.logger,
     );
+    return { characterId: row.id, fromUserId: row.userId, toUserId };
+  }
+
+  /**
+   * ROK-2271 — after commit (never inside the tx: a rollback must not
+   * announce a write), each detached signup's event re-syncs its embed and
+   * thread state. No thread line is posted for the detach itself: the line
+   * diff ignores a dropped character (`characterFragments`), so a later
+   * flush only posts if the member's line state really changed.
+   */
+  private afterCommit(adminId: number, out: ReassignOutcome): void {
+    const { row, toUserId } = out;
     this.logger.log(
       `Admin ${adminId} moved character ${row.id} from ${row.userId} to ${toUserId}`,
     );
-    return { characterId: row.id, fromUserId: row.userId, toUserId };
+    for (const { eventId, signupId } of out.detached) {
+      this.eventEmitter.emit(SIGNUP_EVENTS.UPDATED, {
+        eventId,
+        userId: out.row.userId,
+        signupId,
+        action: 'character_detached',
+      });
+    }
   }
 }

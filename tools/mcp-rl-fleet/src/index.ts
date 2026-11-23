@@ -238,6 +238,7 @@ registerTool(envSync.TOOL_NAME, envSync.TOOL_DESCRIPTION, envSyncSchema, async (
 
 const envCloneProdSchema: Shape = {
   slug: slugSchema,
+  worktree_path: worktreePathSchema,
   skip_local_refresh: z.boolean().optional(),
   timeout_seconds: z.number().int().min(60).max(7200).optional(),
   ...waitFragment,

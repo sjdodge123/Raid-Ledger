@@ -17,7 +17,10 @@ import {
   resolveGenericSlotRole,
   findNextPosition,
 } from './signups-roster-query.helpers';
-import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
+import {
+  SIGNUP_EVENTS,
+  type SignupEventPayload,
+} from '../discord-bot/discord-bot.constants';
 
 export async function findLinkedUser(db: Tx, discordUserId: string) {
   const [user] = await db
@@ -264,7 +267,8 @@ export async function cancelByDiscordUserFlow(
     eventId,
     signupId: signup.id,
     action: 'discord_signup_cancelled',
-  });
+    urgent: cancelInfo.cancelStatus === 'roached_out',
+  } satisfies SignupEventPayload);
 }
 
 /**

@@ -20,6 +20,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 
 /** Shared mock types for signup interaction tests */
 export interface SignupInteractionMocks {
@@ -50,6 +51,7 @@ export interface SignupInteractionMocks {
   mockSettingsService: {
     getBranding: jest.Mock;
     getClientUrl: jest.Mock;
+    getTrustedClientUrl: jest.Mock;
     getDefaultTimezone: jest.Mock;
   };
   mockDb: Record<'select', jest.Mock>;
@@ -187,6 +189,10 @@ function createSecondaryCoreServiceMocks(
       getClientUrl: jest.fn(() =>
         Promise.resolve(process.env.CLIENT_URL ?? null),
       ),
+      // ROK-2294: the import link reads the trusted URL (null when unset).
+      getTrustedClientUrl: jest.fn(() =>
+        Promise.resolve(process.env.CLIENT_URL ?? null),
+      ),
       getDefaultTimezone: jest.fn().mockResolvedValue(null),
     },
     mockDb,
@@ -218,6 +224,7 @@ function createEmojiServiceProvider() {
 function buildSignupProviders(mocks: Record<string, unknown>) {
   return [
     SignupInteractionListener,
+    EventEmbedMessageEditor,
     { provide: DrizzleAsyncProvider, useValue: mocks.mockDb },
     { provide: DiscordBotClientService, useValue: mocks.mockClientService },
     { provide: SignupsService, useValue: mocks.mockSignupsService },

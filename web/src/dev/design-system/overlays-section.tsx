@@ -1,7 +1,7 @@
 /**
  * Overlay + container primitives for /dev/design-system (ROK-1539):
  * Modal, BottomSheet, ScrollCollapsible, NavChip, CopyButton, MarkdownText,
- * the stretched-button card (§4.2, TDB:1949) and the FAB. ROK-1655 adds the pinned `footer` and the dirty-close
+ * ShowOnceSecretDialog (ROK-2263), the stretched-button card (§4.2, TDB:1949) and the FAB. ROK-1655 adds the pinned `footer` and the dirty-close
  * `closeGuard` (`useDirtyCloseGuard`) on both Modal and BottomSheet: type in
  * the form demos, then press Esc, tap the backdrop, × or Cancel to see
  * "Discard your changes?". ROK-1648 L13: each form demo also opens as a long
@@ -26,6 +26,7 @@ import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { StretchedCardDemo } from './stretched-card-demo';
 import { StackedSheetDemo } from './stacked-sheet-demo';
 import { BottomNavDemo } from './bottom-nav-demo';
+import { ShowOnceSecretDemo } from './show-once-secret-demo';
 
 const DEMO_BTN = 'px-3 py-2 rounded-lg text-sm font-medium bg-panel border border-edge text-secondary hover:bg-overlay transition-colors';
 
@@ -201,7 +202,7 @@ export function OverlaysSection(): JSX.Element {
         <Section
             id="overlays"
             title="Overlays and containers"
-            blurb="Modal / BottomSheet (each with a pinned footer and the dirty-close guard) / ScrollCollapsible / stretched-button card / NavChip / CopyButton / MarkdownText / FAB / the phone bottom bar's raised Hubs circle. Buttons below open the real components."
+            blurb="Modal / BottomSheet (each with a pinned footer and the dirty-close guard) / ShowOnceSecretDialog / ScrollCollapsible / stretched-button card / NavChip / CopyButton / MarkdownText / FAB / the phone bottom bar's raised Hubs circle. Buttons below open the real components."
         >
             <div data-testid="ds-overlays">
                 <StateGrid>
@@ -210,6 +211,7 @@ export function OverlaysSection(): JSX.Element {
                     <BottomSheetDemo />
                     <StackedSheetDemo triggerClass={DEMO_BTN} />
                     <FormSheetDemo />
+                    <ShowOnceSecretDemo triggerClass={DEMO_BTN} />
                     <CollapsibleDemo />
                     <StretchedCardDemo />
                     <ChipsAndText />

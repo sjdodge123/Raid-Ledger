@@ -1,5 +1,7 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RescheduleResponseListener } from './reschedule-response.listener';
+import { SettingsService } from '../../settings/settings.service';
 import * as rescheduleBack from './reschedule-back.handlers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';
@@ -176,6 +178,11 @@ async function setupMenusModule() {
       {
         provide: ActivityLogService,
         useValue: { log: jest.fn().mockResolvedValue(undefined) },
+      },
+      { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+      {
+        provide: SettingsService,
+        useValue: { getTrustedClientUrl: jest.fn().mockResolvedValue(null) },
       },
     ],
   }).compile();

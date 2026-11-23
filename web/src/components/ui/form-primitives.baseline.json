@@ -25,7 +25,7 @@
     "components/events/invite-modal.tsx": 5,
     "components/events/mobile-event-card.tsx": 1,
     "components/events/player-card.tsx": 1,
-    "components/events/signup-confirmation-modal.tsx": 5,
+    "components/events/signup-confirmation-modal.tsx": 4,
     "components/events/signup-role-picker.tsx": 1,
     "components/features/game-time/GameTimePanel.tsx": 3,
     "components/features/game-time/GameTimeWidget.tsx": 2,

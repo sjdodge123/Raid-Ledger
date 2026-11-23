@@ -12,7 +12,8 @@
  * edge, and keeping dispatch outside the transactional path means a Discord
  * outage can never leave a row unexpired.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { Cron } from '@nestjs/schedule';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -41,6 +42,7 @@ export class TieExpiryService {
     private readonly activityLog: ActivityLogService,
     private readonly cronJobService: CronJobService,
     private readonly lineupNotifications: LineupNotificationService,
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   /** Archive every tie hold that has run out its week. Never decides. */
@@ -72,6 +74,7 @@ export class TieExpiryService {
     return sweepExpiredTieHolds(this.db, now, {
       logExpiry: (lineupId) => this.logExpiry(lineupId, now),
       logger: this.logger,
+      ...(this.events ? { events: this.events } : {}),
     });
   }
 

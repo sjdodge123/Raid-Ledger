@@ -104,9 +104,12 @@ export class OllamaDockerService {
     if (network) {
       args.push('--network', network);
     }
+    // Loopback only: the api reaches Ollama via localhost (api on the host)
+    // or the container name (api on the same Docker network) — never via the
+    // host's LAN address, so the port must not be exposed beyond loopback.
     args.push(
       '-p',
-      '11434:11434',
+      '127.0.0.1:11434:11434',
       '-v',
       'raid-ledger_ollama_data:/root/.ollama',
       'ollama/ollama:latest',

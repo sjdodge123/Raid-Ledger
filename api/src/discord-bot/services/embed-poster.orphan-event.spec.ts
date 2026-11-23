@@ -1,3 +1,4 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 /**
  * ROK-1511: an event deleted while its embed is posting makes the
  * discord_event_messages insert raise FK 23503. The posted message must be
@@ -78,6 +79,7 @@ describe('EmbedPosterService — event deleted mid-post (ROK-1511)', () => {
   function buildProviders() {
     return [
       EmbedPosterService,
+      { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       {
         provide: DiscordBotClientService,

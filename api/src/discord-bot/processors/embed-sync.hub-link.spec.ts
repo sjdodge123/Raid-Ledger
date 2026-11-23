@@ -14,6 +14,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EMBED_SYNC_QUEUE } from '../queues/embed-sync.queue';
 import { QueueHealthService } from '../../queue/queue-health.service';
 import { resolveGameHubLinkSafe } from '../channel-lifecycle/hub-link.resolver';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 
 jest.mock('../channel-lifecycle/hub-link.resolver', () => ({
   resolveGameHubLinkSafe: jest.fn(),
@@ -26,6 +27,7 @@ async function makeProcessor(): Promise<EmbedSyncProcessor> {
   const module = await Test.createTestingModule({
     providers: [
       EmbedSyncProcessor,
+      EventEmbedMessageEditor,
       { provide: DrizzleAsyncProvider, useValue: {} },
       { provide: getQueueToken(EMBED_SYNC_QUEUE), useValue: {} },
       { provide: QueueHealthService, useValue: { register: jest.fn() } },

@@ -1,3 +1,4 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 /**
  * Tests that EmbedPosterService resolves and injects voiceChannelId into embed data (ROK-507).
  */
@@ -61,6 +62,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
   function buildProvidersCore() {
     return [
       EmbedPosterService,
+      { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       {
         provide: DiscordBotClientService,
@@ -273,6 +275,7 @@ describe('EmbedPosterService — planned temporary voice channel (2026-11-13)', 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EmbedPosterService,
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
         {
           provide: DrizzleAsyncProvider,
           useValue: {

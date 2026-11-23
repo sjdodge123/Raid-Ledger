@@ -3,7 +3,10 @@
  * variants, fails closed for an unknown instance, and leaves the other
  * variants' expansion sets untouched.
  */
-import { lootExpansionsFor } from './boss-loot-expansions';
+import {
+  lootExpansionsFor,
+  lootFallbackExpansionFor,
+} from './boss-loot-expansions';
 
 const RETAIL_SET = ['classic', 'tbc', 'wotlk', 'cata'];
 
@@ -49,5 +52,29 @@ describe('lootExpansionsFor (ROK-2209)', () => {
     expect(lootExpansionsFor('toString', 63, fallback)).toEqual([
       'fallback-used',
     ]);
+  });
+});
+
+describe('lootFallbackExpansionFor (ROK-2270)', () => {
+  it('falls back to classic for a Forever read of a classic-edition dungeon (Wailing Caverns 240)', () => {
+    expect(lootFallbackExpansionFor('wow_forever', 240)).toBe('classic');
+  });
+
+  it('falls back to classic for a classic-edition raid and a wing parent (Molten Core 741, SM 316)', () => {
+    expect(lootFallbackExpansionFor('wow_forever', 741)).toBe('classic');
+    expect(lootFallbackExpansionFor('wow_forever', 316)).toBe('classic');
+  });
+
+  it('never falls back for a Forever-new dungeon (Ruins of Lordaeron 90000002)', () => {
+    expect(lootFallbackExpansionFor('wow_forever', 90_000_002)).toBeNull();
+  });
+
+  it('never falls back for an instance the catalogue does not know', () => {
+    expect(lootFallbackExpansionFor('wow_forever', 999999)).toBeNull();
+  });
+
+  it('never falls back outside wow_forever', () => {
+    expect(lootFallbackExpansionFor('classic_era', 240)).toBeNull();
+    expect(lootFallbackExpansionFor('retail', 240)).toBeNull();
   });
 });

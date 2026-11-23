@@ -152,6 +152,16 @@ describe('POST /csp-report Sentry capture (ROK-1501)', () => {
     },
   );
 
+  // Tech-debt L3901: the content-type gate runs through the real
+  // @Headers('content-type') binding, so a non-report type is ignored even
+  // when its body is a real, non-Cloudflare violation.
+  it('ignores an application/json body: 204, no Sentry capture', async () => {
+    const res = await postReport('application/json', NON_CLOUDFLARE_BODY);
+
+    expect(res.status).toBe(204);
+    expect(captureMessage).not.toHaveBeenCalled();
+  });
+
   it('still sends a non-Cloudflare violation to Sentry as the parsed report', async () => {
     const res = await postReport('application/csp-report', NON_CLOUDFLARE_BODY);
 

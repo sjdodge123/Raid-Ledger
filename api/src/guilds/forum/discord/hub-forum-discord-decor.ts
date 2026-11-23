@@ -1,8 +1,31 @@
-import { HUB_FORUM_DISCORD_TAG_LIMIT } from '@raid-ledger/contract';
+import {
+  EVENT_PLANNING_TAGS,
+  HUB_FORUM_DISCORD_TAG_LIMIT,
+} from '@raid-ledger/contract';
 import { DiscordAPIError } from 'discord.js';
+import type { SubjectKind } from './hub-forum-discord-subject';
 
 /** ROK-2258 ruling 2 — the tag every synced event post carries. */
-export const EVENT_TAG_NAME = 'Event';
+export const EVENT_TAG_NAME = EVENT_PLANNING_TAGS.event;
+
+/** ROK-2272 §3.3 — the tag a scheduling-poll post carries (made on demand). */
+export const POLL_TAG_NAME = EVENT_PLANNING_TAGS.poll;
+
+/** ROK-2272 §3.3 — the tag a lineup post carries (made on demand). */
+export const LINEUP_TAG_NAME = EVENT_PLANNING_TAGS.lineup;
+
+/** Kind tags a hub tag may never share (inbound routing, §3.3). */
+export const RESERVED_TAG_NAMES: readonly string[] = [
+  EVENT_TAG_NAME,
+  POLL_TAG_NAME,
+  LINEUP_TAG_NAME,
+];
+
+/** True when `name` (any case, trimmed) is a reserved kind tag. */
+export function isReservedTagName(name: string): boolean {
+  const want = name.trim().toLowerCase();
+  return RESERVED_TAG_NAMES.some((r) => r.toLowerCase() === want);
+}
 
 /** ROK-2258 ruling 1 — the forum's default reaction when none is set. */
 export const DEFAULT_REACTION_EMOJI = '👍';
@@ -33,6 +56,29 @@ export function findTagId(
 ): string | null {
   const want = key(name);
   return existing.find((t) => key(t.name) === want)?.id ?? null;
+}
+
+/**
+ * ROK-2272 §3.3 — the id of kind tag `name` (Event/Poll/Lineup), skipping
+ * any tag a hub binding owns. A hub named "Poll" before the reservation
+ * keeps its "Poll" tag (no retroactive rename); a kind post then goes
+ * untagged rather than wearing that hub's tag. `planTagCreates` still sees
+ * the name as taken, so no duplicate-named tag is attempted.
+ *
+ * @param existing - The forum's tags.
+ * @param name - The kind tag name.
+ * @param hubTagIds - Tag ids bound to hubs on this forum (`bindings.tagId`).
+ */
+export function findKindTagId(
+  existing: readonly ForumTag[],
+  name: string,
+  hubTagIds: readonly (string | null)[],
+): string | null {
+  const owned = new Set(hubTagIds);
+  return findTagId(
+    existing.filter((t) => !owned.has(t.id)),
+    name,
+  );
 }
 
 /**
@@ -102,18 +148,35 @@ export function eventTagIdOf(
 /** Discord allows at most 5 tags on one forum post. */
 const POST_TAG_MAX = 5;
 
+/** ROK-2272 S8 — the kind tag each subject post carries. */
+const KIND_TAG_NAMES: Record<SubjectKind, string> = {
+  event: EVENT_TAG_NAME,
+  poll: POLL_TAG_NAME,
+  lineup: LINEUP_TAG_NAME,
+};
+
 /**
- * ROK-2258 ruling 2 — the tags a new forum post carries: the hub's tag(s),
- * plus the forum's Event tag on an event post (when the forum has one),
- * de-duplicated and capped at Discord's 5 per post.
+ * ROK-2258 ruling 2 / ROK-2272 S8 — the tags a new forum post carries: the
+ * hub's tag(s), plus the forum's kind tag (Event / Poll / Lineup) on a
+ * subject post when the forum has one (F4: none ⇒ hub tag only),
+ * de-duplicated and capped at Discord's 5 per post. A tag a hub owns is
+ * never taken as the kind tag (Codex P2: a legacy hub named "Poll"), the
+ * same rule as {@link findKindTagId} / {@link eventTagIdOf}.
+ *
+ * @param hubTagIds - Tag ids the forum's bound hubs own (`base` is added).
  */
 export function postTagIds(
   base: readonly string[],
-  isEvent: boolean,
+  kind: SubjectKind | null,
   forumTags: readonly ForumTag[],
+  hubTagIds: readonly (string | null)[] = [],
 ): string[] {
-  const eventTagId = isEvent ? findTagId(forumTags, EVENT_TAG_NAME) : null;
-  const all = eventTagId === null ? base : [...base, eventTagId];
+  const owned = [...base, ...hubTagIds];
+  const kindTagId =
+    kind === null
+      ? null
+      : findKindTagId(forumTags, KIND_TAG_NAMES[kind], owned);
+  const all = kindTagId === null ? base : [...base, kindTagId];
   return [...new Set(all)].slice(0, POST_TAG_MAX);
 }
 

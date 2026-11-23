@@ -10,6 +10,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { MessageFlags } from 'discord.js';
 import { ROACH_OUT_BUTTON_IDS } from '../discord-bot.constants';
 import { EventEmitter } from 'node:events';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 
 /** Test-friendly interface exposing private members needed by specs */
 interface TestableRoachOutInteractionListener {
@@ -113,6 +114,7 @@ async function setupRoachOutModule() {
   testModule = await Test.createTestingModule({
     providers: [
       RoachOutInteractionListener,
+      EventEmbedMessageEditor,
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       { provide: DiscordBotClientService, useValue: mockClientService },
       { provide: SignupsService, useValue: mockSignupsService },

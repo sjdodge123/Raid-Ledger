@@ -226,6 +226,17 @@ function linkDiscordTests(
       }),
     ).rejects.toThrow(/Validation failed/);
   });
+
+  it('rejects a local: placeholder — snowflakes only (ROK-2275)', async () => {
+    await expect(
+      getController().linkDiscordForTest({
+        userId: 1,
+        discordId: 'local:admin@local',
+        username: 'admin',
+      }),
+    ).rejects.toThrow(/Validation failed/);
+    expect(getMock().linkDiscordForTest).not.toHaveBeenCalled();
+  });
 }
 
 function enableDiscordNotificationsTests(

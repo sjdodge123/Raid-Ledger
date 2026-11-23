@@ -5,6 +5,7 @@
 import {
   BG3_SAVE_CONTRACT_ID,
   BG3_SCREENSHOT_CONTRACT_ID,
+  WOW_ADDON_ERRORS_CONTRACT_ID,
   WOW_LEDGERLINK_CONTRACT_ID,
   Bg3SaveMessageSchema,
   COMPANION_CAPTURED_AT_MAX_FUTURE_MS,
@@ -28,6 +29,7 @@ import {
 } from '../ingest/companion-handler.registry';
 import type { CompanionIngestAuth } from '../ingest/companion-ingest-request';
 import { CompanionConfigOwners } from './companion-config-owners.service';
+import { WowAddonErrorsHandler } from '../../plugins/wow-common/companion/wow-addon-errors.handler';
 import {
   CompanionConfigService,
   DEFAULT_COMPANION_MIN_APP_VERSION,
@@ -175,14 +177,35 @@ describe('authenticated', () => {
     }
   });
 
-  it('defaults to the shipped table: bg3-save, bg3-screenshot and wow-ledgerlink are listed', async () => {
+  it('defaults to the shipped table: bg3-save, bg3-screenshot, wow-ledgerlink and wow-addon-errors are listed', async () => {
     const shipped = new CompanionConfigService(registry);
     const ids = (await shipped.build(DEVICE)).contracts?.map((c) => c.id);
     expect(ids).toEqual([
       BG3_SAVE_CONTRACT_ID,
       BG3_SCREENSHOT_CONTRACT_ID,
       WOW_LEDGERLINK_CONTRACT_ID,
+      WOW_ADDON_ERRORS_CONTRACT_ID,
     ]);
+  });
+
+  it('ROK-2099: wow-addon-errors is enabled once the blizzard handler is registered (device only, 120 s)', async () => {
+    const shippedRegistry = new CompanionHandlerRegistry({
+      isActive: () => true,
+    });
+    shippedRegistry.register('blizzard', new WowAddonErrorsHandler());
+    const shipped = new CompanionConfigService(shippedRegistry);
+    const entry = (await shipped.build(DEVICE)).contracts?.find(
+      (c) => c.id === WOW_ADDON_ERRORS_CONTRACT_ID,
+    );
+    expect(entry).toMatchObject({
+      id: WOW_ADDON_ERRORS_CONTRACT_ID,
+      enabled: true,
+      cadence: { minIntervalSec: 120 },
+    });
+    const viaSession = (await shipped.build(SESSION)).contracts?.find(
+      (c) => c.id === WOW_ADDON_ERRORS_CONTRACT_ID,
+    );
+    expect(viaSession?.enabled).toBe(false);
   });
 });
 

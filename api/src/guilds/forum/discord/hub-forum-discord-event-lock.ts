@@ -21,19 +21,28 @@ import {
   not,
   or,
   sql,
+  type SQL,
 } from 'drizzle-orm';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import {
+  deleteForumStarterRows,
+  EventForumStarterCards,
+} from '../../../discord-bot/services/event-forum-starter.cards';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { syncExpiredPolls } from '../subject-discussion/poll-discussion.deadline';
+import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
+import { HubForumDiscordEventLockGateway } from './hub-forum-discord-event-lock.gateway';
 import { UNSENT_PREFIX } from './hub-forum-discord-links.queries';
-import { isGone } from './hub-forum-discord-outbound.discord';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+
+// Re-exported: specs and the module import it from here.
+export { HubForumDiscordEventLockGateway };
 
 const links = schema.hubForumDiscordLinks;
 const threads = schema.hubForumThreads;
 const bindings = schema.hubForumDiscordBindings;
-const REASON = 'Raid Ledger event discussion is read-only';
 /** Posts per tick; the rest wait 5 minutes. */
 const BATCH = 50;
 
@@ -44,35 +53,34 @@ export interface LockChange {
   threadId: number;
   discordThreadId: string;
   readOnly: boolean;
+  /** The thread's event (null for a poll / lineup thread). */
+  eventId: number | null;
 }
 
-/** Lock/archive a forum post behind a plain id (spied on by specs). */
-@Injectable()
-export class HubForumDiscordEventLockGateway {
-  constructor(private readonly client: DiscordBotClientService) {}
+/** A thread with a subject (event, poll or lineup — ROK-2272 S8). */
+const HAS_SUBJECT = or(
+  isNotNull(threads.eventId),
+  isNotNull(threads.matchId),
+  isNotNull(threads.lineupId),
+);
 
-  /** Read-only: lock then archive; reopened: unarchive then unlock. */
-  async setReadOnly(postId: string, readOnly: boolean): Promise<void> {
-    const guild = this.client.isConnected() ? this.client.getGuild() : null;
-    if (!guild) throw new Error('Discord bot is offline');
-    try {
-      const ch = await guild.channels.fetch(postId);
-      if (!ch?.isThread()) return;
-      if (readOnly) {
-        await ch.setLocked(true, REASON);
-        await ch.setArchived(true, REASON);
-      } else {
-        await ch.setArchived(false, REASON);
-        await ch.setLocked(false, REASON);
-      }
-    } catch (err) {
-      if (!isGone(err)) throw err;
-    }
-  }
+/** The RL thread is read-only at `now` (closed or detached). */
+function readOnlyAt(now: Date) {
+  const at = sql`${now.toISOString()}::timestamptz`;
+  return sql<boolean>`(${threads.eventDetachedAt} IS NOT NULL OR COALESCE(${threads.writeClosesAt} <= ${at}, false))`;
+}
+
+/** The recorded Discord lock state differs from the RL read-only state. */
+function disagrees(readOnly: SQL<boolean>) {
+  return or(
+    and(readOnly, isNull(links.discordLockedAt)),
+    and(not(readOnly), isNotNull(links.discordLockedAt)),
+  );
 }
 
 /**
- * Linked, sent, undeleted event-thread posts whose lock state must flip —
+ * Linked, sent, undeleted subject-thread posts (event, poll or lineup —
+ * ROK-2272 S8) whose lock state must flip —
  * only in the hub's CURRENT binding (D9: an unbound or re-bound hub's old
  * posts are left alone, review MINOR-5).
  */
@@ -80,8 +88,7 @@ export async function dueLockChanges(
   db: ForumDiscordDb,
   now: Date,
 ): Promise<LockChange[]> {
-  const at = sql`${now.toISOString()}::timestamptz`;
-  const readOnly = sql<boolean>`(${threads.eventDetachedAt} IS NOT NULL OR COALESCE(${threads.writeClosesAt} <= ${at}, false))`;
+  const readOnly = readOnlyAt(now);
   return db
     .select({
       linkId: links.id,
@@ -89,6 +96,7 @@ export async function dueLockChanges(
       threadId: links.threadId,
       discordThreadId: links.discordThreadId,
       readOnly,
+      eventId: threads.eventId,
     })
     .from(links)
     .innerJoin(threads, eq(threads.id, links.threadId))
@@ -97,13 +105,10 @@ export async function dueLockChanges(
       and(
         eq(links.kind, 'thread'),
         gte(links.createdAt, bindings.boundAt),
-        isNotNull(threads.eventId),
+        HAS_SUBJECT,
         isNull(links.discordDeletedAt),
         not(like(links.discordThreadId, `${UNSENT_PREFIX}%`)),
-        or(
-          and(readOnly, isNull(links.discordLockedAt)),
-          and(not(readOnly), isNotNull(links.discordLockedAt)),
-        ),
+        disagrees(readOnly),
       ),
     )
     .orderBy(links.id)
@@ -120,16 +125,62 @@ export class HubForumDiscordEventLockSweep {
     private readonly gateway: HubForumDiscordEventLockGateway,
     private readonly client: DiscordBotClientService,
     private readonly outbound: HubForumDiscordOutboundService,
+    private readonly registry: EventPlanningPostsLockSweep,
+    private readonly starters: EventForumStarterCards,
   ) {}
 
-  /** Flip every due post; returns how many changed. Offline bot → 0. */
+  /**
+   * ROK-2272 S8: first the poll-deadline pass (RL-side state — stamps the
+   * close time on polls whose deadline passed unobserved; runs even while
+   * the bot is offline), then flip every due post — hub links, then the
+   * event-planning registry (ROK-2272 S4a). A throw in one pass never stops
+   * the others, but the first one is rethrown after all ran so the cron
+   * records a failure (review MAJOR-1). Returns how many POSTS changed (the
+   * deadline pass is not counted). Offline bot → no Discord pass, 0.
+   */
   async sweep(now = new Date()): Promise<number> {
-    if (!this.client.isConnected()) return 0;
+    const errors: unknown[] = [];
+    await this.pass('poll-deadline', errors, () =>
+      syncExpiredPolls(this.db, now),
+    );
+    const posts = this.client.isConnected()
+      ? await this.sweepPosts(now, errors)
+      : 0;
+    if (errors.length > 0) throw errors[0];
+    return posts;
+  }
+
+  /** The two Discord passes, each isolated by `pass`. */
+  private async sweepPosts(now: Date, errors: unknown[]): Promise<number> {
+    const hub = await this.pass('hub', errors, () => this.sweepHub(now));
+    const reg = await this.pass('registry', errors, () =>
+      this.registry.sweep(now),
+    );
+    return hub + reg;
+  }
+
+  private async sweepHub(now: Date): Promise<number> {
     let changed = 0;
     for (const row of await this.due(now)) {
       if (await this.apply(row, now)) changed += 1;
     }
     return changed;
+  }
+
+  /** One pass; a throw is logged, collected into `errors`, counted as 0. */
+  private async pass(
+    what: string,
+    errors: unknown[],
+    fn: () => Promise<number>,
+  ): Promise<number> {
+    try {
+      return await fn();
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Event lock sweep (${what}) failed: ${why}`);
+      errors.push(err);
+      return 0;
+    }
   }
 
   /** The posts to flip this tick. */
@@ -145,6 +196,9 @@ export class HubForumDiscordEventLockSweep {
         .update(links)
         .set({ discordLockedAt: row.readOnly ? now : null })
         .where(eq(links.id, row.linkId));
+      // ROK-2292 D7: a locked (closed / detached) post's starter stops syncing.
+      if (row.readOnly)
+        await deleteForumStarterRows(this.db, row.discordThreadId);
     } catch (err) {
       this.warn(row, err);
       return false;
@@ -153,10 +207,15 @@ export class HubForumDiscordEventLockSweep {
     return true;
   }
 
-  /** Reopened: push the title/starter skipped while locked (binding-checked). */
+  /**
+   * Reopened: track the event starter again (ROK-2292, D7 dropped it), then
+   * push the title/starter skipped while locked (binding-checked).
+   */
   private async refresh(row: LockChange): Promise<void> {
-    const { guildId, threadId } = row;
+    const { guildId, threadId, eventId } = row;
     try {
+      if (eventId !== null)
+        await this.starters.restore(eventId, row.discordThreadId);
       await this.outbound.apply({
         guildId,
         threadId,

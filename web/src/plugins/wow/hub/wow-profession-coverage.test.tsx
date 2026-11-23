@@ -2,10 +2,12 @@
  * ROK-1173 (AC7) — the profession coverage strip: known count (ROK-2149) + per
  * profession counts, chips that toggle the Profession filter (`aria-pressed`),
  * the scope copy at zero professions, hidden without insights — and, through
- * `useWowMemberFilters`, a chip press really narrows the member list.
+ * `useWowMemberFilters`, a chip press really narrows the member list — and
+ * (ROK-2281) the profession sort survives unpicking another pill but falls
+ * back to the default when Clear all unpicks its own.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type JSX } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -13,7 +15,9 @@ import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { MOCK_CHAR_IDS, PROFESSIONS_FIXTURE, rosterInsightsHandler } from '../../../test/handlers/forever-hub-widgets';
-import type { HubMemberRow } from '../../hub-module';
+import type { HubMemberRow, HubModule } from '../../hub-module';
+import { HubMembers } from '../../../components/hub/hub-members';
+import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { PROFESSION_SCOPE_COPY, WowProfessionCoverage } from './wow-profession-coverage';
 import { buildProfessionIndex, toggleValue, type ProfessionCoverage, type ProfessionIndex } from './wow-member-filters.helpers';
 import { useWowMemberFilters } from './use-wow-member-filters';
@@ -129,5 +133,54 @@ describe('useWowMemberFilters — coverage chip drives the Profession filter (RO
         expect(screen.getByTestId('wow-profession-coverage-linked')).toHaveTextContent('Professions known: 3 of 3');
         await userEvent.click(skinning);
         expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Loner']);
+    });
+});
+
+/* ROK-2281: the real WoW filter hook inside core's Members list, so pills, Clear all and "Sort by" are wired end to end. */
+const SORT_MODULE: HubModule = {
+    kind: 'wow_guild', tabs: [], overviewWidgets: [], heroPills: [],
+    memberColumns: [
+        { id: 'name', header: 'Name', cell: ({ row: r }) => <span>{r.name}</span> },
+        { id: 'rank', header: 'Rank', cell: ({ row: r }) => <span>{r.rankName}</span>,
+            groupBy: (r) => ({ key: String(r.rankIndex), label: r.rankName ?? '', testId: `guild-rank-${r.rankIndex}` }) },
+    ],
+    memberRows: () => ROWS,
+    memberSearch: (r) => r.name,
+    useMemberFilters: useWowMemberFilters,
+};
+
+function MembersHarness(): JSX.Element {
+    const raids = useQuery<GuildRaidsDto, Error>({ queryKey: ['raids-unused'], queryFn: () => Promise.reject(new Error('unused')), enabled: false });
+    return <HubMembers ctx={{ page: PAGE, raids }} module={SORT_MODULE} />;
+}
+
+const originalMatchMedia = window.matchMedia;
+
+describe('Members profession sort — unpicking pills (ROK-2281 ruling 3)', () => {
+    afterEach(() => { window.matchMedia = originalMatchMedia; });
+
+    it('keeps the Mining sort when another pill is unpicked, and Clear all drops it back to Rank', async () => {
+        window.matchMedia = (query: string) => ({
+            matches: query === DESKTOP_MQ, media: query, onchange: null,
+            addListener: () => undefined, removeListener: () => undefined,
+            addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false,
+        });
+        server.use(rosterInsightsHandler({ all: PROFESSIONS_FIXTURE }));
+        renderWithProviders(<MembersHarness />);
+        await userEvent.click(await screen.findByTestId('filter-panel-trigger'));
+        await userEvent.click(await screen.findByRole('button', { name: 'Mining: 1' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Alchemy: 2' }));
+        const sort = screen.getByRole('combobox', { name: 'Sort by' });
+        await userEvent.selectOptions(sort, 'Mining high→low');
+        expect(sort).toHaveValue('profession-mining-desc');
+        await userEvent.click(screen.getByRole('button', { name: 'Alchemy: 2' }));
+        expect(screen.getByRole('button', { name: 'Alchemy: 2' })).toHaveAttribute('aria-pressed', 'false');
+        expect(sort, 'unpicking a different pill keeps the active Mining sort').toHaveValue('profession-mining-desc');
+        await userEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+        await waitFor(() => expect(sort, 'Clear all unpicks Mining, so its sort falls back to the default').toHaveValue('rank'));
+        expect(screen.queryByRole('option', { name: 'Mining high→low' }), 'no pill picked, no profession sorts').toBeNull();
+        await userEvent.click(screen.getByRole('button', { name: 'Mining: 1' }));
+        expect(screen.getByRole('option', { name: 'Mining high→low' })).toBeInTheDocument();
+        expect(sort, 'the reset is real state — picking Mining again does not bring the old sort back').toHaveValue('rank');
     });
 });

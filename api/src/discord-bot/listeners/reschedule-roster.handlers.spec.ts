@@ -13,6 +13,10 @@ import type {
 } from './reschedule-response.helpers';
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 
+jest.mock('./reschedule-slot.handlers', () => ({
+  ensureRosterAssignment: jest.fn().mockResolvedValue(undefined),
+}));
+
 describe('buildUpdateSet — ROK-548 preferredRoles filtering', () => {
   describe('preferredRoles array filtering', () => {
     it('keeps only MMO roles from preferredRoles', () => {
@@ -153,5 +157,102 @@ describe('reconfirmSignup — unlinked Discord id (ROK-2097)', () => {
     db.limit.mockResolvedValueOnce([]);
     await reconfirmSignup(deps, interaction, event);
     expect(db.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('reconfirmSignup — signup.updated for the thread lines (ROK-2271)', () => {
+  const row = {
+    id: 7,
+    status: 'tentative',
+    preferredRoles: ['dps'],
+    roachedOutAt: null,
+    confirmationStatus: 'confirmed',
+  };
+  function setup() {
+    const db = createDrizzleMock();
+    const emit = jest.fn();
+    const confirmSignup = jest.fn().mockResolvedValue(undefined);
+    const deps = {
+      db,
+      eventEmitter: { emit },
+      signupsService: { confirmSignup },
+      activityLog: { log: jest.fn().mockResolvedValue(undefined) },
+      logger: { warn: jest.fn(), error: jest.fn(), log: jest.fn() },
+    } as unknown as RescheduleDeps;
+    const interaction = {
+      user: { id: 'discord-d' },
+    } as unknown as ButtonInteraction;
+    const event = { id: 42 } as unknown as EventRow;
+    return { db, deps, emit, confirmSignup, interaction, event };
+  }
+
+  it('linked: emits once when the status changes', async () => {
+    const { db, deps, emit, interaction, event } = setup();
+    db.limit.mockResolvedValueOnce([row]);
+    await reconfirmSignup(deps, interaction, event, 5);
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith('signup.updated', {
+      eventId: 42,
+      userId: 5,
+      signupId: 7,
+      action: 'reschedule_reconfirm',
+    });
+  });
+
+  it('linked: emits once when only the role changes', async () => {
+    const { db, deps, emit, interaction, event } = setup();
+    db.limit.mockResolvedValueOnce([{ ...row, status: 'signed_up' }]);
+    await reconfirmSignup(deps, interaction, event, 5, {
+      preferredRoles: ['healer'],
+    });
+    expect(emit).toHaveBeenCalledTimes(1);
+  });
+
+  it('linked: no emit when nothing the line shows changed', async () => {
+    const { db, deps, emit, interaction, event } = setup();
+    db.limit.mockResolvedValueOnce([{ ...row, status: 'signed_up' }]);
+    await reconfirmSignup(deps, interaction, event, 5, {
+      preferredRoles: ['dps'],
+    });
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('linked with a character: leaves the emit to confirmSignup', async () => {
+    const { db, deps, emit, confirmSignup, interaction, event } = setup();
+    db.limit.mockResolvedValueOnce([row]);
+    await reconfirmSignup(deps, interaction, event, 5, { characterId: 'c1' });
+    expect(confirmSignup).toHaveBeenCalledTimes(1);
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('linked: no emit when the write fails', async () => {
+    const { db, deps, emit, interaction, event } = setup();
+    db.limit.mockResolvedValueOnce([row]);
+    db.set.mockImplementationOnce(() => {
+      throw new Error('db down');
+    });
+    await expect(reconfirmSignup(deps, interaction, event, 5)).rejects.toThrow(
+      'db down',
+    );
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('unlinked: emits once when the status changes', async () => {
+    const { db, deps, emit, interaction, event } = setup();
+    db.limit.mockResolvedValueOnce([row]);
+    await reconfirmSignup(deps, interaction, event);
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith('signup.updated', {
+      eventId: 42,
+      signupId: 7,
+      action: 'reschedule_reconfirm',
+    });
+  });
+
+  it('unlinked: no emit when no guest row matches', async () => {
+    const { db, deps, emit, interaction, event } = setup();
+    db.limit.mockResolvedValueOnce([]);
+    await reconfirmSignup(deps, interaction, event);
+    expect(emit).not.toHaveBeenCalled();
   });
 });

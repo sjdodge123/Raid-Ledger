@@ -101,17 +101,28 @@ export function signupPingJobId(eventId: number, trail = false): string {
   return `forum-signup-pings-${eventId}${trail ? '-trail' : ''}`;
 }
 
-/** The hub thread an event's post belongs to (scopes the pinged set). */
-export interface PingedSetScope {
-  guildId: number;
-  threadId: number;
+/**
+ * What an event's post belongs to (scopes the pinged set): the hub thread,
+ * or (ROK-2272 S4b) a non-hub event's registry post — null before the first
+ * line creates it.
+ */
+export type PingedSetScope =
+  { guildId: number; threadId: number } | { planningPostId: number | null };
+
+/** The scope's key suffix; the hub form is unchanged since ROK-2260. */
+export function pingScopeSuffix(scope: PingedSetScope): string {
+  if ('planningPostId' in scope) {
+    return `planning:${scope.planningPostId ?? 'new'}`;
+  }
+  return `${scope.guildId}:${scope.threadId}`;
 }
 
 /**
  * The Redis set of Discord ids already pinged into the event's post. Scoped
  * to the hub thread (Codex P2-4): a retag to another hub is a new post, so
- * its players are pinged again; the old set just expires.
+ * its players are pinged again; the old set just expires. A re-created
+ * registry post (new row id) is likewise a fresh set.
  */
 export function pingedSetKey(eventId: number, scope: PingedSetScope): string {
-  return `hub-forum:signup-pings:${eventId}:${scope.guildId}:${scope.threadId}`;
+  return `hub-forum:signup-pings:${eventId}:${pingScopeSuffix(scope)}`;
 }

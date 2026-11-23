@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 /**
  * ROK-2208 Codex P2 — runs async tasks one at a time per key, in arrival
  * order. `bind()` keys it on the Discord guild so two hubs choosing the
- * shared `#hub-forums` at once cannot both miss it and create two.
+ * shared `#event-planning` at once cannot both miss it and create two.
  *
  * In-process on purpose: the API runs as ONE process (the allinone image),
  * and the critical section spans Discord API calls, so a Postgres advisory

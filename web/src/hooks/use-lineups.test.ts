@@ -636,3 +636,45 @@ describe('useLineupParticipants (ROK-1557)', () => {
         expect(mockGetLineupParticipants).toHaveBeenCalledTimes(2);
     });
 });
+
+describe('lineup participation refreshes the lineup Discussion card (ROK-2272 S9)', () => {
+    const LINEUP_DISCUSSION = ['subject-discussion', 'lineup', 1, 'u1'];
+    const OTHER_DISCUSSION = ['subject-discussion', 'lineup', 2, 'u1'];
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockNominateGame.mockResolvedValue(mockLineupResponse);
+        mockRemoveNomination.mockResolvedValue(undefined);
+        mockToggleVote.mockResolvedValue(mockLineupResponse);
+        mockSetStar.mockResolvedValue(mockLineupResponse);
+    });
+
+    async function runAndCheck(run: (qc: QueryClient, wrapper: (p: { children: ReactNode }) => ReturnType<typeof createElement>) => Promise<void>) {
+        const { queryClient, wrapper } = createWrapper();
+        queryClient.setQueryData(LINEUP_DISCUSSION, { state: 'none' });
+        queryClient.setQueryData(OTHER_DISCUSSION, { state: 'none' });
+        await run(queryClient, wrapper);
+        expect(queryClient.getQueryState(LINEUP_DISCUSSION)?.isInvalidated).toBe(true);
+        expect(queryClient.getQueryState(OTHER_DISCUSSION)?.isInvalidated).toBe(false);
+    }
+
+    it('nominating marks that lineup’s discussion stale', () => runAndCheck(async (_qc, wrapper) => {
+        const { result } = renderHook(() => useNominateGame(), { wrapper });
+        await act(async () => { await result.current.mutateAsync({ lineupId: 1, body: { gameId: 42 } }); });
+    }));
+
+    it('withdrawing a nomination marks that lineup’s discussion stale', () => runAndCheck(async (_qc, wrapper) => {
+        const { result } = renderHook(() => useRemoveNomination(), { wrapper });
+        await act(async () => { await result.current.mutateAsync({ lineupId: 1, gameId: 42 }); });
+    }));
+
+    it('voting marks that lineup’s discussion stale', () => runAndCheck(async (_qc, wrapper) => {
+        const { result } = renderHook(() => useToggleVote(), { wrapper });
+        await act(async () => { await result.current.mutateAsync({ lineupId: 1, gameId: 42 }); });
+    }));
+
+    it('starring (an implied vote) marks that lineup’s discussion stale', () => runAndCheck(async (_qc, wrapper) => {
+        const { result } = renderHook(() => useSetStar(), { wrapper });
+        await act(async () => { await result.current.mutateAsync({ lineupId: 1, gameId: 42 }); });
+    }));
+});

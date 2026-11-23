@@ -11,7 +11,6 @@ import { resolvePostEventFollowupRecipients } from './post-event-followup.helper
 import {
   EVENT_NOTICE_TTL_SECONDS,
   eventNoticeKey,
-  sendClaimedEventNotice,
 } from './event-notice-plan.helpers';
 import { NotificationDedupService } from './notification-dedup.service';
 import type { FollowupFanoutDeps } from './post-event-followup-fanout.helpers';
@@ -138,15 +137,9 @@ describe('runFollowupFanout — per-(user, event) notice claims', () => {
     const held = new Set<string>();
     const s = setup(held);
     await runFollowupFanout(s.deps, 10, { eventId: 55 }, 9);
-    const dedup = {
-      checkAndMarkSent: jest.fn((key: string) =>
-        Promise.resolve(held.has(key)),
-      ),
-      releaseKey: jest.fn(),
-    };
-    const send = jest.fn().mockResolvedValue({});
-    expect(await sendClaimedEventNotice(dedup, 55, 11, send)).toBe(false);
-    expect(send).not.toHaveBeenCalled();
+    const later = dedupOver(held);
+    const alreadyClaimed = await later.checkAndMarkSent(eventNoticeKey(55, 11));
+    expect(alreadyClaimed).toBe(true);
   });
 
   it('gives the claims back when the send fails', async () => {
@@ -195,11 +188,9 @@ describe('runFollowupFanout — claims kept only for notified recipients (Codex 
     );
     await runFollowupFanout(s.deps, 10, { eventId: 55 }, 9);
     expect([...held]).toEqual([eventNoticeKey(55, 11)]);
-    const send = jest.fn().mockResolvedValue({});
-    expect(await sendClaimedEventNotice(dedupOver(held), 55, 22, send)).toBe(
-      true,
-    );
-    expect(send).toHaveBeenCalledTimes(1);
+    const later = dedupOver(held);
+    const alreadyClaimed = await later.checkAndMarkSent(eventNoticeKey(55, 22));
+    expect(alreadyClaimed).toBe(false);
   });
 });
 

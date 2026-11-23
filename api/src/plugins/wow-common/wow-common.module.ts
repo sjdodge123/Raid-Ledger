@@ -18,14 +18,13 @@ import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
 import { ForeverConfigController } from './forever-config.controller';
 import { ForeverConfigService } from './forever-config.service';
-import { ForeverNamespaceProbeController } from './forever-namespace-probe.controller';
-import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { ForeverQuestImportController } from './forever-quest-import/forever-quest-import.controller';
 import { ForeverQuestImportService } from './forever-quest-import/forever-quest-import.service';
 import {
   FOREVER_QUEST_AUTO_IMPORT_KICKS,
   ForeverQuestAutoImportService,
 } from './forever-quest-import/forever-quest-auto-import.service';
+import * as foreverProbes from './forever-probes.registration';
 import { ForeverRealmRulesetsController } from './forever-realm-rulesets.controller';
 import { ForeverRealmRulesetsService } from './forever-realm-rulesets.service';
 import { ForeverRulesetLookupService } from './forever-ruleset-lookup.service';
@@ -51,6 +50,7 @@ import { SuggestedGroupsModule } from './guilds/suggested-groups/suggested-group
 import { EventRaidReadinessController } from './event-raid-readiness.controller';
 import { EventRaidReadinessService } from './event-raid-readiness.service';
 import { SettingsModule } from '../../settings/settings.module';
+import { CronJobModule } from '../../cron-jobs/cron-job.module';
 import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
@@ -78,6 +78,8 @@ import { RecentDingsService } from './guilds/recent-dings/recent-dings.service';
 import { CompanionHandlerRegistry } from '../../companion/ingest/companion-handler.registry';
 import { CompanionIngestModule } from '../../companion/ingest/companion-ingest.module';
 import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
+import { WowAddonErrorsHandler } from './companion/wow-addon-errors.handler';
+import * as addonErrors from './companion/wow-addon-errors.registration';
 import { InstanceCatalogueService } from './instance-catalogue/instance-catalogue.service';
 import { LedgerlinkRulesetNoticeService } from './companion/ledgerlink-ruleset-notice.service';
 import { NotificationModule } from '../../notifications/notification.module';
@@ -94,11 +96,14 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     // ROK-1910/1920: roster fact sources + WowFactsService.
     WowFactsModule,
     SuggestedGroupsModule,
+    // ROK-2099 D7: the addon-error retention cron's tracked run.
+    CronJobModule,
   ],
   controllers: [
     BlizzardController,
     ForeverConfigController,
-    ForeverNamespaceProbeController,
+    // ROK-1716 namespace probe + ROK-2129 DEMO_MODE Battle.net account probe.
+    ...foreverProbes.CONTROLLERS,
     ForeverQuestImportController,
     ForeverRealmRulesetsController,
     DungeonQuestsController,
@@ -110,6 +115,8 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     CharacterQuestsController,
     // ROK-2147: owner/officer-only installed-addon list.
     CharacterInstalledAddonsController,
+    // ROK-2099 S3: admin reads + export of uploaded addon errors.
+    ...addonErrors.CONTROLLERS,
     ...guildHub.CONTROLLERS,
   ],
   providers: [
@@ -120,7 +127,7 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     BlizzardService,
     BlizzardAuthService,
     ForeverConfigService,
-    ForeverNamespaceProbeService,
+    ...foreverProbes.PROVIDERS,
     // ROK-2143: Forever quest import (admin POST); ROK-2162: also automatic
     // when the overlay is empty + weekly (registrar job).
     ForeverQuestImportService,
@@ -169,6 +176,10 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     // ROK-1964: the `wow-ledgerlink` companion contract handler.
     WowLedgerlinkHandler,
     LedgerlinkRulesetNoticeService,
+    // ROK-2099: the `wow-addon-errors` companion contract handler.
+    WowAddonErrorsHandler,
+    // ROK-2099 D7 retention cron + S3 admin read service.
+    ...addonErrors.PROVIDERS,
   ],
   exports: [
     InstanceCatalogueService,
@@ -200,6 +211,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly hubKindAdapter: WowHubKindAdapter,
     private readonly companionRegistry: CompanionHandlerRegistry,
     private readonly ledgerlink: WowLedgerlinkHandler,
+    private readonly addonErrors: WowAddonErrorsHandler,
     @Inject(WOW_BOOT_SEED_ENABLED) private readonly bootSeedEnabled: boolean,
   ) {}
 
@@ -208,6 +220,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     // and a failed seed must not leave the contract unhandled. The registry
     // resolves it only while `blizzard` is active.
     this.companionRegistry.register(WOW_COMMON_MANIFEST.id, this.ledgerlink);
+    this.companionRegistry.register(WOW_COMMON_MANIFEST.id, this.addonErrors);
     await bestEffortInit('WowCommonModule.init', this.logger, async () => {
       this.pluginRegistry.registerManifest(WOW_COMMON_MANIFEST);
       await this.pluginRegistry.ensureInstalled(WOW_COMMON_MANIFEST.id);

@@ -31,12 +31,12 @@
  * memory writes (they swallow errors, which would poison the transaction).
  */
 import type * as schema from '../../drizzle/schema';
-import type { MatchingPassResult } from '../lineups-matching.helpers';
 import { writeTiebreakerCohortMemory } from '../cohort-memory-write.helpers';
 import { withTiebreakerAdvanceLock } from './tiebreaker-advance.helpers';
 import {
   announceLineupDecided,
   decideLineupInTx,
+  type DecidePassResult,
   type TiebreakerDecideDeps,
 } from './tiebreaker-decide.helpers';
 import {
@@ -65,7 +65,7 @@ export interface FinalizeOutcome {
   /** True when THIS call resolved the row (writes the veto cohort memory). */
   resolvedNow: boolean;
   /** The matching pass this call ran, or null when decide was complete. */
-  pass: MatchingPassResult | null;
+  pass: DecidePassResult | null;
 }
 
 /**

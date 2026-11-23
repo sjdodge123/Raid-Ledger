@@ -33,6 +33,8 @@ export interface DungeonQuestDto {
   levelBand?: QuestLevelBand | null;
   /** ROK-2224: true on an escort quest (ESCORT_QUEST_IDS); key absent otherwise. */
   isEscort?: boolean;
+  /** ROK-2276: true on an overlay-only quest with no start evidence; key absent otherwise. */
+  startLocationUnconfirmed?: boolean;
 }
 
 /** A dungeon's catalogue level span (ROK-1908). */

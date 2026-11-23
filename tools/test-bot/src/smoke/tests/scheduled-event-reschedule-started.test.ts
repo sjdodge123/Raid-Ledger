@@ -38,6 +38,7 @@ import {
   isEndedSeStatus,
   type SeSnapshot,
 } from '../reschedule-started.js';
+import { blockerSuffixFor } from '../scheduled-event-blocker-lookup.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 /** Minutes until the event starts. Creation skips an SE whose start is past. */
@@ -98,10 +99,14 @@ async function waitForActive(seId: string): Promise<void> {
     },
     ACTIVE_TIMEOUT_MS,
     { intervalMs: 2000 },
-  ).catch(() => {
+  ).catch(async () => {
+    // A foreign Active event on our SE's channel blocks Scheduled -> Active
+    // (TECH-DEBT-BACKLOG 2026-11-21); name it. "" on none or a failed lookup.
+    const blocker = await blockerSuffixFor(seId);
     throw new Error(
       `precondition: SE ${seId} did not reach Active within ` +
-        `${ACTIVE_TIMEOUT_MS}ms (last: ${describeRescheduleState(seId, last, [])})`,
+        `${ACTIVE_TIMEOUT_MS}ms (last: ${describeRescheduleState(seId, last, [])})` +
+        blocker,
     );
   });
 }

@@ -93,6 +93,8 @@ function record(replyCount: number): HubForumThreadRecord {
     updatedAt: NOW,
     eventId: 5,
     eventDetachedAt: null,
+    matchId: null,
+    lineupId: null,
     writeClosesAt: null,
   };
   return { thread, author: null, event: null };
@@ -104,6 +106,10 @@ function reply(id: number): { reply: HubForumReplySelect; author: null } {
     threadId: 21,
     guildId: 7,
     authorId: 9,
+    kind: 'reply',
+    copiedFromReplyId: null,
+    copiedFromThreadId: null,
+    subjectUserId: null,
     authorDiscordId: null,
     authorDiscordName: null,
     authorDiscordAvatar: null,

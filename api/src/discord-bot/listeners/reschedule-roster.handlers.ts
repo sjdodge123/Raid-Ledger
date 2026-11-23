@@ -18,6 +18,11 @@ import { showRescheduleRoleForCharacter } from './reschedule-role-step.helpers';
 import { ensureRosterAssignment } from './reschedule-slot.handlers';
 import { defined } from '../../common/defined.helpers';
 import { unclaimedOrOwnedBy } from '../../events/signups-ownership.helpers';
+import { activatedAtOnReactivation } from '../../events/signup-activated-at.helpers';
+import {
+  announceIfLineChanged,
+  type LineFields,
+} from './reschedule-signup-emit.helpers';
 
 export type { RescheduleDeps, ReconfirmOptions };
 
@@ -136,6 +141,8 @@ export function buildUpdateSet(
     status: options?.signupStatus === 'tentative' ? 'tentative' : 'signed_up',
     roachedOutAt: null,
     confirmationStatus: 'confirmed',
+    // ROK-2293: re-stamped only when the row was declined/roached out/departed.
+    activatedAt: activatedAtOnReactivation(),
   };
   if (options?.preferredRoles) {
     set.preferredRoles = options.preferredRoles.filter((r: string) =>
@@ -172,11 +179,7 @@ async function updateLinkedSignup(
     .update(schema.eventSignups)
     .set(updateSet)
     .where(eq(schema.eventSignups.id, signup.id));
-  if (options?.characterId) {
-    await deps.signupsService.confirmSignup(event.id, signup.id, userId, {
-      characterId: options.characterId,
-    });
-  }
+  await afterLinkedWrite(deps, event.id, userId, signup, updateSet, options);
   await logDiscordAck(deps, event.id, wasPending, updateSet, { userId });
   return signup.id;
 }
@@ -205,10 +208,32 @@ async function updateUnlinkedSignup(
     .update(schema.eventSignups)
     .set(updateSet)
     .where(eq(schema.eventSignups.id, signup.id));
+  announceIfLineChanged(deps, event.id, signup, updateSet);
   await logDiscordAck(deps, event.id, wasPending, updateSet, {
     discordUserId: interaction.user.id,
   });
   return signup.id;
+}
+
+/**
+ * ROK-2271 — a character change goes through confirmSignup, which emits
+ * signup.updated itself; otherwise announce a line-visible change here.
+ */
+async function afterLinkedWrite(
+  deps: RescheduleDeps,
+  eventId: number,
+  userId: number,
+  signup: LineFields & { id: number },
+  updateSet: Record<string, unknown>,
+  options?: ReconfirmOptions,
+): Promise<void> {
+  if (!options?.characterId) {
+    announceIfLineChanged(deps, eventId, signup, updateSet, userId);
+    return;
+  }
+  await deps.signupsService.confirmSignup(eventId, signup.id, userId, {
+    characterId: options.characterId,
+  });
 }
 
 async function replyEventError(

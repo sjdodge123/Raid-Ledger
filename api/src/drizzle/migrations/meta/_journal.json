@@ -2150,6 +2150,69 @@
       "when": 1794979568180,
       "tag": "0307_forever_activity_reattribution",
       "breakpoints": true
+    },
+    {
+      "idx": 308,
+      "version": "7",
+      "when": 1795056287110,
+      "tag": "0308_backup_export_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 309,
+      "version": "7",
+      "when": 1795071822114,
+      "tag": "0309_guild_profiles_public_card",
+      "breakpoints": true
+    },
+    {
+      "idx": 310,
+      "version": "7",
+      "when": 1795126131298,
+      "tag": "0310_wow_addon_error_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 311,
+      "version": "7",
+      "when": 1795153209583,
+      "tag": "0311_event_planning_posts",
+      "breakpoints": true
+    },
+    {
+      "idx": 312,
+      "version": "7",
+      "when": 1795244801383,
+      "tag": "0312_mature_guardsmen",
+      "breakpoints": true
+    },
+    {
+      "idx": 313,
+      "version": "7",
+      "when": 1795244901383,
+      "tag": "0313_signin_reminders",
+      "breakpoints": true
+    },
+    {
+      "idx": 314,
+      "version": "7",
+      "when": 1795245314293,
+      "tag": "0314_forum_signup_lines",
+      "breakpoints": true
+    },
+    {
+      "idx": 315,
+      "version": "7",
+      "when": 1795305913505,
+      "tag": "0315_supreme_the_enforcers",
+      "breakpoints": true
+    },
+    {
+      "idx": 316,
+      "version": "7",
+      "when": 1795383269551,
+      "tag": "0316_forum_chat_copy",
+      "breakpoints": true
     }
   ]
 }

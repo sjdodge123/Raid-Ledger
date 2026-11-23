@@ -56,7 +56,11 @@ const TB_ID = 5;
 const LINEUP_ID = 9;
 /** The lock transaction's handle — distinct from `deps.db` (the outer pool). */
 const TX = { lockTransaction: true } as unknown as Db;
-const EMPTY_PASS = { schedulingMatchIds: [], orphanedCards: [] };
+const EMPTY_PASS = {
+  schedulingMatchIds: [],
+  orphanedCards: [],
+  leftVoting: true,
+};
 
 interface Store {
   tb: TiebreakerRow;

@@ -10,7 +10,7 @@ import { users } from './users';
 
 /**
  * ROK-313: audit log of admin moderation actions (kick/ban/role-change).
- * ROK-1754: also impersonate_start/stop. `action` is plain text (no CHECK), so
+ * ROK-1754: also impersonate_start/stop. ROK-2263: backup_token_mint/revoke. `action` is plain text (no CHECK), so
  * widening this enum needs no migration; moderation-history readers filter
  * back to the five moderation kinds.
  */
@@ -27,6 +27,8 @@ export const adminActions = pgTable(
         'role_change',
         'impersonate_start',
         'impersonate_stop',
+        'backup_token_mint',
+        'backup_token_revoke',
       ],
     }).notNull(),
     actorId: integer('actor_id').references(() => users.id, {

@@ -27,11 +27,14 @@ export const MODERATION_ACTION_KINDS = [
   'role_change',
 ] as const;
 
-/** Kinds recorded in `admin_actions.action` (ROK-1754: + impersonation). */
+/** Kinds recorded in `admin_actions.action` (ROK-1754: + impersonation;
+ * ROK-2263: + backup-export token mint/revoke). */
 export type AdminActionKind =
   | (typeof MODERATION_ACTION_KINDS)[number]
   | 'impersonate_start'
-  | 'impersonate_stop';
+  | 'impersonate_stop'
+  | 'backup_token_mint'
+  | 'backup_token_revoke';
 
 /** Rows for one target, moderation kinds only (ROK-1754). */
 function moderationRowsFor(targetId: number) {
@@ -50,10 +53,10 @@ export interface InsertAdminActionInput {
   metadata?: string | null;
 }
 
-/** Insert one audit row. Callers gate this on a moderation write RETURNING a row
+/** Insert one audit row (`db` may be a transaction). Callers gate this on a moderation write RETURNING a row
  * so a retry does not append a duplicate (§9.10 #4). */
 export async function insertAdminAction(
-  db: Db,
+  db: Pick<Db, 'insert'>,
   input: InsertAdminActionInput,
 ): Promise<void> {
   await db.insert(schema.adminActions).values({

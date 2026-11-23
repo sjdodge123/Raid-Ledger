@@ -29,6 +29,13 @@ export function isUnsent(link: Pick<ForumLink, 'discordMessageId'>): boolean {
   return link.discordMessageId.startsWith(UNSENT_PREFIX);
 }
 
+/** R3: only RL-origin, sent, still-present rows are pushed on edit. */
+export function isEditableLink(link: ForumLink): boolean {
+  return (
+    link.origin === 'raidledger' && !link.discordDeletedAt && !isUnsent(link)
+  );
+}
+
 /** Claim an outbound create; null when a link already exists (idempotent). */
 export async function claimLink(
   db: ForumDiscordDb,
@@ -303,4 +310,22 @@ export async function rehomeReplies(
         eq(links.discordThreadId, unsentId('thread', threadId)),
       ),
     );
+}
+
+/**
+ * D9 — the link belongs to the hub's CURRENT binding: the hub is bound and
+ * the link is not older than `bound_at` (same rule as `dueLockChanges`). A
+ * post from a previous binding (unbind, re-bind) is left alone.
+ */
+export async function isCurrentBindingLink(
+  db: ForumDiscordDb,
+  link: Pick<ForumLink, 'guildId' | 'createdAt'>,
+): Promise<boolean> {
+  const b = schema.hubForumDiscordBindings;
+  const [binding] = await db
+    .select({ boundAt: b.boundAt })
+    .from(b)
+    .where(eq(b.guildId, link.guildId))
+    .limit(1);
+  return !!binding && link.createdAt.getTime() >= binding.boundAt.getTime();
 }

@@ -13,6 +13,7 @@ import {
 } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 import { SettingsService } from '../../settings/settings.service';
 import {
   DiscordListenerBinding,
@@ -48,6 +49,7 @@ export class RoachOutInteractionListener {
     private readonly eventsService: EventsService,
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly settingsService: SettingsService,
+    private readonly messageEditor: EventEmbedMessageEditor,
   ) {}
 
   private get deps(): RoachOutDeps {
@@ -58,6 +60,7 @@ export class RoachOutInteractionListener {
       eventsService: this.eventsService,
       embedFactory: this.embedFactory,
       settingsService: this.settingsService,
+      messageEditor: this.messageEditor,
       logger: this.logger,
     };
   }

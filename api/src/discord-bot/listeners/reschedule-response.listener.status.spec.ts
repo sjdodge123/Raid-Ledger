@@ -1,5 +1,7 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RescheduleResponseListener } from './reschedule-response.listener';
+import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';
 import { CharactersService } from '../../characters/characters.service';
@@ -105,8 +107,11 @@ const mockSignup = {
   user: { id: 41 },
 };
 
+let mockEmitter: { emit: jest.Mock };
+
 async function setupStatusModule() {
   mockDb = createDrizzleMock();
+  mockEmitter = { emit: jest.fn() };
   mockSignupsService = {
     findByDiscordUser: jest.fn().mockResolvedValue(null),
     confirmSignup: jest.fn().mockResolvedValue({ id: 101 }),
@@ -145,6 +150,11 @@ async function setupStatusModule() {
       {
         provide: ActivityLogService,
         useValue: { log: jest.fn().mockResolvedValue(undefined) },
+      },
+      { provide: EventEmitter2, useValue: mockEmitter },
+      {
+        provide: SettingsService,
+        useValue: { getTrustedClientUrl: jest.fn().mockResolvedValue(null) },
       },
     ],
   }).compile();
@@ -257,6 +267,47 @@ function tentativeEdgeCaseTests() {
 }
 
 function declineSuccessTests() {
+  it('emits signup.updated once after the decline write (ROK-2271)', async () => {
+    mockDb.limit.mockResolvedValueOnce([mockEvent]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
+    );
+    await listener['handleButtonInteraction'](interaction);
+    expect(mockEmitter.emit).toHaveBeenCalledTimes(1);
+    expect(mockEmitter.emit).toHaveBeenCalledWith('signup.updated', {
+      eventId: 42,
+      signupId: 101,
+      action: 'reschedule_decline',
+    });
+  });
+
+  it('does not emit when the signup was already declined (ROK-2271)', async () => {
+    mockDb.limit.mockResolvedValueOnce([mockEvent]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue({
+      ...mockSignup,
+      status: 'declined',
+    });
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
+    );
+    await listener['handleButtonInteraction'](interaction);
+    expect(mockEmitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('does not emit when the decline write fails (ROK-2271)', async () => {
+    mockDb.limit.mockResolvedValueOnce([mockEvent]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    mockDb.set.mockImplementationOnce(() => {
+      throw new Error('db down');
+    });
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
+    );
+    await listener['handleButtonInteraction'](interaction);
+    expect(mockEmitter.emit).not.toHaveBeenCalled();
+  });
+
   it('sets status to declined and deletes roster assignment', async () => {
     mockDb.limit.mockResolvedValueOnce([mockEvent]);
     mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);

@@ -14,8 +14,14 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 /**
  * The once-ever guard (pattern: ROK-2260's signup-ping catch-up). Bump the
  * suffix to re-run the backfill.
+ *
+ * v2 (ROK-2272 S8): forums dressed under v1 lack the new Poll and Lineup
+ * kind tags. A re-run is safe on a dressed forum: tags are reused by name
+ * (no duplicate, no rename), the 20-tag cap is respected, hubs already
+ * tagged are skipped, a post already carrying the Event tag is not
+ * rewritten, and a moderator's default reaction is never overwritten.
  */
-export const FORUM_DECOR_BACKFILL_KEY = 'hub-forum:discord-decor:backfill:v1';
+export const FORUM_DECOR_BACKFILL_KEY = 'hub-forum:discord-decor:backfill:v2';
 
 /** Review r1: the guard expires while running, so a crash mid-run frees it. */
 const RUNNING_TTL_SECONDS = 3600;

@@ -9,6 +9,7 @@ import {
   markdownToPlainText,
   type HubForumCan,
   type HubForumDeleted,
+  type HubForumReplyKind,
 } from '@raid-ledger/contract';
 import { decodeCursor, encodeCursor } from '../posts/hub-posts.helpers';
 
@@ -35,6 +36,8 @@ export interface HubForumOwnedRow {
   authorDiscordId: string | null;
   createdAt: Date;
   deletedAt: Date | null;
+  /** Replies only (ROK-2274): a `signup_line` is system text. */
+  kind?: HubForumReplyKind;
 }
 
 /** Opaque base64url cursor (same format and validation as hub posts). */
@@ -80,6 +83,7 @@ export function withinEditWindow(createdAt: Date, now: Date): boolean {
  * thread (`pinnable`) and moderator. Moderators never edit another's text.
  * ROK-2208 R3/§6: a Discord-origin row is never editable on RL and only a
  * moderator may remove it, even when its author is a linked RL member.
+ * ROK-2274 D9: a signup line is never editable; only a moderator removes it.
  */
 export function canFor(
   actor: HubForumActor,
@@ -87,7 +91,10 @@ export function canFor(
   opts: { now: Date; pinnable: boolean; readOnly?: boolean },
 ): HubForumCan {
   const live = row.deletedAt === null;
+  // Any system line (signup line, ROK-2297 copy header); threads have no kind.
+  const line = row.kind !== undefined && row.kind !== 'reply';
   const own =
+    !line &&
     actor.canWrite &&
     row.authorId === actor.userId &&
     row.authorDiscordId === null;

@@ -11,6 +11,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
 import { SteamNudgeBanner } from './SteamNudgeBanner';
+import { blockWebStorage } from '../../test/block-web-storage';
 
 // Mock auth hook to control user.steamId and role
 vi.mock('../../hooks/use-auth', () => ({
@@ -157,5 +158,34 @@ describe('SteamNudgeBanner — CTA', () => {
     await user.click(ctaButton);
 
     expect(mockLinkSteam).toHaveBeenCalled();
+  });
+});
+
+describe('SteamNudgeBanner — browser blocks storage (TECH-DEBT L4009)', () => {
+  let restore: () => void = () => undefined;
+  beforeEach(() => {
+    mockLinkSteam.mockReset().mockResolvedValue(undefined);
+    restore = blockWebStorage();
+  });
+
+  afterEach(() => restore());
+
+  it('renders (a blocked dismissal read counts as not dismissed)', () => {
+    renderWithProviders(
+      <SteamNudgeBanner lineupId={42} lineupStatus="building" userSteamId={null} />,
+    );
+
+    expect(screen.getByText(/link.*steam/i)).toBeInTheDocument();
+  });
+
+  it('dismiss still hides the banner for this page', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <SteamNudgeBanner lineupId={42} lineupStatus="building" userSteamId={null} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /dismiss/i }));
+
+    expect(screen.queryByText(/link.*steam/i)).not.toBeInTheDocument();
   });
 });

@@ -114,6 +114,7 @@ export class LineupsService {
         lineupNotifications: this.lineupNotifications,
         logger: this.logger,
         resolveChannelName: this.resolveChannelName,
+        eventEmitter: this.eventEmitter,
       },
       dto,
       userId,

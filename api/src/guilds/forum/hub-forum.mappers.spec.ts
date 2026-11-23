@@ -57,6 +57,8 @@ function thread(
     updatedAt: AT,
     eventId: null,
     eventDetachedAt: null,
+    matchId: null,
+    lineupId: null,
     writeClosesAt: null,
     ...over,
   };
@@ -68,6 +70,10 @@ function reply(over: Partial<HubForumReplySelect> = {}): HubForumReplySelect {
     threadId: 9,
     guildId: 2,
     authorId: 5,
+    kind: 'reply',
+    copiedFromReplyId: null,
+    copiedFromThreadId: null,
+    subjectUserId: null,
     body: 'see you there',
     editedAt: null,
     deletedAt: null,
@@ -135,6 +141,27 @@ describe('toThreadSummary', () => {
     expect(orphan.lock).toMatchObject({ reason: 'event-deleted' });
   });
 
+  // ROK-2272 S7 Codex: poll / lineup threads are lifecycle-owned too, so the
+  // list row must name the subject for `forumRowCan` to withhold Edit/Delete.
+  it('names a poll or lineup subject on the row, and nothing on a normal thread', () => {
+    const normal = toThreadSummary({ thread: thread(), author: person });
+    expect('matchId' in normal || 'lineupId' in normal).toBe(false);
+    const poll = toThreadSummary({
+      thread: thread({ matchId: 41 }),
+      author: person,
+    });
+    expect(HubForumThreadSummarySchema.parse(poll)).toMatchObject({
+      matchId: 41,
+    });
+    expect('lineupId' in poll).toBe(false);
+    const lineup = toThreadSummary({
+      thread: thread({ lineupId: 12 }),
+      author: person,
+    });
+    expect(lineup).toMatchObject({ lineupId: 12 });
+    expect('matchId' in lineup).toBe(false);
+  });
+
   it('blanks title + preview of a deleted thread and says who removed it', () => {
     const gone = thread({
       deletedAt: LATER,
@@ -172,6 +199,19 @@ describe('toForumReply', () => {
     const gone = reply({ deletedAt: LATER, deletedAs: 'author', deletedBy: 5 });
     const out = toForumReply({ reply: gone, author: person }, CAN);
     expect(out).toMatchObject({ body: '', deleted: 'author' });
+  });
+
+  // ROK-2274: only a system row names its kind; a plain reply omits it.
+  it('carries kind for a signup line and omits it for a reply', () => {
+    const line = reply({
+      kind: 'signup_line',
+      authorId: null,
+      subjectUserId: 5,
+    });
+    const out = toForumReply({ reply: line, author: null }, CAN);
+    expect(HubForumReplySchema.parse(out).kind).toBe('signup_line');
+    const plain = toForumReply({ reply: reply(), author: person }, CAN);
+    expect('kind' in plain).toBe(false);
   });
 });
 

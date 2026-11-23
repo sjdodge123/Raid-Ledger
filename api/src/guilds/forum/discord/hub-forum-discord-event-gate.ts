@@ -1,77 +1,57 @@
 /**
- * ROK-2208 §5.7 item 3 (R11) — the inbound write gate for EVENT threads. A
- * Discord message in a post linked to an RL event thread is imported only
- * when its author may write there under ROK-2226 §6: a `signed_up` /
- * `tentative` signup on the event (bench included), found through
- * `users.discord_id` OR — OQ-10, ruled "yes" — an anonymous Discord signup
- * (`event_signups.discord_user_id`, no RL account; imported as a guest).
- * Anyone else stays on Discord only and gets ONE DM per (user, post): Redis
- * `SET NX` on `hfd:notice:<threadId>:<discordId>` for 30 days. Closed DMs
- * (50007) are silent. A read-only thread drops the message without a DM —
- * the lock sweep closes the post. A Discord user can never START an event
- * thread: inbound top-level posts are always imported as plain threads.
+ * ROK-2208 §5.7 item 3 (R11), widened by ROK-2272 S8 (R7) — the inbound
+ * write gate for SUBJECT threads (event, scheduling poll, lineup). A Discord
+ * message in a post linked to such a thread is imported only when its author
+ * may write there (`hub-forum-discord-subject-gate.facts.ts`): an event
+ * signup (RL account or OQ-10's anonymous Discord signup), a poll vote or
+ * match membership, a lineup nomination or vote. Anyone else stays on
+ * Discord only and gets ONE DM per (user, post): Redis `SET NX` on
+ * `hfd:notice:<threadId>:<discordId>` for 30 days. Closed DMs (50007) are
+ * silent. A read-only thread drops the message without a DM — the lock
+ * sweep closes the post. A Discord user can never START a subject thread:
+ * inbound top-level posts are always imported as plain threads. The class
+ * keeps its event-era name so its DI slot and the ingest stay untouched.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, eq, inArray } from 'drizzle-orm';
 import Redis from 'ioredis';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { createDmEmbed } from '../../../discord-bot/embeds/embed-chrome.helpers';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
-import * as schema from '../../../drizzle/schema';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
 import { getClientUrl } from '../../../settings/settings-bot.helpers';
 import { SettingsService } from '../../../settings/settings.service';
-import {
-  WRITABLE_SIGNUP_STATUSES,
-  isEventSignup,
-} from '../event-discussion/event-discussion.queries';
 import type { ForumLink } from './hub-forum-discord-links.queries';
-import { userIdForDiscord } from './hub-forum-discord-inbound.writes';
+import { subjectNoticeText } from './hub-forum-discord-subject-gate.copy';
+import {
+  loadSubjectGateFacts,
+  type GateSubject,
+  type SubjectGateFacts,
+} from './hub-forum-discord-subject-gate.facts';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+
+export type { SubjectGateFacts } from './hub-forum-discord-subject-gate.facts';
 
 /** One notice per (Discord user, post) for 30 days. */
 export const EVENT_NOTICE_TTL_SECONDS = 30 * 24 * 60 * 60;
 
-/** The Redis "already told" key. */
+/** The Redis "already told" key (thread-keyed, any subject). */
 export function eventNoticeKey(threadId: number, discordId: string): string {
   return `hfd:notice:${threadId}:${discordId}`;
 }
 
-/** The ruled DM copy. */
-export function eventNoticeText(title: string, url: string): string {
-  return `Only players signed up for ${title} can post in its discussion. Join Raid Ledger and sign up: ${url}`;
-}
-
-/** What the gate needs to know about one (thread, author). */
-export interface EventGateFacts {
-  eventId: number | null;
-  eventTitle: string;
-  writeClosesAt: Date | null;
-  eventDetachedAt: Date | null;
-  signedUp: boolean;
-}
-
-/** Facts for a thread with no event (or no row). */
-const NO_EVENT = {
-  eventId: null,
-  eventTitle: '',
-  writeClosesAt: null,
-  eventDetachedAt: null,
-} as const satisfies Omit<EventGateFacts, 'signedUp'>;
-
 /** import = sync it; refuse = keep on Discord + DM; drop = keep, no DM. */
-export type EventGateVerdict = 'import' | 'refuse' | 'drop';
+export type SubjectGateVerdict = 'import' | 'refuse' | 'drop';
 
 /** §5.7 decision on plain facts (pure). */
-export function eventGateVerdict(
-  f: EventGateFacts,
+export function subjectGateVerdict(
+  f: SubjectGateFacts,
   now: Date,
-): EventGateVerdict {
-  if (f.eventId === null) return 'import';
+): SubjectGateVerdict {
+  if (f.subject === null) return 'import';
   const closes = f.writeClosesAt;
   const ended = closes !== null && closes.getTime() <= now.getTime();
   if (f.eventDetachedAt !== null || ended) return 'drop';
-  return f.signedUp ? 'import' : 'refuse';
+  return f.participant ? 'import' : 'refuse';
 }
 
 /** Discord's "Cannot send messages to this user" (DMs closed). */
@@ -100,80 +80,40 @@ export class HubForumDiscordEventGate {
     now = new Date(),
   ): Promise<boolean> {
     const facts = await this.loadFacts(post.threadId, authorId);
-    const verdict = eventGateVerdict(facts, now);
-    if (verdict === 'refuse' && facts.eventId !== null) {
-      await this.noticeOnce(post.threadId, authorId, facts);
+    const verdict = subjectGateVerdict(facts, now);
+    if (verdict === 'refuse' && facts.subject !== null) {
+      await this.noticeOnce(post.threadId, authorId, facts, facts.subject);
     }
     return verdict === 'import';
   }
 
-  /** The thread's event columns + whether the author holds a writable signup. */
-  async loadFacts(threadId: number, authorId: string): Promise<EventGateFacts> {
-    const t = schema.hubForumThreads;
-    const e = schema.events;
-    const [row] = await this.db
-      .select({
-        eventId: t.eventId,
-        eventTitle: e.title,
-        writeClosesAt: t.writeClosesAt,
-        eventDetachedAt: t.eventDetachedAt,
-      })
-      .from(t)
-      .leftJoin(e, eq(e.id, t.eventId))
-      .where(eq(t.id, threadId))
-      .limit(1);
-    if (!row || row.eventId === null) {
-      return { ...NO_EVENT, signedUp: false };
-    }
-    const signedUp = await this.isSignedUp(row.eventId, authorId);
-    return { ...row, eventTitle: row.eventTitle ?? 'this event', signedUp };
-  }
-
-  /** 2226 §6 via the RL account, else OQ-10's anonymous Discord signup. */
-  private async isSignedUp(
-    eventId: number,
-    authorId: string,
-  ): Promise<boolean> {
-    const userId = await userIdForDiscord(this.db, authorId);
-    if (userId !== null && (await isEventSignup(this.db, eventId, userId))) {
-      return true;
-    }
-    const s = schema.eventSignups;
-    const [anon] = await this.db
-      .select({ id: s.id })
-      .from(s)
-      .where(
-        and(
-          eq(s.eventId, eventId),
-          eq(s.discordUserId, authorId),
-          inArray(s.status, [...WRITABLE_SIGNUP_STATUSES]),
-        ),
-      )
-      .limit(1);
-    return anon !== undefined;
+  /** The thread's subject facts + whether the author may write there. */
+  loadFacts(threadId: number, authorId: string): Promise<SubjectGateFacts> {
+    return loadSubjectGateFacts(this.db, threadId, authorId);
   }
 
   /** Claim the Redis key; only the claimer DMs. Never throws. */
   private async noticeOnce(
     threadId: number,
     discordId: string,
-    facts: EventGateFacts,
+    facts: SubjectGateFacts,
+    subject: GateSubject,
   ): Promise<void> {
     const key = eventNoticeKey(threadId, discordId);
     const ttl = EVENT_NOTICE_TTL_SECONDS;
     try {
       const claimed = await this.redis.set(key, '1', 'EX', ttl, 'NX');
       if (claimed !== 'OK') return;
-      const url = `${await getClientUrl(this.settings)}/events/${facts.eventId}`;
+      const url = `${await getClientUrl(this.settings)}${facts.path}`;
       const embed = createDmEmbed({ state: 'needs_you' })
-        .setTitle(facts.eventTitle)
-        .setDescription(eventNoticeText(facts.eventTitle, url))
+        .setTitle(facts.title)
+        .setDescription(subjectNoticeText(subject.kind, facts.title, url))
         .setURL(url);
       await this.client.sendEmbedDM(discordId, embed);
     } catch (err) {
       if (isClosedDms(err)) return;
       const why = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Event thread ${threadId} notice DM failed: ${why}`);
+      this.logger.warn(`Forum thread ${threadId} notice DM failed: ${why}`);
     }
   }
 }

@@ -69,6 +69,8 @@ export interface SeedGuildInput extends SeedGuildSummaryOverrides {
   withDungeonPlan: boolean;
   /** ROK-2212 L14: a Suggested-groups cast (claimed + unclaimed) in one Forever dungeon. */
   withSuggestedGroup: boolean;
+  /** ROK-1813: switch the opt-in public card on (implies withRecruitment). */
+  withPublicCard: boolean;
   /** ROK-1789 B9 (Q-B16): the JWT caller owns the rank-0 character + a member editor grant. */
   asCaller: boolean;
   /** ROK-1789 B9: roster rows incl. filler (5..60). */

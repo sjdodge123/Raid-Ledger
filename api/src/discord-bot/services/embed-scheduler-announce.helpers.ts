@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { findAnnouncementMessage } from './event-message-rows.helpers';
 import type { GameAffinityNotificationService } from '../../notifications/game-affinity-notification.service';
 
 /** The deferred-event fields the group announce needs. */
@@ -26,16 +27,7 @@ async function findPostedMessage(
   db: Pick<PostgresJsDatabase<typeof schema>, 'select'>,
   eventId: number,
 ): Promise<{ guildId: string; channelId: string; messageId: string } | null> {
-  const [row] = await db
-    .select({
-      guildId: schema.discordEventMessages.guildId,
-      channelId: schema.discordEventMessages.channelId,
-      messageId: schema.discordEventMessages.messageId,
-    })
-    .from(schema.discordEventMessages)
-    .where(eq(schema.discordEventMessages.eventId, eventId))
-    .limit(1);
-  return row ?? null;
+  return findAnnouncementMessage(db, eventId);
 }
 
 /**

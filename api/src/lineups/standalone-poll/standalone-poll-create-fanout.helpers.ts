@@ -11,7 +11,9 @@
  * (ROK-1893 P3) is held to the same quiet fan-out until P2b gives it the
  * hub's own channel.
  */
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { StandalonePollVisibility } from '@raid-ledger/contract';
+import { emitPollOpened } from '../lineup-lifecycle-emit.helpers';
 import type { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
 import type { StandalonePollNotificationService } from './standalone-poll-notification.service';
 import type { CreatePollInput, PollGame } from './standalone-poll.service';
@@ -29,6 +31,8 @@ export interface CreateFanoutDeps {
   pollEmbed: Pick<SchedulingPollEmbedService, 'firePostInitialEmbed'>;
   /** ROK-1431: channel-lifecycle activity nudge (absent in narrow test graphs). */
   nudge?: Pick<GameActivityNudge, 'touch'> | undefined;
+  /** ROK-2272 S6: carries `POLL_OPENED` (every visibility; listeners gate). */
+  events?: EventEmitter2 | undefined;
 }
 
 type FanoutIds = { lineupId: number; matchId: number; creatorId: number };
@@ -44,6 +48,12 @@ export function fireCreateFanout(
   hubId: number | null = null,
 ): void {
   GameActivityNudge.safeTouch(deps.nudge, game.id);
+  emitPollOpened(deps.events, {
+    matchId: ids.matchId,
+    lineupId: ids.lineupId,
+    guildId: hubId,
+    visibility,
+  });
   // ROK-1893 P3 ruling 2026-10-23: a hub poll stays on its hub (see resolver).
   const fanout = resolveCreateFanout(
     visibility,

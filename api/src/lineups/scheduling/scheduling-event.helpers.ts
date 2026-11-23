@@ -10,6 +10,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { CreateEventDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import {
@@ -28,6 +29,7 @@ import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
 import { yesVotesOnly } from './scheduling-stance.helpers';
 import { fireEventCreated } from '../lineups-notify-hooks.helpers';
+import { emitPollLockedIn } from '../lineup-lifecycle-emit.helpers';
 import type { EventsService } from '../../events/events.service';
 import type { SignupsService } from '../../events/signups.service';
 import type { LineupNotificationService } from '../lineup-notification.service';
@@ -138,6 +140,8 @@ export interface LockInEventDeps {
   lineupNotifications: LineupNotificationService;
   pollEmbed: { fireUpdateEmbed: (matchId: number) => void };
   logger: Logger;
+  /** ROK-2272 S6: lifecycle bus for `POLL_LOCKED_IN`. */
+  events?: EventEmitter2 | undefined;
 }
 
 /** Create the event; on a throw, release the claim before re-throwing. */
@@ -258,6 +262,9 @@ export async function createLockedInEvent(
     playerCap,
   );
   const eventId = await claimAndCreateEvent(deps, matchId, userId, dto);
+  // ROK-2272 S6: the claim + link committed (claimAndCreateEvent threw
+  // otherwise) — the match is `scheduled` now.
+  emitPollLockedIn(deps.events, { matchId, eventId });
   // ROK-1617: YES voters only. A member who answered "that time does not work"
   // must not be rostered onto — or auto-hearted for — exactly that time.
   const voters = yesVotesOnly(await findScheduleVotes(db, [slot.id]));

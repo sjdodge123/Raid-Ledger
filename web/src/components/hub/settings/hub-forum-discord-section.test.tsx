@@ -1,7 +1,7 @@
 /**
  * ROK-2208 S3 — the settings sheet's "Discord forum" section: §6 visibility
  * (members never, Officers read-only, a non-community Leader read-only),
- * the opt-in form (Q10: shared #hub-forums preselected, full forum disabled,
+ * the opt-in form (Q10: shared #event-planning preselected, full forum disabled,
  * Turn on gated by the acknowledgement), the bound state and Unlink.
  */
 import { describe, it, expect } from 'vitest';
@@ -62,7 +62,7 @@ describe('Discord forum section — who sees what (§6)', () => {
     it('shows an Officer the status read-only', async () => {
         serve({ binding: forumDiscordBinding() });
         renderSheet(page('game_community', OFFICER));
-        expect(await within(await section()).findByTestId('hub-forum-discord-channel-name')).toHaveTextContent('#hub-forums');
+        expect(await within(await section()).findByTestId('hub-forum-discord-channel-name')).toHaveTextContent('#event-planning');
         expect(screen.queryByTestId('hub-forum-discord-unlink')).not.toBeInTheDocument();
     });
     it('gives a non-community Leader (not staff) no form', async () => {
@@ -74,7 +74,7 @@ describe('Discord forum section — who sees what (§6)', () => {
 });
 
 describe('Discord forum section — turning it on', () => {
-    it('joins the shared #hub-forums once the box is ticked (Q10 c)', async () => {
+    it('joins the shared #event-planning once the box is ticked (Q10 c)', async () => {
         const calls = serve({ binding: null }, [forumDiscordChannel()]);
         renderSheet(page('game_community', LEADER));
         const turnOn = await screen.findByTestId('hub-forum-discord-turn-on');

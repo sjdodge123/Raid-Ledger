@@ -18,6 +18,7 @@ import {
   runPgRestoreDirect,
   runPgRestoreDocker,
   isRestoreFatal,
+  restoreErrorMessage,
   runMigrations,
   bootstrapAdmin,
   seedGameData,
@@ -63,6 +64,8 @@ const SANITIZED_EXCLUDED_TABLES = [
   'local_credentials',
   'sessions',
   'consumed_intent_tokens',
+  // ROK-2263: export-token hashes must not ride into clones / fleet envs.
+  'backup_export_tokens',
 ] as const;
 
 @Injectable()
@@ -307,14 +310,14 @@ export class BackupService implements OnModuleInit {
       }
     } catch (err) {
       if (isRestoreFatal(err)) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = restoreErrorMessage(err);
         this.logger.error(`pg_restore failed: ${msg}`);
         throw new InternalServerErrorException(
           `Database restore failed: ${msg}`,
         );
       }
       this.logger.warn(
-        `pg_restore completed with warnings: ${err instanceof Error ? err.message : String(err)}`,
+        `pg_restore completed with warnings: ${restoreErrorMessage(err)}`,
       );
     }
   }
@@ -359,10 +362,12 @@ export class BackupService implements OnModuleInit {
         );
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = restoreErrorMessage(err);
       this.logger.error(`pg_dump failed: ${msg}`);
       cleanupPartialFile(outputPath);
-      throw new Error(`pg_dump failed: ${msg}`, { cause: err });
+      // No `cause`: the raw execFile error's message/cmd hold the DATABASE_URL.
+      // eslint-disable-next-line preserve-caught-error -- TD L2808, see above
+      throw new Error(`pg_dump failed: ${msg}`);
     }
   }
 }

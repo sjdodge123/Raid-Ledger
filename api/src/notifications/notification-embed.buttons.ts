@@ -2,10 +2,12 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { buildHubProposalButton } from './notification-embed.hub-proposal';
 import { buildPollHubButton } from './notification-embed.poll-hub';
 import { buildGgReadyButton } from './notification-embed.gg-ready';
+import { buildCalendarReconnectButton } from './calendar-reconnect-nudge.helpers';
 import {
   ROACH_OUT_BUTTON_IDS,
   RUNNING_LATE_BUTTON_IDS,
 } from '../discord-bot/discord-bot.constants';
+import { SIGNUP_STATE_EMOJI } from '../discord-bot/embeds/signup-state-emoji.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { toStr } from './notification-embed.helpers';
 import { buildLfgPlayerInviteRow } from './notification-embed.lfg-player-invite';
@@ -66,12 +68,12 @@ export function buildExtraRows(
           .setCustomId(`${ROACH_OUT_BUTTON_IDS.ROACH_OUT}:${eid}`)
           .setLabel('Roach Out')
           .setStyle(ButtonStyle.Danger)
-          .setEmoji('\uD83E\uDEB3'),
+          .setEmoji(SIGNUP_STATE_EMOJI.roachOut),
         new ButtonBuilder()
           .setCustomId(`${RUNNING_LATE_BUTTON_IDS.LATE}:${eid}`)
           .setLabel('Running Late')
           .setStyle(ButtonStyle.Secondary)
-          .setEmoji('\u23F0'),
+          .setEmoji(SIGNUP_STATE_EMOJI.late),
       ),
     ];
   if (type === 'event_rescheduled') return [buildRescheduleRow(eid)];
@@ -140,6 +142,8 @@ const PAYLOAD_BUTTONS: Partial<
   hub_proposal_submitted: buildHubProposalButton,
   hub_proposal_reviewed: buildHubProposalButton,
   gg_ready: buildGgReadyButton,
+  // ROK-1866: "Reconnect calendar" → the Integrations page.
+  calendar_needs_reconnect: buildCalendarReconnectButton,
 };
 
 /** Build the primary action button for a notification. */

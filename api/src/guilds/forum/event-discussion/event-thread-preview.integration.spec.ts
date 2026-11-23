@@ -129,6 +129,103 @@ describe('event thread latest-reply preview (ROK-2229)', () => {
   });
 });
 
+/** ROK-2274: a system signup line, `minutesAgo` old (no author, no count bump). */
+async function seedLine(s: Scene, body: string, minutesAgo: number) {
+  const at = new Date(Date.now() - minutesAgo * MIN);
+  const [row] = nonEmpty(
+    await ctx.posts.testApp.db
+      .insert(schema.hubForumReplies)
+      .values({
+        threadId: s.threadId,
+        guildId: s.guildId,
+        authorId: null,
+        kind: 'signup_line',
+        subjectUserId: ctx.ids.signed,
+        body,
+        createdAt: at,
+        updatedAt: at,
+      })
+      .returning(),
+    'line',
+  );
+  return row.id;
+}
+
+async function replyCountOf(threadId: number): Promise<number> {
+  const t = schema.hubForumThreads;
+  const [row] = nonEmpty(
+    await ctx.posts.testApp.db
+      .select({ n: t.replyCount })
+      .from(t)
+      .where(eq(t.id, threadId)),
+    'thread',
+  );
+  return row.n;
+}
+
+async function threadView(s: Scene, who: 'plain' | 'officerA') {
+  const path = `/guilds/${s.guildId}/forum/${s.threadId}`;
+  const res = await call(ctx.posts, 'get', path, who);
+  expect(res.status).toBe(200);
+  return res.body as HubForumThread;
+}
+
+describe('signup lines in the event thread (ROK-2274)', () => {
+  it('a line newer than every reply is never the list preview (D8)', async () => {
+    const s = await newScene(ctx);
+    await seedReplies(s, [{ body: 'Newest real reply', minutesAgo: 20 }]);
+    await seedLine(s, '✅ Mirelle signed up', 1);
+    const row = await listedRow(s);
+    expect(row.latestReply?.preview).toBe('Newest real reply');
+    expect(row.replyCount).toBe(1);
+    const previews = await latestReplyPreviews(ctx.posts.testApp.db, [
+      s.threadId,
+    ]);
+    expect(previews.get(s.threadId)?.preview).toBe('Newest real reply');
+  });
+
+  it('a thread with only lines previews nothing', async () => {
+    const s = await newScene(ctx);
+    await seedLine(s, '✅ Mirelle signed up', 2);
+    const previews = await latestReplyPreviews(ctx.posts.testApp.db, [
+      s.threadId,
+    ]);
+    expect([...previews.keys()]).toEqual([]);
+  });
+
+  it('lines page in order with replies and name their kind', async () => {
+    const s = await newScene(ctx);
+    await seedReplies(s, [{ body: 'Count me in', minutesAgo: 20 }]);
+    await seedLine(s, '✅ Mirelle signed up', 10);
+    const view = await threadView(s, 'plain');
+    expect(view.replies.map((r) => [r.body, r.kind ?? 'reply'])).toEqual([
+      ['Count me in', 'reply'],
+      ['✅ Mirelle signed up', 'signup_line'],
+    ]);
+  });
+
+  it('D9: nobody edits a line; a member cannot delete it, an officer can', async () => {
+    const s = await newScene(ctx);
+    await seedReplies(s, [{ body: 'Count me in', minutesAgo: 20 }]);
+    const lineId = await seedLine(s, '✅ Mirelle signed up', 5);
+    const line = (await threadView(s, 'officerA')).replies.find(
+      (r) => r.id === lineId,
+    );
+    expect(line?.can).toEqual({ edit: false, delete: true, pin: false });
+    const path = `/guilds/${s.guildId}/forum/${s.threadId}/replies/${lineId}`;
+    const edit = await call(ctx.posts, 'patch', path, 'officerA', {
+      body: 'rewritten',
+    });
+    expect(edit.status).toBe(403);
+    expect((await call(ctx.posts, 'delete', path, 'plain')).status).toBe(403);
+    expect((await call(ctx.posts, 'delete', path, 'officerA')).status).toBe(
+      204,
+    );
+    // The line never counted, so removing it leaves the one real reply.
+    expect(await replyCountOf(s.threadId)).toBe(1);
+  });
+});
+
 describe('event thread header numbers (ROK-2229)', () => {
   it('counts signups exactly like the event page (bench in, inactive out)', async () => {
     const s = await newScene(ctx);

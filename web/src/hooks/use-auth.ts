@@ -12,6 +12,7 @@ import { readClaims } from '../lib/api/token-expiry';
 import { toast } from '../lib/toast';
 import { endDeactivatedSession, isDeactivatedResponse } from '../lib/api/deactivated-session';
 import { awaitMagicLinkRedeem } from '../lib/magic-link-redeem';
+import { peekCapturedSigninLinkToken, isSigninLinkPage } from '../lib/magic-link-capture';
 import { clearCapturedQueryToken } from '../lib/query-token-capture';
 import { bumpIdentityEpoch } from '../lib/api/cross-tab-auth';
 import { dropViewerPrivateCaches } from './viewer-private-caches';
@@ -108,13 +109,17 @@ function fetchMe(token: string): Promise<Response> {
 
 /**
  * ROK-1353: refresh failed — clear storage and, for a Discord-linked user,
- * attempt ONE silent re-auth redirect before settling on the login screen.
+ * attempt ONE silent re-auth redirect before settling on the login screen
+ * (never while a `/signin-link` token is held for its tap — ROK-2283).
  * ROK-1811: the session ended, so the previous viewer's caches go with it
  * (when called as a query function, which hands over its client).
  */
 function handleRefreshFailure(client: QueryClient | undefined): null {
     clearAllAuthStorage();
     if (client) dropViewerPrivateCaches(client);
+    // ROK-2283 (Codex P2): a held /signin-link token lives only in memory, so
+    // a silent OAuth hop would lose it — stay put and let Continue spend it.
+    if (peekCapturedSigninLinkToken() && isSigninLinkPage(window.location.pathname)) return null;
     attemptSilentReauth(window.location.pathname + window.location.search);
     return null;
 }

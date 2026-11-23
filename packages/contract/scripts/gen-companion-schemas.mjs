@@ -1,9 +1,9 @@
 // Regenerates packages/contract/companion/envelope/v1/schema.json,
 // companion/bg3-save/v1/schema.json, companion/bg3-screenshot/v1/schema.json,
-// companion/wow-ledgerlink/v1/schema.json and
+// companion/wow-ledgerlink/v1/schema.json, companion/wow-addon-errors/v1/schema.json and
 // companion/device-link/v1/schema.json, companion/dev-bridge/v1/schema.json and
 // companion/dev-bridge/v1/allowlist.json from the Zod source of truth (ROK-1954,
-// ROK-1955, ROK-1964, ROK-2055).
+// ROK-1955, ROK-1964, ROK-2055, ROK-2099).
 // Build dist first:
 //   npm run build -w packages/contract && node packages/contract/scripts/gen-companion-schemas.mjs
 // The api jest drift guard (api/src/companion/companion-contract.spec.ts) and,
@@ -24,7 +24,9 @@ import {
     serializeBg3ScreenshotJsonSchema,
     serializeCompanionDeviceLinkJsonSchema,
     serializeCompanionEnvelopeJsonSchema,
+    serializeWowAddonErrorsJsonSchema,
     serializeWowLedgerlinkJsonSchema,
+    WOW_ADDON_ERRORS_CONTRACT_VERSION,
     WOW_LEDGERLINK_CONTRACT_VERSION,
 } from '../dist/index.js';
 
@@ -34,6 +36,7 @@ const outputs = [
     [join(root, 'bg3-save', `v${BG3_SAVE_CONTRACT_VERSION}`, 'schema.json'), serializeBg3SaveJsonSchema()],
     [join(root, 'bg3-screenshot', `v${BG3_SCREENSHOT_CONTRACT_VERSION}`, 'schema.json'), serializeBg3ScreenshotJsonSchema()],
     [join(root, 'wow-ledgerlink', `v${WOW_LEDGERLINK_CONTRACT_VERSION}`, 'schema.json'), serializeWowLedgerlinkJsonSchema()],
+    [join(root, 'wow-addon-errors', `v${WOW_ADDON_ERRORS_CONTRACT_VERSION}`, 'schema.json'), serializeWowAddonErrorsJsonSchema()],
     [
         join(root, 'device-link', `v${COMPANION_DEVICE_LINK_CONTRACT_VERSION}`, 'schema.json'),
         serializeCompanionDeviceLinkJsonSchema(),

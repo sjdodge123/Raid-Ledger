@@ -82,13 +82,19 @@ const core = {
     { id: 'game_community', kind: 'hub-kind', label: 'Community hubs for any game' },
     { id: 'event-guild-tagger', kind: 'event-tagger', label: 'Tags events with the hub they belong to' },
     { id: 'event-discussion', kind: 'event-tagger', label: 'Opens a forum thread for each hub-tagged event' },
+    // ROK-2272 S7 — scheduling-poll (and, S7b, lineup) Raid Ledger threads.
+    { id: 'poll-discussion', kind: 'event-tagger', label: 'Opens a forum thread for each hub-tagged scheduling poll and lineup' },
+    // ROK-2272 S4a — Discord-only posts for non-hub events, polls and lineups.
+    { id: 'event-planning.discord-posts', kind: 'event-tagger', label: 'Posts non-hub events, polls and lineups into the event-planning Discord forum' },
     { id: 'hub-media.upload', kind: 'ingest-source', label: 'Members upload pictures to the hub Gallery' },
     // ROK-2208 — the hub Forum ↔ Discord forum channel sync.
     { id: 'hub-forum.discord-sync', kind: 'ingest-source', label: 'Syncs the hub Forum with a Discord forum channel' },
     { id: 'HubForumDiscordSync_retrySweep', kind: 'scheduled-job', label: 'Retries hub Forum posts that did not reach Discord every 5 minutes' },
-    { id: 'HubForumDiscordSync_eventLockSweep', kind: 'scheduled-job', label: 'Locks and archives the Discord post of a read-only event thread every 5 minutes' },
+    { id: 'HubForumDiscordSync_eventLockSweep', kind: 'scheduled-job', label: 'Closes event, poll and lineup posts in the Discord forum 1 hour after they end' },
     { id: 'SteamAppStatsProcessor_scheduledRefresh', kind: 'scheduled-job', label: 'Refreshes Steam achievements for game hubs every night' },
     { id: 'GgDeliveryCron_tick', kind: 'scheduled-job', label: 'Delivers GG <year>: the announcement, then paced player DMs' },
+    // ROK-2284 — paced reminder DMs to guild members who never signed in.
+    { id: 'SigninReminderCron_tick', kind: 'scheduled-job', label: 'DMs guild members who have never signed in, every few weeks' },
     ...ggCoreCards,
   ],
   setup: CORE_SETUP,
@@ -182,6 +188,9 @@ const blizzard = {
     { id: 'blizzard', kind: 'scheduled-job', label: 'Character sync and raid data refresh' },
     // ROK-1964: the `wow-ledgerlink` companion contract handler.
     { id: 'wow-ledgerlink', kind: 'ingest-source', label: 'Reads LedgerLink exports the Companion uploads' },
+    // ROK-2099: the `wow-addon-errors` companion contract handler (admins read the errors).
+    { id: 'wow-addon-errors', kind: 'ingest-source', label: 'Reads addon error logs the Companion uploads' },
+    { id: 'WowAddonErrorsRetention_prune', kind: 'scheduled-job', label: 'Deletes addon errors not seen for 90 days' },
     { id: 'blizzard', kind: 'claim-provider', label: 'Lets players claim their character from the guild roster' },
     // ROK-2187 — produced from `api/src/plugins/wow-common/gg/` (this plugin's folder).
     { id: 'wow-levels', kind: 'gg-card', label: 'GG <year>: levels your WoW characters dinged' },

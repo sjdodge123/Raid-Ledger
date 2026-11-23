@@ -192,7 +192,9 @@ export async function cancelSignup(
   logger.log(
     `User ${userId} canceled signup for event ${eventId} (${data.cancelStatus})`,
   );
-  emitCancelled(eventEmitter, eventId, userId, data.signup.id);
+  emitCancelled(eventEmitter, eventId, userId, data.signup.id, {
+    urgent: data.cancelStatus === 'roached_out',
+  });
   await notifyCancellation(
     db,
     eventId,
@@ -209,12 +211,14 @@ function emitCancelled(
   eventId: number,
   userId: number,
   signupId: number,
+  { urgent }: { urgent: boolean },
 ): void {
   eventEmitter.emit(SIGNUP_EVENTS.DELETED, {
     eventId,
     userId,
     signupId,
     action: 'signup_cancelled',
+    urgent,
   } satisfies SignupEventPayload);
 }
 

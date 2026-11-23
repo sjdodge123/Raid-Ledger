@@ -2,11 +2,12 @@ import { HttpException } from '@nestjs/common';
 import { PermissionFlagsBits } from 'discord.js';
 import {
   HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME,
+  HUB_FORUM_DISCORD_LEGACY_CHANNEL_NAMES,
   HUB_FORUM_DISCORD_TAG_LIMIT,
   PutHubForumDiscordSchema,
   type PutHubForumDiscordInput,
 } from '@raid-ledger/contract';
-import { EVENT_TAG_NAME } from './hub-forum-discord-decor';
+import { isReservedTagName } from './hub-forum-discord-decor';
 
 /**
  * ROK-2208 §5.1 step 4 — what the bot needs IN the forum channel to sync it.
@@ -66,18 +67,25 @@ export function missingForumPermissions(
 /** A hub's forum tag name: its name, trimmed to Discord's cap. */
 export function tagNameFor(hubName: string): string {
   const name = hubName.trim().slice(0, FORUM_TAG_NAME_MAX).trim() || 'Hub';
-  // Codex P2 #1: a hub tag never shares the Event tag (inbound routing).
-  const reserved = name.toLowerCase() === EVENT_TAG_NAME.toLowerCase();
-  return reserved ? `${name} hub` : name;
+  // Codex P2 #1 + ROK-2272 §3.3: a hub tag never shares a kind tag
+  // (Event, Poll, Lineup) — inbound routing would match two owners.
+  return isReservedTagName(name) ? `${name} hub` : name;
 }
+
+/** The shared forum's names (ROK-2272: default + legacy). */
+const RESERVED_NAMES: ReadonlySet<string> = new Set([
+  HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME,
+  ...HUB_FORUM_DISCORD_LEGACY_CHANNEL_NAMES,
+]);
 
 /** Discord's channel name cap. */
 const CHANNEL_NAME_MAX = 100;
 
 /**
  * Q10(c) — the name of a hub's OWN new forum: lower-case, words joined by
- * `-` (how Discord shows it). The shared `#hub-forums` name is refused so a
- * second forum by that name is never made (400 `FORUM_DISCORD_NAME_RESERVED`).
+ * `-` (how Discord shows it). The shared `#event-planning` name (and its
+ * legacy `#hub-forums`, ROK-2272) is refused so a second forum by that name
+ * is never made (400 `FORUM_DISCORD_NAME_RESERVED`).
  */
 export function forumChannelName(raw: string): string {
   const slug = raw
@@ -87,11 +95,11 @@ export function forumChannelName(raw: string): string {
     .slice(0, CHANNEL_NAME_MAX)
     .replace(/^-+|-+$/g, '');
   const name = slug || 'hub-forum';
-  if (name === HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME) {
+  if (RESERVED_NAMES.has(name)) {
     throw forumDiscordError(
       400,
       'FORUM_DISCORD_NAME_RESERVED',
-      `#${HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME} is the shared forum. Pick another name for this hub's own forum.`,
+      `#${name} is the shared forum. Pick another name for this hub's own forum.`,
     );
   }
   return name;

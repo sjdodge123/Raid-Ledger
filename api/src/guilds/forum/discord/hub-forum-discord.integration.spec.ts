@@ -11,6 +11,7 @@ import type {
   HubForumDiscordPreflight,
   HubForumDiscordStatus,
 } from '@raid-ledger/contract';
+import { HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME as SHARED_NAME } from '@raid-ledger/contract';
 import { eq } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
 import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
@@ -391,7 +392,7 @@ describe('ROK-2208 binding — sharing a forum (AC3, D6)', () => {
 });
 
 describe('ROK-2208 binding — the picker and the tag budget', () => {
-  it("the picker lists a shared forum with its free tag slots (the lone hub's tag and Event spent)", async () => {
+  it("the picker lists a shared forum with its free tag slots (the lone hub's tag and the three kind tags spent)", async () => {
     const { channelId } = await boundHub();
     const res = await as(
       'admin',
@@ -402,7 +403,8 @@ describe('ROK-2208 binding — the picker and the tag budget', () => {
     const opts = (res.body as HubForumDiscordChannelOptions).channels;
     expect(opts.find((c) => c.id === channelId)).toMatchObject({
       sharedWith: 1,
-      tagsFree: 18, // ROK-2258: 20 − (hub tag + Event tag), nothing left to reserve
+      // ROK-2258 + ROK-2272 S8: 20 − (hub tag + Event + Poll + Lineup), nothing left to reserve
+      tagsFree: 16,
     });
   });
 
@@ -499,10 +501,10 @@ const modTags = (n: number) =>
   }));
 
 describe("ROK-2208 Q10(c) create — the hub's own forum", () => {
-  it('create without a target makes a forum named after the hub, never #hub-forums', async () => {
+  it('create without a target makes a forum named after the hub, never #event-planning', async () => {
     const { g, channelId } = await boundHub();
     const name = forumChannelName(await hubNameOf(g));
-    expect(name).not.toBe('hub-forums');
+    expect(name).not.toBe(SHARED_NAME);
     expect(fake.spies.createForum).toHaveBeenCalledWith(name);
     expect((await forumRow(channelId))?.managed).toBe(true);
   });
@@ -522,11 +524,11 @@ describe("ROK-2208 Q10(c) create — the hub's own forum", () => {
   });
 });
 
-describe('ROK-2208 Q10(c) create shared — one #hub-forums, reused', () => {
-  it('the 1st hub creates #hub-forums, the 2nd joins it with a tag', async () => {
+describe('ROK-2208 Q10(c) create shared — one #event-planning, reused', () => {
+  it('the 1st hub creates #event-planning, the 2nd joins it with a tag', async () => {
     const a = await newHub(ctx);
     expect((await shareIn(a)).status).toBe(200);
-    expect(fake.spies.createForum).toHaveBeenCalledWith('hub-forums');
+    expect(fake.spies.createForum).toHaveBeenCalledWith(SHARED_NAME);
     const b = await newHub(ctx);
     const res = await shareIn(b);
     expect(res.status).toBe(200);
@@ -540,7 +542,7 @@ describe('ROK-2208 Q10(c) create shared — one #hub-forums, reused', () => {
     expect(need(await bindingRow(b), 'b row').tagId).not.toBeNull();
   });
 
-  it('Codex P2: two hubs sharing at once make ONE #hub-forums and both join it', async () => {
+  it('Codex P2: two hubs sharing at once make ONE #event-planning and both join it', async () => {
     const a = await newHub(ctx);
     const b = await newHub(ctx);
     const [ra, rb] = await Promise.all([shareIn(a), shareIn(b)]);
@@ -551,7 +553,16 @@ describe('ROK-2208 Q10(c) create shared — one #hub-forums, reused', () => {
     expect(second.channelId).toBe(first.channelId);
   });
 
-  it('an existing #hub-forums on Discord is reused, never a second one', async () => {
+  it('an existing #event-planning on Discord is reused, never a second one', async () => {
+    const f = fake.put({ name: SHARED_NAME });
+    const g = await newHub(ctx);
+    const res = await shareIn(g);
+    expect(res.status).toBe(200);
+    expect((res.body as HubForumDiscordStatus).binding?.channelId).toBe(f.id);
+    expect(fake.spies.createForum).not.toHaveBeenCalled();
+  });
+
+  it('ROK-2272: a not-yet-renamed legacy #hub-forums is reused as the shared forum', async () => {
     const f = fake.put({ name: 'hub-forums' });
     const g = await newHub(ctx);
     const res = await shareIn(g);
@@ -560,8 +571,8 @@ describe('ROK-2208 Q10(c) create shared — one #hub-forums, reused', () => {
     expect(fake.spies.createForum).not.toHaveBeenCalled();
   });
 
-  it('a full #hub-forums is 409 TAG_LIMIT for the 2nd hub, and no new forum', async () => {
-    fake.put({ name: 'hub-forums', tags: modTags(19) });
+  it('a full #event-planning is 409 TAG_LIMIT for the 2nd hub, and no new forum', async () => {
+    fake.put({ name: SHARED_NAME, tags: modTags(19) });
     expect((await shareIn(await newHub(ctx))).status).toBe(200);
     const b = await newHub(ctx);
     expect((await preflightOf(b)).shared?.tagsFree).toBe(0);
@@ -585,7 +596,7 @@ describe('ROK-2208 preflight — before Turn on sync (review web MAJOR 2)', () =
     });
   });
 
-  it('no #hub-forums yet: the shared option needs the create permissions', async () => {
+  it('no #event-planning yet: the shared option needs the create permissions', async () => {
     fake.state.missingToCreate = ['Manage Channels'];
     const p = await preflightOf(await newHub(ctx));
     expect(p).toMatchObject({
@@ -594,7 +605,7 @@ describe('ROK-2208 preflight — before Turn on sync (review web MAJOR 2)', () =
     });
     expect(p.shared).toEqual({
       channelId: null,
-      name: 'hub-forums',
+      name: SHARED_NAME,
       sharedWith: 0,
       tagsUsed: 0,
       tagsFree: 20,
@@ -603,18 +614,19 @@ describe('ROK-2208 preflight — before Turn on sync (review web MAJOR 2)', () =
     });
   });
 
-  it('a #hub-forums with one hub reports its tags, the tag to come and missing perms', async () => {
-    const f = fake.put({ name: 'hub-forums', tags: modTags(3) });
+  it('a #event-planning with one hub reports its tags, the tag to come and missing perms', async () => {
+    const f = fake.put({ name: SHARED_NAME, tags: modTags(3) });
     expect((await shareIn(await newHub(ctx))).status).toBe(200);
     const g = await newHub(ctx);
     const forum = need(fake.forums.get(f.id), 'forum');
     forum.missing = ['Manage Webhooks'];
     expect((await preflightOf(g)).shared).toEqual({
       channelId: f.id,
-      name: 'hub-forums',
+      name: SHARED_NAME,
       sharedWith: 1,
-      tagsUsed: 5, // ROK-2258: 3 moderator tags + the 1st hub's tag + Event
-      tagsFree: 15,
+      // ROK-2258 + ROK-2272 S8: 3 moderator tags + the 1st hub's tag + Event, Poll, Lineup
+      tagsUsed: 7,
+      tagsFree: 13,
       tagName: (await hubNameOf(g)).trim().slice(0, 20).trim(),
       missingPermissions: ['Manage Webhooks'],
     });

@@ -2,6 +2,7 @@ import type { Logger } from '@nestjs/common';
 import { eq, and, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { announcementRowsOnly } from './event-message-rows.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 
@@ -35,6 +36,7 @@ export async function findExistingEmbedRecord(
       and(
         eq(schema.discordEventMessages.eventId, eventId),
         eq(schema.discordEventMessages.guildId, guildId),
+        announcementRowsOnly(),
       ),
     )
     .limit(1);

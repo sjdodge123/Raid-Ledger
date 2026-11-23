@@ -46,6 +46,16 @@ export interface CorsEnv {
   clientUrl?: string | undefined;
 }
 
+/**
+ * Response headers the web may read cross-origin. ROK-1164: a log download's
+ * server-chosen filename. ROK-2099: an addon-errors export cut at its row cap.
+ */
+export const CORS_EXPOSED_HEADERS = [
+  'Content-Disposition',
+  'X-Export-Truncated',
+  'X-Export-Row-Cap',
+];
+
 /** The slice of INestApplication this needs (keeps tests adapter-free). */
 export interface CorsPolicyApp {
   use(...handlers: unknown[]): unknown;
@@ -178,8 +188,7 @@ export function applyCorsPolicy(
     cb(null, {
       origin: passed.has(req),
       credentials: true,
-      // ROK-1164: the web reads a log download's server-chosen filename.
-      exposedHeaders: ['Content-Disposition'],
+      exposedHeaders: CORS_EXPOSED_HEADERS,
     }),
   );
 }

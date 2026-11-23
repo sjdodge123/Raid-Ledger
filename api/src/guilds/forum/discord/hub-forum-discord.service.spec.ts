@@ -18,6 +18,7 @@ import type {
 import * as queries from './hub-forum-discord.queries';
 import type { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 import { HubForumDiscordService } from './hub-forum-discord.service';
+import type { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import * as share from './hub-forum-discord.share';
 
@@ -99,6 +100,7 @@ function fakeGateway(store: ReturnType<typeof fakeStore>) {
     ensureWebhook: jest.fn(() => Promise.resolve('wh1')),
     cachedForum: jest.fn(() => null),
     deleteForum: jest.fn(() => Promise.resolve()),
+    deleteOwnWebhooks: jest.fn(() => Promise.resolve()),
   };
   return { gw, created, gateway: gw as unknown as HubForumDiscordGateway };
 }
@@ -115,6 +117,7 @@ function makeService(gateway: HubForumDiscordGateway) {
     resolver,
     decor,
     new HubForumBindLock(),
+    { invalidate: jest.fn() } as unknown as EventPlanningForumResolver,
   );
 }
 
@@ -180,5 +183,39 @@ describe('HubForumDiscordService.unbind — delete under the bind lock (M1)', ()
     await svc.unbind(101, true);
     expect(gw.deleteForum).toHaveBeenCalledWith('chan-1');
     expect(q.deleteForumRow).toHaveBeenCalledWith(db, 1);
+  });
+});
+
+describe('ROK-2296 unbind — the last hub out frees the bot webhooks', () => {
+  async function boundTo(hubs: number[]) {
+    const store = fakeStore();
+    const { gw, created, gateway } = fakeGateway(store);
+    const svc = makeService(gateway);
+    const binds = hubs.map((h) => svc.bind(actor, h, SHARED));
+    created.resolve(forumInfo('chan-1'));
+    await Promise.all(binds);
+    return { gw, svc };
+  }
+
+  it('deletes them when the last binding leaves without deleteForum', async () => {
+    const { gw, svc } = await boundTo([101]);
+    await svc.unbind(101, false);
+    expect(gw.deleteOwnWebhooks).toHaveBeenCalledWith('chan-1');
+    expect(gw.deleteForum).not.toHaveBeenCalled();
+    expect(q.deleteForumRow).not.toHaveBeenCalled();
+  });
+
+  it('keeps them while another hub still binds the forum', async () => {
+    const { gw, svc } = await boundTo([101, 102]);
+    await svc.unbind(101, true);
+    expect(gw.deleteOwnWebhooks).not.toHaveBeenCalled();
+    expect(gw.deleteForum).not.toHaveBeenCalled();
+  });
+
+  it('leaves it to deleteForum when the bot-made forum itself goes', async () => {
+    const { gw, svc } = await boundTo([101]);
+    await svc.unbind(101, true);
+    expect(gw.deleteForum).toHaveBeenCalledWith('chan-1');
+    expect(gw.deleteOwnWebhooks).not.toHaveBeenCalled();
   });
 });

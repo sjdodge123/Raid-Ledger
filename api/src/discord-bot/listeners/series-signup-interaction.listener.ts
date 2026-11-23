@@ -10,6 +10,7 @@ import { CharactersService } from '../../characters/characters.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
+import { SettingsService } from '../../settings/settings.service';
 import { SERIES_BUTTON_IDS } from '../series-signup/series-signup.constants';
 import { errorMessage, errorStack } from '../../common/error-format.helpers';
 import {
@@ -57,6 +58,7 @@ export class SeriesSignupInteractionListener {
     private readonly signupsService: SignupsService,
     private readonly charactersService: CharactersService,
     private readonly emojiService: DiscordEmojiService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   private get deps(): SeriesInteractionDeps {
@@ -67,6 +69,7 @@ export class SeriesSignupInteractionListener {
       signupsService: this.signupsService,
       charactersService: this.charactersService,
       emojiService: this.emojiService,
+      settingsService: this.settingsService,
     };
   }
 

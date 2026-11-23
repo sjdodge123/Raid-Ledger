@@ -25,7 +25,7 @@ import { WowEventsLead } from './schedule-for-guild';
 import { useWowAddonsVisible } from './wow-resources.helpers';
 import { WOW_MEMBER_SORTS } from './wow-member-filters.helpers';
 import { useWowMemberFilters } from './use-wow-member-filters';
-import { BlizzardRosterSection } from '../guild/blizzard-roster-section';
+import { WowSettingsSections } from '../guild/wow-settings-sections';
 import { isForeverGuildPage } from '../lib/forever-identity';
 
 /**
@@ -71,8 +71,8 @@ export const wowHubModule: HubModule = {
     eventsLead: WowEventsLead,
     eventsJumpTab: 'raids',
     editorDelegation: WowEditorDelegation,
-    /** ROK-1928 A4: the Forever guild's Blizzard roster slug + sync status (renders nothing elsewhere). */
-    settingsSections: BlizzardRosterSection,
+    /** ROK-1928 A4 Blizzard roster (Forever only) + ROK-1813 public recruiting card (canEdit only). */
+    settingsSections: WowSettingsSections,
     /** ROK-2192/2199: the rank-0 GM and a delegated editor open settings only on a Forever hub, where the Blizzard roster is theirs to write. */
     topRankOpensSettings: isForeverGuildPage,
     /** ROK-2132: a non-member of a Forever guild gets the join gate instead of the 403 notice. */

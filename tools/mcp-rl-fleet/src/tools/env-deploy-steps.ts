@@ -208,7 +208,11 @@ export async function runDeployChain(
   if (params.clone_prod) {
     t = now();
     ctx.setCurrent('cloning prod data');
-    const cp = await runCloneCore({ slug: params.slug, skip_local_refresh: params.clone_prod_skip_local_refresh });
+    const cp = await runCloneCore({
+      slug: params.slug,
+      skip_local_refresh: params.clone_prod_skip_local_refresh,
+      worktree_path: params.worktree_path,
+    });
     if (!cp.ok) {
       cloneFailureDetail = cp.stderr || 'clone failed';
       ctx.recordStep('clone_prod', false, now() - t, undefined, cloneFailureDetail);
