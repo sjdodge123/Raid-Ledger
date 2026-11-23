@@ -13,7 +13,7 @@ Arguments: none → Phase A. `--resume <path to NIGHT-PLAN>` → skip to **Resum
 
 ## Phase A — plan the night (operator awake, aim for ≤30 min, ≤6 Lead turns)
 
-1. **Boot** exactly as `/lead` §1, in one batched turn. Add: `rl_status` disk/memory, open PRs with their CI state, envs and their death times (created + 24 h), open approvals via `rl_approval_list` (interim `pending-approval/INDEX.md` only if the dashboard is unreachable).
+1. **Boot** exactly as `/lead` §1, in one batched turn. Fold the previous night's `project_overnight_<date>.md` into `project_overnight_archive.md` (append its body under a `## <date>` heading, delete the per-night file, keep ONE index line for the archive) so the memory index does not grow a line per night. Add: `rl_status` disk/memory, open PRs with their CI state, envs and their death times (created + 24 h), open approvals via `rl_approval_list` (interim `pending-approval/INDEX.md` only if the dashboard is unreachable).
 2. **Draft `planning-artifacts/NIGHT-PLAN-YYYY-MM-DD.md`** in the MAIN checkout (format: `NIGHT-PLAN-2026-10-24.md`). Sections:
    - **Window:** start → operator wake time (ask in step 3 if unknown), and a wind-down mark at wake − 45 min.
    - **§1 Ranking:** every candidate with a verdict: **RUN to PR** / **RUN to gate** (no PR) / **spec + mockup only** / **DEFER**, and a one-line why. Candidates come from the live state, in sprint order (fix → tech-debt → small → feature unless the state files say otherwise). A story may be RUN only if nothing in it waits on a ruling the operator has not given tonight. Unruled design work = spec + mockup only (submitted with `rl_approval_submit`).

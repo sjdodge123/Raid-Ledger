@@ -22,7 +22,10 @@ cd /Users/sdodge/Documents/Projects/Raid-Ledger
 ls -lt planning-artifacts/ | head -12
 date -u && git fetch -q origin && git log --oneline -3 origin/main && gh pr list --state open && git worktree list
 curl -s https://raid.gamernight.net/api/system/version
+node scripts/memory-index-check.mjs
 ```
+
+If `memory-index-check.mjs` exits 1 (duplicate lines, over 200 lines, a link to a missing file, or a memory file missing from the index), fix the memory index before starting work.
 
 Plus `mcp__mcp-rl-fleet__rl_status` (slots, envs, queue) and `mcp__mcp-rl-fleet__rl_approval_list` (open items in the operator's Pending approval inbox; the default read carries no operator note text, and the Lead never sets `include_notes`). If the `rl_*` tools are missing: `sh scripts/mcp-launch.sh mcp-rl-fleet --self-check`, then restart the session.
 
