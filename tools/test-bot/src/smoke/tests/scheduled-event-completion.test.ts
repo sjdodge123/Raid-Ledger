@@ -22,6 +22,10 @@ import {
   releaseScheduledEvents,
   releaseScheduledEventsAndRethrow,
 } from '../scheduled-events-toggle.js';
+import {
+  describeBlockingEvent,
+  pickBlockingEvent,
+} from '../scheduled-event-blocker.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 /** Force-set event times to the past via test endpoint (bypasses Zod validation). */
@@ -133,6 +137,35 @@ async function findScheduledEventByTitle(
   return { id: match.id, status: match.status };
 }
 
+/**
+ * Wait for this test's Scheduled Event to appear. Each poll reads the guild's
+ * events once; when ours is missing and a foreign event is Active on the
+ * default voice channel the API uses (`ctx.voiceChannels[0]`, set by
+ * setup.ts), throw at once naming it instead of timing out after
+ * `timeoutMs` with no cause (TECH-DEBT-BACKLOG 2026-11-21).
+ */
+async function waitForOwnScheduledEvent(
+  ctx: TestContext,
+  title: string,
+): Promise<{ id: string; status: GuildScheduledEventStatus }> {
+  const channelId = ctx.voiceChannels[0]?.id;
+  return pollForCondition(
+    async () => {
+      const events = await getGuild().scheduledEvents.fetch();
+      const own = events.find((se) => se.name.includes(title));
+      if (own) return { id: own.id, status: own.status };
+      if (!channelId) return null;
+      const blocker = pickBlockingEvent(events.values(), channelId, title);
+      if (blocker) {
+        throw new Error(describeBlockingEvent(blocker, channelId, title));
+      }
+      return null;
+    },
+    ctx.config.timeoutMs,
+    { intervalMs: 2000 },
+  );
+}
+
 const scheduledEventCreatedOnEventCreate: SmokeTest = {
   name: 'Discord Scheduled Event is created when an event is created',
   category: 'flow',
@@ -144,11 +177,7 @@ const scheduledEventCreatedOnEventCreate: SmokeTest = {
     try {
       await awaitProcessing(ctx.api);
       // Poll for the Discord scheduled event to appear in the guild
-      const se = await pollForCondition(
-        () => findScheduledEventByTitle(ev.title),
-        ctx.config.timeoutMs,
-        { intervalMs: 2000 },
-      );
+      const se = await waitForOwnScheduledEvent(ctx, ev.title);
       if (se.status !== GuildScheduledEventStatus.Scheduled) {
         throw new Error(
           `Expected Scheduled status, got ${GuildScheduledEventStatus[se.status]}`,
@@ -172,11 +201,7 @@ const scheduledEventCompletedAfterCron: SmokeTest = {
     try {
       await awaitProcessing(ctx.api);
       // Wait for the Discord scheduled event to appear
-      const created = await pollForCondition(
-        () => findScheduledEventByTitle(ev.title),
-        ctx.config.timeoutMs,
-        { intervalMs: 2000 },
-      );
+      const created = await waitForOwnScheduledEvent(ctx, ev.title);
       if (!created) throw new Error('Scheduled event was not created');
 
       // Move the event times to the past so it becomes a completion candidate
@@ -224,11 +249,7 @@ const completionCronSkipsFutureEvents: SmokeTest = {
     try {
       await awaitProcessing(ctx.api);
       // Wait for the Discord scheduled event to appear
-      const created = await pollForCondition(
-        () => findScheduledEventByTitle(ev.title),
-        ctx.config.timeoutMs,
-        { intervalMs: 2000 },
-      );
+      const created = await waitForOwnScheduledEvent(ctx, ev.title);
       if (!created) throw new Error('Scheduled event was not created');
 
       // Trigger the completion cron -- this event has future times, should NOT complete
