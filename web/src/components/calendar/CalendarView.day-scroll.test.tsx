@@ -42,6 +42,20 @@ function renderPhoneDay(): ReturnType<typeof render> {
     );
 }
 
+const FROM_CALENDAR_STATE = { state: { fromCalendar: true, calendarDate: '2026-02-10', calendarView: 'day' } };
+
+function renderPhoneDayWithEvent(): Element {
+    mockUseEventsReturn.data = {
+        data: [createMockEvent({ id: 42, title: 'Late Raid', startTime: '2026-02-10T12:00:00Z', endTime: '2026-02-10T13:00:00Z' })],
+    };
+    const { container } = renderPhoneDay();
+    // The real Day card: its own click handler stops propagation, so rbc's onSelectEvent never fires.
+    const card = container.querySelector('.day-event-block');
+    if (!card) throw new Error('the Day view rendered no .day-event-block card');
+    setWindowValue('scrollY', 480);
+    return card;
+}
+
 describe('CalendarView — phone Day-view scroll round trip (ROK-2303)', () => {
     const originalWidth = window.innerWidth;
     let scrollTo: ReturnType<typeof vi.spyOn>;
@@ -66,18 +80,21 @@ describe('CalendarView — phone Day-view scroll round trip (ROK-2303)', () => {
         setWindowValue('scrollY', 0);
     });
 
-    it('saves the window offset when an event is opened from the phone Day view', () => {
-        mockUseEventsReturn.data = {
-            data: [createMockEvent({ id: 42, title: 'Late Raid', startTime: '2026-02-10T12:00:00Z', endTime: '2026-02-10T13:00:00Z' })],
-        };
-        const { container } = renderPhoneDay();
-        const card = container.querySelector('.rbc-event');
-        if (!card) throw new Error('the Day view rendered no event card');
-        setWindowValue('scrollY', 480);
+    it('a tap on the Day card saves the window offset and opens the event from the calendar', () => {
+        const card = renderPhoneDayWithEvent();
 
         fireEvent.click(card);
 
-        expect(mockNavigate).toHaveBeenCalledWith('/events/42', expect.anything());
+        expect(mockNavigate).toHaveBeenCalledWith('/events/42', FROM_CALENDAR_STATE);
+        expect(JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? 'null')).toEqual({ date: '2026-02-10', y: 480 });
+    });
+
+    it('Enter on the Day card saves the window offset and opens the event from the calendar', () => {
+        const card = renderPhoneDayWithEvent();
+
+        fireEvent.keyDown(card, { key: 'Enter' });
+
+        expect(mockNavigate).toHaveBeenCalledWith('/events/42', FROM_CALENDAR_STATE);
         expect(JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? 'null')).toEqual({ date: '2026-02-10', y: 480 });
     });
 

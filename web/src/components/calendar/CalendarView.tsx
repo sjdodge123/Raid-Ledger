@@ -205,10 +205,10 @@ function useCalendarViewState(
     return { navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, isGridLoading, calendarEvents, handlePrev, handleNext, handleToday };
 }
 
-function useEventWrappers(eventOverlapsGameTime: (s: Date, e: Date) => boolean, handleMonthChipClick: (e: React.MouseEvent, d: Date) => void) {
+function useEventWrappers(eventOverlapsGameTime: (s: Date, e: Date) => boolean, handleMonthChipClick: (e: React.MouseEvent, d: Date) => void, onOpenEvent: (e: GridEvent) => void) {
     const MonthEventWrapper = useCallback(({ event }: { event: GridEvent }) => isLayerEvent(event) ? null : <MonthEventComponent event={event} eventOverlapsGameTime={eventOverlapsGameTime} onChipClick={handleMonthChipClick} />, [eventOverlapsGameTime, handleMonthChipClick]);
     const WeekEventWrapper = useCallback(({ event }: { event: GridEvent }) => isLayerEvent(event) ? <LayerWindowLabel event={event} /> : <WeekEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />, [eventOverlapsGameTime]);
-    const DayEventWrapper = useCallback(({ event }: { event: GridEvent }) => isLayerEvent(event) ? <LayerWindowLabel event={event} /> : <DayEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />, [eventOverlapsGameTime]);
+    const DayEventWrapper = useCallback(({ event }: { event: GridEvent }) => isLayerEvent(event) ? <LayerWindowLabel event={event} /> : <DayEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} onOpen={onOpenEvent} />, [eventOverlapsGameTime, onOpenEvent]);
     return { MonthEventWrapper, WeekEventWrapper, DayEventWrapper };
 }
 
@@ -264,7 +264,8 @@ function useCalendarInteractions(
     }, [navigate, view, currentDate, isScheduleView, setCurrentDate, setView]);
 
     const eventPropGetter = useCallback((event: GridEvent) => (isLayerEvent(event) ? { className: 'rl-layer-window', style: {} } : { style: getCalendarEventStyle(event.resource?.game?.slug || 'default') }), []);
-    const wrappers = useEventWrappers(eventOverlapsGameTime, handleMonthChipClick);
+    // ROK-2303: the Day card stops propagation, so it opens through handleSelectEvent itself.
+    const wrappers = useEventWrappers(eventOverlapsGameTime, handleMonthChipClick, handleSelectEvent);
     return { handleSelectEvent, eventPropGetter, wrappers };
 }
 

@@ -17,6 +17,8 @@ import type { CharacterRole } from '@raid-ledger/contract';
 interface DayEventCardProps {
     event: CalendarEvent;
     eventOverlapsGameTime: (start: Date, end: Date) => boolean;
+    /** ROK-2303: the calendar's open-event path (Day-view scroll save + `fromCalendar` state). Plain navigate when absent. */
+    onOpen?: (event: CalendarEvent) => void;
 }
 
 const ROLE_CONFIG: Record<string, { label: string; cssClass: string }> = {
@@ -179,25 +181,36 @@ function DayEventConfirmModal({ s, event, d }: { s: ReturnType<typeof useDayEven
     );
 }
 
-export const DayEventCard = React.memo(function DayEventCard({ event, eventOverlapsGameTime }: DayEventCardProps) {
+/** Card click / Enter / Space open the event, except from a button, link or dialog inside it. */
+function useCardOpenHandlers(event: CalendarEvent, onOpen: ((event: CalendarEvent) => void) | undefined) {
     const navigate = useNavigate();
-    const { user, isAuthenticated } = useAuth();
-    const d = useDayEventData(event, eventOverlapsGameTime);
-    const isSignedUp = user ? d.allRosterUsers.some((a) => a.userId === user.id) : false;
-    const s = useDayEventSignup({ eventId: event.id, hasGame: !!event.resource?.game?.id, getTotalForRole: d.getTotalForRole, assignments: d.assignments, totalPlayerSlots: d.totalPlayerSlots, totalBenchSlots: d.totalBenchSlots });
+    const openEvent = useCallback(() => {
+        if (onOpen) onOpen(event);
+        else navigate(`/events/${event.id}`);
+    }, [onOpen, navigate, event]);
 
     const handleCardClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         if ((e.target as HTMLElement).closest('button, a, [role="dialog"]')) return;
-        navigate(`/events/${event.id}`);
-    }, [navigate, event.id]);
+        openEvent();
+    }, [openEvent]);
 
     const handleCardKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         if ((e.target as HTMLElement).closest('button, a, [role="dialog"]')) return;
         e.preventDefault();
-        navigate(`/events/${event.id}`);
-    }, [navigate, event.id]);
+        openEvent();
+    }, [openEvent]);
+    return { handleCardClick, handleCardKeyDown };
+}
+
+export const DayEventCard = React.memo(function DayEventCard({ event, eventOverlapsGameTime, onOpen }: DayEventCardProps) {
+    const { user, isAuthenticated } = useAuth();
+    const d = useDayEventData(event, eventOverlapsGameTime);
+    const isSignedUp = user ? d.allRosterUsers.some((a) => a.userId === user.id) : false;
+    const s = useDayEventSignup({ eventId: event.id, hasGame: !!event.resource?.game?.id, getTotalForRole: d.getTotalForRole, assignments: d.assignments, totalPlayerSlots: d.totalPlayerSlots, totalBenchSlots: d.totalBenchSlots });
+
+    const { handleCardClick, handleCardKeyDown } = useCardOpenHandlers(event, onOpen);
 
     return (
         <>

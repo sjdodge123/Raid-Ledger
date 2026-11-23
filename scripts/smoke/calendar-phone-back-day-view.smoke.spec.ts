@@ -94,6 +94,44 @@ async function scrollCardToCentre(card: Locator): Promise<number> {
     });
 }
 
+/** The sessionStorage key `use-day-view-scroll-restore.ts` saves the phone Day-view offset under. */
+const DAY_SCROLL_KEY = 'rl:calendar-day-scroll';
+
+/** The saved Day-view offset's `y`, or null while nothing (valid) is saved. */
+async function readSavedDayScrollY(page: Page): Promise<number | null> {
+    return page.evaluate((key) => {
+        const raw = sessionStorage.getItem(key);
+        if (raw === null) return null;
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed !== 'object' || parsed === null || !('y' in parsed)) return null;
+        return typeof parsed.y === 'number' ? parsed.y : null;
+    }, DAY_SCROLL_KEY);
+}
+
+/**
+ * Phone: tap `card`, wait for its event page, and return the offset the app SAVED at
+ * the tap (asserted within tolerance of `recordedY`). Comparing Back against the saved
+ * value, not the browser's, means native scroll restoration alone cannot pass the test.
+ */
+async function tapCardAndReadSavedY(page: Page, card: Locator, s: Seeded, recordedY: number): Promise<number> {
+    await card.click();
+    await expect(page).toHaveURL(new RegExp(`/events/${s.id}(\\?|$)`));
+    await expect.poll(() => readSavedDayScrollY(page), {
+        message: `the tap saved the Day-view offset under ${DAY_SCROLL_KEY}`, timeout: 10_000,
+    }).not.toBeNull();
+    const savedY = await readSavedDayScrollY(page);
+    if (savedY === null) throw new Error(`no Day-view offset saved under ${DAY_SCROLL_KEY}`);
+    expect(Math.abs(savedY - recordedY), `saved offset ${savedY} is within ${SCROLL_TOLERANCE_PX}px of the window scrollY ${recordedY} at the tap`).toBeLessThanOrEqual(SCROLL_TOLERANCE_PX);
+    return savedY;
+}
+
+/** EventDetailTopbar: aria-label "Go back", text "← Back to Calendar" only when opened with `fromCalendar` state. */
+async function expectBackToCalendarButton(page: Page): Promise<Locator> {
+    const backButton = page.getByRole('button', { name: 'Go back' });
+    await expect(backButton, 'the event page knows it was opened from the calendar').toHaveText(/Back to Calendar/, { timeout: 15_000 });
+    return backButton;
+}
+
 /** Tap `card`, wait for its event page, then go Back. */
 async function openEventAndGoBack(page: Page, card: Locator, s: Seeded): Promise<void> {
     await card.click();
@@ -118,15 +156,15 @@ async function expectDayRestored(page: Page, s: Seeded, savedY: number): Promise
     await expect(cardFor(page, s.title), 'the tapped card is on screen after Back').toBeInViewport();
 }
 
-/** Phone: seed the late event, open its Day, centre the card and return the saved scrollY. */
-async function phoneDayAtLateCard(page: Page, testInfo: TestInfo, s: Seeded): Promise<{ card: Locator; savedY: number }> {
+/** Phone: open the late event's Day, centre the card and return the window scrollY before the tap. */
+async function phoneDayAtLateCard(page: Page, testInfo: TestInfo, s: Seeded): Promise<{ card: Locator; recordedY: number }> {
     await openPhoneDay(page, s.date);
     const card = cardFor(page, s.title);
     await expect(card).toBeVisible({ timeout: 15_000 });
-    const savedY = await scrollCardToCentre(card);
-    expect(savedY, `the ${LATE_HOUR}:00 card is below the fold, so the window had to scroll (${testInfo.project.name})`).toBeGreaterThan(0);
+    const recordedY = await scrollCardToCentre(card);
+    expect(recordedY, `the ${LATE_HOUR}:00 card is below the fold, so the window had to scroll (${testInfo.project.name})`).toBeGreaterThan(0);
     await expect(card).toBeInViewport();
-    return { card, savedY };
+    return { card, recordedY };
 }
 
 test.describe('Calendar — Back from an event returns to the Day view (ROK-2303)', () => {
@@ -139,9 +177,13 @@ test.describe('Calendar — Back from an event returns to the Day view (ROK-2303
         expect(viewParam(page), 'Schedule carries no ?view= in the URL').toBeNull();
         try {
             const s = await seedLateEvent(token, page, testInfo, world.uid('rok-2303-late'), ids);
-            const { card, savedY } = await phoneDayAtLateCard(page, testInfo, s);
+            const { card, recordedY } = await phoneDayAtLateCard(page, testInfo, s);
 
-            await openEventAndGoBack(page, card, s);
+            const savedY = await tapCardAndReadSavedY(page, card, s, recordedY);
+            await expectBackToCalendarButton(page);
+            await expect(page.getByText(s.title).first()).toBeVisible({ timeout: 15_000 });
+            await page.goBack();
+            await expect(page).toHaveURL(/\/calendar(\?|$)/);
 
             await expectDayRestored(page, s, savedY);
         } finally {
@@ -156,13 +198,10 @@ test.describe('Calendar — Back from an event returns to the Day view (ROK-2303
         await page.goto('/calendar');
         try {
             const s = await seedLateEvent(token, page, testInfo, world.uid('rok-2303-btn'), ids);
-            const { card, savedY } = await phoneDayAtLateCard(page, testInfo, s);
+            const { card, recordedY } = await phoneDayAtLateCard(page, testInfo, s);
 
-            await card.click();
-            await expect(page).toHaveURL(new RegExp(`/events/${s.id}(\\?|$)`));
-            // EventDetailTopbar: aria-label "Go back", text "← Back to Calendar" when opened from the calendar.
-            const backButton = page.getByRole('button', { name: 'Go back' });
-            await expect(backButton).toHaveText(/Back to Calendar/, { timeout: 15_000 });
+            const savedY = await tapCardAndReadSavedY(page, card, s, recordedY);
+            const backButton = await expectBackToCalendarButton(page);
             await backButton.click();
             await expect(page).toHaveURL(/\/calendar(\?|$)/);
 
