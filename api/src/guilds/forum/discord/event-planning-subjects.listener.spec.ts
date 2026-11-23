@@ -209,4 +209,10 @@ describe('ROK-2287 EventPlanningSubjectsListener reconnect catch-up', () => {
       tags: { event_planning_posts: 'poll-title-catch-up' },
     });
   });
+
+  it('ROK-2301: a recorded follow-up poll re-syncs its post (rename)', async () => {
+    const { listener, subjects } = setup();
+    await listener.onFollowupLinked({ matchId: 900, endedEventId: 42 });
+    expect(subjects.syncPoll).toHaveBeenCalledWith(900);
+  });
 });

@@ -8,6 +8,7 @@
 import { randomBytes } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, eq, isNull } from 'drizzle-orm';
+import { POST_EVENT_FOLLOWUP_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { waitFor } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
@@ -280,6 +281,52 @@ describe('syncPollDiscussion (real db)', () => {
     expect((await liveThread(matchId))?.title).toBe(
       `${testApp.seed.game.name} — Poll (after Tuesday Dungeon Night)`,
     );
+  });
+
+  it('ROK-2301 MAJOR-1: production order, opened then recorded then POLL_LINKED', async () => {
+    const guildId = await newHub();
+    const { matchId, lineupId } = await newPoll({ guildId });
+    const endedEventId = await newEvent('Tuesday Dungeon Night');
+    await testApp.db
+      .insert(schema.postEventFollowupSent)
+      .values({ eventId: endedEventId, choice: 'poll' });
+    emitter().emit(LINEUP_MATCH_EVENTS.POLL_OPENED, {
+      matchId,
+      lineupId,
+      guildId,
+      visibility: 'public',
+    });
+    await waitFor(async () => {
+      expect((await liveThread(matchId))?.title).toBe(
+        `${testApp.seed.game.name} — Poll`,
+      );
+    }, 5000);
+    await testApp.db
+      .update(schema.postEventFollowupSent)
+      .set({ matchId })
+      .where(eq(schema.postEventFollowupSent.eventId, endedEventId));
+    emitter().emit(POST_EVENT_FOLLOWUP_EVENTS.POLL_LINKED, {
+      matchId,
+      endedEventId,
+    });
+    await waitFor(async () => {
+      expect((await liveThread(matchId))?.title).toBe(
+        `${testApp.seed.game.name} — Poll (after Tuesday Dungeon Night)`,
+      );
+    }, 5000);
+    expect(await threadRows(matchId)).toHaveLength(1);
+  });
+
+  it('ROK-2301 MINOR-1: two follow-up rows on one match, the newest names it, one poll row', async () => {
+    const guildId = await newHub();
+    const { matchId } = await newPoll({ guildId });
+    await newFollowup(await newEvent('Older Raid'), matchId);
+    await newFollowup(await newEvent('Newer Raid'), matchId);
+    for (let i = 0; i < 3; i += 1) {
+      const poll = await findPollForSync(testApp.db, matchId);
+      expect(poll?.matchId).toBe(matchId);
+      expect(poll?.followupOfEventTitle).toBe('Newer Raid');
+    }
   });
 
   it('ROK-2295: a poll that produced its event keeps its game title', async () => {
