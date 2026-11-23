@@ -24,6 +24,13 @@ export interface PollSyncRow {
   phaseDeadline: Date | null;
   /** Event the match produced / reschedules — such a poll never expires. */
   linkedEventId: number | null;
+  /**
+   * ROK-2295: the title of the event this poll RESCHEDULES. Null when
+   * unlinked, when the event is gone, and for a poll that PRODUCED its event
+   * at lock-in (`events.created_from_poll_id` = this match — the same
+   * reading as `standalone-poll-auth.helpers.ts`).
+   */
+  linkedEventTitle: string | null;
   guildId: number | null;
   visibility: 'public' | 'private';
   creatorId: number;
@@ -58,6 +65,8 @@ export async function findPollForSync(
       lineupStatus: l.status,
       phaseDeadline: l.phaseDeadline,
       linkedEventId: m.linkedEventId,
+      eventTitle: schema.events.title,
+      eventFromPollId: schema.events.createdFromPollId,
       guildId: l.guildId,
       visibility: l.visibility,
       creatorId: l.createdBy,
@@ -68,11 +77,17 @@ export async function findPollForSync(
     .from(m)
     .innerJoin(l, eq(l.id, m.lineupId))
     .innerJoin(schema.games, eq(schema.games.id, m.gameId))
+    .leftJoin(schema.events, eq(schema.events.id, m.linkedEventId))
     .where(eq(m.id, matchId))
     .limit(1);
   if (!row) return null;
-  const { override, ...rest } = row;
-  return { ...rest, standalone: override?.standalone === true };
+  const { override, eventTitle, eventFromPollId, ...rest } = row;
+  const produced = eventFromPollId === matchId;
+  return {
+    ...rest,
+    linkedEventTitle: produced ? null : eventTitle,
+    standalone: override?.standalone === true,
+  };
 }
 
 /** The poll's live (attached) thread, or null. */

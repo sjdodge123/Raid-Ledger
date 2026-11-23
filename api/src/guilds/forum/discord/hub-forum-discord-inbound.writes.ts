@@ -207,19 +207,24 @@ interface Gone {
   updatedAt: Date;
 }
 
-/** Soft-delete a live reply and drop it from its thread's count. */
+/**
+ * Soft-delete a live reply and drop it from its thread's count. System lines
+ * (a mirrored `copy_header`) never counted, so their removal drops nothing —
+ * same rule as `softDeleteReply` (ROK-2274 D8, ROK-2297).
+ */
 async function removeReply(
   tx: Tx,
   link: ForumLink,
   replyId: number,
   gone: Gone,
 ): Promise<boolean> {
-  const done = await tx
+  const [done] = await tx
     .update(replies)
     .set(gone)
     .where(and(eq(replies.id, replyId), isNull(replies.deletedAt)))
-    .returning({ id: replies.id });
-  if (done.length === 0) return false;
+    .returning({ kind: replies.kind });
+  if (!done) return false;
+  if (done.kind !== 'reply') return true;
   await tx
     .update(threads)
     .set({ replyCount: sql`greatest(${threads.replyCount} - 1, 0)` })

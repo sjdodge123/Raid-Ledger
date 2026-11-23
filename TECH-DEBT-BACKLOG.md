@@ -4501,6 +4501,11 @@ Existing entries are left in place; this records their status. Line numbers are 
 - **low** — `api/src/discord-bot/services/event-forum-starter.cards.ts:158` (`track()`) with `api/src/guilds/forum/discord/hub-forum-discord-event-outbound.service.ts:~220`: an event DELETED while the hub webhook `createPost` is in flight leaves the new hub post showing a live signup card. `track()` swallows the FK error and records no row, but nothing retires the card (the planning creator closes its post; the hub creator has no equivalent). Narrow window (delete inside one Discord round-trip). Suggested: on the swallowed 23503 on the hub path, edit the starter to `removedStarterEmbed()` via the webhook editor, or queue the existing hub detach/close for that thread.
 - **nit** — `api/src/guilds/forum/discord/forum-starter.backfill.ts`: the in-memory `unfixable` thread-id set is never pruned (grows for the process lifetime; bounded by posts that can never be edited). Suggested: drop ids whose post is locked/deleted on each run, or cap the set.
 
+### 2026-11-22 — fix/overnight-batch-2-2026-11-22 (surfaced during overnight batch-2 review)
+
+- **low** `api/src/calendar-sync/read/calendar-read-failure.helpers.ts:128-133` — `failureTarget` lets a transient read failure write `provider_error` on any `active` connection without checking `readEnabled`, so if the user switches reading off while a sync's final attempt is mid-fetch, the "Calendar removed · pick another" line comes back after `applyReadUpdate` cleared it. Narrow race. Suggested: add `eq(c.readEnabled, true)` to the transient branch.
+- **low** `api/src/guilds/forum/discord/hub-forum-discord-inbound.ingest.ts:144` — `onDelete` ignores the boolean `removeFromDiscord` now returns and reports `'deleted'` even when nothing was removed (PR #2287 delta review). Suggested: return `'ignored'` when it is false. Also no integration case pins an RL-side delete followed by the gateway delete (deletedBy/deletedAs must stay). Suggested: add one to `hub-forum-discord-inbound.integration.spec.ts`.
+- **med** `Dockerfile.allinone` builder stage (L79-89) — no `NODE_OPTIONS`, so `nest build` OOMs at Node's ~2 GB default heap in fleet image builds (`rl_env_build_image_from_runner`, tasks fc8da8f748b5 / c6945d620c02: "Reached heap limit"); app-only typecheck peaks ~2.9 GB (ROK-2288). Pre-existing on main 9de1e02c4. Suggested: `ENV NODE_OPTIONS=--max-old-space-size=4096` after `COPY . .` (infra PR, local allinone build + /api/health).
 ### 2026-11-22 — PR #2284 ROK-2293 (surfaced during GitHub CI integration-test-shard 4/4, run 45000112965)
 - **med** `api/src/events/signups-roster-anonymous.integration.spec.ts:150-156` — `expect(rows.map(r=>r.userId)).toEqual([2031])` received `[2029]` (the event host). `createFutureEvent` (`signups.integration.spec-helpers.ts:44`) starts the event exactly 24h out, the live reminder cron (`event-reminder.service.ts:79`, every minute at :20) picks up events within 24h and always reminds the host (`event-reminder.service.ts:251-261`); the `waitFor` at :151 only waits for "at least one row", so a reminder row that lands on a :20 tick satisfies it first. Pre-existing timing race, not the PR's diff (fleet `--full` passed it; RCA `planning-artifacts/story-notes/overnight-2026-11-22/RCA-PR-2284.md`). Suggested: filter rows to the roster-assignment notification type and wait for `rows.some(r => r.userId === userId)`, or default `createFutureEvent` to 48h / `reminder24hour: false` (reproduce with `scripts/spec-loop.sh` first per the flake protocol).
 
@@ -4530,6 +4535,46 @@ Existing entries are left in place; this records their status. Line numbers are 
 - **med** `api/src/guilds/forum/discord/hub-forum-discord-signup-lines.ts` — no gone-post handling: a hub forum post deleted in Discord probably makes every signup line retry the send forever (same bug class as L4487, fixed for votes in 22b06f17b; send path not traced). Suggested: reuse the 10003/404 → mark-link-deleted handling from 22b06f17b.
 - **low** `api/src/users/users-delete-lineups.helpers.ts` (`deleteUserLineups`) — the detach of a deleted/wiped user's lineup + poll hub forum threads runs without the per-lineup/poll discussion advisory lock that `syncLineupDiscussion` / `syncPollDiscussion` hold, so a sync racing the delete can insert a new attached thread nothing detaches (Opus review MINOR-1). Tried overnight and reverted: taking those advisory locks inside the delete tx deadlocks against the sync, because `selectUserScreenshotPaths` locks the user row `FOR UPDATE` while the sync's thread INSERT waits on that row via the `authorId` FK (Codex P2); taking the locks first (before the user row) still leaves a race when a lineup or a scheduling-poll match is created between the id read and the row lock (Codex P2 + Opus MINOR, round 2). Reverted commits: 309b55556, defede3fc. Suggested: either revalidate the subject ids after the user-row lock and restart the tx when they changed, or lock the user's lineup rows `FOR UPDATE` before the user row so no new match/poll can be created mid-wipe — then re-run Codex.
 
+### 2026-11-22 — fix/overnight-batch-3-2026-11-22 (resolution notes)
+
+- resolved: Discord login/link doesn't stamp `guild_member_seen_at` (originally under "2026-10-09 — fix/rok-1749-guild-sweep-scope", origin/main L2523) — FIXED-ALREADY on main: `11548573b` (ROK-1759, #1562), stamp in `users-link-discord.helpers.ts:17-22`
+- resolved: quest-prep-panel expanded card light-theme contrast (originally under "2026-10-10 — fix/rok-1758-forever-quest-followups + fix/rok-1760-addon-gear-names", origin/main L2550) — FIXED-ALREADY on main: `1669a1cc0` (ROK-2183, #2102); no raw slate/hex left in `quest-prep-panel.css`
+- resolved: calendar-write job overlapping its own `-rerun` → duplicate Google copy (originally under "2026-10-20 — feat/rok-1857-poll-calendar-copies", origin/main L3455) — FIXED-ALREADY on main: `48df3c890` (#1955), `deferWhileSiblingActive` in `api/src/calendar-sync/write/calendar-write-overlap.helpers.ts`
+- resolved: deadline-extended embed posted for private lineups (originally under "2026-10-18 — main @ 6aa64d965", origin/main L2882) — FIXED-ALREADY on main: `711f53ca8` (#1791), `lineup-notification-deadline-extended.helpers.ts:84`
+- partially resolved: display-name uniqueness (originally under "2026-10-18 — main @ 6aa64d965", origin/main L2826) — the LIKE-escape part is FIXED-ALREADY on main (`escapeLikePattern`, `users.service.ts:269`, `711f53ca8` #1791); the trim/NFKC/unique-index remainder is a contract+migration design item and stays open
+- probably resolved (unconfirmed): roster PATCH writes a client-supplied `signupId ?? lookup` (originally under "2026-10-18 — main @ 6aa64d965", origin/main L2873) — the pattern no longer exists in `api/src/events` (`git grep "signupId ??"` empty); fixing commit not identified
+- resolved: inbound Discord message delete reported `'deleted'` even when `removeFromDiscord` removed nothing (tonight's review finding, `hub-forum-discord-inbound.ingest.ts` `onDelete`) — fixed in this batch: `2f244ac36` (now returns `'skipped'`; unit cases in `hub-forum-discord-inbound.ingest.spec.ts`)
+- resolved: no coverage that an RL-side delete of a Discord-linked thread keeps its original `deletedBy`/`deletedAs` when the gateway thread-delete arrives (tonight's review finding) — fixed in this batch: `c9c2f5c13` (integration case in `hub-forum-discord-inbound.integration.spec.ts`)
+- resolved: a transient read failure finishing after the user switched reading off could re-set `provider_error` (tonight's review finding, `calendar-read-failure.helpers.ts` `failureTarget`) — fixed in this batch: `0c97cdaa6` (transient branch also requires `read_enabled = true`; integration case in `calendar-read-sync-guards.integration.spec.ts`)
+### 2026-11-22 — overnight sweep 5 resolution notes (backlog L1–1500)
+
+Line numbers are origin/main `TECH-DEBT-BACKLOG.md` lines at 740618c11. Evidence: tech-debt confirmation lane 5 (`planning-artifacts/story-notes/overnight-2026-11-22/TECHDEBT-CONFIRM-5.md`).
+
+- L175 — FIXED-ALREADY: binding-heal WARN fires once per process (`voice-state.listener.ts:85`).
+- L221 — FIXED-ALREADY: `ad-hoc-suppression.helpers.ts:357` `notifyWindowExtended` → `ad-hoc-event.service.ts:60` emits `SUPPRESSION_WINDOW_EVENTS.EXTENDED` (ROK-1696).
+- L251 — FIXED-ALREADY: `%s` printf survivors interpolated (`voice-attendance-flush.helpers.ts:233`); no `%s`/`%d` left in the cited files.
+- L259 — FIXED-ALREADY: `discord-channels-page.tsx:59` `resetUpdateError` → `updateBinding.reset()`.
+- L277 — FIXED-ALREADY: `demo-test-core.helpers.spec.ts` covers `getNotificationsForTest`.
+- L316 — FIXED-ALREADY: `use-coop-filter-state.ts:9,13` is a thin wrapper over `useSessionState`.
+- L360 — FIXED-ALREADY: signup-interaction and pug-invite listeners use `DiscordListenerBinding` (`signup-interaction.listener.ts:55,65`; `pug-invite.listener.ts:43,57`).
+- L394 — FIXED-ALREADY: `isMissingTableError` guard at `game-time-absence.helpers.ts:109`.
+- L422 — FIXED-ALREADY: `ci.yml` `code:` filter lists `api/package.json`, `web/package.json`, `packages/*/package.json`.
+- L490 — OBSOLETE: `buildAdHocSpawnPushContent` / `buildAdHocCompletedPushContent` no longer exist in `api/src`.
+- L562 — FIXED-ALREADY: `upsertFixtureUser` uses `onConflictDoUpdate` (#1374; lane 4's L1860 note).
+- L578 — FIXED-ALREADY: `orchestrateSchedulingOpen` (`lineup-notification-public-dispatch.helpers.ts:216-236`) only DMs; the card is the only channel surface.
+- L745 — FIXED-ALREADY: `demo-test-core.helpers.ts:165-195` logs busy queues/failing jobs and throws a diagnostic 409 (ROK-1511).
+- L922 — FIXED-ALREADY: `lineup-detail-page.tsx:207` `showPrompt` no longer checks `'pending'`.
+- L923 — FIXED-ALREADY: `lineup-notification.service.ts` is down to 204 counted lines.
+- L956 — FIXED-ALREADY: `replaceDeletedPost` restores the row on failure (`lfm-embed.service.ts:375-391`, TDB:954).
+- L958 — FIXED-ALREADY: no `CLIENT_URL` read left in `lfm-embed.helpers.ts`.
+- L984 — FIXED-ALREADY: `use-onboarding-fte.ts:68-72` `setQueryData` + invalidate of `['auth','me']`.
+- L1087 — FIXED-ALREADY: `listGuildTextChannels` matches `ChannelType.GuildText|GuildAnnouncement` (`discord-bot-client.guild.helpers.ts:154-168`, ROK-1518).
+- L1418 — FIXED-ALREADY: sentinel sha compatibility pair retired (`playwright-sentinel.ts:6`, TDB:1416).
+- L1445 — FIXED-ALREADY: poll-page reads run under `Promise.all` (`scheduling-poll-page.helpers.ts:111`); votes → terminal stays sequential on purpose (TDB:1443).
+- L1457 — FIXED-ALREADY: `validate-ci.sh:117` `E2E_SCOPE=none` skips Playwright; resolution memoized at `:2120`.
+- L1495 — FIXED-ALREADY: `bg-amber-500/20|/30` light overrides at `index.css:813,841-842`, pinned by `light-fill.guard.test.ts:106`.
+- L967 — still LIVE, parked for an operator ruling (overnight 2026-11-22): a cleared LFG intent can't tell "signed up for this event" from "withdrew", so widening `resolveConvertRole` lets a member who left convert a later group (review MAJOR + Codex P2s). Options: `cleared_reason`/`cleared_at` column (migration) or creator-only. Tried fix eacad11b0 reverted.
+- L957 — fixed in fix/overnight-batch-5-2026-11-22: `LfgGroupChangedPayload.pollId` / `eventId` narrowed to `?: number` (`lfg.constants.ts`); no emitter sent an explicit null (tsc clean).
 ### 2026-11-22 — overnight flake triage + contract-tests check (resolution notes, backlog L1–1500)
 
 Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md` and `CONTRACT-TESTS-GAP.md` (local only). Line refs are origin/main backlog lines.
@@ -4541,3 +4586,10 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 - L498 — FIXED-ALREADY: the runner now reports exec bits ok.
 - L337 — NOT REPRODUCED: `standalone-poll-reschedule-cycle.integration.spec.ts` 0/50 failures in isolation on fleet slot 2 (task 0fc4af789e93, incl. one 53s cold start). Close unless it recurs in CI.
 - L412 — NOT REPRODUCED: `availability.integration.spec.ts` 0/50 in isolation (task e159980f5f41); fits the cross-suite BullMQ/ioredis carrier that only shows in the full laptop suite — tracked by L183/L271/L287.
+
+### 2026-11-22 — rok-2294-import-character-link (surfaced during ROK-2294 review)
+- **low** `web/src/components/auth/AuthGuard.tsx:38-46` — a first-time (not yet onboarded) non-admin who follows the Discord "Import it" link (`/profile/gaming/characters?game=<id>`) is sent to `/onboarding`, which never reads the saved auth redirect, so `?game=` is dropped. Pre-existing for every deep link. Suggested: `/onboarding` finishes by calling `consumeAuthRedirect()`.
+
+### 2026-11-23 — fix/rok-2299-day-view-card-clip (surfaced during the ROK-2299 e2e root cause)
+
+- **med** — `web/src/components/calendar/calendar-styles.css:711-729` (Day-view rules at >=769px): on desktop/tablet a Day card is held at its 100px min-height by react-big-calendar's `.rbc-day-slot .rbc-event-content { flex: 1 1 0 }`, so `.day-event-block` (overflow visible) outgrows `.rbc-event` and a back-to-back later card paints over the earlier card's description (measured at 1280px: later card starts at y=460, description spans 465-501). Pre-existing: these rules are unchanged from main (ROK-2299 only wrapped them in `@media (min-width: 769px)`; the phone layout is what that story fixes). Suggested: size the desktop card from its content, or clip / gap back-to-back cards as on the phone.

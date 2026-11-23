@@ -87,6 +87,7 @@ function setup() {
     build: jest.fn().mockResolvedValue(null),
     track: jest.fn().mockResolvedValue(undefined),
   };
+  const pollCards = { build: jest.fn().mockResolvedValue(null) };
   const deps: EventPostDeps = {
     db: {} as ForumDiscordDb,
     gateway,
@@ -96,6 +97,7 @@ function setup() {
     clientUrl: () => Promise.resolve('https://rl.example'),
     timeZone: () => Promise.resolve('UTC'),
     starters,
+    pollCards,
   };
   return {
     svc: new EventPostOutbound(deps),
@@ -103,6 +105,7 @@ function setup() {
     redrive,
     attempt,
     starters,
+    pollCards,
   };
 }
 
@@ -363,5 +366,43 @@ describe('ROK-2292 delta-3: starter tracking after a sent post', () => {
     const run = attempt.mock.results[0]?.value as Promise<void>;
     await expect(run).resolves.toBeUndefined();
     expect(link?.discordThreadId).toBe('p1');
+  });
+});
+
+describe('ROK-2295 lane B: a poll post opens with the live poll embed', () => {
+  const pollCard = { embeds: [], components: [] };
+
+  it('creates the poll post with the poll card, never tracked as an event starter', async () => {
+    const { svc, gateway, starters, pollCards } = setup();
+    mocked.source.mockResolvedValue(scheduleSource());
+    pollCards.build.mockResolvedValue(pollCard);
+    await svc.ensurePost(TO, REF);
+    expect(pollCards.build).toHaveBeenCalledWith(21);
+    expect(gateway.createPost).toHaveBeenCalledWith(
+      TO.target,
+      expect.objectContaining({ title: 'Friday raid — Poll', card: pollCard }),
+      expect.anything(),
+    );
+    expect(starters.build).not.toHaveBeenCalled();
+    expect(starters.track).not.toHaveBeenCalled();
+  });
+
+  it('a card render failure falls back to the text body and still posts', async () => {
+    const { svc, gateway, pollCards } = setup();
+    mocked.source.mockResolvedValue(scheduleSource());
+    pollCards.build.mockRejectedValue(new Error('db down'));
+    const link = await svc.ensurePost(TO, REF);
+    const post = gateway.createPost.mock.calls[0]?.[1] as { card?: unknown };
+    expect(post).not.toHaveProperty('card');
+    expect(link?.discordThreadId).toBe('p1');
+  });
+
+  it('a lineup post gets no poll card', async () => {
+    const { svc, pollCards } = setup();
+    mocked.source.mockResolvedValue(
+      scheduleSource({ kind: 'lineup', id: 4, title: 'Game night' }),
+    );
+    await svc.ensurePost(TO, REF);
+    expect(pollCards.build).not.toHaveBeenCalled();
   });
 });

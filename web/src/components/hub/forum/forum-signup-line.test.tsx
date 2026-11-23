@@ -56,4 +56,12 @@ describe('ForumReplyItemView — signup lines (ROK-2274)', () => {
         expect(screen.getByTestId('forum-reply-body')).toHaveTextContent('I can swap to resto.');
         expect(screen.queryByTestId('forum-signup-line')).toBeNull();
     });
+
+    it('renders a copied-chat header as the same system line (ROK-2297)', () => {
+        const header = buildForumReply({ id: 41, kind: 'copy_header', author: null, body: 'Earlier chat from Raid night · 3 messages, Nov 20 – Nov 21' });
+        renderWithProviders(<Harness reply={header} />);
+        expect(screen.getByTestId('forum-signup-line-text')).toHaveTextContent('Earlier chat from Raid night · 3 messages');
+        expect(screen.getByTestId('forum-signup-line')).toHaveAttribute('id', 'forum-reply-41');
+        expect(screen.queryByTestId('forum-reply')).toBeNull();
+    });
 });

@@ -58,6 +58,9 @@ function makeDeps(): SeriesInteractionDeps & {
         data: [{ id: 'c1', name: 'Thorin', isMain: false }],
       }),
     },
+    settingsService: {
+      getTrustedClientUrl: jest.fn().mockResolvedValue(null),
+    },
     emojiService: {
       getRoleEmojiComponent: jest.fn(),
       getClassEmojiComponent: jest.fn(),

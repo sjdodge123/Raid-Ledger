@@ -3,7 +3,10 @@ import { DiscordAPIError } from 'discord.js';
 import type Redis from 'ioredis';
 import type { SettingsService } from '../../../settings/settings.service';
 import { findLiveLineupThread } from '../subject-discussion/lineup-discussion.queries';
-import { findLivePollThread } from '../subject-discussion/poll-discussion.queries';
+import {
+  findLivePollThread,
+  findPollForSync,
+} from '../subject-discussion/poll-discussion.queries';
 import {
   findLivePlanningPost,
   markPlanningPostDeleted,
@@ -77,14 +80,14 @@ function fakeRedis() {
   };
 }
 
-function build(online = true) {
+function build(online = true, db: object = {}) {
   const gateway = {
     isOnline: jest.fn().mockReturnValue(online),
-    mention: jest.fn().mockResolvedValue(undefined),
+    mention: jest.fn().mockResolvedValue('closing-msg'),
   };
   const redis = fakeRedis();
   const svc = new HubForumDiscordClosingLines(
-    {} as unknown as ForumDiscordDb,
+    db as unknown as ForumDiscordDb,
     gateway as unknown as HubForumDiscordOutboundGateway,
     redis as unknown as Redis,
     {} as unknown as SettingsService,
@@ -218,6 +221,28 @@ describe('subject entry points (ROK-2272 S8)', () => {
     findPoll.mockResolvedValue(null);
     await svc.pollReopened(4);
     expect(redis.del).not.toHaveBeenCalled();
+  });
+
+  it('ROK-2295 m-3: an unreadable event falls back to the poll subject (game), never the storage title', async () => {
+    const noEvent = {
+      select: () => noEvent,
+      from: () => noEvent,
+      where: () => noEvent,
+      limit: () => Promise.resolve([]),
+    };
+    const { svc, gateway } = build(true, noEvent);
+    findPoll.mockResolvedValue(thread);
+    findLink.mockResolvedValue(sentLink() as never);
+    jest.mocked(findPollForSync).mockResolvedValueOnce({
+      gameName: 'Valheim',
+      linkedEventId: null,
+      linkedEventTitle: null,
+      lineupTitle: 'Standalone Scheduling Poll',
+    } as never);
+    await svc.pollLockedIn(4, 99);
+    const [call] = gateway.mention.mock.calls;
+    expect(call?.[1]).toContain('Valheim');
+    expect(call?.[1]).not.toContain('Standalone Scheduling Poll');
   });
 
   it('an eventless lock-in posts nothing and reads nothing', async () => {

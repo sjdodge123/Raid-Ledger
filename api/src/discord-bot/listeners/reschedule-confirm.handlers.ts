@@ -6,6 +6,7 @@ import {
   showCharacterSelect,
   showRoleSelect,
 } from '../utils/signup-dropdown-builders';
+import { resolveCharacterImportUrl } from '../utils/character-import-link.helpers';
 import type { CharacterDto } from '@raid-ledger/contract';
 import type { EventRow, RescheduleDeps } from './reschedule-response.helpers';
 import { reconfirmSignup } from './reschedule-roster.handlers';
@@ -155,13 +156,34 @@ async function showCharSelect(
   characters: CharacterDto[],
   suffix?: string,
 ): Promise<void> {
-  await showCharacterSelect(ctx.interaction, {
-    customIdPrefix: RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT,
-    eventId: ctx.event.id,
-    eventTitle: ctx.event.title,
+  await showRescheduleCharacterList(
+    ctx.interaction,
+    ctx.deps,
+    ctx.event,
     characters,
-    emojiService: ctx.deps.emojiService,
+    suffix,
+  );
+}
+
+/** The reschedule character list (+ ROK-2294 import link); also used by Back. */
+export async function showRescheduleCharacterList(
+  interaction: ButtonInteraction,
+  deps: Pick<RescheduleDeps, 'emojiService' | 'settingsService'>,
+  event: EventRow,
+  characters: CharacterDto[],
+  suffix?: string,
+): Promise<void> {
+  await showCharacterSelect(interaction, {
+    customIdPrefix: RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT,
+    eventId: event.id,
+    eventTitle: event.title,
+    characters,
+    emojiService: deps.emojiService,
     customIdSuffix: suffix,
+    importUrl: await resolveCharacterImportUrl(
+      deps.settingsService,
+      event.gameId,
+    ),
   });
 }
 

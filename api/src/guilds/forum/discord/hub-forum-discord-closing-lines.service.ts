@@ -18,6 +18,7 @@ import { REDIS_CLIENT } from '../../../redis/redis.module';
 import { getClientUrl } from '../../../settings/settings-bot.helpers';
 import { SettingsService } from '../../../settings/settings.service';
 import { findPollForSync } from '../subject-discussion/poll-discussion.queries';
+import { pollSubjectTitle } from '../subject-discussion/poll-discussion.sync';
 import {
   closingLineText,
   type ClosingLine,
@@ -150,7 +151,7 @@ export class HubForumDiscordClosingLines {
       .limit(1);
     if (row) return row.title;
     const poll = await findPollForSync(this.db, matchId);
-    return poll?.standalone ? poll.lineupTitle : (poll?.gameName ?? '');
+    return poll ? pollSubjectTitle(poll) : '';
   }
 
   /** The lineup's decided game, then its threshold-met matches, deduped. */

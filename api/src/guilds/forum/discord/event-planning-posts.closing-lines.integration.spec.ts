@@ -63,7 +63,11 @@ function stubDiscord(): void {
     .mockImplementation(() => Promise.resolve(snowflake()));
   const out = app().get(HubForumDiscordOutboundGateway);
   jest.spyOn(out, 'isOnline').mockReturnValue(true);
-  mention = jest.spyOn(out, 'mention').mockResolvedValue(undefined);
+  mention = jest
+    .spyOn(out, 'mention')
+    .mockImplementation(() => Promise.resolve(snowflake()));
+  // ROK-2295: a voted line may be re-worded in place; never reach Discord.
+  jest.spyOn(out, 'editBotMessage').mockResolvedValue('ok');
 }
 
 async function newLineup(standalone: boolean, status: 'voting' | 'decided') {

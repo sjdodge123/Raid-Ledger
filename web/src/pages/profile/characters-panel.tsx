@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { readCharacterPrefill, type CharacterPrefill } from '../../plugins/character-identity';
 import { useAuth } from '../../hooks/use-auth';
@@ -13,12 +13,12 @@ function useCharacterModal(games: { id: number }[]) {
     const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
     const [prefill, setPrefill] = useState<CharacterPrefill | null>(null);
 
-    const openWithPrefill = useCallback((p: CharacterPrefill) => {
-        setEditingCharacter(null);
-        setSelectedGameId(p.gameId);
-        setPrefill(p);
-        setShowAddModal(true);
+    const openNew = useCallback((gameId: number, p: CharacterPrefill | null) => {
+        setEditingCharacter(null); setPrefill(p);
+        setSelectedGameId(gameId); setShowAddModal(true);
     }, []);
+    const openWithPrefill = useCallback((p: CharacterPrefill) => openNew(p.gameId, p), [openNew]);
+    const openForGame = useCallback((gameId: number) => openNew(gameId, null), [openNew]);
 
     function handleAdd() {
         setEditingCharacter(null); setPrefill(null);
@@ -40,7 +40,7 @@ function useCharacterModal(games: { id: number }[]) {
         setSelectedGameId(null); setPrefill(null);
     }
 
-    return { showAddModal, editingCharacter, selectedGameId, prefill, openWithPrefill, handleAdd, handleEdit, handleClose };
+    return { showAddModal, editingCharacter, selectedGameId, prefill, openWithPrefill, openForGame, handleAdd, handleEdit, handleClose };
 }
 
 /**
@@ -57,6 +57,27 @@ function useRoutedCharacterPrefill(ready: boolean, openWithPrefill: (p: Characte
         openWithPrefill(prefill);
         navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
     }, [prefill, ready, openWithPrefill, navigate, location.pathname, location.search]);
+}
+
+/**
+ * `?game=<gameId>` (the Discord "Don't see your character? Import it" link)
+ * opens Add Character for that game once the registry is loaded, then drops
+ * the param (replace, no history entry) so a refresh does not reopen it. An
+ * unknown or malformed id is dropped and the panel opens normally.
+ */
+function useGameQueryParam(games: { id: number }[], openForGame: (gameId: number) => void) {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const raw = searchParams.get('game');
+    useEffect(() => {
+        if (raw === null || games.length === 0) return;
+        const gameId = Number(raw);
+        if (Number.isInteger(gameId) && games.some((g) => g.id === gameId)) openForGame(gameId);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete('game');
+            return next;
+        }, { replace: true });
+    }, [raw, games, openForGame, setSearchParams]);
 }
 
 function CharactersPanelHeader({ onAdd, disabled }: { onAdd: () => void; disabled: boolean }) {
@@ -80,6 +101,7 @@ export function CharactersPanel() {
     const { games } = useGameRegistry();
     const modal = useCharacterModal(games);
     useRoutedCharacterPrefill(games.length > 0, modal.openWithPrefill);
+    useGameQueryParam(games, modal.openForGame);
 
     const characters = charactersData?.data ?? [];
     const activeGameId = modal.editingCharacter?.gameId ?? (modal.selectedGameId || undefined);

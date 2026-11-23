@@ -29,7 +29,11 @@ export function stubOutbound(testApp: TestApp) {
     postNotice: jest.spyOn(gw, 'postNotice').mockResolvedValue(undefined),
     // ROK-2260 signup pings: bot online, mention + silent remove recorded.
     isOnline: jest.spyOn(gw, 'isOnline').mockReturnValue(true),
-    mention: jest.spyOn(gw, 'mention').mockResolvedValue(undefined),
+    mention: jest
+      .spyOn(gw, 'mention')
+      .mockImplementation(() => Promise.resolve(snowflake())),
+    // ROK-2295: a voted line re-worded in place.
+    editBotMessage: jest.spyOn(gw, 'editBotMessage').mockResolvedValue('ok'),
     removeThreadMembers: jest
       .spyOn(gw, 'removeThreadMembers')
       .mockImplementation((_post, ids) => Promise.resolve(ids)),

@@ -269,14 +269,34 @@ export class HubForumDiscordOutboundGateway {
   /**
    * ROK-2260: a bot message in a post that pings exactly `userIds` — the
    * mention is what adds each of them to the post (Discord thread rule).
+   * Returns the sent message's id (ROK-2295: a voted line is edited later).
    */
   async mention(
     discordThreadId: string,
     content: string,
     userIds: string[],
-  ): Promise<void> {
+  ): Promise<string> {
     const thread = await this.thread(discordThreadId);
-    await thread.send({ content, allowedMentions: { users: userIds } });
+    const msg = await thread.send({
+      content,
+      allowedMentions: { users: userIds },
+    });
+    return msg.id;
+  }
+
+  /** ROK-2295: re-word a bot message in a post; the edit pings nobody. */
+  async editBotMessage(
+    discordThreadId: string,
+    messageId: string,
+    content: string,
+  ): Promise<DiscordWriteResult> {
+    return orGone(async () => {
+      const thread = await this.thread(discordThreadId);
+      await thread.messages.edit(messageId, {
+        content,
+        allowedMentions: NO_MENTIONS,
+      });
+    });
   }
 
   /**

@@ -37,6 +37,9 @@ function makeDeps(): SeriesInteractionDeps & {
       cancelByDiscordUser: jest.fn().mockResolvedValue(undefined),
     },
     charactersService: { findAllForUser: jest.fn() },
+    settingsService: {
+      getTrustedClientUrl: jest.fn().mockResolvedValue(null),
+    },
     emojiService: {} as never,
   };
 }

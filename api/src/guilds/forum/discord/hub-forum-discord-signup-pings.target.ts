@@ -35,12 +35,15 @@ export interface FlushKeys {
   lines: string;
 }
 
+/** A live post to write in; a hub post carries its link row id. */
+export interface LivePingPost {
+  discordThreadId: string;
+  scope: PingedSetScope;
+  linkId?: number;
+}
+
 /** The post to write in, or why there is none (a `SignupPingOutcome`). */
-export type PingPost =
-  | { discordThreadId: string; scope: PingedSetScope }
-  | 'closed'
-  | 'pending'
-  | 'offline';
+export type PingPost = LivePingPost | 'closed' | 'pending' | 'offline';
 
 /** Reopen a locked registry post whose close moved into the future. */
 export type ReopenPlanningPost = (postId: number) => Promise<ReopenResult>;
@@ -90,7 +93,8 @@ export async function resolveHubPost(
   const post = await outbound.ensureEventPost({ guildId, threadId, create });
   if (!post || post.discordDeletedAt || post.discordLockedAt) return 'closed';
   if (links.isUnsent(post)) return 'pending';
-  return { discordThreadId: post.discordThreadId, scope: pingScope(ref) };
+  const { discordThreadId, id: linkId } = post;
+  return { discordThreadId, scope: pingScope(ref), linkId };
 }
 
 /**
@@ -128,21 +132,27 @@ export async function resolvePlanningPost(
  * registry post's thread is gone (moderator delete), its row is marked
  * deleted and the flush is `'offline'` — a retried outcome (review round 2
  * MINOR-R2-1), so the queue's retry finds no live post, creates a fresh
- * one and posts the change that found the deletion. A hub post's gone
- * error is rethrown unchanged (its inbound delete handles it).
+ * one and posts the change that found the deletion. A gone hub post (the
+ * bot missed the inbound delete) marks its link deleted and is `'closed'`
+ * — terminal, never re-created (TECH-DEBT T1). Any other error rethrows.
  */
 export async function writeUnlessGone<T>(
   db: ForumDiscordDb,
-  scope: PingedSetScope,
+  post: LivePingPost,
   write: () => Promise<T>,
-): Promise<T | 'offline'> {
+): Promise<T | 'offline' | 'closed'> {
   try {
     return await write();
   } catch (err) {
-    const postId = 'planningPostId' in scope ? scope.planningPostId : null;
-    if (postId === null || !isGone(err)) throw err;
-    await markPlanningPostDeleted(db, postId, new Date());
-    return 'offline';
+    if (!isGone(err)) throw err;
+    const { scope, linkId } = post;
+    if ('planningPostId' in scope && scope.planningPostId !== null) {
+      await markPlanningPostDeleted(db, scope.planningPostId, new Date());
+      return 'offline';
+    }
+    if (linkId === undefined) throw err;
+    await links.markDeleted(db, linkId, new Date());
+    return 'closed';
   }
 }
 

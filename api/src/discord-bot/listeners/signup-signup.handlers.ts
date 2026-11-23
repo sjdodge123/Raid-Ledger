@@ -1,11 +1,11 @@
 import type { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import * as schema from '../../drizzle/schema';
 import { healPendingFromDiscord } from '../../events/signups-reconfirm.helpers';
-import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import {
-  showCharacterSelect as sharedShowCharacterSelect,
-  showRoleSelect as sharedShowRoleSelect,
-} from '../utils/signup-dropdown-builders';
+  showCharacterSelect,
+  showRoleSelect,
+  showZeroCharacterRoleSelect,
+} from './signup-select-wrappers';
 import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { tryGameSignupFlow } from './signup-signup-game.handlers';
@@ -134,12 +134,11 @@ async function offerSelectionUI(
       embed,
     );
   if (!ctx.isMMO) return false;
-  await showRoleSelect(
+  await showZeroCharacterRoleSelect(
     interaction,
     eventId,
     deps,
-    undefined,
-    undefined,
+    ctx.gameId,
     undefined,
     embed,
   );
@@ -172,6 +171,7 @@ async function offerCharacterSelection(
     deps,
     undefined,
     embed,
+    ctx.gameId,
   );
   return true;
 }
@@ -208,6 +208,7 @@ async function offerCharacterOrRole(a: CharOrRoleArgs): Promise<boolean> {
       deps,
       undefined,
       embed,
+      ctx.gameId,
     );
     return true;
   }
@@ -264,47 +265,4 @@ export async function handleNewLinkedSignup(
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);
-}
-
-/** Wrapper for shared character select dropdown. */
-export async function showCharacterSelect(
-  interaction: ButtonInteraction,
-  eventId: number,
-  eventTitle: string,
-  characters: import('@raid-ledger/contract').CharacterDto[],
-  deps: Pick<SignupInteractionDeps, 'emojiService'>,
-  signupStatus?: 'tentative',
-  embed?: EmbedBuilder,
-): Promise<void> {
-  await sharedShowCharacterSelect(interaction, {
-    customIdPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
-    eventId,
-    eventTitle,
-    characters,
-    emojiService: deps.emojiService,
-    customIdSuffix: signupStatus,
-    embed,
-  });
-}
-
-/** Wrapper for shared role select dropdown. */
-export async function showRoleSelect(
-  interaction:
-    ButtonInteraction | import('discord.js').StringSelectMenuInteraction,
-  eventId: number,
-  deps: Pick<SignupInteractionDeps, 'emojiService'>,
-  characterId?: string,
-  characterInfo?: { name: string; role: string | null },
-  signupStatus?: 'tentative',
-  embed?: EmbedBuilder,
-): Promise<void> {
-  await sharedShowRoleSelect(interaction, {
-    customIdPrefix: SIGNUP_BUTTON_IDS.ROLE_SELECT,
-    eventId,
-    emojiService: deps.emojiService,
-    characterId,
-    characterInfo,
-    customIdSuffix: signupStatus,
-    embed,
-  });
 }

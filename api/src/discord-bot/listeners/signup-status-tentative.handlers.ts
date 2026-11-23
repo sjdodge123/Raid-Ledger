@@ -1,7 +1,11 @@
 import type { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
-import { showCharacterSelect, showRoleSelect } from './signup-signup.handlers';
+import {
+  showCharacterSelect,
+  showRoleSelect,
+  showZeroCharacterRoleSelect,
+} from './signup-select-wrappers';
 import { fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
@@ -116,7 +120,7 @@ async function tryTentativeCharPath(
     await showTentativeCharacterSelect(
       interaction,
       eventId,
-      event.title,
+      event,
       ctx.characters,
       deps,
       embed,
@@ -163,12 +167,11 @@ async function tryLinkedTentativeGameFlow(
   });
   if (charResult !== null) return charResult;
   if (!ctx.isMMO) return false;
-  await showRoleSelect(
+  await showZeroCharacterRoleSelect(
     interaction,
     eventId,
     deps,
-    undefined,
-    undefined,
+    event.gameId,
     'tentative',
     embed,
   );
@@ -178,7 +181,7 @@ async function tryLinkedTentativeGameFlow(
 async function showTentativeCharacterSelect(
   interaction: ButtonInteraction,
   eventId: number,
-  eventTitle: string,
+  event: typeof schema.events.$inferSelect,
   characters: import('@raid-ledger/contract').CharacterDto[],
   deps: SignupInteractionDeps,
   embed?: EmbedBuilder,
@@ -186,11 +189,12 @@ async function showTentativeCharacterSelect(
   await showCharacterSelect(
     interaction,
     eventId,
-    eventTitle,
+    event.title,
     characters,
     deps,
     'tentative',
     embed,
+    event.gameId,
   );
 }
 

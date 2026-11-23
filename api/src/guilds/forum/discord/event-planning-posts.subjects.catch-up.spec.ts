@@ -4,6 +4,8 @@
  * each id goes through `ensureLineupPost`, and one failing lineup is warned
  * while the rest still run.
  */
+import type { SchedulingPollForumCard } from '../../../lineups/scheduling/scheduling-poll-forum-card';
+import type { SchedulingPollEmbedQueueService } from '../../../lineups/scheduling/scheduling-poll-embed.queue';
 import { Logger } from '@nestjs/common';
 import type { SettingsService } from '../../../settings/settings.service';
 import type { EventPlanningPostCreator } from './event-planning-posts.create';
@@ -30,6 +32,8 @@ function setup(forum: typeof FORUM | null = FORUM) {
     db,
     {} as unknown as SettingsService,
     creator as unknown as EventPlanningPostCreator,
+    { build: jest.fn() } as unknown as SchedulingPollForumCard,
+    { enqueue: jest.fn() } as unknown as SchedulingPollEmbedQueueService,
   );
   const ensure = jest
     .spyOn(subjects, 'ensureLineupPost')

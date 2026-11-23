@@ -29,17 +29,47 @@ export async function outboundUrl(
   return forumThreadUrl(await getClientUrl(settings), ref.guildId, ref);
 }
 
-/** The webhook author for `row` and the RL link for `ref`. */
+/** A Discord-origin row's guest author columns (`discordGuestColumns`). */
+export interface DiscordGuestAuthor {
+  authorDiscordId: string | null;
+  authorDiscordName: string | null;
+  authorDiscordAvatar: string | null;
+}
+
+/**
+ * ROK-2297: with no RL person, a guest's own Discord name + CDN avatar (the
+ * `forumSync` URL shape). Null when the row has no guest name.
+ */
+export function guestVoice(guest: DiscordGuestAuthor): OutboundAuthor | null {
+  const { authorDiscordId: id, authorDiscordName: name } = guest;
+  if (id === null || name === null) return null;
+  const hash = guest.authorDiscordAvatar;
+  return {
+    username: webhookUsername(name),
+    avatarURL: hash
+      ? `https://cdn.discordapp.com/avatars/${id}/${hash}.png?size=64`
+      : null,
+  };
+}
+
+/**
+ * The webhook author for `row` and the RL link for `ref`. An unclaimed
+ * Discord guest (`row` null) speaks as their Discord self (copied chat).
+ */
 export async function outboundVoice(
   settings: SettingsService,
   row: HubPostPersonRow | null,
   ref: OutboundRef,
+  guest?: DiscordGuestAuthor,
 ): Promise<[OutboundAuthor, string]> {
   const clientUrl = await getClientUrl(settings);
+  const url = forumThreadUrl(clientUrl, ref.guildId, ref);
+  const asGuest = row === null && guest ? guestVoice(guest) : null;
+  if (asGuest) return [asGuest, url];
   const person = toPerson(row);
   const author = {
     username: webhookUsername(person.displayName),
     avatarURL: absoluteAvatarUrl(person.avatarUrl, clientUrl),
   };
-  return [author, forumThreadUrl(clientUrl, ref.guildId, ref)];
+  return [author, url];
 }
