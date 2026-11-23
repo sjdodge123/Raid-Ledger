@@ -19,16 +19,27 @@ export type Delivery = 'both' | 'dm-only' | 'none';
 /** A hidden row with no caller expiry is removed by the 04:00 cleanup (Q3). */
 export const HIDDEN_ROW_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-/**
- * Resolve delivery for one type; a missing type entry takes its default.
- * `skipDiscord` callers (invite, GG) send their own DM with the returned row
- * id, so a hidden row is still written for them.
- */
+/** Resolve delivery for one type; a missing type entry takes its default. */
 export function resolveDelivery(
   type: NotificationType,
   prefs: NotificationPreferencesDto | undefined,
 ): Delivery {
   return resolveStoredDelivery(type, prefs?.channelPrefs);
+}
+
+/**
+ * Delivery for one input. A `skipDiscord` caller gets a hidden row only when
+ * it sends its own DM with the returned id (`callerSendsDm`: invite, GG);
+ * any other `skipDiscord` caller has no DM path, so bell off = 'none' (no row,
+ * null return) and its "non-null = reached the member" meaning holds.
+ */
+export function resolveInputDelivery(
+  input: CreateNotificationInput,
+  prefs: NotificationPreferencesDto | undefined,
+): Delivery {
+  const delivery = resolveDelivery(input.type, prefs);
+  if (delivery !== 'dm-only') return delivery;
+  return input.skipDiscord && !input.callerSendsDm ? 'none' : delivery;
 }
 
 /**

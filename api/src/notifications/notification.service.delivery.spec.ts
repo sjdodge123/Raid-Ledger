@@ -118,6 +118,28 @@ describe('NotificationService.create — bell vs Discord (ROK-2290)', () => {
   });
 });
 
+describe('create — skipDiscord callers with the bell off (ROK-2290 review)', () => {
+  it('skipDiscord without callerSendsDm: no row, no DM, returns null (nothing reaches the member)', async () => {
+    const { service, insert, discord } = serviceWith(sw(false, true));
+    const dto = await service.create({ ...input(1), skipDiscord: true });
+    expect(dto).toBeNull();
+    expect(insert).not.toHaveBeenCalled();
+    expect(discord.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("skipDiscord + callerSendsDm: hidden row returned for the caller's own DM, no dispatch", async () => {
+    const { service, values, discord } = serviceWith(sw(false, true));
+    const dto = await service.create({
+      ...input(1),
+      skipDiscord: true,
+      callerSendsDm: true,
+    });
+    expect(values.mock.calls[0]?.[0]).toMatchObject({ inAppHidden: true });
+    expect(dto).toMatchObject({ id: 'row-0' });
+    expect(discord.dispatch).not.toHaveBeenCalled();
+  });
+});
+
 describe('createManyNotifications — per-input delivery (ROK-2290)', () => {
   it('keeps the input↔row index contract across visible, hidden and dropped inputs', async () => {
     const { db, values } = makeDb([
@@ -153,5 +175,20 @@ describe('createManyNotifications — per-input delivery (ROK-2290)', () => {
     ]);
     expect(dtos).toEqual([]);
     expect(values).not.toHaveBeenCalled();
+  });
+
+  it('drops a bell-off skipDiscord input without callerSendsDm, keeps one with it', async () => {
+    const { db, values } = makeDb([
+      { userId: 1, channelPrefs: { new_event: sw(false, true) } },
+      { userId: 2, channelPrefs: { new_event: sw(false, true) } },
+    ]);
+    const dtos = await createManyNotifications(db, new Logger('test'), null, [
+      { ...input(1), skipDiscord: true },
+      { ...input(2), skipDiscord: true, callerSendsDm: true },
+    ]);
+    expect(values.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({ userId: 2, inAppHidden: true }),
+    ]);
+    expect(dtos.map((d) => d.userId)).toEqual([2]);
   });
 });

@@ -296,6 +296,7 @@ export class GgDeliveryService {
     const row = await this.notifications.create({
       ...ready,
       skipDiscord: true,
+      callerSendsDm: true,
     });
     return row?.id ?? null;
   }

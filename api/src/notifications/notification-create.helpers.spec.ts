@@ -11,6 +11,7 @@ import {
   HIDDEN_ROW_TTL_MS,
   buildNotificationValues,
   resolveDelivery,
+  resolveInputDelivery,
 } from './notification-create.helpers';
 import type { NotificationPreferencesDto } from './notification.types';
 
@@ -100,5 +101,41 @@ describe('buildNotificationValues', () => {
     expect(values.inAppHidden).toBe(false);
     expect(values.expiresAt).toBeNull();
     expect(values.payload).toBeNull();
+  });
+});
+
+describe('resolveInputDelivery — skipDiscord callers', () => {
+  const off = prefsWith({ new_event: sw(false, true) });
+  const base = {
+    userId: 1,
+    type: 'new_event' as const,
+    title: 't',
+    message: 'm',
+  };
+
+  it("skipDiscord with no DM of its own: bell off → 'none'", () => {
+    expect(resolveInputDelivery({ ...base, skipDiscord: true }, off)).toBe(
+      'none',
+    );
+  });
+
+  it("skipDiscord + callerSendsDm: bell off → 'dm-only'", () => {
+    expect(
+      resolveInputDelivery(
+        { ...base, skipDiscord: true, callerSendsDm: true },
+        off,
+      ),
+    ).toBe('dm-only');
+  });
+
+  it("no skipDiscord: bell off + Discord on → 'dm-only'", () => {
+    expect(resolveInputDelivery(base, off)).toBe('dm-only');
+  });
+
+  it("skipDiscord with the bell on stays 'both'", () => {
+    const on = prefsWith({ new_event: sw(true, true) });
+    expect(resolveInputDelivery({ ...base, skipDiscord: true }, on)).toBe(
+      'both',
+    );
   });
 });

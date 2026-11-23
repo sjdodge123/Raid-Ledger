@@ -20,7 +20,7 @@ import type {
 import type { DiscordNotificationService } from './discord-notification.service';
 import {
   buildNotificationValues,
-  resolveDelivery,
+  resolveInputDelivery,
   type Delivery,
 } from './notification-create.helpers';
 
@@ -69,7 +69,7 @@ async function resolveEligible(
   const prefsByUser = await loadPreferencesForUsers(db, userIds);
   const eligible: EligibleInput[] = [];
   for (const input of inputs) {
-    const delivery = resolveDelivery(input.type, prefsByUser.get(input.userId));
+    const delivery = resolveInputDelivery(input, prefsByUser.get(input.userId));
     if (delivery !== 'none') eligible.push({ input, delivery });
   }
   return eligible;

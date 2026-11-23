@@ -29,7 +29,7 @@ import {
 import { createManyNotifications } from './notification-batch.helpers';
 import {
   buildNotificationValues,
-  resolveDelivery,
+  resolveInputDelivery,
 } from './notification-create.helpers';
 import {
   mergePreferences,
@@ -79,7 +79,7 @@ export class NotificationService {
     input: CreateNotificationInput,
   ): Promise<NotificationDto | null> {
     const prefs = await this.getPreferences(input.userId);
-    const delivery = resolveDelivery(input.type, prefs);
+    const delivery = resolveInputDelivery(input, prefs);
     if (delivery === 'none') {
       this.logger.debug(
         `Skipping notification for user ${input.userId}: ${input.type} in-app and Discord disabled`,
