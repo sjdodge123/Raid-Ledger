@@ -9,11 +9,10 @@ import {
   safeEditDmEmbed,
   safeErrorReply,
   capitalizeRole,
+  findPugActor,
+  PUG_ACTOR_BLOCKED,
 } from './pug-invite.helpers';
-import {
-  findLinkedUser,
-  showMemberRoleSelect,
-} from './pug-invite-member.handlers';
+import { showMemberRoleSelect } from './pug-invite-member.handlers';
 import { errorStack } from '../../common/error-format.helpers';
 import { defined } from '../../common/defined.helpers';
 
@@ -76,7 +75,8 @@ async function doMemberCharacterSelect(
   eventIdStr: string,
 ): Promise<void> {
   const eventId = parseInt(eventIdStr, 10);
-  const linkedUser = await findLinkedUser(deps, interaction.user.id);
+  const linkedUser = await findPugActor(deps, interaction);
+  if (linkedUser === PUG_ACTOR_BLOCKED) return;
   if (!linkedUser) {
     await interaction.editReply({
       content: 'Could not find your linked account.',
@@ -177,7 +177,8 @@ async function doMemberRoleSelect(
 ): Promise<void> {
   const selectedRole = interaction.values[0] as PugRole;
   const eventId = parseInt(eventIdStr, 10);
-  const linkedUser = await findLinkedUser(deps, interaction.user.id);
+  const linkedUser = await findPugActor(deps, interaction);
+  if (linkedUser === PUG_ACTOR_BLOCKED) return;
   if (!linkedUser) {
     await interaction.editReply({
       content: 'Could not find your linked account.',

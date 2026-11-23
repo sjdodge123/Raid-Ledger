@@ -9,6 +9,8 @@ import * as schema from '../../drizzle/schema';
 import { MEMBER_INVITE_BUTTON_IDS } from '../discord-bot.constants';
 import type { PugInviteDeps } from './pug-invite.helpers';
 import {
+  findPugActor,
+  PUG_ACTOR_BLOCKED,
   safeDeferReply,
   buildAcceptedEmbed,
   buildDeclinedEmbed,
@@ -55,7 +57,8 @@ async function handleMemberAccept(
   interaction: ButtonInteraction,
   eventId: number,
 ): Promise<void> {
-  const linkedUser = await findLinkedUser(deps, interaction.user.id);
+  const linkedUser = await findPugActor(deps, interaction);
+  if (linkedUser === PUG_ACTOR_BLOCKED) return;
   if (!linkedUser) {
     await interaction.editReply({
       content:
@@ -143,18 +146,6 @@ async function handleMemberDecline(
 }
 
 // --- Shared helpers ---
-
-export async function findLinkedUser(
-  deps: PugInviteDeps,
-  discordId: string,
-): Promise<{ id: number } | null> {
-  const [user] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordId))
-    .limit(1);
-  return user ?? null;
-}
 
 export async function lookupActiveEvent(
   deps: PugInviteDeps,
