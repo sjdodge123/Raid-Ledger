@@ -49,7 +49,9 @@ function setup(created: boolean) {
   const embedSync = { enqueue: jest.fn().mockResolvedValue(undefined) };
   const subjects = new EventPlanningSubjectPosts(
     {} as unknown as ForumDiscordDb,
-    {} as unknown as SettingsService,
+    {
+      getDefaultTimezone: jest.fn(() => Promise.resolve(null)),
+    } as unknown as SettingsService,
     creator as unknown as EventPlanningPostCreator,
     {
       build: jest.fn().mockResolvedValue(null),

@@ -31,7 +31,9 @@ function setup(forum: typeof FORUM | null = FORUM) {
   const creator = { resolveForum: jest.fn().mockResolvedValue(forum) };
   const subjects = new EventPlanningSubjectPosts(
     db,
-    {} as unknown as SettingsService,
+    {
+      getDefaultTimezone: jest.fn(() => Promise.resolve(null)),
+    } as unknown as SettingsService,
     creator as unknown as EventPlanningPostCreator,
     { build: jest.fn() } as unknown as SchedulingPollForumCard,
     { enqueue: jest.fn() } as unknown as SchedulingPollEmbedQueueService,

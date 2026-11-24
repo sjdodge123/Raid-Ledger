@@ -61,6 +61,8 @@ interface PollOpts {
   standalone?: { title: string };
   /** ROK-2295: the event this poll reschedules (`linked_event_id`). */
   linkedEventId?: number;
+  /** ROK-2315: the lineup's `phase_deadline` (a plain poll's close date). */
+  phaseDeadline?: Date;
 }
 
 /** A decided lineup with one match (the poll). */
@@ -77,6 +79,7 @@ async function newPoll(opts: PollOpts = {}) {
         visibility: opts.visibility ?? 'public',
         createdBy: testApp.seed.adminUser.id,
         guildId: opts.guildId ?? null,
+        phaseDeadline: opts.phaseDeadline ?? null,
         publicSlug: randomBytes(8).toString('hex'),
       })
       .returning(),
@@ -217,6 +220,25 @@ describe('syncPollDiscussion (real db)', () => {
     );
   });
 
+  it('ROK-2315: a plain poll with a deadline leads with its close date, and follows a deadline change', async () => {
+    const guildId = await newHub();
+    // Noon UTC: the same calendar day in any community timezone.
+    const phaseDeadline = new Date('2099-01-15T12:00:00Z');
+    const { matchId, lineupId } = await newPoll({ guildId, phaseDeadline });
+    expect(await syncPollDiscussion(testApp.db, matchId)).toBe('insert');
+    expect((await liveThread(matchId))?.title).toBe(
+      `Poll · closes Thu 15 Jan — ${testApp.seed.game.name}`,
+    );
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ phaseDeadline: new Date('2099-01-22T12:00:00Z') })
+      .where(eq(schema.communityLineups.id, lineupId));
+    expect(await syncPollDiscussion(testApp.db, matchId)).toBe('refresh');
+    expect((await liveThread(matchId))?.title).toBe(
+      `Poll · closes Thu 22 Jan — ${testApp.seed.game.name}`,
+    );
+  });
+
   it('ROK-2295: a reschedule poll is "Reschedule: <event> — Poll"', async () => {
     const guildId = await newHub();
     const eventId = await newEvent('Thursday Raid');
@@ -258,14 +280,14 @@ describe('syncPollDiscussion (real db)', () => {
     expect(poll?.linkedEventId).toBeNull();
   });
 
-  it('ROK-2301: a follow-up poll thread is "<game> — Poll (after <event>)"', async () => {
+  it('ROK-2315: a follow-up poll thread is "<event> — Follow-up poll"', async () => {
     const guildId = await newHub();
     const title = 'Standalone Scheduling Poll';
     const { matchId } = await newPoll({ guildId, standalone: { title } });
     await newFollowup(await newEvent('Tuesday Dungeon Night'), matchId);
     expect(await syncPollDiscussion(testApp.db, matchId)).toBe('insert');
     expect((await liveThread(matchId))?.title).toBe(
-      `${testApp.seed.game.name} — Poll (after Tuesday Dungeon Night)`,
+      'Tuesday Dungeon Night — Follow-up poll',
     );
   });
 
@@ -279,7 +301,7 @@ describe('syncPollDiscussion (real db)', () => {
     await newFollowup(await newEvent('Tuesday Dungeon Night'), matchId);
     expect(await syncPollDiscussion(testApp.db, matchId)).toBe('refresh');
     expect((await liveThread(matchId))?.title).toBe(
-      `${testApp.seed.game.name} — Poll (after Tuesday Dungeon Night)`,
+      'Tuesday Dungeon Night — Follow-up poll',
     );
   });
 
@@ -311,7 +333,7 @@ describe('syncPollDiscussion (real db)', () => {
     });
     await waitFor(async () => {
       expect((await liveThread(matchId))?.title).toBe(
-        `${testApp.seed.game.name} — Poll (after Tuesday Dungeon Night)`,
+        'Tuesday Dungeon Night — Follow-up poll',
       );
     }, 5000);
     expect(await threadRows(matchId)).toHaveLength(1);

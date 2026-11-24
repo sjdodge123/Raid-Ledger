@@ -180,7 +180,9 @@ async function apply(
   const inserts = action === 'insert' || action === 'move';
   if (!inserts && (action !== 'refresh' || !thread)) return;
   // Read the community zone only when the title shows the close date.
-  const zone = pollTitleNeedsZone(poll) ? await readCommunityTimeZone(tx) : null;
+  const zone = pollTitleNeedsZone(poll)
+    ? await readCommunityTimeZone(tx)
+    : null;
   const clock: SyncClock = { now, zone };
   if (inserts) await insertPollThread(tx, poll, clock);
   else if (thread) await refreshPollThread(tx, thread, poll, clock);

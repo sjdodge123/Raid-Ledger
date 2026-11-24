@@ -414,7 +414,7 @@ describe('ROK-2301 postView: a poll post name composed by the source', () => {
 
   it('ROK-2301: a poll source that carries its own post name is named by it', async () => {
     const { svc } = setup();
-    const name = 'Onyxia — Poll (after Thursday Raid)';
+    const name = 'Thursday Raid — Follow-up poll';
     mocked.source.mockResolvedValue({
       kind: 'poll',
       id: 34,
