@@ -441,6 +441,10 @@ describe('ROK-2314 the full sweep scopes the reschedule guard to event posts', (
     'a %s post whose subject_id equals a rescheduling event id stays open',
     async (subjectKind) => {
       const { setReadOnly } = spies();
+      // The poll and lineup passes must not act on the borrowed subject id.
+      const subjects = app().get(EventPlanningSubjectPosts);
+      jest.spyOn(subjects, 'syncOpenPolls').mockResolvedValue(0);
+      jest.spyOn(subjects, 'ensureMissingLineupPosts').mockResolvedValue(0);
       const eventId = await newEvent(true);
       const other = await newPost({
         closesInMs: HOUR,
