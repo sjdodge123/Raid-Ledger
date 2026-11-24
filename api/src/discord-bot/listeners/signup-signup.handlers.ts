@@ -6,7 +6,7 @@ import {
   showRoleSelect,
   showZeroCharacterRoleSelect,
 } from './signup-select-wrappers';
-import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
+import { findActiveLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { tryGameSignupFlow } from './signup-signup-game.handlers';
 import { benchSuffix } from './signup-bench-feedback.helpers';
@@ -36,7 +36,8 @@ export async function handleExistingSignup(
   existingSignup: ExistingSignup,
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  const linkedUser = await findLinkedUser(interaction.user.id, deps);
+  const linkedUser = await findActiveLinkedUser(interaction, deps);
+  if (linkedUser === false) return;
   // ROK-2097: a row this Discord id may see but not manage is not-found.
   const reactivation = await runOrReplyNotSignedUp(interaction, () =>
     reactivateIfNeeded(eventId, existingSignup, linkedUser, deps),

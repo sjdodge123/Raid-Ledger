@@ -26,6 +26,7 @@ import type { LineupNotificationService } from './lineup-notification.service';
 import { defined } from '../common/defined.helpers';
 import { findLineupById } from './lineups-query.helpers';
 import { assertUserCanParticipate } from './lineups-eligibility.helpers';
+import { assertAccountActive } from '../users/discord-account-status.helpers';
 import { insertLineup } from './lineups-lifecycle.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import {
@@ -276,6 +277,8 @@ export async function runNominate(
   userId: number,
   callerRole: string | undefined,
 ): Promise<LineupDetailResponseDto> {
+  // ROK-2298: non-HTTP callers (Steam-link DM) bypass NotDeactivatedGuard.
+  await assertAccountActive(deps.db, userId);
   const [lineup] = await findLineupById(deps.db, lineupId);
   if (!lineup) throw new NotFoundException('Lineup not found');
   if (lineup.status !== 'building')

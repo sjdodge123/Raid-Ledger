@@ -4,7 +4,11 @@ import * as schema from '../../drizzle/schema';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import { showRoleSelect } from '../utils/signup-dropdown-builders';
 import { buildCharacterBackId } from '../utils/character-back-id';
-import { findLinkedUser, safeEditReply } from './signup-interaction.helpers';
+import {
+  findActiveLinkedUser,
+  safeEditReply,
+  interactionErrorReply,
+} from './signup-interaction.helpers';
 import { replyNoLinkedAccount } from './signup-select-role.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
@@ -37,7 +41,7 @@ export async function handleCharacterSelectMenu(
     );
     await safeEditReply(
       interaction,
-      { content: 'Something went wrong. Please try again.', components: [] },
+      { content: interactionErrorReply(error), components: [] },
       deps.logger,
     );
   }
@@ -49,12 +53,9 @@ async function processCharacterSelect(
   deps: SignupInteractionDeps,
   signupStatus?: 'tentative',
 ): Promise<void> {
-  const linkedUser = await findLinkedUser(interaction.user.id, deps);
-
-  if (!linkedUser) {
-    await replyNoLinkedAccount(interaction);
-    return;
-  }
+  const linkedUser = await findActiveLinkedUser(interaction, deps);
+  if (linkedUser === null) return replyNoLinkedAccount(interaction);
+  if (linkedUser === false) return;
   const characterId = defined(interaction.values[0], 'selected character id');
 
   const redirected = await tryMmoRoleRedirect(

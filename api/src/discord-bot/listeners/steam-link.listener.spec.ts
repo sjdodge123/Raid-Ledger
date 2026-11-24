@@ -335,6 +335,32 @@ function silentSkipTests() {
     expect(mockDmSend).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['banned', { bannedAt: new Date(), deactivatedAt: null }],
+    ['deactivated', { bannedAt: null, deactivatedAt: new Date() }],
+  ])(
+    'ROK-2298 C1: a %s author gets no DM and no interest write',
+    async (_label, moderation) => {
+      stubGameLookup({ id: 42, name: 'CS2', steamAppId: 730 });
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 7, discordId: 'discord-user-1', ...moderation },
+      ]);
+      // Would auto-heart if the guard let the author through.
+      stubInterestCheck(false);
+      stubAutoHeartPref(true);
+      stubNoBuildingLineup();
+
+      const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
+      await callHandleMessage(msg);
+
+      expect({
+        dms: mockDmSend.mock.calls.length,
+        inserts: mockDb.insert.mock.calls.length,
+        reads: mockDb.limit.mock.calls.length,
+      }).toEqual({ dms: 0, inserts: 0, reads: 2 });
+    },
+  );
+
   it('does not send an interest prompt when user is already interested in the game', async () => {
     stubGameLookup({ id: 42, name: 'CS2', steamAppId: 730 });
     stubUserLookup({ id: 7, discordId: 'discord-user-1' });
