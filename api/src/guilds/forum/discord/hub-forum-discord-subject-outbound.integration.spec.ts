@@ -160,7 +160,9 @@ async function reply(route: string, body: string, calls: number) {
 
 async function threadLinks(threadId: number) {
   const l = schema.hubForumDiscordLinks;
-  return db().select().from(l).where(eq(l.threadId, threadId));
+  // Ordered: an UPDATE moves a row in the heap, so an unordered read may
+  // return the reply link before the post link.
+  return db().select().from(l).where(eq(l.threadId, threadId)).orderBy(l.id);
 }
 
 async function bindingTagIds(guildId: number): Promise<string[]> {

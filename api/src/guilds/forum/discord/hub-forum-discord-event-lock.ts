@@ -9,6 +9,9 @@
  * Discord — fine, R5 keeps the RL pin. While locked, `editThread` skips the
  * post (an archived thread rejects edits, 50083), so a reopen re-drives it as
  * `thread.updated` to pick up the current dated title (review MINOR-1).
+ * ROK-2314: an event thread is also read-only while its event's reschedule
+ * poll runs; `sweepEvent` flips one event's posts as soon as the poll opens
+ * or ends instead of waiting for the next tick.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
@@ -32,7 +35,9 @@ import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { syncExpiredPolls } from '../subject-discussion/poll-discussion.deadline';
 import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
+import { eventReschedulingSql } from './event-rescheduling.sql';
 import { HubForumDiscordEventLockGateway } from './hub-forum-discord-event-lock.gateway';
+import { HubEventPostReopenFollowups } from './hub-forum-discord-event-lock.reopen';
 import { UNSENT_PREFIX } from './hub-forum-discord-links.queries';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
@@ -64,10 +69,13 @@ const HAS_SUBJECT = or(
   isNotNull(threads.lineupId),
 );
 
-/** The RL thread is read-only at `now` (closed or detached). */
+/**
+ * The RL thread is read-only at `now` (closed or detached), or (ROK-2314)
+ * its event is mid-reschedule — poll / lineup threads have no event id.
+ */
 function readOnlyAt(now: Date) {
   const at = sql`${now.toISOString()}::timestamptz`;
-  return sql<boolean>`(${threads.eventDetachedAt} IS NOT NULL OR COALESCE(${threads.writeClosesAt} <= ${at}, false))`;
+  return sql<boolean>`(${threads.eventDetachedAt} IS NOT NULL OR COALESCE(${threads.writeClosesAt} <= ${at}, false) OR ${eventReschedulingSql(threads.eventId)})`;
 }
 
 /** The recorded Discord lock state differs from the RL read-only state. */
@@ -78,15 +86,30 @@ function disagrees(readOnly: SQL<boolean>) {
   );
 }
 
+/** Linked, sent, undeleted, current-binding posts that must flip. */
+function dueWhere(readOnly: SQL<boolean>, eventId: number | undefined) {
+  return and(
+    eq(links.kind, 'thread'),
+    gte(links.createdAt, bindings.boundAt),
+    HAS_SUBJECT,
+    isNull(links.discordDeletedAt),
+    not(like(links.discordThreadId, `${UNSENT_PREFIX}%`)),
+    disagrees(readOnly),
+    eventId === undefined ? undefined : eq(threads.eventId, eventId),
+  );
+}
+
 /**
  * Linked, sent, undeleted subject-thread posts (event, poll or lineup —
  * ROK-2272 S8) whose lock state must flip —
  * only in the hub's CURRENT binding (D9: an unbound or re-bound hub's old
- * posts are left alone, review MINOR-5).
+ * posts are left alone, review MINOR-5). `eventId` narrows it to one
+ * event's posts (ROK-2314).
  */
 export async function dueLockChanges(
   db: ForumDiscordDb,
   now: Date,
+  eventId?: number,
 ): Promise<LockChange[]> {
   const readOnly = readOnlyAt(now);
   return db
@@ -101,16 +124,7 @@ export async function dueLockChanges(
     .from(links)
     .innerJoin(threads, eq(threads.id, links.threadId))
     .innerJoin(bindings, eq(bindings.guildId, links.guildId))
-    .where(
-      and(
-        eq(links.kind, 'thread'),
-        gte(links.createdAt, bindings.boundAt),
-        HAS_SUBJECT,
-        isNull(links.discordDeletedAt),
-        not(like(links.discordThreadId, `${UNSENT_PREFIX}%`)),
-        disagrees(readOnly),
-      ),
-    )
+    .where(dueWhere(readOnly, eventId))
     .orderBy(links.id)
     .limit(BATCH);
 }
@@ -127,6 +141,7 @@ export class HubForumDiscordEventLockSweep {
     private readonly outbound: HubForumDiscordOutboundService,
     private readonly registry: EventPlanningPostsLockSweep,
     private readonly starters: EventForumStarterCards,
+    private readonly followups: HubEventPostReopenFollowups,
   ) {}
 
   /**
@@ -159,9 +174,31 @@ export class HubForumDiscordEventLockSweep {
     return hub + reg;
   }
 
+  /**
+   * ROK-2314: flip just this event's posts (hub, then registry) now — the
+   * reschedule poll opened or ended. Same isolation and rethrow as `sweep`;
+   * offline bot → 0 (the 5-minute sweep catches up).
+   */
+  async sweepEvent(eventId: number, now = new Date()): Promise<number> {
+    if (!this.client.isConnected()) return 0;
+    const errors: unknown[] = [];
+    const hub = await this.pass('hub-event', errors, async () =>
+      this.applyAll(await this.due(now, eventId), now),
+    );
+    const reg = await this.pass('registry-event', errors, () =>
+      this.registry.sweepEvent(eventId, now),
+    );
+    if (errors.length > 0) throw errors[0];
+    return hub + reg;
+  }
+
   private async sweepHub(now: Date): Promise<number> {
+    return this.applyAll(await this.due(now), now);
+  }
+
+  private async applyAll(rows: LockChange[], now: Date): Promise<number> {
     let changed = 0;
-    for (const row of await this.due(now)) {
+    for (const row of rows) {
       if (await this.apply(row, now)) changed += 1;
     }
     return changed;
@@ -183,9 +220,9 @@ export class HubForumDiscordEventLockSweep {
     }
   }
 
-  /** The posts to flip this tick. */
-  due(now: Date): Promise<LockChange[]> {
-    return dueLockChanges(this.db, now);
+  /** The posts to flip this tick (only `eventId`'s when given). */
+  due(now: Date, eventId?: number): Promise<LockChange[]> {
+    return dueLockChanges(this.db, now, eventId);
   }
 
   /** Discord first, then record it; a failure retries next tick. */
@@ -209,7 +246,8 @@ export class HubForumDiscordEventLockSweep {
 
   /**
    * Reopened: track the event starter again (ROK-2292, D7 dropped it), then
-   * push the title/starter skipped while locked (binding-checked).
+   * push the title/starter skipped while locked (binding-checked), then
+   * (ROK-2314) re-drive the replies and signup lines held while it was shut.
    */
   private async refresh(row: LockChange): Promise<void> {
     const { guildId, threadId, eventId } = row;
@@ -225,6 +263,7 @@ export class HubForumDiscordEventLockSweep {
     } catch (err) {
       this.warn(row, err);
     }
+    await this.followups.afterReopen(row);
   }
 
   private warn(row: LockChange, err: unknown): void {

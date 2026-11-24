@@ -200,6 +200,23 @@ export class HubForumDiscordReconcileService {
     }
   }
 
+  /**
+   * ROK-2314 MAJOR-2: re-drive these links now, in the given order (a
+   * reopened post's held replies). Same guards as `retrySweep`: a sweep in
+   * flight or an offline bot skips it, and the next tick sends them (the
+   * caller made them due). Returns how many it re-drove.
+   */
+  async retryLinks(rows: links.ForumLink[]): Promise<number> {
+    if (this.sweeping || !this.gateway.isOnline()) return 0;
+    this.sweeping = true;
+    try {
+      for (const link of rows) await this.retryOne(link);
+      return rows.length;
+    } finally {
+      this.sweeping = false;
+    }
+  }
+
   /** Placeholder ids are re-sent (never edited); errors never stop the sweep. */
   private async retryOne(link: links.ForumLink): Promise<void> {
     try {

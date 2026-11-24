@@ -9,6 +9,7 @@ import {
   type LockChange,
 } from './hub-forum-discord-event-lock';
 import type { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
+import type { HubEventPostReopenFollowups } from './hub-forum-discord-event-lock.reopen';
 import type { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 import { syncExpiredPolls } from '../subject-discussion/poll-discussion.deadline';
@@ -76,8 +77,12 @@ function setup(rounds: LockChange[][], connected = true) {
     isConnected: () => connected,
   } as unknown as DiscordBotClientService;
   const outbound = { apply: jest.fn().mockResolvedValue(undefined) };
-  const registry = { sweep: jest.fn().mockResolvedValue(0) };
+  const registry = {
+    sweep: jest.fn().mockResolvedValue(0),
+    sweepEvent: jest.fn().mockResolvedValue(0),
+  };
   const starters = { restore: jest.fn().mockResolvedValue(true) };
+  const followups = { afterReopen: jest.fn().mockResolvedValue(undefined) };
   const sweep = new HubForumDiscordEventLockSweep(
     db,
     gateway as unknown as HubForumDiscordEventLockGateway,
@@ -85,11 +90,15 @@ function setup(rounds: LockChange[][], connected = true) {
     outbound as unknown as HubForumDiscordOutboundService,
     registry as unknown as EventPlanningPostsLockSweep,
     starters as unknown as EventForumStarterCards,
+    followups as unknown as HubEventPostReopenFollowups,
   );
   const due = jest.spyOn(sweep, 'due');
   for (const r of rounds) due.mockResolvedValueOnce(r);
   due.mockResolvedValue([]);
-  return { sweep, gateway, sets, outbound, registry, due, deletes, starters };
+  return {
+    ...{ sweep, gateway, sets, outbound, registry, due, deletes, starters },
+    followups,
+  };
 }
 
 const row = (readOnly: boolean, eventId: number | null = 42): LockChange => ({
@@ -282,5 +291,72 @@ describe('ROK-2272 S8: the poll-deadline pass', () => {
     const err = new Error('poll db down');
     deadline.mockRejectedValueOnce(err);
     await expect(sweep.sweep(NOW)).rejects.toBe(err);
+  });
+});
+
+describe('ROK-2314 MAJOR-2: a reopened post re-sends what it held', () => {
+  it('runs the reopen follow-ups after the re-drive, with the row', async () => {
+    const { sweep, followups, outbound } = setup([[row(false)]]);
+    await sweep.sweep(NOW);
+    expect(followups.afterReopen).toHaveBeenCalledWith(row(false));
+    const redriveAt = outbound.apply.mock.invocationCallOrder[0] ?? -1;
+    const followAt = followups.afterReopen.mock.invocationCallOrder[0] ?? -1;
+    expect(redriveAt).toBeLessThan(followAt);
+  });
+
+  it('still runs them when the re-drive fails', async () => {
+    const { sweep, followups, outbound } = setup([[row(false)]]);
+    outbound.apply.mockRejectedValueOnce(new Error('db down'));
+    await sweep.sweep(NOW);
+    expect(followups.afterReopen).toHaveBeenCalledTimes(1);
+  });
+
+  it('a lock, or a failed reopen, runs no follow-ups', async () => {
+    const locked = setup([[row(true)]]);
+    await locked.sweep.sweep(NOW);
+    const failed = setup([[row(false)]]);
+    failed.gateway.setReadOnly.mockRejectedValueOnce(new Error('boom'));
+    await failed.sweep.sweep(NOW);
+    expect(locked.followups.afterReopen).not.toHaveBeenCalled();
+    expect(failed.followups.afterReopen).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2314 MINOR-4(a): sweepEvent', () => {
+  it('flips the hub posts of that event, then its registry post', async () => {
+    const { sweep, gateway, registry, due } = setup([[row(true)]]);
+    registry.sweepEvent.mockResolvedValueOnce(1);
+    expect(await sweep.sweepEvent(42, NOW)).toBe(2);
+    expect(due).toHaveBeenCalledWith(NOW, 42);
+    expect(registry.sweepEvent).toHaveBeenCalledWith(42, NOW);
+    const hubAt = gateway.setReadOnly.mock.invocationCallOrder[0] ?? -1;
+    const regAt = registry.sweepEvent.mock.invocationCallOrder[0] ?? -1;
+    expect(hubAt).toBeLessThan(regAt);
+    expect(registry.sweep).not.toHaveBeenCalled();
+  });
+
+  it('attempts both passes, then rejects with the first error', async () => {
+    const { sweep, registry, due } = setup([]);
+    const first = new Error('hub down');
+    due.mockRejectedValueOnce(first);
+    registry.sweepEvent.mockRejectedValueOnce(new Error('registry down'));
+    await expect(sweep.sweepEvent(42, NOW)).rejects.toBe(first);
+    expect(registry.sweepEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('a registry throw still applies the hub pass, then rejects with it', async () => {
+    const { sweep, registry, gateway } = setup([[row(true)]]);
+    const err = new Error('registry down');
+    registry.sweepEvent.mockRejectedValueOnce(err);
+    await expect(sweep.sweepEvent(42, NOW)).rejects.toBe(err);
+    expect(gateway.setReadOnly).toHaveBeenCalledWith('9', true);
+  });
+
+  it('returns 0 and touches nothing while the bot is offline', async () => {
+    const { sweep, gateway, registry, due } = setup([[row(true)]], false);
+    expect(await sweep.sweepEvent(42, NOW)).toBe(0);
+    expect(due).not.toHaveBeenCalled();
+    expect(gateway.setReadOnly).not.toHaveBeenCalled();
+    expect(registry.sweepEvent).not.toHaveBeenCalled();
   });
 });

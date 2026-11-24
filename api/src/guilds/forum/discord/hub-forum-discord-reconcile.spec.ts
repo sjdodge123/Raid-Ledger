@@ -80,3 +80,31 @@ describe('ROK-2301 follow-up poll linked: one hub post re-drive', () => {
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('ROK-2314 MAJOR-2: retryLinks re-drives a reopened post', () => {
+  afterEach(() => jest.restoreAllMocks());
+  const reply = (id: number): links.ForumLink => ({
+    ...sentLink,
+    id,
+    kind: 'reply',
+  });
+
+  it('re-drives each link once, in the given order', async () => {
+    jest.spyOn(links, 'rlRowDeleted').mockResolvedValue(false);
+    const retry = jest.fn().mockResolvedValue('unbound');
+    const rows = [reply(5), reply(8), reply(12)];
+    expect(await service(true, { retry }).retryLinks(rows)).toBe(3);
+    expect(retry).toHaveBeenCalledTimes(3);
+    expect(retry).toHaveBeenNthCalledWith(1, rows[0], 'reply.updated');
+    expect(retry).toHaveBeenNthCalledWith(2, rows[1], 'reply.updated');
+    expect(retry).toHaveBeenNthCalledWith(3, rows[2], 'reply.updated');
+  });
+
+  it('does nothing while the bot is offline', async () => {
+    const deleted = jest.spyOn(links, 'rlRowDeleted');
+    const retry = jest.fn();
+    expect(await service(false, { retry }).retryLinks([reply(5)])).toBe(0);
+    expect(retry).not.toHaveBeenCalled();
+    expect(deleted).not.toHaveBeenCalled();
+  });
+});

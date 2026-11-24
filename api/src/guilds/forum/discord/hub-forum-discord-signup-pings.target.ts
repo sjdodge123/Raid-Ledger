@@ -49,6 +49,12 @@ export type PingPost = LivePingPost | 'closed' | 'pending' | 'offline';
 export type ReopenPlanningPost = (postId: number) => Promise<ReopenResult>;
 
 /**
+ * ROK-2314 review MINOR-2: whether the event's reschedule poll runs. Its
+ * post is closed then even before the lock sweep has locked it.
+ */
+export type IsRescheduling = () => Promise<boolean>;
+
+/**
  * The event's ping target. The hub ALWAYS wins; a hub event whose hub has
  * no bound forum gets nothing (null), exactly as before S4b.
  */
@@ -82,13 +88,16 @@ export function flushKeysFor(
 /**
  * The hub post: created by the first line (ruling 1); a removal alone never
  * creates one. Both go through the binding/stale gate (review r1 m3).
- * Closed when read-only, unbound, stale, locked or deleted.
+ * Closed when read-only, unbound, stale, locked, deleted or (ROK-2314)
+ * mid-reschedule — checked first, so no post is created for it.
  */
 export async function resolveHubPost(
   outbound: HubForumDiscordOutboundService,
   ref: HubPingThreadRef,
   create: boolean,
+  rescheduling: IsRescheduling,
 ): Promise<PingPost> {
+  if (await rescheduling()) return 'closed';
   const { guildId, threadId } = ref;
   const post = await outbound.ensureEventPost({ guildId, threadId, create });
   if (!post || post.discordDeletedAt || post.discordLockedAt) return 'closed';
@@ -103,14 +112,17 @@ export async function resolveHubPost(
  * forum, bot offline, event cancelled or past close). A locked post is
  * closed only when genuinely past its close; one rescheduled into the
  * future is reopened here (Codex P2-1), and a failed reopen is `'offline'`
- * (retried), never `'closed'` (terminal).
+ * (retried), never `'closed'` (terminal). ROK-2314: closed (and none made)
+ * while the event's reschedule poll runs, locked yet or not.
  */
 export async function resolvePlanningPost(
   planning: EventPlanningPostsService,
   reopen: ReopenPlanningPost,
   ref: PlanningPingThreadRef,
   create: boolean,
+  rescheduling: IsRescheduling,
 ): Promise<PingPost> {
+  if (await rescheduling()) return 'closed';
   if (ref.post) {
     const { id, discordThreadId, locked } = ref.post;
     if (locked) {

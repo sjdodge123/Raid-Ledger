@@ -32,6 +32,7 @@ import {
   type SignupLineMember,
 } from './hub-forum-discord-signup-lines.queries';
 import type { PingThreadRef } from './hub-forum-discord-signup-pings.queries';
+import { isEventRescheduling } from './event-rescheduling.sql';
 import {
   adoptScope,
   flushKeysFor,
@@ -181,7 +182,7 @@ export class HubForumDiscordSignupPings {
     if (ref.cancelled) plan.lines = []; // review r1 m4: removals only
     if (plan.lines.length === 0 && plan.remove.length === 0) return 'unchanged';
     if (!this.gateway.isOnline()) return 'offline';
-    const post = await this.postFor(ref, plan.lines.length > 0);
+    const post = await this.postFor(eventId, ref, plan.lines.length > 0);
     if (typeof post === 'string') return post;
     await adoptScope(this.redis, eventId, keys, post.scope);
     return writeUnlessGone(this.db, post, async () => {
@@ -245,14 +246,22 @@ export class HubForumDiscordSignupPings {
   }
 
   /** The post to write in (S4b: the one step the two targets differ on). */
-  private postFor(ref: PingThreadRef, create: boolean): Promise<PingPost> {
+  private postFor(
+    eventId: number,
+    ref: PingThreadRef,
+    create: boolean,
+  ): Promise<PingPost> {
+    // ROK-2314: a post is closed while its event's reschedule poll runs.
+    const rescheduling = (): Promise<boolean> =>
+      isEventRescheduling(this.db, eventId);
     return ref.kind === 'hub'
-      ? resolveHubPost(this.outbound, ref, create)
+      ? resolveHubPost(this.outbound, ref, create, rescheduling)
       : resolvePlanningPost(
           this.planning,
           (id) => this.registryLock.reopenIfPending(id),
           ref,
           create,
+          rescheduling,
         );
   }
 
