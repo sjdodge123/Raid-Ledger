@@ -11,9 +11,11 @@ import * as schema from '../../../drizzle/schema';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 /**
- * True when the event whose id is in `eventIdCol` is mid-reschedule. Table
- * names are spelled out: interpolated columns can render unqualified, and
- * `events.id` would then be ambiguous (no outer table has `rescheduling_*`).
+ * True when the event whose id is in `eventIdCol` is mid-reschedule. Drizzle
+ * (0.45) renders the interpolated `eventIdCol` table-qualified
+ * (`"hub_forum_threads"."event_id"`), so it binds to the outer query; the
+ * subquery's own `events` gets the `rl_ev` alias so it can never be confused
+ * with an outer `events` the caller may join.
  */
 export function eventReschedulingSql(eventIdCol: AnyColumn): SQL<boolean> {
   return sql<boolean>`EXISTS (SELECT 1 FROM events rl_ev WHERE rl_ev.id = ${eventIdCol} AND rl_ev.rescheduling_poll_id IS NOT NULL)`;
