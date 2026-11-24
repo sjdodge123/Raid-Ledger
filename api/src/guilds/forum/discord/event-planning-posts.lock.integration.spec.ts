@@ -435,3 +435,24 @@ describe('ROK-2314 reopenIfPending and sweepEvent while rescheduling', () => {
     expect(await lockedAt(p.id)).toBeNull();
   });
 });
+
+describe('ROK-2314 the full sweep scopes the reschedule guard to event posts', () => {
+  it.each(['poll', 'lineup'] as const)(
+    'a %s post whose subject_id equals a rescheduling event id stays open',
+    async (subjectKind) => {
+      const { setReadOnly } = spies();
+      const eventId = await newEvent(true);
+      const other = await newPost({
+        closesInMs: HOUR,
+        subjectKind,
+        subjectId: eventId,
+      });
+      const event = await newPost({ closesInMs: HOUR, subjectId: eventId });
+      await app().get(EventPlanningPostsLockSweep).sweep(new Date());
+      expect(await lockedAt(other.id)).toBeNull();
+      expect(setReadOnly).not.toHaveBeenCalledWith(other.discordThreadId, true);
+      // Control: the same full sweep does close the event's own post.
+      expect(await lockedAt(event.id)).not.toBeNull();
+    },
+  );
+});
