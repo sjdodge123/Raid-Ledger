@@ -25,6 +25,7 @@ import {
   claimPugSlotsInDb,
 } from './pug-invite.member-helpers';
 import { errorStack } from '../../common/error-format.helpers';
+import { isMemberInviteDmMuted } from './pug-invite-dm-prefs.helpers';
 import {
   resolveInviteVoice,
   type InviteVoice,
@@ -172,6 +173,8 @@ export class PugInviteService {
     gameId?: number | null,
   ): Promise<void> {
     if (!this.clientService.isConnected()) return;
+    // ROK-2305: Discord OFF for invites means no invite DM.
+    if (await isMemberInviteDmMuted(this.db, targetDiscordId)) return;
     const event = await this.getEvent(eventId);
     if (!event || event.cancelledAt) return;
 
