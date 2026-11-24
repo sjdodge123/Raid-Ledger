@@ -4,6 +4,7 @@ import { renderDiscordTimestamps } from '../../utils/discord-timestamps';
 /** Event-related notification types we show in the activity feed */
 const EVENT_TYPES = new Set([
     'slot_vacated',
+    'voice_access_lost', // ROK-2311 — split out of slot_vacated
     'member_returned',
     'event_reminder',
     'new_event',

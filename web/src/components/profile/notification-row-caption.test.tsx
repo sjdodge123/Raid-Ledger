@@ -43,6 +43,8 @@ const prefs = {
         new_event: { inApp: false, push: false, discord: false },
         valheim_claim_suggestion: { inApp: false, push: false, discord: true },
         tentative_displaced: { inApp: false, push: true, discord: true },
+        // ROK-2311 — bell off + Discord on stored for an in-app-only row.
+        lineup_lfg_offer: { inApp: false, push: false, discord: true },
     },
 };
 
@@ -65,6 +67,18 @@ function renderSection() {
     return render(<MemoryRouter><NotificationPreferencesSection /></MemoryRouter>);
 }
 
+describe('notificationRowCaption on rows that offer fewer channels (ROK-2311)', () => {
+    it('an in-app-only row (bell only) never reads "Discord DM only"', () => {
+        expect(notificationRowCaption({ inApp: false, push: false, discord: true }, ['inApp'])).toBe('Muted');
+        expect(notificationRowCaption({ inApp: true, push: false, discord: true }, ['inApp'])).toBeNull();
+    });
+
+    it('a DM-only row (no bell) reads "Discord DM only" while Discord is on, "Muted" when off', () => {
+        expect(notificationRowCaption({ inApp: false, push: false, discord: true }, ['push', 'discord'])).toBe('Discord DM only');
+        expect(notificationRowCaption({ inApp: false, push: false, discord: false }, ['push', 'discord'])).toBe('Muted');
+    });
+});
+
 describe('NotificationPreferencesSection captions (ROK-2290)', () => {
     beforeEach(() => vi.clearAllMocks());
 
@@ -83,6 +97,12 @@ describe('NotificationPreferencesSection captions (ROK-2290)', () => {
         expect(captionOf(container, 'valheim_claim_suggestion')).toBe('Discord DM only');
         expect(captionOf(container, 'tentative_displaced')).toBe('Discord DM only');
         expect(captionOf(container, 'new_event')).toBe('Muted');
+    });
+
+    it('never captions the in-app-only LFG-offers row "Discord DM only" (ROK-2311)', () => {
+        mockHook(true);
+        const { container } = renderSection();
+        expect(captionOf(container, 'lineup_lfg_offer')).toBe('Muted');
     });
 
     it('shows no "Discord DM only" caption when the Discord column is hidden', () => {

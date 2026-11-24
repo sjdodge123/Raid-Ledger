@@ -117,7 +117,7 @@ it('renders all visible notification type labels', () => {
             renderSection();
             expect(screen.getByText('Slot Vacated')).toBeInTheDocument();
             expect(screen.getByText('Event Reminders')).toBeInTheDocument();
-            expect(screen.getByText('New Events')).toBeInTheDocument();
+            expect(screen.getByText('Event invites')).toBeInTheDocument();
             expect(screen.getByText('Subscribed Games')).toBeInTheDocument();
             expect(screen.getByText('Event Cancelled')).toBeInTheDocument();
             expect(screen.getByText('Event Rescheduled')).toBeInTheDocument();
@@ -144,7 +144,7 @@ it('renders description for each notification type', () => {
             renderSection();
             expect(screen.getByText('When someone leaves a roster slot')).toBeInTheDocument();
             expect(screen.getByText('Reminders for upcoming events')).toBeInTheDocument();
-            expect(screen.getByText('When new events are created')).toBeInTheDocument();
+            expect(screen.getByText('Someone invites you or one of your characters to an event')).toBeInTheDocument();
             expect(screen.getByText('When an event you signed up for is cancelled')).toBeInTheDocument();
             expect(screen.getByText('When an event you signed up for is rescheduled')).toBeInTheDocument();
             expect(screen.getByText('When you are moved from bench to the active roster')).toBeInTheDocument();
