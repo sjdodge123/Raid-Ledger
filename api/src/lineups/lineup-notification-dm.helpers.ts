@@ -180,7 +180,7 @@ export async function sendSchedulingDM(
 
   await notificationService.create({
     userId: member.userId,
-    type: 'community_lineup',
+    type: 'scheduling_poll',
     title: `Vote on a time for ${match.gameName}`,
     message: `Your match for ${match.gameName} is scheduling -- vote on a time!`,
     payload: {

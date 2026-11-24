@@ -82,14 +82,14 @@ async function resolveGameId(ctx: TestContext): Promise<number> {
 /** Notification ids each voter already held before this run's lock-in. */
 type NoteBaseline = Map<number, ReadonlySet<string>>;
 
-/** `userId`'s latest community_lineup notifications (newest first). */
+/** `userId`'s latest scheduling_poll notifications (newest first). */
 async function latestNotes(
   api: ApiClient,
   userId: number,
 ): Promise<TestNotification[]> {
   const res = await api
     .get<TestNotification[]>(
-      `/admin/test/notifications?userId=${userId}&type=community_lineup&limit=50`,
+      `/admin/test/notifications?userId=${userId}&type=scheduling_poll&limit=50`,
     )
     .catch(() => [] as TestNotification[]);
   return Array.isArray(res) ? res : [];

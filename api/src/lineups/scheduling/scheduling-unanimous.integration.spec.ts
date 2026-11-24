@@ -284,7 +284,7 @@ function describeUnanimous(): void {
 
     const dms = await unanimousDmsFor(poll.creatorId);
     expect(dms).toHaveLength(1);
-    expect(dms[0]?.type).toBe('community_lineup');
+    expect(dms[0]?.type).toBe('scheduling_poll');
     expect(dms[0]?.title).toBe(`Everyone's in for ${poll.gameName}`);
     expect(dms[0]?.payload).toMatchObject({
       subtype: UNANIMOUS_SUBTYPE,

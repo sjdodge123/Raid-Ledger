@@ -25,7 +25,7 @@ export const VOICE_LINE =
   'You no longer have access to the private voice channel. Sign up for the event again to get it back.';
 /** The render seam's fixed notification id (demo-test-render-dm-embed.controller.ts). */
 const RENDER_NOTIFICATION_ID = 'demo-render-dm-embed';
-/** `getEmojiForType('slot_vacated')` — the DM builder titles `${emoji} ${title}`. */
+/** `getEmojiForType('slot_vacated' | 'voice_access_lost')` — the DM builder titles `${emoji} ${title}`. */
 const SLOT_VACATED_EMOJI = '🚪';
 /** discord-api-types ButtonStyle.Link. */
 const LINK_STYLE = 5;
@@ -194,20 +194,27 @@ export interface MirroredNotification {
   payload?: Record<string, unknown>;
 }
 
-/** Every slot_vacated notification the recipient has for this event. */
+/** Types a member's voice-loss DM can ride (ROK-2311): the removal notice
+ *  stays `slot_vacated`; the standalone departure notice is `voice_access_lost`. */
+const VOICE_DM_TYPES = ['slot_vacated', 'voice_access_lost'] as const;
+
+/** Every removal / voice-access notification the recipient has for this event. */
 export async function eventNotifications(
   ctx: TestContext,
   eventId: number,
 ): Promise<MirroredNotification[]> {
-  const rows = (await getNotificationsFor(
-    ctx.api,
-    ctx.dmRecipientUserId,
-    'slot_vacated',
-    50,
-  )) as unknown as MirroredNotification[];
-  return (Array.isArray(rows) ? rows : []).filter(
-    (n) => n.payload?.eventId === eventId,
+  const perType = await Promise.all(
+    VOICE_DM_TYPES.map(async (type) => {
+      const rows = (await getNotificationsFor(
+        ctx.api,
+        ctx.dmRecipientUserId,
+        type,
+        50,
+      )) as unknown as MirroredNotification[];
+      return Array.isArray(rows) ? rows : [];
+    }),
   );
+  return perType.flat().filter((n) => n.payload?.eventId === eventId);
 }
 
 interface RenderedDm {

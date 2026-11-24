@@ -264,7 +264,7 @@ function describeSchedulingPollNudge(): void {
     const dms = dmsForUser(member);
     expect(dms.length).toBe(1);
     expect(dms[0]).toMatchObject({
-      type: 'community_lineup',
+      type: 'scheduling_poll',
       title: 'Scheduling poll waiting on you',
       message: expect.stringContaining(poll.gameName),
       payload: expect.objectContaining({
@@ -322,7 +322,7 @@ function describeSchedulingPollNudge(): void {
     const dms = dmsForUser(member);
     expect(dms.length).toBe(1);
     expect(dms[0]).toMatchObject({
-      type: 'community_lineup',
+      type: 'scheduling_poll',
       title: 'Scheduling poll needs new times',
       message: expect.stringContaining('suggest a new time'),
       payload: expect.objectContaining({

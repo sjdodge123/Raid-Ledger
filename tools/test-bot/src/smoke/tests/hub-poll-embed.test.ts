@@ -5,7 +5,7 @@
  * — "Seed Crew" is an active community hub), enable the DM recipient's Discord
  * notifications, then create a hub-tagged poll as the admin (staff may tag)
  * picking the recipient (`memberUserIds`). The recipient's
- * `community_lineup` row for this poll is polled (no sleep) and must carry
+ * `scheduling_poll` row for this poll is polled (no sleep) and must carry
  * `hubId` + `hubName`; the stored payload is then rendered through the
  * deployed API's REAL DM builder (`POST /admin/test/render-dm-embed`) and the
  * embed must hold exactly one `Hub` Link button → `/hubs/<hubId>` and one
@@ -26,7 +26,7 @@ import type { SmokeTest, TestContext } from "../types.js";
 const SEED = "/admin/test/community-hubs/seed";
 /** `SEED_HUB_NAMES.crew` in `demo-test-community-hubs.helpers.ts`. */
 const CREW_NAME = "Seed Crew";
-const TYPE = "community_lineup";
+const TYPE = "scheduling_poll";
 const HUB_LABEL = "Hub";
 /** discord-api-types ComponentType.Button. */
 const BUTTON_COMPONENT_TYPE = 2;

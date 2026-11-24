@@ -122,7 +122,7 @@ export class LineupLfgBridgeService {
     return claimed;
   }
 
-  /** One in-app `community_lineup` notification per user — no Discord DM. */
+  /** One in-app `lineup_lfg_offer` notification per user — no Discord DM. */
   private async dispatchOffers(
     lineupId: number,
     batches: BridgeBatch[],
@@ -131,7 +131,7 @@ export class LineupLfgBridgeService {
       batches.map((batch) =>
         this.notificationService.create({
           userId: batch.userId,
-          type: 'community_lineup',
+          type: 'lineup_lfg_offer',
           title: batch.title,
           message: batch.message,
           payload: batch.payload,

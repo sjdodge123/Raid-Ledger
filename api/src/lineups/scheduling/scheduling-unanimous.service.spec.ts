@@ -89,7 +89,7 @@ describe('SchedulingUnanimousService.checkMatch (ROK-1632 AC3)', () => {
     expect(m.notifications.create).toHaveBeenCalledTimes(1);
     const input = m.notifications.create.mock.calls[0][0];
     expect(input.userId).toBe(ROW.creatorId);
-    expect(input.type).toBe('community_lineup');
+    expect(input.type).toBe('scheduling_poll');
     expect(input.payload.subtype).toBe(UNANIMOUS_SUBTYPE);
     expect(input.payload.slotId).toBe(ROW.slotId);
   });

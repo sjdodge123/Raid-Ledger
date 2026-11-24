@@ -274,7 +274,7 @@ function describeStandalonePollReminders() {
       const calls = dmsForUser(memberId);
       expect(calls.length).toBe(1);
       expect(calls[0]).toMatchObject({
-        type: 'community_lineup',
+        type: 'scheduling_poll',
         title: expect.stringMatching(/closing soon|24 hours/i),
         payload: expect.objectContaining({
           subtype: 'standalone_scheduling_poll_reminder',

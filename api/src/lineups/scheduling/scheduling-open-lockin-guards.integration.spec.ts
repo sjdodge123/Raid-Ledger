@@ -13,7 +13,7 @@
  * - The EVENT CREATED channel card is dispatched, and on the standalone route
  *   the slot's yes-voters get no EVENT CREATED DM while the rest do.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -343,7 +343,10 @@ describe('ROK-2024 open lock-in announcement evidence (integration)', () => {
       .where(
         and(
           eq(schema.notifications.userId, userId),
-          eq(schema.notifications.type, 'community_lineup'),
+          inArray(schema.notifications.type, [
+            'community_lineup',
+            'scheduling_poll',
+          ]),
         ),
       );
     return rows.map((r) => {
@@ -471,7 +474,10 @@ describe('ROK-2054 standalone lock-in posts no lineup channel card (integration)
         .where(
           and(
             eq(schema.notifications.userId, dmUserId),
-            eq(schema.notifications.type, 'community_lineup'),
+            inArray(schema.notifications.type, [
+              'community_lineup',
+              'scheduling_poll',
+            ]),
           ),
         );
       const ids = rows.map(

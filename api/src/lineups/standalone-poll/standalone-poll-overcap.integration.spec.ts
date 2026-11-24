@@ -24,7 +24,7 @@ import {
   waitFor,
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { nonEmpty } from '../../common/testing/narrow';
 
 let testApp: TestApp;
@@ -136,7 +136,12 @@ async function lineupNotes(userIds: number[]): Promise<LineupNote[]> {
       payload: schema.notifications.payload,
     })
     .from(schema.notifications)
-    .where(eq(schema.notifications.type, 'community_lineup'));
+    .where(
+      inArray(schema.notifications.type, [
+        'community_lineup',
+        'scheduling_poll',
+      ]),
+    );
   return rows
     .filter((r) => userIds.includes(r.userId))
     .map((r) => ({

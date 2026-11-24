@@ -146,7 +146,7 @@ describe('LineupLfgBridgeService (ROK-1457)', () => {
     expect(h.create).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 7,
-        type: 'community_lineup',
+        type: 'lineup_lfg_offer',
         skipDiscord: true,
         payload: expect.objectContaining({
           lineupId: 42,

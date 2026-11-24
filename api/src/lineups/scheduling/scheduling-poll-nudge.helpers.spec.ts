@@ -123,7 +123,7 @@ describe('sendPollNudge', () => {
     expect(result).toEqual({ dispatched: true, created: true });
     expect(d.create).toHaveBeenCalledWith({
       userId: 42,
-      type: 'community_lineup',
+      type: 'scheduling_poll',
       title: 'Scheduling poll waiting on you',
       message:
         'The group still needs your availability for Valheim — ' +

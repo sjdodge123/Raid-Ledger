@@ -193,7 +193,7 @@ export class SchedulingPollExpiryService {
       : buildNoLeaderWarnCopy(poll.gameName, poll.phaseDeadline);
     await this.notificationService.create({
       userId: poll.creatorId,
-      type: 'community_lineup',
+      type: 'scheduling_poll',
       title: copy.title,
       message: copy.message,
       payload: {
