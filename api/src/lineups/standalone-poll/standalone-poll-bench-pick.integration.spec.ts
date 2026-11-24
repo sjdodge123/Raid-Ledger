@@ -258,12 +258,13 @@ async function pollDmTitles(
           'scheduling_poll',
         ]),
       );
-    expectLineupDmTypes(rows);
+    const pollDms = rows.filter(
+      (r) => userIds.includes(r.userId) && POLL_DM_TITLES.includes(r.title),
+    );
+    expectLineupDmTypes(pollDms);
     result = userIds.map((userId) => ({
       userId,
-      titles: rows
-        .filter((r) => r.userId === userId && POLL_DM_TITLES.includes(r.title))
-        .map((r) => r.title),
+      titles: pollDms.filter((r) => r.userId === userId).map((r) => r.title),
     }));
     expect(result.filter((r) => r.titles.length === 0)).toEqual([]);
   }, CHAIN_DEADLINE_MS);

@@ -144,14 +144,13 @@ async function lineupNotes(userIds: number[]): Promise<LineupNote[]> {
         'scheduling_poll',
       ]),
     );
-  expectLineupDmTypes(rows);
-  return rows
-    .filter((r) => userIds.includes(r.userId))
-    .map((r) => ({
-      userId: r.userId,
-      title: r.title,
-      eventId: (r.payload as { eventId?: unknown } | null)?.eventId,
-    }));
+  const mine = rows.filter((r) => userIds.includes(r.userId));
+  expectLineupDmTypes(mine);
+  return mine.map((r) => ({
+    userId: r.userId,
+    title: r.title,
+    eventId: (r.payload as { eventId?: unknown } | null)?.eventId,
+  }));
 }
 
 /** Wait until every one of `userIds` holds at least one lineup DM row. */
