@@ -116,12 +116,47 @@ describe('PostEventReminderService', () => {
       mockDb.execute.mockResolvedValue([makePugRow()]);
       jest.mocked(isDiscordDmMuted).mockResolvedValueOnce(true);
       await service.handlePostEventReminders();
-      expect(isDiscordDmMuted).toHaveBeenCalledWith(
+      expect(isDiscordDmMuted).toHaveBeenLastCalledWith(
         mockDb,
-        { discordId: '123456789' },
+        { userId: 1 },
         'post_event_followup',
       );
       expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
+    });
+
+    it('checks the claiming account, not the slot Discord id, for a local account', async () => {
+      mockDb.execute.mockResolvedValue([
+        makePugRow({
+          claimed_by_user_id: 5,
+          user_discord_id: null,
+          discord_user_id: '555000555',
+        }),
+      ]);
+      jest.mocked(isDiscordDmMuted).mockResolvedValueOnce(true);
+      await service.handlePostEventReminders();
+      expect(isDiscordDmMuted).toHaveBeenLastCalledWith(
+        mockDb,
+        { userId: 5 },
+        'post_event_followup',
+      );
+      expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
+    });
+
+    it('checks by Discord id when no account claimed the slot', async () => {
+      mockDb.execute.mockResolvedValue([
+        makePugRow({
+          claimed_by_user_id: null,
+          user_discord_id: null,
+          discord_user_id: '777000777',
+        }),
+      ]);
+      await service.handlePostEventReminders();
+      expect(isDiscordDmMuted).toHaveBeenLastCalledWith(
+        mockDb,
+        { discordId: '777000777' },
+        'post_event_followup',
+      );
+      expect(mockClientService.sendEmbedDM).toHaveBeenCalledTimes(1);
     });
 
     it('still sends when the switch check says not muted', async () => {

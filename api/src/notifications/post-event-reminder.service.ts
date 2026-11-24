@@ -140,12 +140,11 @@ export class PostEventReminderService {
   ): Promise<void> {
     const discordId = this.resolvePugDiscordId(pug);
     if (!discordId) return;
+    // ROK-2317: the dedup row is written BEFORE the switch check on purpose, so
+    // it now means "handled", not "sent": a muted slot gets a row too. The
+    // reminder window closes ~2 min later, so one decision per slot is enough.
     if (!(await this.trackReminderSent(pug))) return;
-    // ROK-2317: account holders follow Post-Event Follow-Ups; no account => sends.
-    if (await isDiscordDmMuted(this.db, { discordId }, 'post_event_followup')) {
-      this.logger.debug(`Post-event DM muted for slot ${pug.pug_slot_id}`);
-      return;
-    }
+    if (await this.isPostEventDmMuted(pug, discordId)) return;
     const embed = await this.buildPostEventEmbed(
       pug,
       discordId,
@@ -155,7 +154,26 @@ export class PostEventReminderService {
     await this.sendPostEventDM(discordId, embed, pug);
   }
 
-  /** Insert dedup record for post-event reminder. Returns true if first send. */
+  /**
+   * ROK-2317: account holders follow Post-Event Follow-Ups; no account => sends.
+   * A claimed slot is checked against the claiming account (it may be a local
+   * account with no Discord link); otherwise by the slot's Discord id.
+   */
+  private async isPostEventDmMuted(
+    pug: { pug_slot_id: string; claimed_by_user_id: number | null },
+    discordId: string,
+  ): Promise<boolean> {
+    const recipient =
+      pug.claimed_by_user_id != null
+        ? { userId: pug.claimed_by_user_id }
+        : { discordId };
+    if (!(await isDiscordDmMuted(this.db, recipient, 'post_event_followup')))
+      return false;
+    this.logger.debug(`Post-event DM muted for slot ${pug.pug_slot_id}`);
+    return true;
+  }
+
+  /** Insert dedup record for post-event reminder. True the first time this slot is processed. */
   private async trackReminderSent(pug: {
     event_id: number;
     pug_slot_id: string;
