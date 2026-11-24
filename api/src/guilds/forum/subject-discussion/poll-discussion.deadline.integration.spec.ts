@@ -293,3 +293,71 @@ describe('dueLockChanges covers every subject (ROK-2272 S8)', () => {
     expect(due).toContain(eventThread);
   });
 });
+
+describe('ROK-2314 an event post is read-only while its reschedule poll runs', () => {
+  async function setRescheduling(eventId: number, pollId: number | null) {
+    await testApp.db
+      .update(schema.events)
+      .set({ reschedulingPollId: pollId })
+      .where(eq(schema.events.id, eventId));
+  }
+
+  /** A linked event thread closing in `closesInMs`, its event rescheduling. */
+  async function reschedulingPost(closesInMs: number) {
+    const guildId = await newHub();
+    await bind(guildId);
+    const eventId = await newEvent(guildId, new Date(Date.now() + 5 * HOUR));
+    await setRescheduling(eventId, 1);
+    const [t] = nonEmpty(
+      await testApp.db
+        .insert(threads)
+        .values({
+          guildId,
+          authorId: testApp.seed.adminUser.id,
+          title: 'Rescheduling subject',
+          body: 'body',
+          writeClosesAt: new Date(Date.now() + closesInMs),
+          eventId,
+        })
+        .returning({ id: threads.id }),
+      'thread',
+    );
+    await link(guildId, t.id);
+    return { eventId, threadId: t.id };
+  }
+
+  async function lockLink(threadId: number): Promise<void> {
+    const l = schema.hubForumDiscordLinks;
+    await testApp.db
+      .update(l)
+      .set({ discordLockedAt: new Date() })
+      .where(eq(l.threadId, threadId));
+  }
+
+  /** The due flip for this event's post (undefined = not due). */
+  async function dueFor(eventId: number, threadId: number) {
+    const rows = await dueLockChanges(testApp.db, new Date(), eventId);
+    expect(rows.every((r) => r.eventId === eventId)).toBe(true);
+    return rows.find((r) => r.threadId === threadId)?.readOnly;
+  }
+
+  it('an open post whose event is rescheduling is due to close', async () => {
+    const { eventId, threadId } = await reschedulingPost(HOUR);
+    expect(await dueFor(eventId, threadId)).toBe(true);
+  });
+
+  it('cleared with a future close: the locked post is due to reopen', async () => {
+    const { eventId, threadId } = await reschedulingPost(HOUR);
+    await lockLink(threadId);
+    expect(await dueFor(eventId, threadId)).toBeUndefined();
+    await setRescheduling(eventId, null);
+    expect(await dueFor(eventId, threadId)).toBe(false);
+  });
+
+  it('cleared with a past close: the locked post stays closed', async () => {
+    const { eventId, threadId } = await reschedulingPost(-HOUR);
+    await lockLink(threadId);
+    await setRescheduling(eventId, null);
+    expect(await dueFor(eventId, threadId)).toBeUndefined();
+  });
+});

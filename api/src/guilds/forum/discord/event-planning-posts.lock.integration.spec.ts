@@ -311,3 +311,96 @@ describe('ROK-2272 S10 reopen of a poll / lineup post (Codex P2)', () => {
     expect(await lockedAt(p.id)).not.toBeNull();
   });
 });
+
+describe('ROK-2314 an event post is closed while its reschedule poll runs', () => {
+  /** A real (non-hub) event, optionally mid-reschedule. */
+  async function newEvent(rescheduling: boolean): Promise<number> {
+    const start = Date.now() + 24 * HOUR;
+    const [e] = nonEmpty(
+      await db()
+        .insert(schema.events)
+        .values({
+          title: 'Rescheduling event',
+          creatorId: ctx.ids.creator,
+          gameId: ctx.posts.testApp.seed.game.id,
+          isAdHoc: false,
+          reschedulingPollId: rescheduling ? 1 : null,
+          duration: [new Date(start), new Date(start + 2 * HOUR)] as [
+            Date,
+            Date,
+          ],
+        })
+        .returning(),
+      'event',
+    );
+    return e.id;
+  }
+
+  async function clearRescheduling(eventId: number): Promise<void> {
+    await db()
+      .update(schema.events)
+      .set({ reschedulingPollId: null })
+      .where(eq(schema.events.id, eventId));
+  }
+
+  const dueFor = async (postId: number, eventId: number) =>
+    (await dueRegistryLockChanges(db(), new Date(), eventId)).find(
+      (d) => d.postId === postId,
+    )?.readOnly;
+
+  it('an open post with a future close is due to close while rescheduling', async () => {
+    const subjectId = await newEvent(true);
+    const p = await newPost({ closesInMs: HOUR, subjectId });
+    expect(await dueFor(p.id, subjectId)).toBe(true);
+  });
+
+  it('a locked post stays closed while rescheduling, reopens once cleared', async () => {
+    const subjectId = await newEvent(true);
+    const p = await newPost({ closesInMs: HOUR, locked: true, subjectId });
+    expect(await dueFor(p.id, subjectId)).toBeUndefined();
+    await clearRescheduling(subjectId);
+    expect(await dueFor(p.id, subjectId)).toBe(false);
+  });
+
+  it('cleared with a past close: the locked post stays closed', async () => {
+    const subjectId = await newEvent(true);
+    const p = await newPost({ closesInMs: -HOUR, locked: true, subjectId });
+    await clearRescheduling(subjectId);
+    expect(await dueFor(p.id, subjectId)).toBeUndefined();
+  });
+
+  it('the eventId filter returns only that event’s posts', async () => {
+    const subjectId = await newEvent(true);
+    await newPost({ closesInMs: -HOUR });
+    const due = await dueRegistryLockChanges(db(), new Date(), subjectId);
+    expect(due.every((d) => d.subjectId === subjectId)).toBe(true);
+  });
+
+  it('reopenIfPending reports closed while rescheduling (no Discord call)', async () => {
+    const { setReadOnly } = spies();
+    const subjectId = await newEvent(true);
+    const locked = await newPost({ closesInMs: HOUR, locked: true, subjectId });
+    const open = await newPost({
+      closesInMs: HOUR,
+      subjectId: await newEvent(true),
+    });
+    const sweep = app().get(EventPlanningPostsLockSweep);
+    expect(await sweep.reopenIfPending(locked.id)).toBe('closed');
+    expect(await sweep.reopenIfPending(open.id)).toBe('closed');
+    expect(setReadOnly).not.toHaveBeenCalled();
+  });
+
+  it('sweepEvent closes then reopens just that event’s post', async () => {
+    const { setReadOnly } = spies();
+    const subjectId = await newEvent(true);
+    const p = await newPost({ closesInMs: HOUR, subjectId });
+    const sweep = app().get(EventPlanningPostsLockSweep);
+    expect(await sweep.sweepEvent(subjectId)).toBe(1);
+    expect(setReadOnly).toHaveBeenCalledWith(p.discordThreadId, true);
+    expect(await lockedAt(p.id)).not.toBeNull();
+    await clearRescheduling(subjectId);
+    expect(await sweep.sweepEvent(subjectId)).toBe(1);
+    expect(setReadOnly).toHaveBeenLastCalledWith(p.discordThreadId, false);
+    expect(await lockedAt(p.id)).toBeNull();
+  });
+});
