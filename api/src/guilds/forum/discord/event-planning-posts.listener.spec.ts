@@ -48,7 +48,9 @@ describe('EventPlanningPostsListener', () => {
     expect(service.syncEvent).toHaveBeenCalledWith(42);
     expect(service.closeForDeletedEvent).not.toHaveBeenCalled();
   });
+});
 
+describe('ROK-2314 EventPlanningPostsListener lock flip', () => {
   it.each<Handler>(['onUpdated', 'onRescheduling', 'onRescheduleCleared'])(
     'ROK-2314: %s flips that event post lock AFTER the re-sync',
     async (handler) => {
@@ -80,7 +82,9 @@ describe('EventPlanningPostsListener', () => {
     expect(lock.sweepEvent).toHaveBeenCalledWith(5);
     expect(Sentry.captureException).toHaveBeenCalledTimes(2);
   });
+});
 
+describe('EventPlanningPostsListener (connect, delete, bad payloads)', () => {
   it('onConnected runs the reconnect resync pass (Codex P2-2)', async () => {
     const { listener, service } = setup();
     await listener.onConnected();

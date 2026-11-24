@@ -85,6 +85,19 @@ function disagrees(readOnly: SQL<boolean>) {
   );
 }
 
+/** Linked, sent, undeleted, current-binding posts that must flip. */
+function dueWhere(readOnly: SQL<boolean>, eventId: number | undefined) {
+  return and(
+    eq(links.kind, 'thread'),
+    gte(links.createdAt, bindings.boundAt),
+    HAS_SUBJECT,
+    isNull(links.discordDeletedAt),
+    not(like(links.discordThreadId, `${UNSENT_PREFIX}%`)),
+    disagrees(readOnly),
+    eventId === undefined ? undefined : eq(threads.eventId, eventId),
+  );
+}
+
 /**
  * Linked, sent, undeleted subject-thread posts (event, poll or lineup —
  * ROK-2272 S8) whose lock state must flip —
@@ -110,17 +123,7 @@ export async function dueLockChanges(
     .from(links)
     .innerJoin(threads, eq(threads.id, links.threadId))
     .innerJoin(bindings, eq(bindings.guildId, links.guildId))
-    .where(
-      and(
-        eq(links.kind, 'thread'),
-        gte(links.createdAt, bindings.boundAt),
-        HAS_SUBJECT,
-        isNull(links.discordDeletedAt),
-        not(like(links.discordThreadId, `${UNSENT_PREFIX}%`)),
-        disagrees(readOnly),
-        eventId === undefined ? undefined : eq(threads.eventId, eventId),
-      ),
-    )
+    .where(dueWhere(readOnly, eventId))
     .orderBy(links.id)
     .limit(BATCH);
 }

@@ -312,42 +312,39 @@ describe('ROK-2272 S10 reopen of a poll / lineup post (Codex P2)', () => {
   });
 });
 
-describe('ROK-2314 an event post is closed while its reschedule poll runs', () => {
-  /** A real (non-hub) event, optionally mid-reschedule. */
-  async function newEvent(rescheduling: boolean): Promise<number> {
-    const start = Date.now() + 24 * HOUR;
-    const [e] = nonEmpty(
-      await db()
-        .insert(schema.events)
-        .values({
-          title: 'Rescheduling event',
-          creatorId: ctx.ids.creator,
-          gameId: ctx.posts.testApp.seed.game.id,
-          isAdHoc: false,
-          reschedulingPollId: rescheduling ? 1 : null,
-          duration: [new Date(start), new Date(start + 2 * HOUR)] as [
-            Date,
-            Date,
-          ],
-        })
-        .returning(),
-      'event',
-    );
-    return e.id;
-  }
-
-  async function clearRescheduling(eventId: number): Promise<void> {
+/** A real (non-hub) event, optionally mid-reschedule. */
+async function newEvent(rescheduling: boolean): Promise<number> {
+  const start = Date.now() + 24 * HOUR;
+  const [e] = nonEmpty(
     await db()
-      .update(schema.events)
-      .set({ reschedulingPollId: null })
-      .where(eq(schema.events.id, eventId));
-  }
+      .insert(schema.events)
+      .values({
+        title: 'Rescheduling event',
+        creatorId: ctx.ids.creator,
+        gameId: ctx.posts.testApp.seed.game.id,
+        isAdHoc: false,
+        reschedulingPollId: rescheduling ? 1 : null,
+        duration: [new Date(start), new Date(start + 2 * HOUR)] as [Date, Date],
+      })
+      .returning(),
+    'event',
+  );
+  return e.id;
+}
 
-  const dueFor = async (postId: number, eventId: number) =>
-    (await dueRegistryLockChanges(db(), new Date(), eventId)).find(
-      (d) => d.postId === postId,
-    )?.readOnly;
+async function clearRescheduling(eventId: number): Promise<void> {
+  await db()
+    .update(schema.events)
+    .set({ reschedulingPollId: null })
+    .where(eq(schema.events.id, eventId));
+}
 
+const dueFor = async (postId: number, eventId: number) =>
+  (await dueRegistryLockChanges(db(), new Date(), eventId)).find(
+    (d) => d.postId === postId,
+  )?.readOnly;
+
+describe('ROK-2314 an event post is closed while its reschedule poll runs', () => {
   it('an open post with a future close is due to close while rescheduling', async () => {
     const subjectId = await newEvent(true);
     const p = await newPost({ closesInMs: HOUR, subjectId });
@@ -375,7 +372,9 @@ describe('ROK-2314 an event post is closed while its reschedule poll runs', () =
     const due = await dueRegistryLockChanges(db(), new Date(), subjectId);
     expect(due.every((d) => d.subjectId === subjectId)).toBe(true);
   });
+});
 
+describe('ROK-2314 reopenIfPending and sweepEvent while rescheduling', () => {
   it('reopenIfPending reports closed while rescheduling (no Discord call)', async () => {
     const { setReadOnly } = spies();
     const subjectId = await newEvent(true);
