@@ -141,3 +141,39 @@ Each cycle it reads `gh pr view <n> --json number,state,mergeStateStatus,autoMer
 | `TIMEOUT` | 2 | `--minutes` elapsed; usage errors exit 64 |
 
 Then one line per PR (`#n STATE MERGE_STATE auto=true|false failing=<names|->`) and a UTC timestamp. **It only reports:** it never reruns CI, updates a branch or merges — triage the reason it prints (memory `feedback_babysit_prs_and_cleanup`). Spec: `node --test scripts/pr-watch.spec.mjs` (fake `gh` via `GH_BIN`).
+
+## Moved from CLAUDE.md (ROK-2307)
+
+> **Moved verbatim from `CLAUDE.md` on 2026-11-24 (ROK-2307)** to keep the always-loaded
+> instructions small. CLAUDE.md keeps each rule's binding statement and points here; the text
+> below is the full original rule, unchanged apart from heading levels. Change both together.
+
+### Local CI — lite gate by default (STRICT)
+
+**Pick the lightest tier that covers the diff (operator ruling 2026-10-22):** `--scoped` is the default pre-push gate for a **single-workspace** diff, `--static` for a **cross-workspace** one, `--full` unchanged (below). `--scoped` (2026-10-22) builds, typechecks and lints only what the diff touches (`scripts/scoped-gate-plan.mjs`: `api/**` → api, `web/**` → web, `scripts/smoke/**`/`playwright.config.*` → the smoke tsconfig only, `tools/<x>/**` → that tool, `scripts/bundle-budget.config.mjs`/`check-bundle-size.mjs` → web, other `scripts/**` and `.github/workflows/**` → shell parse + `scripts/*.spec.mjs`, `docs/**`/`planning-artifacts/**`/`.claude/**`/`*.md` → nothing), runs at fleet weight `light` (`--static` is `medium`), and refuses (exit 2, naming `--static` or `--full`) on `packages/contract/**`, migrations, `package*.json`, `Dockerfile*`/`nginx/**`/`docker-entrypoint*`, root shared config, an unknown path, or an api+web diff. `--scoped` never replaces a tier it refuses — rerun with the one it names.
+
+**`--static`** runs build + typecheck + lint plus conditional migration/container checks (~3–4 min) and **defers unit, integration, Playwright and Discord smoke to GitHub CI**, which runs them sharded + randomized on every PR. GitHub is the real gate — auto-merge-squash blocks the merge until it's green. A `--static` run showing `Unit/Integration/Playwright: DEFERRED` is the gate working as intended — do NOT treat deferred checks as a skipped step to "fix."
+
+**Escalate to `--full`** (the complete local suite) only when:
+- The diff touches `drizzle/migrations/**` or container/infra (`Dockerfile*`, `nginx/**`, `docker-entrypoint*`) — high blast radius.
+- The diff touches `package.json` / `package-lock.json` (any workspace). GitHub's path filter treats dependency files as `code` (lint) but NOT `api`/`web`, so GitHub **skips unit + integration** for a deps-only change — `--static` would defer behavioral coverage to a job that never runs.
+- It's a **breaking** `packages/contract/**` change (tightening, removing or renaming a field, or changing a schema that parses stored data) or a large cross-workspace refactor.
+- The operator explicitly asks for a full local run.
+
+**Additive contract changes run `--static` (operator ruling 2026-10-07)** — new schemas, new optional fields, new exports. GitHub's path filter maps `packages/contract/**` to the `api`, `web`, `contract` and `smoke_tests` jobs (`.github/workflows/ci.yml`), so unit, integration, the contract specs and Playwright all run before auto-merge; a local `--full` only moves discovery ~45 min earlier. Pair the `--static` gate with the story's own NEW integration spec(s) run alone on the fleet via `rl_run_on_runner` (~2–3 min; needs the Redis sidecar — memory `reference_rl_runner_no_redis`), because a wrong new spec is the most common miss. A breaking change stays `--full`: neither gate catches old stored JSON failing a tightened schema, so it needs the full local run plus a test that seeds old-shape data.
+
+Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--scoped`/`--static` (whichever the selector allows) and self-escalate on those signals. CI-job mapping, conditional-step path lists, the full flag inventory and the `SKIP_BACKUP_INTEGRATION` gating: `docs/runbooks/local-ci-gate.md`.
+
+### Smoke Test Verification (STRICT)
+
+**A green fleet run satisfies the pre-push gate (operator ruling 2026-09-12).** The `git push` hook denies the push unless a sentinel keyed to the branch's **web surface** exists and is younger than 24h. `rl_validate_ci` writes it when the task is observed TERMINAL: a `--scoped` run (`rl_validate_ci({args:["--scoped"]})`, the default for a single-workspace diff) that is `succeeded` with its `Scoped plan` row PASS, Build/TypeScript/Lint each PASS or SKIPPED with at least one PASS, and **no `FAIL` row** writes `gate_tier: scoped`; a `--static` run that is `succeeded` with Build/TypeScript/Lint PASS and **no `FAIL` row anywhere** writes `gate_tier: static`; a Playwright PASS writes `gate_tier: playwright`. A **FAILED** tier (or any `FAIL` row) writes nothing — **fix it or stop, do not hand off.** A SKIPPED tier does not block it; GitHub runs the full suite before merge.
+
+**Agents push web branches themselves** after that green run — "push-ready for the operator" is NOT a valid terminal state for a web branch, because a hand-push skips the gate entirely.
+
+**The fleet never runs the full Playwright suite (operator ruling 2026-10-14).** The fleet gate is `--scoped`/`--static` (whichever the selector allows) plus **only the Playwright specs the branch adds or changes** (a `--scoped`/`--static` run, then `rl_validate_ci({args:["--only-e2e"], e2e_specs:["scripts/smoke/<name>.spec.ts", …], against_env_slug, base_url:"https://slot-N.gamernight.net"})` — ≤20 paths, forwarded as `E2E_SPECS`, desktop + mobile, a PASS writes the playwright-tier sentinel; ROK-1792; ~15–20 min). This holds even when `scripts/smoke/scope-specs.sh` prints `ALL`. **GitHub CI is the full gate:** it runs every spec, sharded, before auto-merge. A full fleet run (`fleet:true e2e_scope:all`, ~60 min) happens only when the operator asks, or when a GitHub run fails on a spec the branch didn't touch and you need to reproduce it. Why: a one-route change on ROK-1774 cost two hour-long full gates that duplicated what GitHub CI runs anyway.
+
+**When you do run it, run BOTH projects.** CI runs desktop AND mobile; **never narrow with `--project=desktop`** — use bare `npx playwright test`, `npx playwright test $(bash scripts/smoke/scope-specs.sh)`, or preferably `./scripts/validate-ci.sh --only-e2e`. New components on shared pages break selectors in OTHER spec files. If a test fails, fix it BEFORE pushing — do NOT use CI as a debugger. **NEVER re-run CI hoping it passes.**
+
+In the `/build` and `/fix-batch`/`/bulk` pipelines the mandatory operator-facing browser check is the **Chrome MCP e2e gate** against the deployed dev env, not scripted Playwright.
+
+Sentinel mechanics, `e2e_scope` and the CI-failure triage checklist: `docs/runbooks/local-ci-gate.md`.

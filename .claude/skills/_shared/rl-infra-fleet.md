@@ -146,7 +146,7 @@ when `RL_TARGET=local`. The remote path is purely additive.
 Agents should use the `mcp__mcp-rl-fleet__*` tools instead of shelling out
 to `rl <cmd>` via Bash. The MCP server forces `rl-agent` identity (no
 operator elevation possible) and returns structured JSON. Full reference
-in CLAUDE.md under "`mcp-rl-fleet`". Common flows:
+in `rl-infra/README.md` → "Agent MCP tool reference" (gotchas: `docs/runbooks/mcp-tools.md`). Common flows:
 
 | Task | MCP tool |
 | ---- | -------- |

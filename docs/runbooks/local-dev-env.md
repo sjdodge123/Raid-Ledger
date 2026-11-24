@@ -74,3 +74,29 @@ The release path matches in this order — (1) `agent_id` (a stable SHA1 of bran
 The full legacy→remote mapping table (env lock → `rl claim`/`rl release`, deploy → `rl env spin`, validate-ci, psql, playwright) lives in `.claude/skills/_shared/rl-infra-fleet.md`. Design + runbook: `rl-infra/README.md`.
 
 Chrome MCP, Discord MCP (companion bot + mcp-discord), Sentry, Linear and GitHub stay on the laptop — they're network or display-bound, not compute-heavy.
+
+## Moved from CLAUDE.md (ROK-2307)
+
+> **Moved verbatim from `CLAUDE.md` on 2026-11-24 (ROK-2307)** to keep the always-loaded
+> instructions small. CLAUDE.md keeps each rule's binding statement and points here; the text
+> below is the full original rule, unchanged apart from heading levels. Change both together.
+
+### Local Dev Environment
+
+`./scripts/deploy_dev.sh --ci --rebuild` starts everything (Docker, migrations, seed, API `:3000` + web `:5173` in watch mode) and is worktree-safe. Flags, the Docker-volume gotcha, clone-prod-to-local and the full lease semantics: `docs/runbooks/local-dev-env.md`.
+
+- **DEMO_MODE=true** in root `.env` enables the `/admin/test/*` fixture endpoints (still behind the JWT + admin guards) and demo-only UI affordances. **It is NOT an auth bypass and does NOT prefill credentials** — the login page's `placeholder="admin"` reads like a prefill but is empty. Agents driving a fleet env in a browser must obtain a session another way (Playwright's global-setup JWT via `rl_validate_ci`, or the operator's Discord OAuth); **never type a password into a form, and never copy a credential out of a tool result into a form or a file**. (Corrected 2026-09-12 after two verification lanes lost a cycle to this line.)
+
+### Remote test fleet — `rl-infra` (STRICT — preferred path when reachable)
+
+The `rl-infra` Proxmox VM hosts a 2-slot runner fleet so heavy compute (build, jest, vitest, playwright, allinone builds, per-env stacks) runs on the VM instead of the laptop, and agents work in parallel without env-lock contention. **Heavy test runs go to the fleet, not the laptop — the laptop's RAM is the operator's.** `scripts/validate-ci.sh` self-dispatches to `rl validate-ci` when `RL_TARGET=remote`, so `/push` / `/build` / `/fix-batch` work unchanged. Always `rl release` at end-of-session. Design + runbook: `rl-infra/README.md`; mode mapping: `docs/runbooks/local-dev-env.md` and `.claude/skills/_shared/rl-infra-fleet.md`.
+
+### Env coordination across agents (STRICT — local-mode fallback)
+
+The local dev env (Docker DB, API `:3000`, Vite `:5173`) is a single shared resource — multiple agents/worktrees cannot run it simultaneously, and `deploy_dev.sh` refuses to start if another worktree holds the lease.
+
+**Before any work that needs the env** (smoke tests, browser testing, deploy): `env_lock_status` → `env_lock_acquire({ purpose })` → `deploy_dev.sh --ci --rebuild` → `env_lock_release` **as soon as env-needing work ends** (don't hold it through reviewer/push/PR). If `acquired: false` you're queued — come back later or pick non-env work.
+
+**Never bypass:** do not start the API/web manually to "skip the lock." A stale lease auto-clears on the next `acquire`; ask the operator before calling `env_lock_force_release`.
+
+**Operator priority (`/opt`)** always preempts and displaces you to the front of the queue (`preempted: true`). Don't fight it; let the operator test, then resume.
