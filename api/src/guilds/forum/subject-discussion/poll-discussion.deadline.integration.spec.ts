@@ -302,12 +302,29 @@ describe('ROK-2314 an event post is read-only while its reschedule poll runs', (
       .where(eq(schema.events.id, eventId));
   }
 
+  /** A real reschedule poll (match) id; the FK rejects a made-up one. */
+  async function newMatch(guildId: number): Promise<number> {
+    const lineupId = await newLineup(guildId, null);
+    const [m] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+        })
+        .returning(),
+      'match',
+    );
+    return m.id;
+  }
+
   /** A linked event thread closing in `closesInMs`, its event rescheduling. */
   async function reschedulingPost(closesInMs: number) {
     const guildId = await newHub();
     await bind(guildId);
     const eventId = await newEvent(guildId, new Date(Date.now() + 5 * HOUR));
-    await setRescheduling(eventId, 1);
+    await setRescheduling(eventId, await newMatch(guildId));
     const [t] = nonEmpty(
       await testApp.db
         .insert(threads)

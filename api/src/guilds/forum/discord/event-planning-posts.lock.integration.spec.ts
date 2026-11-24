@@ -312,9 +312,41 @@ describe('ROK-2272 S10 reopen of a poll / lineup post (Codex P2)', () => {
   });
 });
 
+/** A real reschedule poll (match) id; the FK rejects a made-up one. */
+async function newReschedulePoll(): Promise<number> {
+  const [l] = nonEmpty(
+    await db()
+      .insert(schema.communityLineups)
+      .values({
+        title: `Reschedule poll ${randomBytes(4).toString('hex')}`,
+        phaseDurationOverride: { standalone: true },
+        status: 'decided',
+        visibility: 'public',
+        createdBy: ctx.ids.creator,
+        guildId: null,
+        publicSlug: randomBytes(8).toString('hex'),
+      })
+      .returning(),
+    'lineup',
+  );
+  const [m] = nonEmpty(
+    await db()
+      .insert(schema.communityLineupMatches)
+      .values({
+        lineupId: l.id,
+        gameId: ctx.posts.testApp.seed.game.id,
+        status: 'scheduling',
+      })
+      .returning(),
+    'match',
+  );
+  return m.id;
+}
+
 /** A real (non-hub) event, optionally mid-reschedule. */
 async function newEvent(rescheduling: boolean): Promise<number> {
   const start = Date.now() + 24 * HOUR;
+  const pollId = rescheduling ? await newReschedulePoll() : null;
   const [e] = nonEmpty(
     await db()
       .insert(schema.events)
@@ -323,7 +355,7 @@ async function newEvent(rescheduling: boolean): Promise<number> {
         creatorId: ctx.ids.creator,
         gameId: ctx.posts.testApp.seed.game.id,
         isAdHoc: false,
-        reschedulingPollId: rescheduling ? 1 : null,
+        reschedulingPollId: pollId,
         duration: [new Date(start), new Date(start + 2 * HOUR)] as [Date, Date],
       })
       .returning(),
