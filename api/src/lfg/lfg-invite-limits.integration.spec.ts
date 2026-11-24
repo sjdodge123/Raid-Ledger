@@ -41,6 +41,7 @@ import {
   LFG_INVITE_RECIPIENT_WINDOW_HOURS,
   LFG_INVITE_SKIP_REASON,
 } from './lfg-invite.constants';
+import { DiscordNotificationService } from '../notifications/discord-notification.service';
 import { stripComments } from '../common/testing/strip-comments';
 import { nonEmpty } from '../common/testing/narrow';
 
@@ -242,13 +243,13 @@ describe('POST /lfg/:gameId/invites — consent (AC1, D2)', () => {
   });
 });
 
-describe('POST /lfg/:gameId/invites — a silenced channel is an opt-out (M1)', () => {
-  it('T-A1b: inApp:false is an opt-out too — no row, no notification, no cap slot (M1)', async () => {
+describe('POST /lfg/:gameId/invites — bell off + Discord on still invites (ROK-2290)', () => {
+  it('T-A1b: inApp:false + discord:true SENDS — one invite row, one hidden notification row, one DM, one cap slot', async () => {
     const { gameId, host } = await group('InApp Off Game');
     const u = await linkedMember('inapp-off');
-    // `NotificationService.create` short-circuits on `isCategoryEnabled` and
-    // returns null BEFORE `dispatchDiscord`: no in-app row AND no DM. The
-    // invite must therefore be refused before anything is written.
+    // ROK-2290 "same rule everywhere": `NotificationService.create` writes the
+    // row with `in_app_hidden = true` (never in the bell) and still dispatches
+    // the DM, so the invite is a real send — not the old M1 opt-out.
     await storePrefs(u.userId, {
       [LFG_INVITE_NOTIFICATION_TYPE]: {
         inApp: false,
@@ -256,13 +257,33 @@ describe('POST /lfg/:gameId/invites — a silenced channel is an opt-out (M1)', 
         discord: true,
       },
     });
-
-    await expectSkipped(host.token, gameId, u.userId);
-    expect(await readInvites(u.userId)).toHaveLength(0);
-    expect(await countInviteNotifications(u.userId)).toBe(0);
-    // The group's daily budget is untouched — nothing was spent on a DM that
-    // could never have landed (§10).
-    expect(await countGroupInvites(gameId)).toBe(0);
+    const dispatch = jest
+      .spyOn(testApp.app.get(DiscordNotificationService), 'dispatch')
+      .mockResolvedValue(false);
+    try {
+      await expectSent(host.token, gameId, u.userId);
+      expect(await readInvites(u.userId)).toHaveLength(1);
+      const rows = await testApp.db
+        .select({ hidden: schema.notifications.inAppHidden })
+        .from(schema.notifications)
+        .where(
+          and(
+            eq(schema.notifications.userId, u.userId),
+            eq(schema.notifications.type, LFG_INVITE_NOTIFICATION_TYPE),
+          ),
+        );
+      expect(rows).toEqual([{ hidden: true }]);
+      const dms = dispatch.mock.calls.filter(
+        ([input]) =>
+          input.userId === u.userId &&
+          input.type === LFG_INVITE_NOTIFICATION_TYPE,
+      );
+      expect(dms).toHaveLength(1);
+      // The DM is real, so the group's daily budget spends one slot (§10).
+      expect(await countGroupInvites(gameId)).toBe(1);
+    } finally {
+      dispatch.mockRestore();
+    }
   });
 });
 

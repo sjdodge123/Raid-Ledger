@@ -116,14 +116,12 @@ export async function recipientHasLinkedDiscord(
  * out; a missing key or a missing row takes the type's default, which is ON
  * for both LFG invite types, so it sends (D2, T-A9).
  *
- * TWO keys can silence the invite, and both must be checked BEFORE the row is
- * written (§10 — the budget must not be spent on a DM that cannot land):
- * - `discord: false` — the dispatcher's own `isTypeDisabledForUser` skip.
- * - `inApp: false` — `NotificationService.create` short-circuits on
- *   `isCategoryEnabled` and returns `null` BEFORE `dispatchDiscord`, so no
- *   in-app row AND no DM. Missing that one spent the cap slot, the recipient's
- *   24h budget and the `LFG_INVITE_NO_REPEAT_DAYS` no-repeat horizon on a
- *   silent delivery (M1).
+ * Only `discord: false` silences the invite, and it is checked BEFORE the row
+ * is written (§10 — the budget must not be spent on a DM that cannot land):
+ * it is the dispatcher's own `isTypeDisabledForUser` skip. `inApp: false` no
+ * longer does (ROK-2290): `NotificationService.create` writes a hidden row and
+ * still dispatches the DM when the bell is off and Discord is on. (It used to
+ * return null before `dispatchDiscord`, which is why M1 opted it out.)
  */
 export async function recipientOptedOut(
   db: LfgDb,
@@ -137,7 +135,7 @@ export async function recipientOptedOut(
   const typePrefs = resolveChannelPrefs(row?.prefs)[
     LFG_INVITE_NOTIFICATION_TYPE
   ];
-  return typePrefs.discord === false || typePrefs.inApp === false;
+  return typePrefs.discord === false;
 }
 
 /** Already in the group — the same read the affinity DM uses (§10). */

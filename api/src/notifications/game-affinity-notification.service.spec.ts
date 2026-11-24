@@ -437,7 +437,7 @@ describe('sendEventNotices — one batched write (ROK-2252)', () => {
     expect(h.claimed.has('event-notice:1:user:2')).toBe(true);
   });
 
-  it('a row createMany skips (in-app off) settles false and gives its claim back', async () => {
+  it('a row createMany skips (both channels off) settles false and gives its claim back', async () => {
     const h = build([]);
     h.createMany.mockImplementation((rows) =>
       Promise.resolve(rows.filter((r) => r.userId !== 2).map(asCreated)),

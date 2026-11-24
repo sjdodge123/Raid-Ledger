@@ -7,10 +7,7 @@ import { Logger } from '@nestjs/common';
 import { inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import {
-  DEFAULT_CHANNEL_PREFS,
-  type NotificationType,
-} from '../drizzle/schema/notification-preferences';
+import { DEFAULT_CHANNEL_PREFS } from '../drizzle/schema/notification-preferences';
 import {
   mapNotificationToDto,
   mapPreferencesToDto,
@@ -21,6 +18,11 @@ import type {
   NotificationPreferencesDto,
 } from './notification.types';
 import type { DiscordNotificationService } from './discord-notification.service';
+import {
+  buildNotificationValues,
+  resolveInputDelivery,
+  type Delivery,
+} from './notification-create.helpers';
 
 /**
  * Load preferences for a list of users, backfilling defaults for users
@@ -53,50 +55,50 @@ export async function loadPreferencesForUsers(
   return byUser;
 }
 
-function isCategoryEnabled(
-  type: NotificationType,
-  prefs: NotificationPreferencesDto,
-): boolean {
-  return prefs.channelPrefs[type]?.inApp ?? true;
+interface EligibleInput {
+  input: CreateNotificationInput;
+  delivery: Exclude<Delivery, 'none'>;
 }
 
-async function filterByEnabledCategory(
+/** Keep inputs that reach the member somewhere (bell or DM), in input order. */
+async function resolveEligible(
   db: PostgresJsDatabase<typeof schema>,
   inputs: CreateNotificationInput[],
-): Promise<CreateNotificationInput[]> {
+): Promise<EligibleInput[]> {
   const userIds = [...new Set(inputs.map((i) => i.userId))];
   const prefsByUser = await loadPreferencesForUsers(db, userIds);
-  return inputs.filter((input) =>
-    isCategoryEnabled(input.type, prefsByUser.get(input.userId)!),
-  );
+  const eligible: EligibleInput[] = [];
+  for (const input of inputs) {
+    const delivery = resolveInputDelivery(input, prefsByUser.get(input.userId));
+    if (delivery !== 'none') eligible.push({ input, delivery });
+  }
+  return eligible;
 }
 
 async function insertNotificationBatch(
   db: PostgresJsDatabase<typeof schema>,
   logger: Logger,
-  eligible: CreateNotificationInput[],
+  eligible: EligibleInput[],
 ): Promise<(typeof schema.notifications.$inferSelect)[]> {
+  const now = new Date();
   const created = await db
     .insert(schema.notifications)
     .values(
-      eligible.map((input) => ({
-        userId: input.userId,
-        type: input.type,
-        title: input.title,
-        message: input.message,
-        payload: input.payload ?? null,
-        expiresAt: input.expiresAt ?? null,
-      })),
+      eligible.map(({ input, delivery }) =>
+        buildNotificationValues(input, delivery, now),
+      ),
     )
     .returning();
-  const types = [...new Set(eligible.map((e) => e.type))].join(',');
+  const types = [...new Set(eligible.map((e) => e.input.type))].join(',');
   logger.log(`Created ${created.length} notifications (batch, types=${types})`);
   return created;
 }
 
 /**
  * Create many notifications in a single batch (ROK-1043).
- * Filters by in-app preference, multi-row inserts, fires Discord batch.
+ * Drops inputs with bell AND Discord off, and `skipDiscord` inputs without
+ * `callerSendsDm` once the bell is off; bell-off + Discord-on inputs get a
+ * hidden row (ROK-2290). Multi-row insert, then the Discord batch.
  */
 export async function createManyNotifications(
   db: PostgresJsDatabase<typeof schema>,
@@ -105,10 +107,11 @@ export async function createManyNotifications(
   inputs: CreateNotificationInput[],
 ): Promise<NotificationDto[]> {
   if (inputs.length === 0) return [];
-  const eligible = await filterByEnabledCategory(db, inputs);
+  const eligible = await resolveEligible(db, inputs);
   if (eligible.length === 0) return [];
   const created = await insertNotificationBatch(db, logger, eligible);
-  dispatchDiscordBatch(logger, discordService, eligible, created);
+  const sent = eligible.map((e) => e.input);
+  dispatchDiscordBatch(logger, discordService, sent, created);
   return created.map(mapNotificationToDto);
 }
 
