@@ -24,6 +24,8 @@ const HUB_REF: HubPingThreadRef = {
 const LIVE_LINK = {
   id: 5,
   discordThreadId: 'd-thread',
+  // A sent post (`links.isUnsent` reads it; an `rl:` id would be 'pending').
+  discordMessageId: 'd-thread',
   discordDeletedAt: null,
   discordLockedAt: null,
 };
