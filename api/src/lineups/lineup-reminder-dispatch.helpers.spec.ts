@@ -53,7 +53,7 @@ describe('sendManualSchedulingReminder (ROK-1395)', () => {
     expect(deps.notificationService.create).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 99,
-        type: 'community_lineup',
+        type: 'scheduling_poll',
         title: 'Scheduling Reminder',
         payload: {
           subtype: 'lineup_scheduling_reminder',

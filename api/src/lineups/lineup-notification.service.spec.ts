@@ -756,7 +756,7 @@ describe('LineupNotificationService', () => {
 
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'community_lineup',
+          type: 'scheduling_poll',
           payload: expect.objectContaining({
             subtype: 'lineup_scheduling_open',
           }),

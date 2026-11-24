@@ -3,7 +3,7 @@
  *
  * A rostered attendee who is ALSO game-interested was receiving TWO DMs after
  * an event ended: the targeted post-event follow-up DM (poll vote / quick
- * sign-up) AND the pre-existing game-interest broadcast (`community_lineup`
+ * sign-up) AND the pre-existing game-interest broadcast (`scheduling_poll`
  * scheduling-poll DM on the poll path, `subscribed_game` affinity DM on the
  * event path). These tests prove the broadcast now SUBTRACTS the follow-up
  * recipients so an attendee gets exactly ONE DM, while a NON-attendee
@@ -130,7 +130,7 @@ describe('ROK-1371 double-DM subtraction (integration)', () => {
   }
 
   // ==================================================================
-  // POLL path — community_lineup broadcast vs post_event_followup DM
+  // POLL path — scheduling_poll broadcast vs post_event_followup DM
   // ==================================================================
   describe('poll path', () => {
     it('attendee gets ONLY the follow-up DM; non-attendee still gets the broadcast', async () => {
@@ -158,7 +158,7 @@ describe('ROK-1371 double-DM subtraction (integration)', () => {
 
       // Attendee: exactly one DM, and it is the follow-up (not the broadcast).
       expect(
-        await notifsFor(testApp, attendee.id, 'community_lineup'),
+        await notifsFor(testApp, attendee.id, 'scheduling_poll'),
       ).toHaveLength(0);
       expect(
         await notifsFor(testApp, attendee.id, 'post_event_followup'),
@@ -166,7 +166,7 @@ describe('ROK-1371 double-DM subtraction (integration)', () => {
       expect(await notifsFor(testApp, attendee.id)).toHaveLength(1);
       // Non-attendee: exactly the broadcast, no follow-up.
       expect(
-        await notifsFor(testApp, nonAttendee.id, 'community_lineup'),
+        await notifsFor(testApp, nonAttendee.id, 'scheduling_poll'),
       ).toHaveLength(1);
       expect(
         await notifsFor(testApp, nonAttendee.id, 'post_event_followup'),
@@ -185,10 +185,10 @@ describe('ROK-1371 double-DM subtraction (integration)', () => {
       );
 
       expect(
-        await notifsFor(testApp, attendee.id, 'community_lineup'),
+        await notifsFor(testApp, attendee.id, 'scheduling_poll'),
       ).toHaveLength(1);
       expect(
-        await notifsFor(testApp, nonAttendee.id, 'community_lineup'),
+        await notifsFor(testApp, nonAttendee.id, 'scheduling_poll'),
       ).toHaveLength(1);
     });
   });

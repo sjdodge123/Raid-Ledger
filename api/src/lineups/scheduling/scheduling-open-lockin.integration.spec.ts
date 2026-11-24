@@ -14,7 +14,7 @@
  * Each path must announce exactly once, after the slot voters' signups landed
  * — except a reschedule poll, whose event already exists.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -216,7 +216,7 @@ describe('ROK-2024 open lock-in (integration)', () => {
       .where(
         and(
           eq(schema.notifications.userId, userId),
-          eq(schema.notifications.type, 'community_lineup'),
+          inArray(schema.notifications.type, ['community_lineup', 'scheduling_poll']),
         ),
       );
     return rows.map((r) => {

@@ -20,7 +20,7 @@
  * fire-and-forget, so the ROK-2025 roster assertions first wait until every
  * voter's poll DM has landed.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -250,7 +250,7 @@ async function pollDmTitles(
         title: schema.notifications.title,
       })
       .from(schema.notifications)
-      .where(eq(schema.notifications.type, 'community_lineup'));
+      .where(inArray(schema.notifications.type, ['community_lineup', 'scheduling_poll']));
     result = userIds.map((userId) => ({
       userId,
       titles: rows

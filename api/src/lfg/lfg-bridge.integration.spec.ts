@@ -233,7 +233,7 @@ describe('Lineup → LFG bridge (ROK-1457, integration)', () => {
     expect(await bridgeNotifications(u3)).toEqual([]);
     const [row, ...extra] = nonEmpty(await bridgeNotifications(u1), 'row');
     expect(extra).toEqual([]);
-    expect(row.type).toBe('community_lineup');
+    expect(row.type).toBe('lineup_lfg_offer');
     expect(row.payload).toMatchObject({
       lineupId,
       lineupTitle: 'Saturday Sesh',

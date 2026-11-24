@@ -123,6 +123,9 @@ describe('DiscordNotificationService — lfg_invite prefs (ROK-1471)', () => {
   it.each([
     'lineup_steam_nudge',
     'community_lineup',
+    'scheduling_poll',
+    'lineup_lfg_offer',
+    'voice_access_lost',
     'event_reminder',
   ] as const)(
     'does not send %s to a user whose prefs are the quietDms matrix',

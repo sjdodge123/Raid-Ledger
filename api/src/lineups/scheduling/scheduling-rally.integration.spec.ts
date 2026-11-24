@@ -279,7 +279,7 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
     );
     const [dm] = nonEmpty(await ralliesFor(silent.id), 'rally DM');
     expect(dm).toBeDefined();
-    expect(dm.type).toBe('community_lineup');
+    expect(dm.type).toBe('scheduling_poll');
     expect(dm.payload).toMatchObject({
       subtype: 'scheduling_poll_rally',
       reminderWindow: `rally-${matchId}`,

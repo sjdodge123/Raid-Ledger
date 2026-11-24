@@ -5,7 +5,7 @@
  * one invited member, advance the poll's deadline to T-1h via the
  * (DEMO_MODE-only) `/admin/test/advance-standalone-poll-deadline`
  * endpoint, await processing, then verify:
- *   - the invited member receives a community_lineup notification with
+ *   - the invited member receives a scheduling_poll notification with
  *     `payload.subtype === 'standalone_scheduling_poll_reminder'` and
  *     `payload.window === '1h'` and title containing "closing now",
  *   - the notification's matchId/lineupId match the created poll, which
@@ -58,7 +58,7 @@ async function fetchCommunityLineupNotifications(
 ): Promise<TestNotification[]> {
   const res = await api
     .get<TestNotification[]>(
-      `/admin/test/notifications?userId=${userId}&type=community_lineup&limit=25`,
+      `/admin/test/notifications?userId=${userId}&type=scheduling_poll&limit=25`,
     )
     .catch(() => [] as TestNotification[]);
   return Array.isArray(res) ? res : [];

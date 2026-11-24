@@ -290,7 +290,7 @@ describe('LineupReminderService', () => {
       expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'community_lineup',
+          type: 'scheduling_poll',
           payload: expect.objectContaining({
             subtype: 'lineup_scheduling_reminder',
             lineupId: LINEUP_ID,
@@ -413,7 +413,7 @@ describe('LineupReminderService', () => {
       );
     });
 
-    it('all scheduling reminders use type community_lineup', async () => {
+    it('all scheduling reminders use type scheduling_poll', async () => {
       const lineup = makeDecidedLineup(12);
       mockDb.execute
         .mockResolvedValueOnce([lineup])
@@ -425,7 +425,7 @@ describe('LineupReminderService', () => {
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 1,
-          type: 'community_lineup',
+          type: 'scheduling_poll',
           payload: expect.objectContaining({
             subtype: 'lineup_scheduling_reminder',
             lineupId: LINEUP_ID,
