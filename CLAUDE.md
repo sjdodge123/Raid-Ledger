@@ -113,6 +113,7 @@ Sub-agents die at a **50-turn harness cap** that is NOT configurable — the goa
 2. **The Lead does not poll.** PR/CI waits are `scripts/pr-watch.sh <prs>` with `run_in_background`, never a lane. Fleet gates, env deploys and image builds go to ONE `sonnet` ops lane (`fleet-ops`) that waits with blocking `rl_task_wait`, **never background `sleep` tasks**, and replies once with PASS/FAIL.
 3. **Fewer, fatter turns** — batch independent calls; no "still running" turns.
 4. **Keep bulk out of the Lead's context** — smallest slices; bulk reading goes to a sub-agent.
+5. **Starting context target: about 100k** (operator ruling 2026-11-24, ROK-2307) — ≈38k is the app's own tool schemas; cut connectors a Lead never uses and keep this file lean.
 
 Measurements and detail: `docs/runbooks/lead-and-lanes.md` → "Lead context discipline".
 
