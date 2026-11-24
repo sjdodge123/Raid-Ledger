@@ -13,16 +13,35 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { findSlotOrThrow } from './scheduling-event.helpers';
 import { assertUserCanParticipate } from '../lineups-eligibility.helpers';
+import { assertAccountActive } from '../../users/discord-account-status.helpers';
 import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
 import type { SchedulingPollStatus } from '../../discord-bot/services/discord-embed-scheduling.types';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
+/** Options for `assertCallerMayVote`. */
+export interface CallerMayVoteOptions {
+  /**
+   * ROK-1545 (review F8): when given, the poll's lifecycle is checked against
+   * the lineup row this function already loads — no extra round trip.
+   */
+  match?: { status: string; linkedEventId?: number | null };
+  /**
+   * ROK-2306: refuse a banned/deactivated account (403 `ACCOUNT_BLOCKED`)
+   * before any read. Vote and suggest (which auto-votes) set it. Retract
+   * leaves it off: its HTTP route already runs `NotDeactivatedGuard` and JWT
+   * validation rejects a banned user, so the open retract is service-level
+   * leniency only — a blocked user can still withdraw votes through a
+   * non-HTTP caller, never add one.
+   */
+  requireActive?: boolean;
+}
+
 /**
  * Enforce private-lineup participation on scheduling mutations (vote /
- * suggest). Public lineups (incl. every standalone poll) pass; private
- * lineups are scoped to creator + invitees + admin/operator — mirroring
- * nominate, game-vote, and bandwagon-join, which all run
+ * suggest / retract). Public lineups (incl. every standalone poll) pass;
+ * private lineups are scoped to creator + invitees + admin/operator —
+ * mirroring nominate, game-vote, and bandwagon-join, which all run
  * `assertUserCanParticipate`. Without this, a URL-holder could vote on a
  * private lineup's poll and (since voting enrolls) persist themselves into
  * its participant list.
@@ -31,12 +50,10 @@ export async function assertCallerMayVote(
   db: Db,
   lineupId: number,
   caller: { id: number; role?: string },
-  /**
-   * ROK-1545 (review F8): when given, the poll's lifecycle is checked against
-   * the lineup row this function already loads — no extra round trip.
-   */
-  match?: { status: string; linkedEventId?: number | null },
+  opts: CallerMayVoteOptions = {},
 ): Promise<void> {
+  const { match, requireActive = false } = opts;
+  if (requireActive) await assertAccountActive(db, caller.id);
   const [lineup] = await db
     .select({
       id: schema.communityLineups.id,

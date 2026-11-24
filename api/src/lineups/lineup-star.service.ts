@@ -5,8 +5,9 @@
  * of its 300 permitted lines. The precedent is `TieReadinessController`
  * (ROK-1374), documented at `tie-readiness.controller.ts:1-11`.
  *
- * A star is a vote, so it passes every gate a vote passes — same status
- * check, same `assertVoteOpen` hold guard, same participation check. Skipping
+ * A star is a vote, so it passes every gate a vote passes — same account
+ * check, same status check, same `assertVoteOpen` hold guard, same
+ * participation check. Skipping
  * any of them would let a star land during an open tie hold and dissolve the
  * tie underneath the readiness card, which is the exact operator-reported bug
  * ROK-1374 shipped to fix.
@@ -24,6 +25,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { GameActivityNudge } from '../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
+import { assertAccountActive } from '../users/discord-account-status.helpers';
 import { assertVoteOpen } from './lineups-actions.helpers';
 import { assertUserCanParticipate } from './lineups-eligibility.helpers';
 import { findLineupById } from './lineups-query.helpers';
@@ -90,8 +92,11 @@ export class LineupStarService {
   }
 
   /**
-   * The same four gates `runToggleVote` applies, in the same order, plus a
-   * fifth the vote path is missing.
+   * The gates `runToggleVote` applies, in the same order — account check
+   * (ROK-2306: a banned/deactivated voter is refused before any read, since a
+   * star can insert a vote row), lineup exists, `voting` status,
+   * `assertVoteOpen`, participation — plus a nomination check the vote path
+   * is missing.
    *
    * ROK-1474: `SetStarSchema` proves only "positive int" and the FK only
    * proves "is a game", so `POST /lineups/7/star {gameId: 999}` used to park
@@ -107,6 +112,10 @@ export class LineupStarService {
     gameId: number | null,
     callerRole?: string,
   ) {
+    // ROK-2306: deliberate — a blocked account cannot clear a star either
+    // (game-vote toggle-off is refused the same way); only scheduling-poll
+    // retract stays open to a blocked member.
+    await assertAccountActive(this.db, userId);
     const [lineup] = await findLineupById(this.db, lineupId);
     if (!lineup) throw new NotFoundException('Lineup not found');
     if (lineup.status !== 'voting') {

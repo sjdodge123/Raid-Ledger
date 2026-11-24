@@ -166,6 +166,22 @@ export function assertVoteOpen(lineup: {
   }
 }
 
+/**
+ * Load a lineup the caller may vote on, or throw. ROK-2306: the account check
+ * runs first, so a banned/deactivated voter is refused before any lineup read —
+ * the service gate behind `NotDeactivatedGuard`, for every non-HTTP caller.
+ */
+async function loadVotableLineup(db: Db, lineupId: number, userId: number) {
+  await assertAccountActive(db, userId);
+  const [lineup] = await findLineupById(db, lineupId);
+  if (!lineup) throw new NotFoundException('Lineup not found');
+  if (lineup.status !== 'voting') {
+    throw new BadRequestException('Voting is only allowed in voting status');
+  }
+  assertVoteOpen(lineup);
+  return lineup;
+}
+
 export async function runToggleVote(
   deps: VoteDeps,
   lineupId: number,
@@ -173,12 +189,7 @@ export async function runToggleVote(
   userId: number,
   callerRole: string | undefined,
 ): Promise<LineupDetailResponseDto> {
-  const [lineup] = await findLineupById(deps.db, lineupId);
-  if (!lineup) throw new NotFoundException('Lineup not found');
-  if (lineup.status !== 'voting') {
-    throw new BadRequestException('Voting is only allowed in voting status');
-  }
-  assertVoteOpen(lineup);
+  const lineup = await loadVotableLineup(deps.db, lineupId, userId);
   await assertUserCanParticipate(deps.db, lineup, {
     id: userId,
     ...(callerRole !== undefined ? { role: callerRole } : {}),
