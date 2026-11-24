@@ -6,7 +6,9 @@
  * state, so the 5-minute Core sweep (`HubForumDiscordSync_eventLockSweep`,
  * which runs this pass after the hub pass) is idempotent. A moderator who
  * unarchives a closed post is left alone: the recorded state already says
- * locked.
+ * locked. ROK-2314: an event post is also closed while its event's
+ * reschedule poll runs, and reopens only once the poll ended AND its
+ * `closes_at` is still in the future.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
@@ -18,6 +20,7 @@ import {
   isNotNull,
   isNull,
   lte,
+  not,
   or,
   sql,
   type SQL,
@@ -36,7 +39,12 @@ import {
 } from './event-planning-posts.queries';
 import { EventPlanningPostsService } from './event-planning-posts.service';
 import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
+import {
+  eventReschedulingSql,
+  isEventRescheduling,
+} from './event-rescheduling.sql';
 import { HubForumDiscordEventLockGateway } from './hub-forum-discord-event-lock.gateway';
+import { HubForumDiscordSignupPingQueue } from './hub-forum-discord-signup-pings.queue';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const posts = schema.eventPlanningPosts;
@@ -70,25 +78,46 @@ function reopenedWhere(at: SQL) {
   );
 }
 
-/** Live, and `closes_at` disagrees with the recorded lock state. */
+/** ROK-2314: an event post whose event is mid-reschedule. */
+const RESCHEDULING = sql<boolean>`(${posts.subjectKind} = 'event' AND ${eventReschedulingSql(posts.subjectId)})`;
+
+/**
+ * Live, and `closes_at` (or, ROK-2314, the event's reschedule poll)
+ * disagrees with the recorded lock state.
+ */
 function dueWhere(at: SQL) {
   return and(
     isNull(posts.discordDeletedAt),
     or(
-      and(lte(posts.closesAt, at), isNull(posts.discordLockedAt)),
-      and(reopenedWhere(at), isNotNull(posts.discordLockedAt)),
+      and(
+        or(lte(posts.closesAt, at), RESCHEDULING),
+        isNull(posts.discordLockedAt),
+      ),
+      and(
+        reopenedWhere(at),
+        not(RESCHEDULING),
+        isNotNull(posts.discordLockedAt),
+      ),
     ),
   );
+}
+
+/** ROK-2314: optionally only one event's post. */
+function forEvent(eventId: number | undefined) {
+  if (eventId === undefined) return undefined;
+  return and(eq(posts.subjectKind, 'event'), eq(posts.subjectId, eventId));
 }
 
 /**
  * Live posts whose lock state disagrees with `closes_at`: due and unlocked
  * ⇒ close; in the future and locked ⇒ reopen. A null `closes_at` is never
  * due to close; on a locked poll / lineup post it means reopened.
+ * `eventId` narrows it to that event's post (ROK-2314).
  */
 export async function dueRegistryLockChanges(
   db: ForumDiscordDb,
   now: Date,
+  eventId?: number,
 ): Promise<RegistryLockChange[]> {
   const at = sql`${now.toISOString()}::timestamptz`;
   const rows = await db
@@ -100,7 +129,7 @@ export async function dueRegistryLockChanges(
       locked: isNotNull(posts.discordLockedAt),
     })
     .from(posts)
-    .where(dueWhere(at))
+    .where(and(dueWhere(at), forEvent(eventId)))
     .orderBy(posts.id)
     .limit(BATCH);
   return rows.map(({ locked, subjectKind, ...r }) => ({
@@ -117,7 +146,10 @@ export async function dueRegistryLockChanges(
  */
 export type ReopenResult = 'open' | 'closed' | 'failed';
 
-/** One post's reopen state; null when it is gone (deleted or no row). */
+/**
+ * One post's reopen state; null when it is gone (deleted or no row). An
+ * event post stays `closed` while its reschedule poll runs (ROK-2314).
+ */
 async function reopenState(
   db: ForumDiscordDb,
   postId: number,
@@ -125,11 +157,14 @@ async function reopenState(
 ): Promise<RegistryLockChange | 'open' | 'closed' | null> {
   const [row] = await db.select().from(posts).where(eq(posts.id, postId));
   if (!row || row.discordDeletedAt !== null) return null;
+  const kind = asKind(row.subjectKind);
+  if (kind === 'event' && (await isEventRescheduling(db, row.subjectId)))
+    return 'closed';
   if (row.closesAt === null || row.closesAt <= now) return 'closed';
   if (row.discordLockedAt === null) return 'open';
   return {
     postId,
-    subjectKind: asKind(row.subjectKind),
+    subjectKind: kind,
     subjectId: row.subjectId,
     discordThreadId: row.discordThreadId,
     readOnly: false,
@@ -148,6 +183,7 @@ export class EventPlanningPostsLockSweep {
     private readonly service: EventPlanningPostsService,
     private readonly subjects: EventPlanningSubjectPosts,
     private readonly starters: EventForumStarterCards,
+    private readonly pings: HubForumDiscordSignupPingQueue,
   ) {}
 
   /**
@@ -161,8 +197,21 @@ export class EventPlanningPostsLockSweep {
     if (!this.client.isConnected()) return 0;
     await this.syncOpenPolls(now);
     await this.catchUpLineups(now);
+    return this.flipDue(now);
+  }
+
+  /**
+   * ROK-2314: flip one event's post now (its reschedule poll opened or
+   * ended). Offline bot → 0; the 5-minute sweep catches up.
+   */
+  async sweepEvent(eventId: number, now = new Date()): Promise<number> {
+    if (!this.client.isConnected()) return 0;
+    return this.flipDue(now, eventId);
+  }
+
+  private async flipDue(now: Date, eventId?: number): Promise<number> {
     let changed = 0;
-    for (const row of await dueRegistryLockChanges(this.db, now)) {
+    for (const row of await dueRegistryLockChanges(this.db, now, eventId)) {
       if (await this.apply(row, now)) changed += 1;
     }
     return changed;
@@ -208,10 +257,16 @@ export class EventPlanningPostsLockSweep {
     return 'open';
   }
 
+  /**
+   * A reopened event post is refreshed, then (ROK-2314 MINOR-1) its signup
+   * flush re-armed for the lines held while it was shut. Not in `refresh`:
+   * `reopenIfPending` runs that from inside the flush itself.
+   */
   private async apply(row: RegistryLockChange, now: Date): Promise<boolean> {
     const res = await this.flip(row, now);
     if (res === 'ok' && !row.readOnly && row.subjectKind === 'event') {
       await this.refresh(row);
+      await this.pings.schedule(row.subjectId);
     }
     return res !== 'failed';
   }

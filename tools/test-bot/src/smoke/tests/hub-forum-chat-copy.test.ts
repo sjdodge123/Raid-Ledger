@@ -17,6 +17,7 @@
  */
 import type { ForumChannel, ThreadChannel } from "discord.js";
 import { pollForCondition } from "../../helpers/polling.js";
+import { getGuild } from "../../client.js";
 import { awaitProcessing, createEvent } from "../fixtures.js";
 import type { SmokeTest, TestContext } from "../types.js";
 import { fail, farOffTimes, setup, teardown, TIMEOUT_MS, type Made } from "./hub-forum-discord-outbound.test.js";
@@ -87,6 +88,20 @@ async function expectOnce(post: ThreadChannel, text: string): Promise<void> {
   if (hits.length !== 1) fail(`ROK-2297 D-2: "${text}" should appear exactly once in the event post ${post.id}`, hits);
 }
 
+/** ROK-2314: poll until the post is closed (locked + archived) or reopened (neither). */
+async function expectPostClosed(postId: string, closed: boolean, why: string): Promise<void> {
+  let last: unknown = null;
+  try {
+    await pollForCondition(async () => {
+      const ch = await getGuild().channels.fetch(postId, { force: true }).catch(() => null);
+      last = ch?.isThread() ? { locked: ch.locked, archived: ch.archived } : ch?.type;
+      return ch?.isThread() && ch.locked === closed && ch.archived === closed ? true : null;
+    }, TIMEOUT_MS);
+  } catch {
+    fail(why, last);
+  }
+}
+
 async function chatCopy(ctx: TestContext): Promise<void> {
   const runId = Date.now().toString(36);
   const made: Made = { hub: null, forum: null };
@@ -104,9 +119,11 @@ async function chatCopy(ctx: TestContext): Promise<void> {
     await awaitProcessing(ctx.api);
     const pollPost = await postWith(forum, "Earlier chat from", "ROK-2297 D-1: the poll's post should get the copy header", eventPost.id);
     pollPostId = pollPost.id;
+    await expectPostClosed(eventPost.id, true, `ROK-2314: event post ${eventPost.id} should be locked + archived while the poll runs`);
     await expectInPost(pollPost, `ROK-2297 D-1: the event reply should be copied into poll post ${pollPost.id}`, (c, wh) => wh && c.includes(before));
     await replyWhenReady(ctx, `/scheduling-polls/${String(poll.matchId)}/discussion/replies`, during);
     await rescheduleLockIn(ctx, poll);
+    await expectPostClosed(eventPost.id, false, `ROK-2314: event post ${eventPost.id} should reopen at lock-in`);
     await expectInPost(eventPost, `ROK-2297 D-2: the poll reply should be copied into event post ${eventPost.id}`, (c, wh) => wh && c.includes(during));
     await expectOnce(eventPost, before);
   } finally {

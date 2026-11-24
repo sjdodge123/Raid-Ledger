@@ -15,6 +15,7 @@ import {
   resetThrottler,
   type PostsCtx,
 } from '../../posts/hub-posts.test-fixtures';
+import { requeueHeldReplies } from './hub-forum-discord-event-lock.reopen';
 import { HubForumDiscordInboundIngest } from './hub-forum-discord-inbound.ingest';
 import { unsentId } from './hub-forum-discord-links.queries';
 import {
@@ -492,5 +493,83 @@ describe('ROK-2208 §5.6 reconcile on reconnect', () => {
     const counts = await sync.replayThread(thread);
     expect(counts).toMatchObject({ imported: 0 });
     expect(await linkOf(thread.id)).toBeNull();
+  });
+});
+
+/** A reply of `threadId` whose outbound link is in the given state. */
+async function replyLink(
+  g: number,
+  threadId: number,
+  link: {
+    syncState: string;
+    origin?: string;
+    deleted?: boolean;
+  },
+) {
+  const db = ctx.testApp.db;
+  const [r] = nonEmpty(
+    await db
+      .insert(schema.hubForumReplies)
+      .values({ guildId: g, threadId, body: 'held', authorId: adminId })
+      .returning(),
+    'reply',
+  );
+  const [row] = nonEmpty(
+    await db
+      .insert(schema.hubForumDiscordLinks)
+      .values({
+        guildId: g,
+        kind: 'reply',
+        threadId,
+        replyId: r.id,
+        discordThreadId: freshId(),
+        discordMessageId: freshId(),
+        origin: link.origin ?? 'raidledger',
+        syncState: link.syncState,
+        attempts: 5,
+        lastError: 'archived',
+        discordDeletedAt: link.deleted ? new Date() : null,
+      })
+      .returning(),
+    'reply link',
+  );
+  return row;
+}
+
+describe('ROK-2314 MAJOR-2 requeueHeldReplies', () => {
+  it("resets only the thread's failed, live website reply links", async () => {
+    const { g } = await boundHub();
+    const sent = { syncState: 'synced', attempts: 0, sentId: freshId() };
+    const { thread } = await queuedThread(g, 'rq-mine', sent);
+    const { thread: other } = await queuedThread(g, 'rq-other', {
+      ...sent,
+      sentId: freshId(),
+    });
+    const held = [
+      await replyLink(g, thread.id, { syncState: 'failed' }),
+      await replyLink(g, thread.id, { syncState: 'failed' }),
+    ];
+    const untouched = [
+      await replyLink(g, thread.id, { syncState: 'synced' }),
+      await replyLink(g, thread.id, { syncState: 'pending' }),
+      await replyLink(g, thread.id, { syncState: 'failed', origin: 'discord' }),
+      await replyLink(g, thread.id, { syncState: 'failed', deleted: true }),
+      await replyLink(g, other.id, { syncState: 'failed' }),
+    ];
+    const reset = await requeueHeldReplies(ctx.testApp.db, thread.id);
+    expect(reset.map((l) => l.id)).toEqual(held.map((l) => l.id));
+    for (const l of held) {
+      expect(await linkById(l.id)).toMatchObject({
+        syncState: 'failed',
+        attempts: 0,
+        lastError: null,
+      });
+    }
+    for (const l of untouched) {
+      expect(await linkById(l.id)).toMatchObject({
+        attempts: 5,
+        lastError: 'archived',
+      });
+    }
   });
 });

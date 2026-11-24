@@ -23,6 +23,13 @@ import type {
 } from '../event-discussion/event-discussion-signup-lines.service';
 
 jest.mock('./hub-forum-discord-signup-pings.queries');
+// ROK-2314: no reschedule poll runs in these flushes (the db is a stub).
+// Spread the real module: `event-planning-posts.lock` builds its SQL from
+// `eventReschedulingSql` at import time.
+jest.mock('./event-rescheduling.sql', () => ({
+  ...jest.requireActual<object>('./event-rescheduling.sql'),
+  isEventRescheduling: (): Promise<boolean> => Promise.resolve(false),
+}));
 jest.mock('./hub-forum-discord-signup-lines.queries');
 jest.mock('./hub-forum-discord-links.queries', () => ({
   ...jest.requireActual('./hub-forum-discord-links.queries'),

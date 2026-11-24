@@ -311,3 +311,152 @@ describe('ROK-2272 S10 reopen of a poll / lineup post (Codex P2)', () => {
     expect(await lockedAt(p.id)).not.toBeNull();
   });
 });
+
+/** A real reschedule poll (match) id; the FK rejects a made-up one. */
+async function newReschedulePoll(): Promise<number> {
+  const [l] = nonEmpty(
+    await db()
+      .insert(schema.communityLineups)
+      .values({
+        title: `Reschedule poll ${randomBytes(4).toString('hex')}`,
+        phaseDurationOverride: { standalone: true },
+        status: 'decided',
+        visibility: 'public',
+        createdBy: ctx.ids.creator,
+        guildId: null,
+        publicSlug: randomBytes(8).toString('hex'),
+      })
+      .returning(),
+    'lineup',
+  );
+  const [m] = nonEmpty(
+    await db()
+      .insert(schema.communityLineupMatches)
+      .values({
+        lineupId: l.id,
+        gameId: ctx.posts.testApp.seed.game.id,
+        status: 'scheduling',
+      })
+      .returning(),
+    'match',
+  );
+  return m.id;
+}
+
+/** A real (non-hub) event, optionally mid-reschedule. */
+async function newEvent(rescheduling: boolean): Promise<number> {
+  const start = Date.now() + 24 * HOUR;
+  const pollId = rescheduling ? await newReschedulePoll() : null;
+  const [e] = nonEmpty(
+    await db()
+      .insert(schema.events)
+      .values({
+        title: 'Rescheduling event',
+        creatorId: ctx.ids.creator,
+        gameId: ctx.posts.testApp.seed.game.id,
+        isAdHoc: false,
+        reschedulingPollId: pollId,
+        duration: [new Date(start), new Date(start + 2 * HOUR)] as [Date, Date],
+      })
+      .returning(),
+    'event',
+  );
+  return e.id;
+}
+
+async function clearRescheduling(eventId: number): Promise<void> {
+  await db()
+    .update(schema.events)
+    .set({ reschedulingPollId: null })
+    .where(eq(schema.events.id, eventId));
+}
+
+const dueFor = async (postId: number, eventId: number) =>
+  (await dueRegistryLockChanges(db(), new Date(), eventId)).find(
+    (d) => d.postId === postId,
+  )?.readOnly;
+
+describe('ROK-2314 an event post is closed while its reschedule poll runs', () => {
+  it('an open post with a future close is due to close while rescheduling', async () => {
+    const subjectId = await newEvent(true);
+    const p = await newPost({ closesInMs: HOUR, subjectId });
+    expect(await dueFor(p.id, subjectId)).toBe(true);
+  });
+
+  it('a locked post stays closed while rescheduling, reopens once cleared', async () => {
+    const subjectId = await newEvent(true);
+    const p = await newPost({ closesInMs: HOUR, locked: true, subjectId });
+    expect(await dueFor(p.id, subjectId)).toBeUndefined();
+    await clearRescheduling(subjectId);
+    expect(await dueFor(p.id, subjectId)).toBe(false);
+  });
+
+  it('cleared with a past close: the locked post stays closed', async () => {
+    const subjectId = await newEvent(true);
+    const p = await newPost({ closesInMs: -HOUR, locked: true, subjectId });
+    await clearRescheduling(subjectId);
+    expect(await dueFor(p.id, subjectId)).toBeUndefined();
+  });
+
+  it('the eventId filter returns only that event’s posts', async () => {
+    const subjectId = await newEvent(true);
+    await newPost({ closesInMs: -HOUR });
+    const due = await dueRegistryLockChanges(db(), new Date(), subjectId);
+    expect(due.every((d) => d.subjectId === subjectId)).toBe(true);
+  });
+});
+
+describe('ROK-2314 reopenIfPending and sweepEvent while rescheduling', () => {
+  it('reopenIfPending reports closed while rescheduling (no Discord call)', async () => {
+    const { setReadOnly } = spies();
+    const subjectId = await newEvent(true);
+    const locked = await newPost({ closesInMs: HOUR, locked: true, subjectId });
+    const open = await newPost({
+      closesInMs: HOUR,
+      subjectId: await newEvent(true),
+    });
+    const sweep = app().get(EventPlanningPostsLockSweep);
+    expect(await sweep.reopenIfPending(locked.id)).toBe('closed');
+    expect(await sweep.reopenIfPending(open.id)).toBe('closed');
+    expect(setReadOnly).not.toHaveBeenCalled();
+  });
+
+  it('sweepEvent closes then reopens just that event’s post', async () => {
+    const { setReadOnly } = spies();
+    const subjectId = await newEvent(true);
+    const p = await newPost({ closesInMs: HOUR, subjectId });
+    const sweep = app().get(EventPlanningPostsLockSweep);
+    expect(await sweep.sweepEvent(subjectId)).toBe(1);
+    expect(setReadOnly).toHaveBeenCalledWith(p.discordThreadId, true);
+    expect(await lockedAt(p.id)).not.toBeNull();
+    await clearRescheduling(subjectId);
+    expect(await sweep.sweepEvent(subjectId)).toBe(1);
+    expect(setReadOnly).toHaveBeenLastCalledWith(p.discordThreadId, false);
+    expect(await lockedAt(p.id)).toBeNull();
+  });
+});
+
+describe('ROK-2314 the full sweep scopes the reschedule guard to event posts', () => {
+  it.each(['poll', 'lineup'] as const)(
+    'a %s post whose subject_id equals a rescheduling event id stays open',
+    async (subjectKind) => {
+      const { setReadOnly } = spies();
+      // The poll and lineup passes must not act on the borrowed subject id.
+      const subjects = app().get(EventPlanningSubjectPosts);
+      jest.spyOn(subjects, 'syncOpenPolls').mockResolvedValue(0);
+      jest.spyOn(subjects, 'ensureMissingLineupPosts').mockResolvedValue(0);
+      const eventId = await newEvent(true);
+      const other = await newPost({
+        closesInMs: HOUR,
+        subjectKind,
+        subjectId: eventId,
+      });
+      const event = await newPost({ closesInMs: HOUR, subjectId: eventId });
+      await app().get(EventPlanningPostsLockSweep).sweep(new Date());
+      expect(await lockedAt(other.id)).toBeNull();
+      expect(setReadOnly).not.toHaveBeenCalledWith(other.discordThreadId, true);
+      // Control: the same full sweep does close the event's own post.
+      expect(await lockedAt(event.id)).not.toBeNull();
+    },
+  );
+});

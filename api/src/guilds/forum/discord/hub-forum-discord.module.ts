@@ -19,6 +19,7 @@ import {
   HubForumDiscordEventLockGateway,
   HubForumDiscordEventLockSweep,
 } from './hub-forum-discord-event-lock';
+import { HubEventPostReopenFollowups } from './hub-forum-discord-event-lock.reopen';
 import { HubForumDiscordInboundIngest } from './hub-forum-discord-inbound.ingest';
 import { HubForumDiscordInboundListener } from './hub-forum-discord-inbound.listener';
 import { HubForumDiscordNotices } from './hub-forum-discord-notice';
@@ -64,6 +65,8 @@ import {
   SchedulingPollEmbedQueueService,
 } from '../../../lineups/scheduling/scheduling-poll-embed.queue';
 import { POLL_FORUM_STARTER_PORT } from '../../../lineups/scheduling/poll-forum-starter.port';
+import { EVENT_POST_REOPEN_PORT } from '../../../lineups/standalone-poll/event-post-reopen.port';
+import { EventPostReopener } from './event-post-reopener';
 import { PollForumStarterSync } from './poll-forum-starter.sync';
 import { PollVoterLines } from './poll-voter-lines.refresh';
 import {
@@ -107,6 +110,9 @@ import { ForumChatCopyProcessor } from './forum-chat-copy.processor';
     PollForumStarterSync,
     PollVoterLines,
     { provide: POLL_FORUM_STARTER_PORT, useExisting: PollForumStarterSync },
+    // ROK-2314: a reschedule lock-in reopens the event post before POLL_LOCKED_IN.
+    EventPostReopener,
+    { provide: EVENT_POST_REOPEN_PORT, useExisting: EventPostReopener },
     HubForumDiscordOutboundService,
     HubForumDiscordOutboundListener,
     // ROK-2292 D8: create the event's forum post when it is announced.
@@ -124,6 +130,8 @@ import { ForumChatCopyProcessor } from './forum-chat-copy.processor';
     HubForumDiscordReconcileService,
     HubForumDiscordEventLockGateway,
     HubForumDiscordEventLockSweep,
+    // ROK-2314: a reopened post re-sends held replies + signup lines.
+    HubEventPostReopenFollowups,
     HubForumDiscordSignupPings,
     // ROK-2274: the same flush writes lines into the RL event thread.
     EventDiscussionSignupLines,
