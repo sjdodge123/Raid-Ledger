@@ -1493,6 +1493,19 @@ than `focus-visible:` because the row is only ever focused programmatically). `u
 (`block: 'center'`) and focuses the row named by `location.hash` **after the preferences load** — the rows sit
 behind a skeleton, so a scroll on mount misses them; an unknown anchor does nothing. Link to a row as
 `/profile/notifications#notif-<type>`. Under the section subtitle a `text-xs text-muted` hint line (heroicons `InformationCircleIcon` + a `text-secondary font-medium` lead, `data-testid="notif-channels-hint"`) says the bell and Discord switches are separate, and each row may carry a `text-xs` caption under its description (`notificationRowCaption`, `components/profile/notification-row-caption.ts`, `data-testid="notif-row-caption"`, ROK-2290): `text-success` "Discord DM only" when the bell is off and the Discord switch is on, `text-muted` "Muted" when every *visible* channel is off, nothing otherwise — a hidden Discord column (not linked / bot down) never yields "Discord DM only". The legacy `/profile/preferences/notifications` route redirects through
+
+**Section sub-headings inside the notification matrix (ROK-2311).** The rows are grouped, in this order, under
+seven headings — Events / Your roster spot / Organizer / Games & groups / Lineups & polls / LFG / Other — declared
+once in `NOTIFICATION_TYPE_GROUPS` (`components/profile/notification-type-meta.ts`); never re-order rows inline in the
+section. Each group is a `<section aria-labelledby>` (role `region`, `data-testid="notif-group"`) with an
+`<h3 className="text-[11px] font-semibold uppercase tracking-wider text-dim pt-3.5 pb-1">` heading, then the
+unchanged rows in a `divide-y divide-edge-subtle border-t border-edge-subtle` list. The column header row stays
+once at the top. A new notification type goes into the group it belongs to; a new heading needs a design ruling.
+**Rows that offer fewer channels:** `IN_APP_ONLY_TYPES` (bell only, e.g. `lineup_lfg_offer`) and `DM_ONLY_TYPES`
+(no bell, e.g. `valheim_claim_suggestion`) feed `rowChannels(type, visibleChannels)`; a column the row does not
+offer renders a `text-dim` "—" (`data-testid="notif-not-offered-<channel>"`, sr-only "Not sent by <channel>")
+in place of the switch so the columns stay aligned, and the caption is judged on the row's offered channels —
+so an in-app-only row can never read "Discord DM only".
 `RedirectKeepingLocation`, which keeps `?search` and `#hash`; never use a bare `<Navigate to>` for a route a DM can link to.
 
 **Deep link.** `/games/:id?action=notifications` opens the panel once the interest query has loaded and strips
