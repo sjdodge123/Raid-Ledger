@@ -47,19 +47,16 @@ describe('split-type labels (ROK-2311 R1)', () => {
     expect(json.footer?.text).toBe(`My Guild · ${label}`);
   });
 
-  it.each(SPLIT_LABELS)(
-    '%s batch summary names "%s"',
-    async (type, label) => {
-      const { embed } = await makeService().buildBatchSummaryEmbed(
-        type,
-        4,
-        'Community',
-      );
-      const json = embed.toJSON() as { title?: string; description?: string };
-      expect(json.title).toContain(`4 ${label} Notifications`);
-      expect(json.description).toBe(
-        `You have 4 new ${label.toLowerCase()} notifications. Check the web app for details.`,
-      );
-    },
-  );
+  it.each(SPLIT_LABELS)('%s batch summary names "%s"', async (type, label) => {
+    const { embed } = await makeService().buildBatchSummaryEmbed(
+      type,
+      4,
+      'Community',
+    );
+    const json = embed.toJSON() as { title?: string; description?: string };
+    expect(json.title).toContain(`4 ${label} Notifications`);
+    expect(json.description).toBe(
+      `You have 4 new ${label.toLowerCase()} notifications. Check the web app for details.`,
+    );
+  });
 });
