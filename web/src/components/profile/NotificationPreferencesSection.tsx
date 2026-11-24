@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { InformationCircleIcon } from '@heroicons/react/24/outline';
+import { notificationRowCaption, type NotificationRowCaption } from './notification-row-caption';
 import {
     useNotificationPreferences,
     type NotificationType,
@@ -193,6 +195,13 @@ function ChannelToggle({ channel, active, label, onToggle }: {
     );
 }
 
+/** ROK-2290: what the row's switches add up to — "Discord DM only" (success) or "Muted" (muted). */
+function RowCaption({ caption }: { caption: NotificationRowCaption }) {
+    if (!caption) return null;
+    const tone = caption === 'Discord DM only' ? 'text-success' : 'text-muted';
+    return <div className={`text-xs mt-0.5 ${tone}`} data-testid="notif-row-caption">{caption}</div>;
+}
+
 function NotificationRow({ type, label, description, visibleChannels, preferences, onToggle }: {
     type: NotificationType; label: string; description: string;
     visibleChannels: { channel: Channel; label: string }[];
@@ -205,6 +214,7 @@ function NotificationRow({ type, label, description, visibleChannels, preference
             <div className="flex-1 min-w-0 mr-3">
                 <div className="text-sm font-medium text-foreground truncate">{label}</div>
                 <div className="text-xs text-muted truncate">{description}</div>
+                <RowCaption caption={notificationRowCaption(preferences?.channelPrefs[type], visibleChannels.map((c) => c.channel))} />
             </div>
             <div className="flex gap-2 sm:gap-4 shrink-0">
                 {visibleChannels.map(({ channel }) => (
@@ -258,7 +268,11 @@ export function NotificationPreferencesSection() {
     return (
         <div className="bg-surface border border-edge-subtle rounded-xl p-6">
             <h2 className="text-xl font-semibold text-foreground mb-1">Notifications</h2>
-            <p className="text-sm text-muted mb-5">Choose how and when you get notified</p>
+            <p className="text-sm text-muted mb-1.5">Choose how and when you get notified</p>
+            <p className="text-xs text-muted mb-5 flex items-start gap-1.5" data-testid="notif-channels-hint">
+                <InformationCircleIcon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                <span><span className="text-secondary font-medium">The bell and Discord switches are separate</span> — turn off the bell and you still get the DM.</span>
+            </p>
             {isLoading || !preferences ? <PreferencesSkeleton /> : (
                 <NotificationPreferencesContent preferences={preferences} visibleChannels={visibleChannels} handleToggle={handleToggle} channelAvailability={channelAvailability} />
             )}

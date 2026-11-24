@@ -298,7 +298,7 @@ describe('HubNotificationService.notifyLateTag batched send (L4407)', () => {
     expect(taggedIds(notifications)).toEqual([3]);
   });
 
-  it('gives the claim back for a member whose in-app channel is off', async () => {
+  it('gives the claim back for a member whose bell AND Discord are both off', async () => {
     q.findLateTagEvent.mockResolvedValue(lateEvent());
     const { svc, notifications, dedup } = setup();
     notifications.createMany.mockResolvedValue([{ userId: 3 }]);

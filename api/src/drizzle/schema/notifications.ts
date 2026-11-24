@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
   jsonb,
+  boolean,
   index,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
@@ -66,6 +67,12 @@ export const notifications = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
     /** Notifications expire after a certain period */
     expiresAt: timestamp('expires_at'),
+    /**
+     * ROK-2290: the member muted this type's bell but kept its Discord DM.
+     * The row exists for the DM (and its read/dedupe bookkeeping) but bell
+     * reads must not list or count it.
+     */
+    inAppHidden: boolean('in_app_hidden').default(false).notNull(),
   },
   (table) => ({
     // Composite index for efficient unread queries (userId + readAt IS NULL)

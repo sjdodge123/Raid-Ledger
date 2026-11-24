@@ -436,13 +436,18 @@ describe('AC4 — hub_event_tagged channel preferences', () => {
     expect(dispatchedTo(fan)).toBe(1);
   });
 
-  it('in-app off + Discord on: no row and, per OQ-1 (create gates on in-app first), no DM', async () => {
+  it('in-app off + Discord on: one hidden row (nothing in the bell) and the DM still goes (ROK-2290)', async () => {
     const g = await insertHub();
     const dmOnly = await member(g.id, 'dm-only');
     await setTaggedPrefs(dmOnly, { inApp: false, discord: true });
     await announce(await insertEvent(g.id));
-    expect(await rowsFor(dmOnly)).toHaveLength(0);
-    expect(dispatchedTo(dmOnly)).toBe(0);
+    const rows = await rowsFor(dmOnly, 'hub_event_tagged');
+    expect(rows).toHaveLength(1);
+    expect(rows.map((r) => r.inAppHidden)).toEqual([true]);
+    expect((await rowsFor(dmOnly)).filter((r) => !r.inAppHidden)).toHaveLength(
+      0,
+    );
+    expect(dispatchedTo(dmOnly)).toBe(1);
   });
 });
 
