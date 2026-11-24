@@ -15,6 +15,7 @@ import { SettingsService } from '../settings/settings.service';
 import { getQueueToken } from '@nestjs/bullmq';
 import { at } from '../common/testing/narrow';
 import { GameActivityNudge } from '../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
+import * as planDiscordHelpers from './event-plans-discord.helpers';
 
 const nudge = { touch: jest.fn() };
 
@@ -441,4 +442,33 @@ describe('EventPlansService — getTimeSuggestions', () => {
     testTimeSuggestionsGameInterest());
   it('should respect afterDate parameter', () =>
     testTimeSuggestionsAfterDate());
+});
+
+describe('EventPlansService — cancel DM (ROK-2317 ruling 5)', () => {
+  beforeEach(() => {
+    db.limit.mockResolvedValue([makePlan()]);
+    db.returning.mockResolvedValue([makePlan({ status: 'cancelled' })]);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('sends no "cancelled" DM when the creator cancels their own plan', async () => {
+    const dm = jest
+      .spyOn(planDiscordHelpers, 'dmOrganizer')
+      .mockResolvedValue(undefined);
+    await service.cancel(PLAN_ID, CREATOR_ID);
+    expect(dm).not.toHaveBeenCalled();
+  });
+
+  it('DMs the creator when an admin cancels their plan', async () => {
+    const dm = jest
+      .spyOn(planDiscordHelpers, 'dmOrganizer')
+      .mockResolvedValue(undefined);
+    await service.cancel(PLAN_ID, CREATOR_ID + 1, 'admin');
+    expect(dm).toHaveBeenCalledWith(
+      db,
+      discordClient,
+      CREATOR_ID,
+      'Your event plan "Raid Night" has been cancelled.',
+    );
+  });
 });

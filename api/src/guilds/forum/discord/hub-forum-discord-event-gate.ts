@@ -109,6 +109,7 @@ export class HubForumDiscordEventGate {
         .setTitle(facts.title)
         .setDescription(subjectNoticeText(subject.kind, facts.title, url))
         .setURL(url);
+      // ROK-2317: always sends — explains why the user's own post was not imported.
       await this.client.sendEmbedDM(discordId, embed);
     } catch (err) {
       if (isClosedDms(err)) return;

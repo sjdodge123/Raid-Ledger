@@ -169,6 +169,7 @@ export class SigninReminderService {
     if (await releaseIfOptedOut(this.db, discordId)) return 'skipped';
     const { embed, row } = buildSigninReminderDm(communityName, clientUrl);
     try {
+      // ROK-2317: always sends — recipient has no account, so no switch; own opt-out.
       await this.discord.sendEmbedDM(discordId, embed, row);
     } catch (err) {
       await this.recordFailure(discordId, err);

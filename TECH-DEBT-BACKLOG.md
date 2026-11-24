@@ -193,7 +193,7 @@ A 12-agent pass verified all 293 backlog entries against current `main` (tsc cle
 ### 2026-07-15 — fix/running-late-followups (surfaced during high-effort code review of the running-late/delay follow-ups)
 
 - **[low — defense in depth]** `formatEpoch` (`api/src/notifications/format-helpers.ts:19-29`) renders ANY residual `<t:` token that reaches `buildPlaintextContent` in the server process TZ (no `timeZone` option), and `stripDiscordMarkup` (:39) discards the style char so `:R` (relative "in N hours") collapses to an absolute duplicate. Even after the two fixes above, any future notification type that stores `<t:>` markup inherits the bug. Suggested: thread the recipient timezone into the DM job data and have `formatEpoch` render in it (and render `:R` as a real relative delta). Note: `tools/test-bot/src/helpers/discord-markup.ts` mirrors `format-helpers.ts` and must stay in sync.
-- **[low — product/observability]** The new `running_late` notification type is default-on across inApp/push/discord and has no toggle row in the web `NotificationPreferencesSection` (`web/src/components/profile/NotificationPreferencesSection.tsx`) — same as the shipped `event_delayed` precedent, so users cannot opt out of either. It also sets no `expiresAt`, so a late notice lingers in the in-app list after the event. Suggested (if operators report noise): add prefs rows for `event_delayed` + `running_late` and set `expiresAt = event end` on both.
+- ~~**[low — product/observability]** The new `running_late` notification type is default-on across inApp/push/discord and has no toggle row in the web `NotificationPreferencesSection` (`web/src/components/profile/NotificationPreferencesSection.tsx`) — same as the shipped `event_delayed` precedent, so users cannot opt out of either. It also sets no `expiresAt`, so a late notice lingers in the in-app list after the event. Suggested (if operators report noise): add prefs rows for `event_delayed` + `running_late` and set `expiresAt = event end` on both.~~ **FIXED 2026-11-24** — ROK-2311 #2322 (`running_late` has its own "Running late" row)
 
 ### 2026-07-15 — rok-1394-nonseries-zero-presence-guard (surfaced during fleet validate-ci run on runner-1)
 
@@ -4657,3 +4657,9 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 ### 2026-11-24 — feat/rok-2311-notification-rows (surfaced during ROK-2311 review)
 
 - **low** `api/src/events/signups-roster-ops.helpers.ts:101` (`notifyRemovedUser`, "Removed from Event", sent to the removed member) — still rides on the `slot_vacated` type, whose settings row now sits under the **Organizer** heading, so a member must switch off an organizer-looking row to mute their own removal notice. Pre-existing pairing (ROK-2311 only added the heading). Suggested: split the member-facing removal notice into its own type/row under "Your roster spot" with an inherit migration, like `voice_access_lost`.
+
+### 2026-11-24 — fix/rok-2317-dm-switches (surfaced during ROK-2317 review + spec)
+
+- **[low]** `api/src/notifications/discord-dm-mute.helpers.ts:33` — `isDiscordDmMuted` (and `discordDisabledTypes` before it) does not filter deactivated users when resolving a recipient's prefs. Pre-existing behaviour, carried unchanged into the shared helper (ROK-2317 review NIT-3). A deactivated user's DM paths already stop elsewhere, so this is latent. Suggested: filter `deactivated_at IS NULL` in the lookup, or document that callers gate deactivation first.
+- **[low — config]** `CLAUDE.md` "Files that trigger smoke test review" does not list `api/src/events/invite.service.ts` or `api/src/events/event-plans*`, which both send Discord DMs (ROK-2317 spec). Suggested: add them to that list (operator config file; operator to confirm).
+
