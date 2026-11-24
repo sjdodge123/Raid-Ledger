@@ -5,6 +5,14 @@ import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { at } from '../../common/testing/narrow';
+import { isMemberInviteDmMuted } from './pug-invite-dm-prefs.helpers';
+
+// ROK-2305: the Discord-switch read is its own query; these specs stub the
+// DB by call order, so the switch is mocked (on) here and proven against a
+// real DB in pug-invite-dm-switch.integration.spec.ts.
+jest.mock('./pug-invite-dm-prefs.helpers', () => ({
+  isMemberInviteDmMuted: jest.fn().mockResolvedValue(false),
+}));
 
 /** Create a Collection-like object that has a .find() method (mimics discord.js Collection). */
 function createMockCollection(
@@ -774,6 +782,19 @@ describe('PugInviteService', () => {
 
       expect(clientService.sendEmbedDM).toHaveBeenCalledTimes(1);
       expect(sentEmbedJson().description ?? '').toContain('3 of 8 signed up');
+    });
+
+    it('sends no DM when the invitee turned Discord off for invites (ROK-2305)', async () => {
+      jest.mocked(isMemberInviteDmMuted).mockResolvedValueOnce(true);
+      stubEventThenCount(3);
+
+      await service.sendMemberInviteDm(42, 'discord-user-123', 'notif-1');
+
+      expect(isMemberInviteDmMuted).toHaveBeenCalledWith(
+        mockDb,
+        'discord-user-123',
+      );
+      expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
     });
 
     it('does not report a full event as empty', async () => {
