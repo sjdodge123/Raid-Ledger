@@ -1,6 +1,8 @@
 /**
  * ROK-2317: unit tests for the shared direct-DM switch check.
  */
+import { eq } from 'drizzle-orm';
+import * as schema from '../drizzle/schema';
 import { isDiscordDmMuted } from './discord-dm-mute.helpers';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
@@ -18,6 +20,8 @@ describe('isDiscordDmMuted — by user id', () => {
     await expect(
       isDiscordDmMuted(db as never, { userId: 7 }, 'slot_vacated'),
     ).resolves.toBe(true);
+    // Pins the column: a { userId } recipient matches users.id, never discord_id.
+    expect(db.where).toHaveBeenCalledWith(eq(schema.users.id, 7));
   });
 
   it('is not muted when the stored Discord channel is ON', async () => {
@@ -66,6 +70,8 @@ describe('isDiscordDmMuted — by Discord id', () => {
       ),
     ).resolves.toBe(true);
     expect(db.leftJoin).toHaveBeenCalledTimes(1);
+    // Pins the column: a { discordId } recipient matches users.discord_id.
+    expect(db.where).toHaveBeenCalledWith(eq(schema.users.discordId, '123'));
   });
 
   it('is never muted for a Discord id with no Raid Ledger account', async () => {

@@ -53,6 +53,26 @@ async function seedAccountPug(discord: boolean | 'no-row'): Promise<number> {
   return user.id;
 }
 
+/** A local (no Discord link) account with Post-Event Follow-Ups Discord OFF. */
+async function seedMutedLocalAccount(): Promise<number> {
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId: null, username: 'local_2317', role: 'member' })
+      .returning({ id: schema.users.id }),
+    'local user',
+  );
+  const channelPrefs = resolveChannelPrefs({});
+  channelPrefs.post_event_followup = {
+    ...channelPrefs.post_event_followup,
+    discord: false,
+  };
+  await testApp.db
+    .insert(schema.userNotificationPreferences)
+    .values({ userId: user.id, channelPrefs });
+  return user.id;
+}
+
 /** An event that ended 15 minutes ago — inside the reminder window. */
 async function seedEndedEvent(): Promise<number> {
   const end = new Date(Date.now() - 15 * MINUTE);
@@ -165,6 +185,18 @@ describe('post-event setup DM honours Post-Event Follow-Ups (ROK-2317)', () => {
     await runReminderPass();
 
     expect(dmRecipients()).toEqual([ACCOUNT_DISCORD_ID]);
+  });
+
+  it('sends no DM when a local account that muted it claimed the slot', async () => {
+    const userId = await seedMutedLocalAccount();
+    const eventId = await seedEndedEvent();
+    // Slot keeps a Discord id (the claim came from a local account), so only
+    // the claiming account's switch can stop the DM.
+    await seedPugSlot(eventId, { userId });
+
+    await runReminderPass();
+
+    expect(dmRecipients()).toEqual([]);
   });
 
   it('still nudges a Discord id with no Raid Ledger account', async () => {
