@@ -2,10 +2,7 @@
  * ROK-2317: unit tests for the shared direct-DM switch check.
  */
 import { isDiscordDmMuted } from './discord-dm-mute.helpers';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 let db: MockDb;
 
@@ -62,7 +59,11 @@ describe('isDiscordDmMuted — by Discord id', () => {
       { channelPrefs: { post_event_followup: { discord: false } } },
     ]);
     await expect(
-      isDiscordDmMuted(db as never, { discordId: '123' }, 'post_event_followup'),
+      isDiscordDmMuted(
+        db as never,
+        { discordId: '123' },
+        'post_event_followup',
+      ),
     ).resolves.toBe(true);
     expect(db.leftJoin).toHaveBeenCalledTimes(1);
   });
@@ -70,7 +71,11 @@ describe('isDiscordDmMuted — by Discord id', () => {
   it('is never muted for a Discord id with no Raid Ledger account', async () => {
     db.limit.mockResolvedValueOnce([]);
     await expect(
-      isDiscordDmMuted(db as never, { discordId: '123' }, 'post_event_followup'),
+      isDiscordDmMuted(
+        db as never,
+        { discordId: '123' },
+        'post_event_followup',
+      ),
     ).resolves.toBe(false);
   });
 });

@@ -251,11 +251,7 @@ async function trySendPromoteDM(
 
   const creatorDiscordId = await lookupCreatorDiscord(deps.db, event.creatorId);
   if (!creatorDiscordId) return;
-  // ROK-2317: the promote DM follows the creator's Slot Vacated switch.
-  if (await isDiscordDmMuted(deps.db, { userId: event.creatorId }, 'slot_vacated')) {
-    deps.logger.debug(`Promote DM muted for event ${event.id}`);
-    return;
-  }
+  if (await isPromoteDmMuted(deps, event.id, event.creatorId)) return;
 
   const role = assignment.role!;
   const pos = assignment.position;
@@ -271,6 +267,21 @@ async function trySendPromoteDM(
   deps.logger.log(
     `Sent promote DM to creator ${creatorDiscordId} for event ${event.id}`,
   );
+}
+
+/** ROK-2317: the promote DM follows the creator's Slot Vacated switch. */
+async function isPromoteDmMuted(
+  deps: Pick<DepartureGraceDeps, 'db' | 'logger'>,
+  eventId: number,
+  creatorId: number,
+): Promise<boolean> {
+  const muted = await isDiscordDmMuted(
+    deps.db,
+    { userId: creatorId },
+    'slot_vacated',
+  );
+  if (muted) deps.logger.debug(`Promote DM muted for event ${eventId}`);
+  return muted;
 }
 
 /** Check if bench players exist (excluding departed/declined/roached_out). */
