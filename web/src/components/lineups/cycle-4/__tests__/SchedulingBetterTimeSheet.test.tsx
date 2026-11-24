@@ -94,36 +94,34 @@ describe('SchedulingBetterTimeSheet layout (ROK-1580)', () => {
 });
 
 /**
- * ROK-1546 AC6 — on a phone the trigger is the ladder's SECOND action, not a
- * ghost. The dashed, muted treatment was nearly invisible against the panel on
- * an actual device (operator screenshot), so below `sm` it borrows the same
- * secondary-button recipe the sign-in CTA in `SchedulingSlotRow` uses
- * (`border-edge-strong` + `bg-surface` + `text-foreground`). The dashed/muted
- * look survives from `sm` up, where it never had the contrast problem.
+ * The trigger is the poll's one way out when no offered time suits. ROK-1546
+ * AC6 made it a solid button on phones (the dashed, muted ghost was nearly
+ * invisible on a device); the operator then asked (2026-11-23) for a colour
+ * that stands out, so at every width it is the shared `Button` in its
+ * `warning-soft` variant.
  */
-describe('SchedulingBetterTimeTrigger (ROK-1546 AC6)', () => {
-    /** The trigger element, which owns the whole mobile treatment. */
+describe('SchedulingBetterTimeTrigger', () => {
+    /** The trigger element, which owns the whole treatment. */
     function renderTrigger(): HTMLElement {
         render(<SchedulingBetterTimeTrigger onClick={() => {}} />);
         return screen.getByTestId('scheduling-find-better-time');
     }
 
-    it('reads as a solid secondary button below lg', () => {
+    it('is a full-width tinted button with a 44px touch target', () => {
         const classes = renderTrigger().className.split(/\s+/);
-        expect(classes).toContain('border-edge-strong');
-        expect(classes).toContain('bg-surface');
-        expect(classes).toContain('text-foreground');
+        expect(classes).toContain('bg-warning/10');
+        expect(classes).toContain('border-warning/30');
+        expect(classes).toContain('text-warning');
         expect(classes).toContain('w-full');
         expect(classes).toContain('min-h-[44px]');
     });
 
-    it('keeps the dashed/muted treatment for lg and up only', () => {
+    it('carries the same tint at every width (no muted or dashed look from lg up)', () => {
         const classes = renderTrigger().className.split(/\s+/);
-        // A BARE `border-dashed` would apply on the phone too — that is the bug.
         expect(classes).not.toContain('border-dashed');
-        expect(classes).toContain('lg:border-dashed');
-        expect(classes).not.toContain('text-secondary');
-        expect(classes).toContain('lg:text-secondary');
+        expect(classes).not.toContain('lg:border-dashed');
+        expect(classes).not.toContain('lg:text-secondary');
+        expect(classes).not.toContain('lg:bg-transparent');
     });
 
     it('keeps the copy and renders the leading + as a decorative glyph', () => {

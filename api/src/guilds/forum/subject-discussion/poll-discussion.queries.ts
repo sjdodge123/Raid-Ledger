@@ -5,7 +5,8 @@
  * is its lineup's `guild_id` (spec §3.1). Thread rows reuse
  * `event_detached_at` / `write_closes_at` for the poll subject (R8).
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import * as schema from '../../../drizzle/schema';
 import type { DbOrTx } from '../event-discussion/event-discussion.queries';
 
@@ -31,6 +32,13 @@ export interface PollSyncRow {
    * reading as `standalone-poll-auth.helpers.ts`).
    */
   linkedEventTitle: string | null;
+  /**
+   * ROK-2301: the title of the ended event whose "Schedule a follow-up?"
+   * prompt opened this poll (`post_event_followup_sent.match_id`). Null when
+   * there is no follow-up row, the event is gone, or its title is blank. The
+   * poll itself stays unlinked.
+   */
+  followupOfEventTitle: string | null;
   guildId: number | null;
   visibility: 'public' | 'private';
   creatorId: number;
@@ -50,42 +58,66 @@ export interface LivePollThread {
   writeClosesAt: Date | null;
 }
 
+const m = schema.communityLineupMatches;
+const l = schema.communityLineups;
+/** Aliased so the newest-row subquery below can name the outer row. */
+const followup = alias(schema.postEventFollowupSent, 'poll_followup');
+/** The follow-up prompt's source event (`events` is joined for the link). */
+const followupEvent = alias(schema.events, 'poll_followup_event');
+
+/** The columns `findPollForSync` reads, before shaping. */
+const pollColumns = {
+  matchId: m.id,
+  lineupId: m.lineupId,
+  status: m.status,
+  lineupStatus: l.status,
+  phaseDeadline: l.phaseDeadline,
+  linkedEventId: m.linkedEventId,
+  eventTitle: schema.events.title,
+  eventFromPollId: schema.events.createdFromPollId,
+  followupTitle: followupEvent.title,
+  guildId: l.guildId,
+  visibility: l.visibility,
+  creatorId: l.createdBy,
+  gameName: schema.games.name,
+  lineupTitle: l.title,
+  override: l.phaseDurationOverride,
+};
+
+/**
+ * Review MINOR-1: `post_event_followup_sent.match_id` has no unique
+ * constraint, so join only the NEWEST follow-up row naming the match. The
+ * poll is one row per match id either way; this keeps the title stable.
+ */
+function newestFollowupOf(matchId: typeof m.id): SQL | undefined {
+  return and(
+    eq(followup.matchId, matchId),
+    sql`not exists (select 1 from post_event_followup_sent newer where newer.match_id = ${followup.matchId} and newer.id > ${followup.id})`,
+  );
+}
+
 /** The poll row, or null when the match (or its lineup) is gone. */
 export async function findPollForSync(
   db: DbOrTx,
   matchId: number,
 ): Promise<PollSyncRow | null> {
-  const m = schema.communityLineupMatches;
-  const l = schema.communityLineups;
   const [row] = await db
-    .select({
-      matchId: m.id,
-      lineupId: m.lineupId,
-      status: m.status,
-      lineupStatus: l.status,
-      phaseDeadline: l.phaseDeadline,
-      linkedEventId: m.linkedEventId,
-      eventTitle: schema.events.title,
-      eventFromPollId: schema.events.createdFromPollId,
-      guildId: l.guildId,
-      visibility: l.visibility,
-      creatorId: l.createdBy,
-      gameName: schema.games.name,
-      lineupTitle: l.title,
-      override: l.phaseDurationOverride,
-    })
+    .select(pollColumns)
     .from(m)
     .innerJoin(l, eq(l.id, m.lineupId))
     .innerJoin(schema.games, eq(schema.games.id, m.gameId))
     .leftJoin(schema.events, eq(schema.events.id, m.linkedEventId))
+    .leftJoin(followup, newestFollowupOf(m.id))
+    .leftJoin(followupEvent, eq(followupEvent.id, followup.eventId))
     .where(eq(m.id, matchId))
     .limit(1);
   if (!row) return null;
-  const { override, eventTitle, eventFromPollId, ...rest } = row;
+  const { override, eventTitle, eventFromPollId, followupTitle, ...rest } = row;
   const produced = eventFromPollId === matchId;
   return {
     ...rest,
     linkedEventTitle: produced ? null : eventTitle,
+    followupOfEventTitle: followupTitle?.trim() || null,
     standalone: override?.standalone === true,
   };
 }
@@ -118,7 +150,6 @@ export async function findPollMatchIds(
   db: DbOrTx,
   lineupId: number,
 ): Promise<number[]> {
-  const m = schema.communityLineupMatches;
   const rows = await db
     .select({ id: m.id })
     .from(m)

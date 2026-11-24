@@ -10,7 +10,7 @@ The branch stays local-only through Steps 1-4. No `git push`, no `gh pr create`,
 
 ---
 
-## 3a. Spec ↔ implementation reconciliation (per `feedback_spec_reconcile_before_review.md`)
+## 3a. Spec ↔ implementation reconciliation (per `feedback_chrome_mcp_e2e_before_review.md`)
 
 For each milestone, walk through `planning-artifacts/specs/<STORY>-M<N>-spec.md` vs what was actually built:
 - Any AC NOT delivered → flag in build-state.yaml, append note to the spec

@@ -39,8 +39,9 @@ const IGNORED = [
   /\.md$/,
 ];
 
-/** The target one path maps to, or null when it is not a known surface. */
-function targetFor(path) {
+/** The target one path maps to, or null when it is not a known surface.
+ *  Also used by scripts/lane-check-plan.mjs (ROK-2310). */
+export function targetFor(path) {
   if (/^api\//.test(path)) return 'api';
   // The bundle budget only runs for a web target, so its own config maps there.
   if (/^web\//.test(path) || /^scripts\/(bundle-budget\.config|check-bundle-size)\.mjs$/.test(path)) return 'web';
@@ -96,4 +97,17 @@ async function main() {
   process.stdout.write(`${plan.targets.length ? plan.targets.join(' ') : 'none'}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main();
+// fileURLToPath, not a hand-built `file://` string: a repo path with a space
+// (or any character a URL escapes) never matched, and the CLI printed nothing.
+// realpath as well: node resolves the entry script's symlinks (macOS /var →
+// /private/var, a symlinked checkout), so the raw argv path never matched either.
+const { fileURLToPath } = await import('node:url');
+const { realpathSync } = await import('node:fs');
+function isCliEntry(argvPath) {
+  try {
+    return realpathSync(argvPath) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+if (process.argv[1] && isCliEntry(process.argv[1])) await main();

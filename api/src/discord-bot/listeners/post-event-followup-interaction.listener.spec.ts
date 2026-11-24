@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Logger } from '@nestjs/common';
 import type { Client } from 'discord.js';
 import { PostEventFollowupInteractionListener } from './post-event-followup-interaction.listener';
@@ -102,6 +103,7 @@ async function setup() {
       { provide: DiscordBotClientService, useValue: mockClientService },
       { provide: ModuleRef, useValue: { get: jest.fn(() => ({})) } },
       { provide: NotificationService, useValue: { createMany: jest.fn() } },
+      { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       {
         provide: SettingsService,
         useValue: { getClientUrl: jest.fn().mockResolvedValue(CLIENT_URL) },

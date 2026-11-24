@@ -61,10 +61,10 @@ function gridDate(): string | null {
     return screen.getByTestId('calendar-view').getAttribute('data-date');
 }
 
-function go(to: string): void {
+function go(to: string | -1): void {
     const navigate = navigateRef;
     if (!navigate) throw new Error('navigate not captured');
-    act(() => { void navigate(to); });
+    act(() => { if (to === -1) void navigate(-1); else void navigate(to); });
 }
 
 describe('CalendarPage — external ?view= navigation while mounted', () => {
@@ -140,5 +140,57 @@ describe('CalendarPage — external ?date= navigation while mounted', () => {
 
             expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'schedule', date: '2026-03-10' });
         });
+    });
+});
+
+/** ROK-2303: phone Day view → event → Back returns to Day on the same date. */
+describe('CalendarPage — phone deep links and Back (<768px)', () => {
+    const originalWidth = window.innerWidth;
+    afterEach(() => { Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth }); });
+    function atPhone(entries: string[]): void {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+        echoOnMount = null;
+        renderPage(CalendarPage, entries);
+    }
+
+    it('reopens Day on the same date when Back remounts the page on ?view=day', () => {
+        atPhone(['/calendar?view=day&date=2026-03-10']);
+
+        expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'day', date: '2026-03-10' });
+    });
+
+    it('honours ?view=month on a phone', () => {
+        atPhone(['/calendar?view=month&date=2026-03-10']);
+
+        expect(gridView()).toBe('month');
+    });
+
+    it('opens Schedule with no view param, and keeps Schedule for ?view=week', () => {
+        atPhone(['/calendar']);
+        expect(gridView()).toBe('schedule');
+
+        go('/calendar?view=week&date=2026-03-10');
+        expect(gridView()).toBe('schedule');
+    });
+
+    it('adopts ?view=day on Back while the page stays mounted', () => {
+        atPhone(['/calendar?view=day&date=2026-03-10']);
+        go('/calendar');
+        expect(gridView()).toBe('schedule');
+
+        go(-1);
+
+        expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'day', date: '2026-03-10' });
+    });
+
+    it('re-picks Schedule on a PUSH to /calendar with no view while mounted in Day, and a PUSH to ?view=day picks Day', () => {
+        atPhone(['/calendar?view=day&date=2026-03-10']);
+        expect(gridView()).toBe('day');
+
+        go('/calendar');
+        expect(gridView()).toBe('schedule');
+
+        go('/calendar?view=day&date=2026-04-02');
+        expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'day', date: '2026-04-02' });
     });
 });

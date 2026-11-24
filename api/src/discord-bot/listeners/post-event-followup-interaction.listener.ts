@@ -1,6 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { MessageFlags } from 'discord.js';
 import type { ButtonInteraction } from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -74,6 +74,7 @@ export class PostEventFollowupInteractionListener {
     private readonly moduleRef: ModuleRef,
     private readonly notificationService: NotificationService,
     private readonly settingsService: SettingsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private get deps(): PostEventFollowupDeps {
@@ -84,6 +85,7 @@ export class PostEventFollowupInteractionListener {
       }),
       notificationService: this.notificationService,
       settingsService: this.settingsService,
+      eventEmitter: this.eventEmitter,
       logger: this.logger,
     };
   }

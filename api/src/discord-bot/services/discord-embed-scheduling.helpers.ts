@@ -4,8 +4,9 @@
  *
  * ROK-1461 (slice C): the family renders through `createChannelEmbed`, so the
  * state lives in the author line, the colour comes from the shared palette,
- * the voter count left the footer, the title links `/games/:id`, and the
- * "Vote Now" BUTTON became a masked link on the last description line.
+ * the voter count left the footer, and the "Vote Now" BUTTON became a masked
+ * link on the last description line. ROK-2301: the title opens the poll page
+ * and the game page rides the link line as `Game page ↗`.
  */
 import {
   SLOT_TIE_RULE,
@@ -215,25 +216,33 @@ function leadingTimeLines(slots: SchedulingPollSlot[]): string[] {
   return ['', `Leading time was ${formatSlotTimestamp(leader.proposedTime)}`];
 }
 
-/** Open: intro, slots, tie rule when tied, deadline, then the vote link. */
 /**
- * The poll link line, with ` · Hub ↗` appended when the game has a hub
- * (ROK-1872, D16). Without one the line is byte-identical to before.
+ * The poll link line: poll link, then ` · Hub ↗` when the game has a hub
+ * (ROK-1872, D16), then ` · Game page ↗` when there is a game URL (ROK-2301).
  */
-function pollLinks(label: string, data: SchedulingPollEmbedData): string {
-  const poll = maskedLink(label, data.pollUrl);
+function pollLinks(
+  label: string,
+  data: SchedulingPollEmbedData,
+  gameUrl: string | null,
+): string {
+  const links = [maskedLink(label, data.pollUrl)];
   const hub = data.hubLink;
-  if (!hub) return poll;
-  return `${poll} · ${maskedLink(`${hub.label} ${ARROW}`, hub.url)}`;
+  if (hub) links.push(maskedLink(`${hub.label} ${ARROW}`, hub.url));
+  if (gameUrl) links.push(maskedLink(`Game page ${ARROW}`, gameUrl));
+  return links.join(` ${SEP} `);
 }
 
-function openDescription(data: SchedulingPollEmbedData): string[] {
+/** Open: intro, slots, tie rule when tied, deadline, then the vote link. */
+function openDescription(
+  data: SchedulingPollEmbedData,
+  gameUrl: string | null,
+): string[] {
   const lines = votingHead(data.slots);
   // The rule is the comparator's own copy — never restated locally.
   if (topSlotsAreTied(data.slots)) lines.push('', `*${SLOT_TIE_RULE}*`);
   // The deadline sits directly above the link it closes (S1-AC3).
   lines.push('', ...deadlineLines(data.deadline));
-  lines.push(pollLinks(`Vote now ${ARROW}`, data));
+  lines.push(pollLinks(`Vote now ${ARROW}`, data, gameUrl));
   return lines;
 }
 
@@ -260,14 +269,17 @@ function expiredHint(data: SchedulingPollEmbedData): string {
  * (cancelled) or leading time + hint (expired), then `View poll ↗`.
  * No tie rule, no deadline.
  */
-function terminalDescription(data: SchedulingPollEmbedData): string[] {
+function terminalDescription(
+  data: SchedulingPollEmbedData,
+  gameUrl: string | null,
+): string[] {
   const lines = slotBlock(data.slots);
   if (data.status === 'cancelled') {
     lines.push(...reasonLines(data.cancelReason));
   } else {
     lines.push(...leadingTimeLines(data.slots), '', expiredHint(data));
   }
-  lines.push('', pollLinks(`View poll ${ARROW}`, data));
+  lines.push('', pollLinks(`View poll ${ARROW}`, data, gameUrl));
   return lines;
 }
 
@@ -282,29 +294,35 @@ function withHubName(lines: string[], data: SchedulingPollEmbedData): string[] {
 }
 
 /** Body lines, switched on the poll status (ROK-1549 S1-AC3/AC4, S3-AC3). */
-function statusLines(data: SchedulingPollEmbedData): string[] {
+function statusLines(
+  data: SchedulingPollEmbedData,
+  gameUrl: string | null,
+): string[] {
   const status = data.status ?? 'open';
-  if (status === 'open') return openDescription(data);
+  if (status === 'open') return openDescription(data, gameUrl);
   if (status === 'locked_in') {
     // ROK-1607: the time is settled — a locked-in card must never invite a
     // vote. Only `open` says "Vote now".
     const lines = votingHead(data.slots);
-    lines.push('', pollLinks(`View poll ${ARROW}`, data));
+    lines.push('', pollLinks(`View poll ${ARROW}`, data, gameUrl));
     return lines;
   }
-  return terminalDescription(data);
+  return terminalDescription(data, gameUrl);
 }
 
 /** The description: optional hub name line, then the status body. */
-function buildDescription(data: SchedulingPollEmbedData): string {
-  return withHubName(statusLines(data), data).join('\n');
+function buildDescription(
+  data: SchedulingPollEmbedData,
+  gameUrl: string | null,
+): string {
+  return withHubName(statusLines(data, gameUrl), data).join('\n');
 }
 
 /**
  * Build the scheduling-poll embed body with its shared chrome applied.
  *
  * @param data - Poll state, slots and the poll page URL.
- * @param context - Community name and web origin for the title link.
+ * @param context - Community name and web origin for the `Game page` link.
  * @returns A channel embed; this family carries no action row (ROK-1461).
  */
 export function buildSchedulingPollEmbedBody(
@@ -320,12 +338,13 @@ export function buildSchedulingPollEmbedBody(
     footerLabel: 'Scheduling Poll',
   });
   embed.setTitle(`When should we play ${data.gameName}?`);
+  // ROK-2301: the title opens the poll; the game page moves to the link line.
+  if (data.pollUrl) embed.setURL(data.pollUrl);
   const gameUrl = gameDetailUrl(
     context.clientUrl || process.env.CLIENT_URL,
     data.gameId,
   );
-  if (gameUrl) embed.setURL(gameUrl);
-  embed.setDescription(buildDescription(data));
+  embed.setDescription(buildDescription(data, gameUrl));
 
   const thumbnail = absoluteEmbedImageUrl(data.gameCoverUrl);
   if (thumbnail) embed.setThumbnail(thumbnail);

@@ -16,7 +16,7 @@ Every claim cites a file. Anything marked **UNVERIFIED** could not be confirmed 
 ## 1. Ground rules (operator rulings 2026-10-28)
 
 1. **No manual prod pull. No freeze.** Prod takes only the daily 5 AM ET Watchtower pull. Anything needed on day 1 must merge before ~04:30 ET on Nov 4. Aim for Nov 2–3, so it gets a day on prod first.
-2. **One fix per outage. Revert, don't stack.** If a launch-day fix fails, revert to the last good commit. Do not push a second fix on top (CLAUDE.md "Infrastructure Changes"; memory `feedback_one_fix_per_outage`). A revert still reaches prod only on the next 5 AM pull, so the per-hub hide in §5 is the same-day fallback.
+2. **One fix per outage. Revert, don't stack.** If a launch-day fix fails, revert to the last good commit. Do not push a second fix on top (CLAUDE.md "Infrastructure Changes"; memory `feedback_infrastructure_changes`). A revert still reaches prod only on the next 5 AM pull, so the per-hub hide in §5 is the same-day fallback.
 3. **Professions from the addon (ROK-1907 / H11) are post-launch.** The Guild professions widget runs on manual entry only (`web/src/plugins/wow/hub-widgets/professions.register.ts`).
 4. **Dungeon quests may be empty for real events on day 1.** ROK-1908 (the alias map and full dataset) lands Nov 4–5.
 5. **Companion + LedgerLink auto-sync is day 1 for the Operator only.** Other guilds paste strings by hand.
@@ -71,7 +71,7 @@ The Companion auto-creates characters only when the realm's ruleset is known. Th
 
 1. Save the two raw strings **outside the repo** (scratch only). Never commit them raw.
 2. Replace every real character name, GUID and guild name.
-3. Add them to `packages/contract/ledgerlink/v1/fixtures/` in a normal Raid Ledger PR. It is a fixtures-only change: it updates `CHANGELOG.md` and says **additive** in the PR body (CLAUDE.md "LedgerLink addon contract"). Alert the LedgerLink agent (memory `feedback_alert_ledgerlink_on_contract_change`).
+3. Add them to `packages/contract/ledgerlink/v1/fixtures/` in a normal Raid Ledger PR. It is a fixtures-only change: it updates `CHANGELOG.md` and says **additive** in the PR body (CLAUDE.md "LedgerLink addon contract"). Alert the LedgerLink agent (memory `project_ledgerlink_is_the_dev_tunnel`).
 
 ### 3.6 Check every MUST widget on the prod Forever hub — Lead session (a `fleet-ui-verify`-style lane can't reach prod, so the Operator screenshots if needed)
 

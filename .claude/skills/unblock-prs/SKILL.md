@@ -276,10 +276,7 @@ git push --force-with-lease origin <branch>
 gh pr merge <number> --auto --squash
 ```
 
-**Monitor CI:**
-```bash
-gh pr checks <number> --watch
-```
+**Monitor CI:** `scripts/pr-watch.sh <number>` with `run_in_background` (exits once: `ALL MERGED` / `FAILED #n` / `CLOSED #n` / `STUCK #n` / `TIMEOUT` / `ERROR #n` = three `gh` errors in a row for one PR, exit 1; it only reports).
 
 ### 3-alt-f: Wait for Merge, Update Main
 
@@ -431,6 +428,8 @@ Invoke the `/loop` skill (no leading interval — dynamic mode) with a polling p
 ```
 Skill({skill: "loop", args: "Poll PRs #N1, #N2, #N3 until ALL are MERGED. Each tick: gh pr view <num> --json state,mergeStateStatus,headRefOid,statusCheckRollup. Per PR — see Step 8c-e of the unblock-prs skill for decisions. Self-pace 270s while CI moves; stretch to 1200s if every remaining PR is BLOCKED on operator decision."})
 ```
+
+Between ticks, prefer waiting with one background `scripts/pr-watch.sh <N1> <N2> ...` over a fixed cadence: it exits on the first PR that needs a decision (FAILED / CLOSED / STUCK) or when all are merged, and it only reports — the 8c–e actions stay here.
 
 The /loop skill runs the prompt now, then ScheduleWakeup at the chosen cadence. It re-enters itself each tick until the loop body returns "stop." Step 8c–e describes the loop body.
 

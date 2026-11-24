@@ -67,6 +67,10 @@ if [[ -z "$TOOL" ]] || ! [[ "$TOOL" =~ ^[a-zA-Z0-9_-]+$ ]] || (( ${#TOOL} > 64 )
     echo '{"ok":false,"error":"invalid_tool_name"}' >&2
     exit 2
 fi
+# ROK-2280 — every wrapped command (heartbeat wrapper, gate-fanout serial
+# fallback) inherits the tool; the wrapper forwards companion-bot creds only for
+# rl_validate_ci. Exported before the env capture below so the record shows it.
+export RL_TASK_TOOL="$TOOL"
 if [[ ${#CMD_ARGS[@]} -eq 0 ]]; then
     echo '{"ok":false,"error":"missing_cmd"}' >&2
     exit 2
@@ -122,7 +126,7 @@ CWD=$(pwd)
 # is delimited by a literal NUL byte (which is forbidden in env values by
 # POSIX), so the record boundary is unambiguous regardless of value content.
 ENV_JSON=$(env -0 \
-    | jq -Rn --slurp '
+    | jq -R --slurp '
         split("\u0000")
         | map(select(length > 0))
         | map(capture("^(?<key>[^=]+)=(?<value>.*)$"; "s"))
