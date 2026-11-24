@@ -107,7 +107,10 @@ beforeEach(() => {
     .spyOn(client, 'sendDirectMessage')
     .mockResolvedValue(undefined);
   serverInviteFor = jest
-    .spyOn(testApp.app.get(PugInviteService, { strict: false }), 'serverInviteFor')
+    .spyOn(
+      testApp.app.get(PugInviteService, { strict: false }),
+      'serverInviteFor',
+    )
     .mockResolvedValue(null);
   // Record each post-claim DM promise so the spec can await it.
   const invite = testApp.app.get(InviteService, { strict: false });

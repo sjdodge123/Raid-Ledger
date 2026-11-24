@@ -185,7 +185,9 @@ describe('plan cancel DM — ruling 5 (ROK-2317)', () => {
     expect(res.status).toBe(200);
     expect(await planStatus(planId)).toBe('cancelled');
     expect(dmRecipients()).toEqual([ORGANIZER_DISCORD_ID]);
-    expect(sendDirectMessage.mock.calls[0]?.[1]).toBe('Your event plan "Plan 2317" has been cancelled.');
+    expect(sendDirectMessage.mock.calls[0]?.[1]).toBe(
+      'Your event plan "Plan 2317" has been cancelled.',
+    );
   });
 
   it('sends no DM when an admin cancels but polls Discord is off', async () => {
