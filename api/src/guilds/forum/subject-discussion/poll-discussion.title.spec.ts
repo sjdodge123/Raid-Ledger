@@ -13,6 +13,7 @@ import { pollThreadTitle } from './poll-discussion.sync';
 import {
   deadlinePollTitle,
   followupPollTitle,
+  pollTitleNeedsZone,
   pollTitleWithin,
 } from './poll-discussion.title';
 
@@ -108,6 +109,33 @@ describe('plain poll title (ROK-2315)', () => {
     );
   });
 
+  it('keeps the dated title once lock-in links the event it produced', () => {
+    // findPollForSync nulls linkedEventTitle for the poll's own event, so
+    // POLL_LOCKED_IN must not rename the post to "<game> — Poll".
+    const locked = poll({
+      linkedEventId: 5,
+      linkedEventTitle: null,
+      phaseDeadline: DEADLINE,
+    });
+    const want = `Poll · closes Thu 26 Nov — ${GAME}`;
+    expect(rlTitle(locked)).toBe(want);
+    expect(dcTitle(locked)).toBe(want);
+    expect(pollTitleNeedsZone(locked)).toBe(true);
+  });
+
+  it('needs the zone only for the dated form', () => {
+    expect(pollTitleNeedsZone(poll({ phaseDeadline: DEADLINE }))).toBe(true);
+    expect(pollTitleNeedsZone(poll())).toBe(false);
+    const resched = poll({
+      linkedEventId: 9,
+      linkedEventTitle: 'Friday Raid',
+      phaseDeadline: DEADLINE,
+    });
+    expect(pollTitleNeedsZone(resched)).toBe(false);
+    const fu = followup('Thursday Raid', { phaseDeadline: DEADLINE });
+    expect(pollTitleNeedsZone(fu)).toBe(false);
+  });
+
   it('a blank game reads "Scheduling"', () => {
     const p = poll({ phaseDeadline: DEADLINE, gameName: '  ' });
     expect(rlTitle(p)).toBe('Poll · closes Thu 26 Nov — Scheduling');
@@ -150,9 +178,9 @@ describe('follow-up title limits (ROK-2315)', () => {
 
   it('keeps an emoji-heavy Discord name within 100 UTF-16 units', () => {
     const name = dcTitle(followup('🐉'.repeat(200)));
+    // 100 → 82 dragons (182 units) → max 59 → 41 dragons: 82 + 1 + 17 = 100.
+    expect(name).toBe(`${'🐉'.repeat(41)}…${TAIL}`);
     expect(name.length).toBeLessThanOrEqual(100);
-    expect(name.startsWith('🐉')).toBe(true);
-    expect(name.endsWith(`🐉…${TAIL}`)).toBe(true);
   });
 
   it('a title that fits exactly is used whole, without an ellipsis', () => {

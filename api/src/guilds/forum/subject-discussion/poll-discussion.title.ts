@@ -108,6 +108,19 @@ export function deadlinePollTitle(
   return `${head}${cutTo(subject, room)}${ELLIPSIS}`;
 }
 
+/**
+ * The deadline a plain poll's title reads, or null when the title is not the
+ * dated form (a reschedule, a follow-up, or no deadline). Classified with
+ * `rescheduledEvent`, not `linkedEventId`: a poll that PRODUCED its event at
+ * lock-in gets `linkedEventId` but no `linkedEventTitle`, and must keep its
+ * dated title rather than be renamed on POLL_LOCKED_IN.
+ */
+function datedDeadline(poll: PollTitleFields): Date | null {
+  if (rescheduledEvent(poll) !== null) return null;
+  if (followupEventTitle(poll) !== null) return null;
+  return poll.phaseDeadline;
+}
+
 /** The leading-form title (follow-up or dated) when one applies, else null. */
 function leadingTitle(
   poll: PollTitleFields,
@@ -116,8 +129,9 @@ function leadingTitle(
 ): string | null {
   const event = followupEventTitle(poll);
   if (event !== null) return followupPollTitle(event, max);
-  if (poll.linkedEventId !== null || poll.phaseDeadline === null) return null;
-  const date = eventPostDate(poll.phaseDeadline, timeZone);
+  const deadline = datedDeadline(poll);
+  if (deadline === null) return null;
+  const date = eventPostDate(deadline, timeZone);
   return deadlinePollTitle(poll.gameName, date, max);
 }
 
@@ -137,13 +151,10 @@ export function pollTitleWithin(
 }
 
 /**
- * True when the title reads the close date (a plain, unlinked poll with a
- * deadline), so a caller knows whether it needs the community timezone.
+ * True when the title reads the close date (the same classifier
+ * `pollTitleWithin` uses), so a caller knows whether it needs the community
+ * timezone.
  */
 export function pollTitleNeedsZone(poll: PollTitleFields): boolean {
-  return (
-    poll.linkedEventId === null &&
-    poll.phaseDeadline !== null &&
-    followupEventTitle(poll) === null
-  );
+  return datedDeadline(poll) !== null;
 }
