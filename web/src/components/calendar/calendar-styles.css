@@ -723,12 +723,49 @@
         overflow: hidden;
     }
 
+    /* Every row is a fixed whole-line height (title 1 line, meta 1 line,
+       description 2 lines) and never shrinks, so the card's clip falls
+       between rows: a 100px card shows all three, a 50px card shows pill +
+       title + meta and hides the description whole. */
+    .calendar-view-day .day-event-content {
+        padding-top: 0.5rem;
+        gap: 0.25rem;
+    }
+
+    .calendar-view-day .day-event-content > * {
+        flex-shrink: 0;
+    }
+
+    .calendar-view-day .day-event-title,
+    .calendar-view-day .day-event-meta > * {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .calendar-view-day .day-event-meta {
+        flex-wrap: nowrap;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .calendar-view-day .day-event-time {
+        flex-shrink: 0;
+    }
+
+    /* In a narrow column the creator gives way before the game name. */
+    .calendar-view-day .day-event-creator {
+        flex-shrink: 100;
+    }
+
     .calendar-view-day .day-event-description {
         display: -webkit-box;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
         line-clamp: 2;
         overflow: hidden;
+        margin-top: 0;
     }
 }
 

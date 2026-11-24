@@ -203,6 +203,10 @@ test.describe('Calendar — Day-view cards never overlap a later event (ROK-2299
             if (!cardBox || !titleBox) throw new Error('short card or its title has no box');
             expect(titleBox.y, 'title starts inside the 30-min card').toBeGreaterThanOrEqual(cardBox.y - 1);
             expect(titleBox.y, 'title starts inside the 30-min card').toBeLessThan(cardBox.y + cardBox.height);
+            expect(titleBox.height, 'title is one line (ellipsised, not wrapped)').toBeLessThan(28);
+            const metaBox = await shortCard.locator('.day-event-meta').boundingBox();
+            if (!metaBox) throw new Error('short card meta row has no box');
+            expect(metaBox.y + metaBox.height, 'the 30-min card\'s time row ends inside the card (not sliced)').toBeLessThanOrEqual(cardBox.y + cardBox.height + 1);
 
             // 4. The 30-min card is the topmost hit and a click opens its own event.
             const points: Array<{ x: number; y: number }> = [];
