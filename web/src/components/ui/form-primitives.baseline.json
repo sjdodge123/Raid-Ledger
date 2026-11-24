@@ -123,7 +123,7 @@
     "components/players/players-mobile-toolbar.tsx": 1,
     "components/profile/AvatarSelectorModal.tsx": 3,
     "components/profile/CharacterCard.tsx": 5,
-    "components/profile/NotificationPreferencesSection.tsx": 1,
+    "components/profile/notification-matrix-rows.tsx": 1,
     "components/profile/UserEventSignups.tsx": 1,
     "components/profile/UserInfoCard.tsx": 1,
     "components/profile/my-watched-games-section.tsx": 2,
