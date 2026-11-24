@@ -10,7 +10,7 @@
 // ROK-2306: the vote guard's account lookup is pinned in its own spec.
 jest.mock('../../users/discord-account-status.helpers', () => ({
   ...jest.requireActual<object>('../../users/discord-account-status.helpers'),
-  assertAccountActive: async () => undefined,
+  assertAccountActive: () => Promise.resolve(),
 }));
 import { NotFoundException } from '@nestjs/common';
 import {
