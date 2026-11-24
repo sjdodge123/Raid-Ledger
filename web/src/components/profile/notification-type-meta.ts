@@ -19,13 +19,16 @@ export interface NotificationTypeGroup {
  */
 export const IN_APP_ONLY_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>(['lineup_lfg_offer']);
 
-/** ROK-2311 — the inverse: rows whose notice is only ever a Discord DM. Their row hides the bell. */
+/**
+ * ROK-2311 — the inverse: rows whose notice is only ever a Discord DM (never the bell, never pushed).
+ * Their row hides the bell and Push switches and keeps only Discord.
+ */
 export const DM_ONLY_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>(['valheim_claim_suggestion']);
 
 /** The channels a row offers, out of the channels the member can see. */
 export function rowChannels<T extends { channel: Channel }>(type: NotificationType, visible: readonly T[]): T[] {
     if (IN_APP_ONLY_TYPES.has(type)) return visible.filter(({ channel }) => channel === 'inApp');
-    if (DM_ONLY_TYPES.has(type)) return visible.filter(({ channel }) => channel !== 'inApp');
+    if (DM_ONLY_TYPES.has(type)) return visible.filter(({ channel }) => channel === 'discord');
     return [...visible];
 }
 
