@@ -74,7 +74,9 @@ describe('LineupStarService.setStar — lifecycle nudge (Codex r10 P2)', () => {
 
 describe('LineupStarService.setStar — blocked accounts (ROK-2306)', () => {
   it('a banned/deactivated voter → 403 ACCOUNT_BLOCKED before any read or write', async () => {
-    jest.mocked(assertAccountActive).mockRejectedValueOnce(accountBlockedError());
+    jest
+      .mocked(assertAccountActive)
+      .mockRejectedValueOnce(accountBlockedError());
     await expect(
       makeService(jest.fn()).setStar(1, 7, 2, 'member'),
     ).rejects.toMatchObject({

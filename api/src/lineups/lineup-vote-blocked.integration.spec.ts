@@ -4,6 +4,8 @@
  * nominate guard throws), so a caller that bypasses `NotDeactivatedGuard`
  * cannot vote for a blocked user. Real DB; the active control keeps the
  * refusal honest — the same fixture lets an active member's vote land.
+ * Review round 1: the scheduling-poll vote (`SchedulingService.toggleVote`)
+ * gets the same pair of cases.
  */
 import { HttpException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
@@ -15,6 +17,8 @@ import {
 import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { LineupsService } from './lineups.service';
+import { SchedulingService } from './scheduling/scheduling.service';
+import { generatePublicSlug } from './public-lineup-slug.helpers';
 
 type Block = 'banned' | 'deactivated' | 'active';
 const BLOCKED = { status: 403, code: 'ACCOUNT_BLOCKED' };
@@ -142,6 +146,95 @@ describe('LineupsService.toggleVote refuses blocked accounts (ROK-2306)', () => 
     expect({ result, rows: await votesBy(lineupId, userId) }).toEqual({
       result: 'ok',
       rows: [{ gameId }],
+    });
+  });
+});
+
+function scheduling(): SchedulingService {
+  return testApp.app.get(SchedulingService, { strict: false });
+}
+
+/** An open poll: a decided public lineup, a `scheduling` match, one future slot. */
+async function createOpenPoll(): Promise<{ matchId: number; slotId: number }> {
+  const [lineup] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'ROK-2306 poll',
+        createdBy: testApp.seed.adminUser.id,
+        status: 'decided',
+        visibility: 'public',
+        publicSlug: generatePublicSlug(),
+        includeSchedulingPhase: true,
+        phaseDurationOverride: { standalone: true },
+      })
+      .returning(),
+    'lineup',
+  );
+  const [match] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupMatches)
+      .values({
+        lineupId: lineup.id,
+        gameId: testApp.seed.game.id,
+        status: 'scheduling',
+        thresholdMet: true,
+        voteCount: 1,
+      })
+      .returning(),
+    'match',
+  );
+  const [slot] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupScheduleSlots)
+      .values({
+        matchId: match.id,
+        proposedTime: new Date(Date.now() + 72 * 60 * 60 * 1000),
+        suggestedBy: 'user',
+      })
+      .returning(),
+    'slot',
+  );
+  return { matchId: match.id, slotId: slot.id };
+}
+
+async function pollVotesBy(slotId: number, userId: number) {
+  return testApp.db
+    .select({ stance: schema.communityLineupScheduleVotes.stance })
+    .from(schema.communityLineupScheduleVotes)
+    .where(
+      and(
+        eq(schema.communityLineupScheduleVotes.slotId, slotId),
+        eq(schema.communityLineupScheduleVotes.userId, userId),
+      ),
+    );
+}
+
+describe('SchedulingService.toggleVote refuses blocked accounts (ROK-2306)', () => {
+  it.each<Block>(['banned', 'deactivated'])(
+    '%s user → 403 ACCOUNT_BLOCKED and no poll vote row',
+    async (block) => {
+      const userId = await createUser(block);
+      const { matchId, slotId } = await createOpenPoll();
+      const result = await outcome(
+        scheduling().toggleVote(slotId, userId, matchId, 'member'),
+      );
+      expect({ result, rows: await pollVotesBy(slotId, userId) }).toEqual({
+        result: BLOCKED,
+        rows: [],
+      });
+    },
+  );
+
+  it('active control: the poll vote row is written', async () => {
+    const userId = await createUser('active');
+    const { matchId, slotId } = await createOpenPoll();
+    const result = await outcome(
+      scheduling().toggleVote(slotId, userId, matchId, 'member'),
+    );
+    expect({ result, rows: await pollVotesBy(slotId, userId) }).toEqual({
+      result: 'ok',
+      rows: [{ stance: 'yes' }],
     });
   });
 });
