@@ -2,10 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventPlansService, EVENT_PLANS_QUEUE } from './event-plans.service';
 import { autoSignupPollVoters } from './event-plans-auto-signup.helpers';
 import { at } from '../common/testing/narrow';
+import { accountBlockedError } from '../users/discord-account-status.helpers';
 
 // Wiring boundary — voter resolution + signup-loop behavior is covered by
 // event-plans-auto-signup.helpers.spec.ts; here we assert the args it receives.
 jest.mock('./event-plans-auto-signup.helpers', () => ({
+  ...jest.requireActual('./event-plans-auto-signup.helpers'),
   autoSignupPollVoters: jest.fn().mockResolvedValue(undefined),
 }));
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -507,6 +509,26 @@ async function testAutoSignupCreator() {
   expect(signupsService.signup).toHaveBeenCalledWith(99, CREATOR_ID);
 }
 
+async function testBlockedCreatorStillCompletesPlan() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
+      [3, makePollAnswer([])],
+    ]),
+  );
+  signupsService.signup.mockRejectedValueOnce(accountBlockedError());
+
+  await service.processPollClose(PLAN_ID);
+  expect(eventsService.create).toHaveBeenCalled();
+  expect(db.set).toHaveBeenCalledWith(
+    expect.objectContaining({ status: 'completed', createdEventId: 99 }),
+  );
+  expect(db.set).not.toHaveBeenCalledWith(
+    expect.objectContaining({ status: 'expired' }),
+  );
+}
+
 async function testAutoSignupWinningVoters() {
   setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
   setupPollWithAnswers(
@@ -628,6 +650,8 @@ describe('processPollClose — winner determination', () => {
   it('should pick highest registered votes', () => testPicksHighestVotes());
   it('should pick earliest date on tie', () => testPicksEarliestOnTie());
   it('should auto-signup creator', () => testAutoSignupCreator());
+  it('completes the plan without the creator when the creator is blocked (ROK-2298)', () =>
+    testBlockedCreatorStillCompletesPlan());
   it('should auto-signup winning-option voters (ROK-1379 follow-up)', () =>
     testAutoSignupWinningVoters());
   it('should not auto-signup voters when None wins', () =>

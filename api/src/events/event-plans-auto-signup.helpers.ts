@@ -11,6 +11,7 @@ import { and, inArray, isNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { SignupsService } from './signups.service';
+import { isAccountBlockedError } from '../users/discord-account-status.helpers';
 
 const logger = new Logger('EventPlansAutoSignup');
 
@@ -72,6 +73,27 @@ export async function autoSignupPollVoters(
       `Auto-signup voter resolution failed for event ${eventId}: ${
         error instanceof Error ? error.message : 'Unknown error'
       }`,
+    );
+  }
+}
+
+/**
+ * ROK-2298: sign the plan's creator up for the event the poll produced. A
+ * creator banned/deactivated while the poll was open is simply not signed up
+ * (the event still exists and the plan still completes); any other error
+ * propagates unchanged.
+ */
+export async function signupPlanCreator(
+  signupsService: Pick<SignupsService, 'signup'>,
+  eventId: number,
+  creatorId: number,
+): Promise<void> {
+  try {
+    await signupsService.signup(eventId, creatorId);
+  } catch (error) {
+    if (!isAccountBlockedError(error)) throw error;
+    logger.warn(
+      `Plan creator ${creatorId} is blocked; not signed up for event ${eventId}`,
     );
   }
 }

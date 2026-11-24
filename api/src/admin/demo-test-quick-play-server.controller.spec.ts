@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { steamPlayer } from '../plugins/pelican/presence/presence-events';
 import * as presenceHelpers from '../discord-bot/services/ad-hoc-server-presence.helpers';
+import * as identityHelpers from '../discord-bot/services/ad-hoc-steam-identity.helpers';
 import {
   DEMO_PELICAN_SERVER_ID,
   DemoTestQuickPlayServerController,
@@ -48,7 +49,7 @@ beforeEach(() => {
       adHocStatus: 'live',
     });
   identitySpy = jest
-    .spyOn(presenceHelpers, 'resolveSteamIdentity')
+    .spyOn(identityHelpers, 'resolveSteamIdentity')
     .mockResolvedValue(null);
 });
 

@@ -3,8 +3,14 @@ import type {
   InteractionReplyOptions,
   StringSelectMenuInteraction,
 } from 'discord.js';
+import { MessageFlags } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
+import {
+  ACCOUNT_BLOCKED_REPLY,
+  isAccountBlockedError,
+  resolveDiscordAccount,
+} from '../../users/discord-account-status.helpers';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 
@@ -151,6 +157,48 @@ export async function findLinkedUser(
     .where(eq(schema.users.discordId, discordUserId))
     .limit(1);
   return user ?? null;
+}
+
+/** Generic copy every listener catch shows for an unexpected failure. */
+export const GENERIC_ERROR_REPLY = 'Something went wrong. Please try again.';
+
+/**
+ * ROK-2298 safety net: the copy a listener catch shows. A service refusal of
+ * a blocked account (`ForbiddenException{code:'ACCOUNT_BLOCKED'}`) gets the
+ * blocked reply instead of the generic error.
+ */
+export function interactionErrorReply(error: unknown): string {
+  return isAccountBlockedError(error)
+    ? ACCOUNT_BLOCKED_REPLY
+    : GENERIC_ERROR_REPLY;
+}
+
+/**
+ * ROK-2298 gateway lookup for ACTION entry points (sign up, tentative, picks,
+ * series join, running late, delay, follow-up). Returns the linked user,
+ * `null` when the Discord id is unlinked, or `false` when the account is
+ * banned/deactivated — in which case the ephemeral blocked reply has already
+ * been sent and the caller must stop (no write, no embed sync). Cleanup paths
+ * (decline an existing row, leave series, "I'm here") keep `findLinkedUser`.
+ */
+export async function findActiveLinkedUser(
+  interaction: ButtonInteraction | StringSelectMenuInteraction,
+  deps: Pick<SignupInteractionDeps, 'db'> & { logger: MinimalLogger },
+): Promise<typeof schema.users.$inferSelect | null | false> {
+  const account = await resolveDiscordAccount(deps.db, interaction.user.id);
+  if (account.kind === 'linked') return account.user;
+  if (account.kind === 'unlinked') return null;
+  const content = ACCOUNT_BLOCKED_REPLY;
+  if (interaction.deferred || interaction.replied) {
+    await safeEditReply(interaction, { content, components: [] }, deps.logger);
+  } else {
+    await safeReply(
+      interaction,
+      { content, flags: MessageFlags.Ephemeral },
+      deps.logger,
+    );
+  }
+  return false;
 }
 
 /** Fetch an event by ID. */

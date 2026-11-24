@@ -10,7 +10,10 @@ import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 import type { CreateEventPlanDto } from '@raid-ledger/contract';
 import { dmOrganizer } from './event-plans-discord.helpers';
-import { autoSignupPollVoters } from './event-plans-auto-signup.helpers';
+import {
+  autoSignupPollVoters,
+  signupPlanCreator,
+} from './event-plans-auto-signup.helpers';
 import { defined } from '../common/defined.helpers';
 
 const logger = new Logger('EventPlansCrud');
@@ -184,7 +187,7 @@ async function handleEventCreated(
   winnerLabel: string,
   winnerVoterDiscordIds: string[],
 ): Promise<void> {
-  await signupsService.signup(eventId, plan.creatorId);
+  await signupPlanCreator(signupsService, eventId, plan.creatorId);
   await markPlanCompleted(db, plan.id, winnerIndex, eventId);
   // After markPlanCompleted: auto-signup is best-effort and must never
   // reach createEventFromPlan's catch (which would expire a completed plan).

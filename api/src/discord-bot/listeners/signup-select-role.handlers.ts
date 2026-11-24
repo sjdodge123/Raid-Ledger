@@ -1,7 +1,7 @@
 import type { StringSelectMenuInteraction } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
-import { findLinkedUser } from './signup-interaction.helpers';
+import { findActiveLinkedUser } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { getConflictSuffix } from './signup-conflict-warning.helpers';
@@ -79,11 +79,9 @@ export async function handleLinkedRoleSelect(
   a: LinkedRoleSelectArgs,
 ): Promise<void> {
   const { interaction, deps, characterId, roleCtx, signupStatus } = a;
-  const linkedUser = await findLinkedUser(interaction.user.id, deps);
-  if (!linkedUser) {
-    await replyNoLinkedAccount(interaction);
-    return;
-  }
+  const linkedUser = await findActiveLinkedUser(interaction, deps);
+  if (linkedUser === null) return replyNoLinkedAccount(interaction);
+  if (linkedUser === false) return;
   const opts = buildRoleSignupOptions(
     roleCtx.selectedRoles,
     roleCtx.primaryRole,
@@ -155,7 +153,8 @@ export async function handleUnlinkedRoleSelect(
   roleCtx: RoleSelectInfo,
   signupStatus?: 'tentative',
 ): Promise<void> {
-  const linkedUser = await findLinkedUser(interaction.user.id, deps);
+  const linkedUser = await findActiveLinkedUser(interaction, deps);
+  if (linkedUser === false) return;
   if (linkedUser) {
     await handleLinkedNoCharRoleSelect(
       interaction,

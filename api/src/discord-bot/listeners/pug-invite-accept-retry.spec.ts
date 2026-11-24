@@ -11,6 +11,7 @@ import type {
 } from 'discord.js';
 import * as schema from '../../drizzle/schema';
 import { PUG_BUTTON_IDS } from '../discord-bot.constants';
+import { ACCOUNT_BLOCKED_REPLY } from '../../users/discord-account-status.helpers';
 import type { PugInviteDeps } from './pug-invite.helpers';
 import { handlePugButtonInteraction } from './pug-invite-pug.handlers';
 import {
@@ -25,12 +26,16 @@ interface World {
   slot: { id: string; status: string; [key: string]: unknown };
   linked: boolean;
   mmo: boolean;
+  bannedAt?: Date;
 }
 
 /** Rows a `select().from(table)` returns from the fake world. */
 function rowsFor(world: World, table: unknown): unknown[] {
   if (table === schema.pugSlots) return [{ ...world.slot }];
-  if (table === schema.users) return world.linked ? [{ id: 7 }] : [];
+  if (table === schema.users) {
+    const user = { id: 7, discordId: DISCORD_ID, deactivatedAt: null };
+    return world.linked ? [{ ...user, bannedAt: world.bannedAt ?? null }] : [];
+  }
   if (table === schema.events) {
     const slotConfig = world.mmo ? { type: 'mmo' } : null;
     return [{ id: 1, title: 'Raid Night', gameId: 3, slotConfig }];
@@ -183,4 +188,46 @@ describe('PUG accept — a rejected signup leaves the invite retryable (ROK-2203
     expect(world.slot.status).toBe('accepted');
     expect(world.slot.role).toBe('tank');
   });
+});
+
+describe('PUG accept — a blocked invitee is refused, never anonymous (ROK-2298)', () => {
+  function blockedWorld(mmo: boolean): World {
+    return { ...newWorld(true, mmo), bannedAt: new Date() };
+  }
+  function writes(deps: PugInviteDeps): number {
+    const svc = deps.signupsService as unknown as Record<string, jest.Mock>;
+    return (
+      (svc.signup?.mock.calls.length ?? 0) +
+      (svc.signupDiscord?.mock.calls.length ?? 0)
+    );
+  }
+
+  it('Accept button: blocked reply, no signup, slot unchanged', async () => {
+    const world = blockedWorld(false);
+    const deps = buildDeps(world);
+    const i = await clickAccept(deps);
+    expect({
+      reply: lastReply(i),
+      writes: writes(deps),
+      status: world.slot.status,
+    }).toEqual({ reply: ACCOUNT_BLOCKED_REPLY, writes: 0, status: 'invited' });
+  });
+
+  it.each(['character', 'role'] as const)(
+    '%s select: blocked reply, no signup, slot unchanged',
+    async (kind) => {
+      const world = blockedWorld(kind === 'role');
+      const deps = buildDeps(world);
+      const i = await pick(deps, kind);
+      expect({
+        reply: lastReply(i),
+        writes: writes(deps),
+        status: world.slot.status,
+      }).toEqual({
+        reply: ACCOUNT_BLOCKED_REPLY,
+        writes: 0,
+        status: 'invited',
+      });
+    },
+  );
 });

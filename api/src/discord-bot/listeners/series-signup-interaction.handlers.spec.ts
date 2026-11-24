@@ -12,13 +12,25 @@ import {
   type SeriesInteractionDeps,
 } from './series-signup-interaction.handlers';
 import type { ParsedSeriesCustomId } from './series-signup-interaction.helpers';
-import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
+import {
+  findActiveLinkedUser,
+  findLinkedUser,
+  fetchEvent,
+} from './signup-interaction.helpers';
 import { findActiveMembership } from '../../events/series-signups.queries';
 
-jest.mock('./signup-interaction.helpers', () => ({
-  findLinkedUser: jest.fn(),
-  fetchEvent: jest.fn(),
-}));
+// ROK-2298: findActiveLinkedUser defaults to the mocked findLinkedUser, so
+// the active-user cases keep their setup; blocked cases override it.
+jest.mock('./signup-interaction.helpers', () => {
+  const findLinkedUser = jest.fn();
+  return {
+    fetchEvent: jest.fn(),
+    findLinkedUser,
+    findActiveLinkedUser: jest.fn((i: { user: { id: string } }) =>
+      findLinkedUser(i.user.id),
+    ),
+  };
+});
 jest.mock('../../events/series-signups.queries', () => ({
   findActiveMembership: jest.fn(),
 }));
@@ -368,5 +380,56 @@ describe('handleSeriesConfirm', () => {
     expect(lastReply(i).content).toBe(
       'Link your Raid Ledger account to join a series.',
     );
+  });
+});
+
+describe('blocked account (ROK-2298, A9)', () => {
+  // findActiveLinkedUser → false means "blocked, reply already sent".
+  const mockedActive = findActiveLinkedUser as jest.Mock;
+  const parsed = (
+    action: ParsedSeriesCustomId['action'],
+  ): ParsedSeriesCustomId => ({
+    action,
+    eventId: 42,
+    characterId: null,
+    roles: null,
+  });
+  beforeEach(() => {
+    mockedActive.mockResolvedValueOnce(false);
+  });
+
+  it('Join series reads no series state and renders no picker', async () => {
+    const deps = makeDeps();
+    const i = makeInteraction();
+    await handleJoinSeries(i, 42, deps);
+    expect(deps.seriesSignupsService.getState).not.toHaveBeenCalled();
+    expect(mockedEvent).not.toHaveBeenCalled();
+    expect(i.editReply).not.toHaveBeenCalled();
+  });
+
+  it('character and role picks render no next step', async () => {
+    const deps = makeDeps();
+    const i = makeInteraction(['tank']);
+    await handleSeriesCharacterPick(
+      i as unknown as StringSelectMenuInteraction,
+      parsed('series_char'),
+      deps,
+    );
+    mockedActive.mockResolvedValueOnce(false);
+    await handleSeriesRolePick(
+      i as unknown as StringSelectMenuInteraction,
+      parsed('series_role'),
+      deps,
+    );
+    expect(mockedEvent).not.toHaveBeenCalled();
+    expect(i.editReply).not.toHaveBeenCalled();
+  });
+
+  it('Confirm never calls join', async () => {
+    const deps = makeDeps();
+    const i = makeInteraction();
+    await handleSeriesConfirm(i, parsed('series_confirm'), deps);
+    expect(deps.seriesSignupsService.join).not.toHaveBeenCalled();
+    expect(i.editReply).not.toHaveBeenCalled();
   });
 });

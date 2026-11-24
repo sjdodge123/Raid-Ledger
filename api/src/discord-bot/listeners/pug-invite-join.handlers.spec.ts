@@ -10,6 +10,10 @@ import {
 } from '../../common/testing/drizzle-mock';
 import type { PugInviteDeps } from './pug-invite.helpers';
 import { handleJoinEventButton } from './pug-invite-join.handlers';
+import {
+  ACCOUNT_BLOCKED_REPLY,
+  accountBlockedError,
+} from '../../users/discord-account-status.helpers';
 
 const INVITEE = '555555555555555555';
 const STRANGER = '999999999999999999';
@@ -29,11 +33,16 @@ interface Harness {
   interaction: ButtonInteraction;
 }
 
-function buildHarness(clickerId: string): Harness {
+function buildHarness(
+  clickerId: string,
+  bannedAt: Date | null = null,
+): Harness {
   const db = createDrizzleMock();
   db.limit
     .mockResolvedValueOnce([EVENT])
-    .mockResolvedValueOnce([{ id: 7, discordId: clickerId }])
+    .mockResolvedValueOnce([
+      { id: 7, discordId: clickerId, bannedAt, deactivatedAt: null },
+    ])
     .mockResolvedValueOnce([]);
   const signup = jest.fn().mockResolvedValue({});
   const editReply = jest.fn().mockResolvedValue(undefined);
@@ -80,5 +89,28 @@ describe('handleJoinEventButton invitee binding (ROK-1825)', () => {
       signup: [[42, 7, { slotRole: 'dps' }]],
       deletes: 1,
     });
+  });
+
+  it('refuses a banned invitee with the blocked reply and no signup (ROK-2298)', async () => {
+    const h = buildHarness(INVITEE, new Date());
+    await handleJoinEventButton(h.deps, h.interaction, 'pugcode1');
+    expect({
+      reply: h.editReply.mock.calls,
+      signups: h.signup.mock.calls.length,
+      deletes: h.db.delete.mock.calls.length,
+    }).toEqual({
+      reply: [[{ content: ACCOUNT_BLOCKED_REPLY, components: [] }]],
+      signups: 0,
+      deletes: 0,
+    });
+  });
+
+  it('a ban racing the click (signup throws ACCOUNT_BLOCKED) gets the blocked reply (ROK-2298)', async () => {
+    const h = buildHarness(INVITEE);
+    h.signup.mockRejectedValueOnce(accountBlockedError());
+    await handleJoinEventButton(h.deps, h.interaction, 'pugcode1');
+    expect(h.editReply.mock.calls.at(-1)).toEqual([
+      { content: ACCOUNT_BLOCKED_REPLY },
+    ]);
   });
 });
