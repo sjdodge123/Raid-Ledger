@@ -4,7 +4,8 @@
  * (ROK-2208 `setup`; binding it dresses the forum with THIS build's decor, so
  * the `Poll` kind tag exists):
  *  1. the poll gets its RL thread (`GET /scheduling-polls/:id/discussion`);
- *  2. the first vote (the suggest auto-vote) creates the post `<title> — Poll`
+ *  2. the first vote (the suggest auto-vote) creates the post
+ *     `Poll · closes <date> — <game>` (ROK-2315: the poll has a deadline)
  *     carrying the hub tag + `Poll`;
  *  3. the companion bot writes in the post — it is linked to the DM recipient,
  *     who neither voted nor is a member, so the R7 gate refuses it; an RL
@@ -103,13 +104,19 @@ async function waitDiscussion(
   }
 }
 
-/** The RL thread's title — already `<title> — Poll`, the Discord post name too. */
+/**
+ * ROK-2315: a plain poll with a deadline leads with its close date, read in
+ * the community timezone (so only the shape is pinned, not the day).
+ */
+export const DATED_POLL_TITLE = /^Poll · closes \p{L}{3} \d{1,2} \p{L}{3,4} — \S/u;
+
+/** The RL thread's title — the dated poll title, the Discord post name too. */
 async function threadTitle(ctx: TestContext, d: Discussion): Promise<string> {
   const t = await ctx.api.get<{ title?: unknown }>(
     `/guilds/${String(d.guildId)}/forum/${String(d.threadId)}`,
   );
-  if (typeof t.title !== "string" || !t.title.endsWith(" — Poll"))
-    return fail("poll thread: title should end ' — Poll'", t);
+  if (typeof t.title !== "string" || !DATED_POLL_TITLE.test(t.title))
+    return fail("poll thread: title should be 'Poll · closes <date> — <game>'", t);
   return t.title;
 }
 

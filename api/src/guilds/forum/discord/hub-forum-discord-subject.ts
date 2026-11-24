@@ -71,21 +71,25 @@ export function subjectPostTitle(
 }
 
 /**
- * ROK-2301: a poll's Discord post name, ≤100: the follow-up form
- * `<game> — Poll (after <event>)` when it applies, else
- * `subjectPostTitle('poll', <subject>)`. Same rule as the RL thread title.
+ * ROK-2301 / ROK-2315: a poll's Discord post name, ≤100: the follow-up form
+ * `<event> — Follow-up poll` or the dated `Poll · closes <date> — <game>`
+ * when it applies, else `subjectPostTitle('poll', <subject>)`. Same rule as
+ * the RL thread title; `timeZone` is the community default (null ⇒ UTC).
  */
-export function pollPostTitle(poll: PollTitleFields): string {
+export function pollPostTitle(
+  poll: PollTitleFields,
+  timeZone: string | null,
+): string {
   const plain = (subject: string): string => subjectPostTitle('poll', subject);
   // The shared rule counts code points; this file holds Discord names to 100
   // UTF-16 units (as `cutAtBoundary` does). An emoji-heavy event title is cut
   // further until the name fits; the plain form already does. A code point
   // is at most two units, so half the overshoot never cuts more than needed.
   let max = DISCORD_THREAD_NAME_MAX;
-  let name = pollTitleWithin(poll, max, plain);
+  let name = pollTitleWithin(poll, max, plain, timeZone);
   while (name.length > DISCORD_THREAD_NAME_MAX && max > 0) {
     max -= Math.ceil((name.length - DISCORD_THREAD_NAME_MAX) / 2);
-    name = pollTitleWithin(poll, max, plain);
+    name = pollTitleWithin(poll, max, plain, timeZone);
   }
   return name;
 }

@@ -100,7 +100,9 @@ function setup(subject: { matchId: number | null }) {
   const svc = new HubForumDiscordOutboundService(
     {} as ForumDiscordDb,
     gateway as unknown as HubForumDiscordOutboundGateway,
-    {} as unknown as SettingsService,
+    {
+      getDefaultTimezone: jest.fn(() => Promise.resolve(null)),
+    } as unknown as SettingsService,
     {} as unknown as EventForumStarterCards,
     {} as unknown as SchedulingPollForumCard,
   );
