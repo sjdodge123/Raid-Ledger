@@ -88,7 +88,7 @@ test.describe('Profile notifications panel', () => {
         // The In-App column header should always be present.
         await expect(page.getByText('In-App')).toBeVisible({ timeout: 5_000 });
 
-        // At least one toggle button should be present (e.g., "Enable/Disable Slot Vacated inApp notifications")
+        // At least one toggle button should be present (e.g., "Enable/Disable Slot Vacated In-App notifications")
         const toggleButtons = page.locator('button[aria-label*="notifications"]');
         await expect(toggleButtons.first()).toBeVisible({ timeout: 5_000 });
     });

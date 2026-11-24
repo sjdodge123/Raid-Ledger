@@ -163,18 +163,18 @@ it('renders description for each notification type', () => {
         it('toggle button has correct aria-label for active toggle', () => {
             renderSection();
             // slot_vacated inApp is true -> should say "Disable"
-            expect(screen.getByLabelText('Disable Slot Vacated inApp notifications')).toBeInTheDocument();
+            expect(screen.getByLabelText('Disable Slot Vacated In-App notifications')).toBeInTheDocument();
         });
 
         it('toggle button has correct aria-label for inactive toggle', () => {
             renderSection();
             // slot_vacated push is false -> should say "Enable"
-            expect(screen.getByLabelText('Enable Slot Vacated push notifications')).toBeInTheDocument();
+            expect(screen.getByLabelText('Enable Slot Vacated Push notifications')).toBeInTheDocument();
         });
 
         it('calls updatePreferences when toggle is clicked', () => {
             renderSection();
-            fireEvent.click(screen.getByLabelText('Disable Slot Vacated inApp notifications'));
+            fireEvent.click(screen.getByLabelText('Disable Slot Vacated In-App notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { slot_vacated: { inApp: false } },
             });
@@ -182,7 +182,7 @@ it('renders description for each notification type', () => {
 
         it('calls updatePreferences to enable an inactive toggle', () => {
             renderSection();
-            fireEvent.click(screen.getByLabelText('Enable Slot Vacated push notifications'));
+            fireEvent.click(screen.getByLabelText('Enable Slot Vacated Push notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { slot_vacated: { push: true } },
             });
@@ -200,12 +200,12 @@ it('renders description for each notification type', () => {
 
         it('shows the opt-out default as an active Discord toggle', () => {
             renderSection();
-            expect(screen.getByLabelText('Disable LFG player invites discord notifications')).toBeInTheDocument();
+            expect(screen.getByLabelText('Disable LFG player invites Discord notifications')).toBeInTheDocument();
         });
 
         it('opting out of Discord invites calls updatePreferences with the lfg_player_invite type', () => {
             renderSection();
-            fireEvent.click(screen.getByLabelText('Disable LFG player invites discord notifications'));
+            fireEvent.click(screen.getByLabelText('Disable LFG player invites Discord notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { lfg_player_invite: { discord: false } },
             });
@@ -223,7 +223,7 @@ it('renders description for each notification type', () => {
 
         it('opting out of the Discord DM sends the valheim_claim_suggestion type', () => {
             renderSection();
-            fireEvent.click(screen.getByLabelText('Disable Character claim suggestions discord notifications'));
+            fireEvent.click(screen.getByLabelText('Disable Character claim suggestions Discord notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { valheim_claim_suggestion: { discord: false } },
             });
@@ -241,7 +241,7 @@ it('renders description for each notification type', () => {
 
         it('opting out of the Discord DM sends the calendar_needs_reconnect type', () => {
             renderSection();
-            fireEvent.click(screen.getByLabelText('Disable Calendar needs reconnecting discord notifications'));
+            fireEvent.click(screen.getByLabelText('Disable Calendar needs reconnecting Discord notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { calendar_needs_reconnect: { discord: false } },
             });
@@ -249,7 +249,7 @@ it('renders description for each notification type', () => {
 
         it('opting out of the in-app item sends the calendar_needs_reconnect type', () => {
             renderSection();
-            fireEvent.click(screen.getByLabelText('Disable Calendar needs reconnecting inApp notifications'));
+            fireEvent.click(screen.getByLabelText('Disable Calendar needs reconnecting In-App notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { calendar_needs_reconnect: { inApp: false } },
             });

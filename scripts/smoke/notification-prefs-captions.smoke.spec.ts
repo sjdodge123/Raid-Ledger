@@ -71,7 +71,7 @@ test.describe('Notification settings captions', () => {
             const patched = page.waitForResponse(
                 (r) => r.url().includes('/notifications/preferences') && r.request().method() === 'PATCH',
             );
-            await rowEl.getByRole('button', { name: `Disable ${ROW.label} inApp notifications` }).click();
+            await rowEl.getByRole('button', { name: `Disable ${ROW.label} In-App notifications` }).click();
             expect((await patched).ok(), 'the bell toggle PATCH must succeed').toBe(true);
 
             await expect(caption, 'bell off + Discord on must caption the row "Discord DM only"')

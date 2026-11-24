@@ -18,17 +18,18 @@ export interface ChannelColumn {
 /** One row's switch states, keyed by channel; a missing value reads as off. */
 export type RowPrefs = Partial<Record<Channel, boolean>> | undefined;
 
-function ChannelToggle({ channel, active, label, onToggle }: {
-    channel: Channel; active: boolean; label: string; onToggle: () => void;
+/** One switch; screen readers hear the column's label ("In-App"), never the raw channel key. */
+function ChannelToggle({ column, active, label, onToggle }: {
+    column: ChannelColumn; active: boolean; label: string; onToggle: () => void;
 }) {
     return (
         <div className="w-10 sm:w-12 flex justify-center">
             <button type="button" onClick={onToggle}
                 className={`w-10 h-10 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all ${
-                    active ? 'text-emerald-400 bg-emerald-500/15 hover:bg-emerald-500/25' : 'text-muted hover:text-secondary hover:bg-panel'
+                    active ? 'text-success bg-success/15 hover:bg-success/25' : 'text-muted hover:text-secondary hover:bg-panel'
                 }`}
-                aria-label={`${active ? 'Disable' : 'Enable'} ${label} ${channel} notifications`}>
-                <ChannelIcon channel={channel} active={active} />
+                aria-label={`${active ? 'Disable' : 'Enable'} ${label} ${column.label} notifications`}>
+                <ChannelIcon channel={column.channel} active={active} />
             </button>
         </div>
     );
@@ -68,7 +69,7 @@ export function NotificationRow({ type, label, description, visibleChannels, pre
             </div>
             <div className="flex gap-2 sm:gap-4 shrink-0">
                 {visibleChannels.map((column) => offered.includes(column.channel) ? (
-                    <ChannelToggle key={column.channel} channel={column.channel} active={prefs?.[column.channel] ?? false}
+                    <ChannelToggle key={column.channel} column={column} active={prefs?.[column.channel] ?? false}
                         label={label} onToggle={() => onToggle(type, column.channel)} />
                 ) : <ChannelNotOffered key={column.channel} column={column} />)}
             </div>

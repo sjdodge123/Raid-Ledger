@@ -72,7 +72,7 @@ describe('rows that offer fewer channels (ROK-2311)', () => {
         const { container } = renderSection();
         const row = rowOf(container, 'lineup_lfg_offer');
         expect(within(row).getAllByRole('button')).toHaveLength(1);
-        expect(within(row).getByRole('button')).toHaveAccessibleName(/inApp notifications$/);
+        expect(within(row).getByRole('button')).toHaveAccessibleName(/In-App notifications$/);
         expect(within(row).getByTestId('notif-not-offered-push')).toBeInTheDocument();
         expect(within(row).getByTestId('notif-not-offered-discord')).toBeInTheDocument();
     });
@@ -80,12 +80,12 @@ describe('rows that offer fewer channels (ROK-2311)', () => {
     it('the DM-only claim-suggestion row hides the bell and Push switches', () => {
         const { container } = renderSection();
         const row = rowOf(container, 'valheim_claim_suggestion');
-        expect(within(row).queryByRole('button', { name: /inApp notifications$/ })).toBeNull();
-        expect(within(row).queryByRole('button', { name: /push notifications$/ })).toBeNull();
+        expect(within(row).queryByRole('button', { name: /In-App notifications$/ })).toBeNull();
+        expect(within(row).queryByRole('button', { name: /Push notifications$/ })).toBeNull();
         expect(within(row).getByTestId('notif-not-offered-inApp')).toBeInTheDocument();
         expect(within(row).getByTestId('notif-not-offered-push')).toBeInTheDocument();
         expect(within(row).getAllByRole('button')).toHaveLength(1);
-        expect(within(row).getByRole('button', { name: /discord notifications$/ })).toBeInTheDocument();
+        expect(within(row).getByRole('button', { name: /Discord notifications$/ })).toBeInTheDocument();
     });
 
     it('the DM-only row offers no switch at all when the Discord column is hidden', () => {

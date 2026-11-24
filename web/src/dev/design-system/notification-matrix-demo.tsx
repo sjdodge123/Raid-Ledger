@@ -7,7 +7,7 @@
 import { useState, type JSX } from 'react';
 import type { Channel, NotificationType } from '../../hooks/use-notifications';
 import { NotificationGroup, type ChannelColumn, type RowPrefs } from '../../components/profile/notification-matrix-rows';
-import type { NotificationTypeGroup } from '../../components/profile/notification-type-meta';
+import { NOTIFICATION_TYPE_META, type NotificationTypeGroup } from '../../components/profile/notification-type-meta';
 import { StateFrame } from './design-system-bits';
 
 const COLUMNS: readonly ChannelColumn[] = [
@@ -16,13 +16,12 @@ const COLUMNS: readonly ChannelColumn[] = [
     { channel: 'discord', label: 'Discord' },
 ];
 
+const SAMPLE_TYPES: readonly NotificationType[] = ['scheduling_poll', 'lineup_lfg_offer', 'valheim_claim_suggestion'];
+
+/** The three sample rows, picked from the shipped meta so the copy never drifts from `/profile/notifications`. */
 const SAMPLE_GROUP: NotificationTypeGroup = {
     heading: 'Lineups & polls',
-    rows: [
-        { type: 'scheduling_poll', label: 'Scheduling polls', description: 'A poll to pick a time, its reminders and results' },
-        { type: 'lineup_lfg_offer', label: 'LFG offers after a lineup', description: 'Offers to find a group for a game that did not win' },
-        { type: 'valheim_claim_suggestion', label: 'Character claim suggestions', description: 'A Discord DM when a Valheim character looks like yours' },
-    ],
+    rows: NOTIFICATION_TYPE_META.filter((meta) => SAMPLE_TYPES.includes(meta.type)),
 };
 
 const INITIAL: Partial<Record<NotificationType, RowPrefs>> = {
