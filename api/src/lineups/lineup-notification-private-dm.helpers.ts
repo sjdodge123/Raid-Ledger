@@ -161,7 +161,7 @@ export async function sendPrivateSchedulingDM(
 
   await notificationService.create({
     userId: member.userId,
-    type: 'community_lineup',
+    type: 'scheduling_poll',
     title: `Vote on a time for ${match.gameName}`,
     message:
       `Your private lineup match for **${match.gameName}** is scheduling — ` +

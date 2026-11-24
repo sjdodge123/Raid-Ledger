@@ -315,7 +315,7 @@ export async function sendRallyDm(
   );
   const created = await deps.notificationService.create({
     userId,
-    type: 'community_lineup',
+    type: 'scheduling_poll',
     title,
     message,
     payload: rallyPayload(poll, target.slotId),
