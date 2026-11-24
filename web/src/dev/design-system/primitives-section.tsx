@@ -22,6 +22,7 @@ import { LineupEmptyState } from '../../components/lineups/LineupEmptyState';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { TabRowDemo } from './tab-row-demo';
 import { RowCapDemo } from './row-cap-demo';
+import { NotificationMatrixDemo } from './notification-matrix-demo';
 import { HubRowBitsDemo } from './hub-row-bits-demo';
 import { ForumBylineDemo } from './forum-byline-demo';
 import { ForumSignupLineDemo } from './forum-signup-line-demo';
@@ -195,6 +196,7 @@ export function PrimitivesSection(): JSX.Element {
                 <EmptyAndLoading />
                 <TabRowDemo />
                 <RowCapDemo />
+                <NotificationMatrixDemo />
                 <HubRowBitsDemo />
                 <ForumBylineDemo />
                 <ForumSignupLineDemo />
