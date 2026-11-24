@@ -5,7 +5,11 @@
  * posts are created lazily by the first signup ping. DELETED closes
  * unconditionally because the single-event delete emits BEFORE the row is
  * gone and the series delete AFTER. Failures are logged and captured, never
- * thrown into the emitter.
+ * thrown into the emitter. ROK-2314: UPDATED (reschedule lock-in re-emits
+ * it), RESCHEDULING and RESCHEDULE_CLEARED then flip that event's post lock
+ * (hub and registry) right away, so the post closes while a reschedule poll
+ * runs and reopens when it ends — after the re-sync, so the reopen retitles
+ * with the moved `closes_at`.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -17,6 +21,7 @@ import {
 } from '../../../discord-bot/discord-bot.constants';
 import { lifecycleEventId } from '../event-discussion/event-discussion.listener';
 import { EventPlanningPostsService } from './event-planning-posts.service';
+import { HubForumDiscordEventLockSweep } from './hub-forum-discord-event-lock';
 
 @Injectable()
 export class EventPlanningPostsListener {
@@ -25,11 +30,14 @@ export class EventPlanningPostsListener {
   readonly hubBehaviour = 'event-planning.discord-posts';
   readonly ownerPluginId = CORE_PLUGIN_ID;
 
-  constructor(private readonly service: EventPlanningPostsService) {}
+  constructor(
+    private readonly service: EventPlanningPostsService,
+    private readonly lock: HubForumDiscordEventLockSweep,
+  ) {}
 
   @OnEvent(APP_EVENT_EVENTS.UPDATED, { async: true })
   onUpdated(payload: unknown): Promise<void> {
-    return this.run('updated', payload, (id) => this.service.syncEvent(id));
+    return this.syncThenFlip('updated', payload);
   }
 
   @OnEvent(APP_EVENT_EVENTS.CANCELLED, { async: true })
@@ -39,16 +47,18 @@ export class EventPlanningPostsListener {
 
   @OnEvent(APP_EVENT_EVENTS.RESCHEDULING, { async: true })
   onRescheduling(payload: unknown): Promise<void> {
-    return this.run('rescheduling', payload, (id) =>
-      this.service.syncEvent(id),
-    );
+    return this.syncThenFlip('rescheduling', payload);
   }
 
   @OnEvent(APP_EVENT_EVENTS.RESCHEDULE_CLEARED, { async: true })
   onRescheduleCleared(payload: unknown): Promise<void> {
-    return this.run('reschedule-cleared', payload, (id) =>
-      this.service.syncEvent(id),
-    );
+    return this.syncThenFlip('reschedule-cleared', payload);
+  }
+
+  /** Re-sync the post, then (even if that failed) flip its lock now. */
+  private async syncThenFlip(what: string, payload: unknown): Promise<void> {
+    await this.run(what, payload, (id) => this.service.syncEvent(id));
+    await this.run(`${what}-lock`, payload, (id) => this.lock.sweepEvent(id));
   }
 
   @OnEvent(APP_EVENT_EVENTS.DELETED, { async: true })
