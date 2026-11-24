@@ -82,7 +82,7 @@ test.describe('Profile notifications panel', () => {
         // Verify several notification types are rendered as rows
         await expect(page.getByText('Slot Vacated')).toBeVisible({ timeout: 5_000 });
         await expect(page.getByText('Event Reminders')).toBeVisible({ timeout: 5_000 });
-        await expect(page.getByText('New Events', { exact: true })).toBeVisible({ timeout: 5_000 });
+        await expect(page.getByText('Event invites', { exact: true })).toBeVisible({ timeout: 5_000 });
 
         // Verify channel toggle buttons exist — each row has per-channel toggles.
         // The In-App column header should always be present.
