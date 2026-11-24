@@ -1,8 +1,9 @@
 /**
  * ROK-2299 — Day-view cards on the PHONE keep their time-sized height and clip
  * their content, so an earlier, longer card never hangs over a later one and
- * takes its taps. Desktop/tablet (>= 769px) Day view is unchanged: a card is
- * content-tall (min-height 100px) and shows all of its content.
+ * takes its taps. ROK-2304 — desktop/tablet (>= 769px) Day view does the same on
+ * 100px hours: each card is clipped to its time slot, so no card paints over the
+ * next, while a 90-minute card (150px) still shows its whole description.
  *
  * Seed: two events created through `POST /events` (no game, so nothing IGDB can
  * rename): a 90-minute "long" event with a description, and a 30-minute "short"
@@ -28,7 +29,7 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 const LONG_MS = 90 * 60_000;
 const SHORT_MS = 30 * 60_000;
-const DESCRIPTION = 'ROK-2299: the desktop Day view shows the whole card, this line included.';
+const DESCRIPTION = 'ROK-2304: the desktop Day view shows the whole card, this line included.';
 
 interface Seeded { longId: number; shortId: number; longTitle: string; shortTitle: string; date: string }
 
@@ -158,7 +159,7 @@ test.describe('Calendar — Day-view cards never overlap a later event (ROK-2299
         }
     });
 
-    test('desktop/tablet: Day view still shows the whole card content', async ({ page, world }, testInfo) => {
+    test('desktop/tablet: no card paints over the next (ROK-2304)', async ({ page, world }, testInfo) => {
         test.skip(isMobile(testInfo), 'the phone layout is the test above');
         const token = await getAdminToken();
         const ids: number[] = [];
@@ -167,34 +168,55 @@ test.describe('Calendar — Day-view cards never overlap a later event (ROK-2299
             const s = await seedPair(token, page, testInfo, (p) => world.uid(p), ids);
             await openDay(page, testInfo, s.date);
             const longCard = cardFor(page, s.longTitle);
+            const shortCard = cardFor(page, s.shortTitle);
             await expect(longCard).toBeVisible({ timeout: 15_000 });
-            await expect(longCard.locator('.day-event-description')).toBeVisible();
-            // What main (and this branch) does at >= 769px, measured on slot-2 at 1280 and 810:
-            // `.rbc-event` gets `height: auto !important; min-height: 100px; overflow: visible`,
-            // but react-big-calendar's `.rbc-day-slot .rbc-event-content { flex: 1 1 0 }` keeps
-            // the auto height at the 100px minimum, so the `.day-event-block` (which paints the
-            // card's gradient) grows past `.rbc-event` (110px vs 100px) and nothing clips it.
-            // So "unchanged" = nothing clips: the phone rules (time-sized card, overflow hidden,
-            // 2-line clamp) would each fail one of these if they leaked above 768px.
+            await expect(shortCard).toBeVisible({ timeout: 15_000 });
+
+            // 1. The long card's painted block (what overflowed before) ends where the next card starts.
+            await expect.poll(async () => {
+                const a = await longCard.locator('.day-event-block').boundingBox();
+                const b = await shortCard.boundingBox();
+                return a && b ? Math.round(a.y + a.height - b.y) : Number.POSITIVE_INFINITY;
+            }, { message: 'px the 90-min card\'s .day-event-block reaches past the top of the back-to-back 30-min card (<= 1)', timeout: 15_000 })
+                .toBeLessThanOrEqual(1);
+
+            // 2 + 3 + 5a. Block stays inside `.rbc-event`, is clipped, and the 90-min card's description fits.
             await expect.poll(async () => longCard.evaluate((el) => {
                 const block = el.querySelector('.day-event-block');
                 const desc = el.querySelector('.day-event-description');
-                const slot = document.querySelector('.rbc-day-slot .rbc-timeslot-group');
-                if (!block || !desc || !slot) return 'missing block, description or time slot';
-                const hourPx = slot.getBoundingClientRect().height;
+                if (!block || !desc) return 'missing block or description';
                 const card = el.getBoundingClientRect();
                 const b = block.getBoundingClientRect();
                 const d = desc.getBoundingClientRect();
+                const overflow = getComputedStyle(block).overflow;
                 const problems: string[] = [];
-                if (card.height < 99) problems.push(`card ${Math.round(card.height)}px < 100px minimum`);
-                if (card.height <= hourPx * 1.5 + 1) problems.push(`card ${Math.round(card.height)}px is time-sized (90 min = ${Math.round(hourPx * 1.5)}px)`);
-                if (getComputedStyle(el).overflow !== 'visible') problems.push(`.rbc-event overflow ${getComputedStyle(el).overflow}`);
-                if (getComputedStyle(block).overflow !== 'visible') problems.push(`.day-event-block overflow ${getComputedStyle(block).overflow}`);
-                if (desc.scrollHeight > desc.clientHeight + 1) problems.push(`description clipped (${desc.scrollHeight} > ${desc.clientHeight})`);
-                if (d.bottom > b.bottom + 1) problems.push(`description ends ${Math.round(d.bottom - b.bottom)}px below the painted block`);
-                return problems.join('; ') || 'content-tall';
-            }), { message: 'desktop/tablet Day card is content-tall and unclipped (phone clip rules must not apply >= 769px)', timeout: 15_000 })
-                .toBe('content-tall');
+                if (b.bottom > card.bottom + 1) problems.push(`block ends ${Math.round(b.bottom - card.bottom)}px below .rbc-event`);
+                if (overflow !== 'hidden' && overflow !== 'clip') problems.push(`.day-event-block overflow ${overflow}`);
+                if (d.bottom > b.bottom + 1) problems.push(`description ends ${Math.round(d.bottom - b.bottom)}px below the block (clipped)`);
+                return problems.join('; ') || 'clipped to its slot';
+            }), { message: '90-min Day card is clipped to its time slot and still shows its description', timeout: 15_000 })
+                .toBe('clipped to its slot');
+
+            // 5b. The 30-min card's title starts inside the card.
+            const cardBox = await shortCard.boundingBox();
+            const titleBox = await shortCard.locator('.day-event-title').boundingBox();
+            if (!cardBox || !titleBox) throw new Error('short card or its title has no box');
+            expect(titleBox.y, 'title starts inside the 30-min card').toBeGreaterThanOrEqual(cardBox.y - 1);
+            expect(titleBox.y, 'title starts inside the 30-min card').toBeLessThan(cardBox.y + cardBox.height);
+
+            // 4. The 30-min card is the topmost hit and a click opens its own event.
+            const points: Array<{ x: number; y: number }> = [];
+            await expect.poll(async () => {
+                const hit = await topmostPointOn(shortCard);
+                if ('covered' in hit) return `covered by ${hit.covered}`;
+                points.push(hit);
+                return 'topmost';
+            }, { message: 'the 30-min card is the topmost hit (the long card above does not cover it)', timeout: 15_000 })
+                .toBe('topmost');
+            const position = points.at(-1);
+            if (!position) throw new Error('topmost poll passed without a point');
+            await shortCard.click({ position });
+            await expect(page).toHaveURL(new RegExp(`/events/${s.shortId}(\\?|$)`));
         } finally {
             for (const id of ids) await apiDelete(token, `/events/${id}`);
         }
