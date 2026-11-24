@@ -26,6 +26,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { and, eq, inArray } from 'drizzle-orm';
 import { nonEmpty } from '../../common/testing/narrow';
+import { expectLineupDmTypes } from '../../common/testing/lineup-dm-type-pin';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -127,12 +128,13 @@ interface LineupNote {
   eventId: unknown;
 }
 
-/** Every `community_lineup` notification row for `userIds`. */
+/** Every lineup + poll notification row for `userIds`, type pinned per title. */
 async function lineupNotes(userIds: number[]): Promise<LineupNote[]> {
   const rows = await testApp.db
     .select({
       userId: schema.notifications.userId,
       title: schema.notifications.title,
+      type: schema.notifications.type,
       payload: schema.notifications.payload,
     })
     .from(schema.notifications)
@@ -142,6 +144,7 @@ async function lineupNotes(userIds: number[]): Promise<LineupNote[]> {
         'scheduling_poll',
       ]),
     );
+  expectLineupDmTypes(rows);
   return rows
     .filter((r) => userIds.includes(r.userId))
     .map((r) => ({

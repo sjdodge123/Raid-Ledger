@@ -44,7 +44,7 @@ export function buildCancelMessage(
 }
 
 /**
- * Build a `community_lineup` notification for each recipient. Returns an empty
+ * Build a `scheduling_poll` (ROK-2311) notification for each recipient. Returns an empty
  * array when there are no recipients (e.g. an actor-only match), so callers can
  * pass the result straight to `NotificationService.createMany`.
  */

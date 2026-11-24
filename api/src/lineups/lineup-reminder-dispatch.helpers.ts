@@ -4,8 +4,10 @@
  *
  * Composed by `LineupReminderService` (cron) and `SchedulingRemindService`
  * (manual) — each helper checks the dedup cache, builds the copy, and
- * creates a `community_lineup` notification. Kept in its own file to keep
- * the services under the 300-line ESLint ceiling.
+ * creates the notification: vote and nomination reminders are
+ * `community_lineup`, scheduling reminders (cron + manual) are
+ * `scheduling_poll` (ROK-2311). Kept in its own file to keep the services
+ * under the 300-line ESLint ceiling.
  */
 import type { NotificationService } from '../notifications/notification.service';
 import type { NotificationDedupService } from '../notifications/notification-dedup.service';

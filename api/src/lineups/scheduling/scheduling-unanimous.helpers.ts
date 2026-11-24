@@ -14,8 +14,8 @@ import { formatLockLabel } from './scheduling-poll-expiry.helpers';
 
 /**
  * Payload discriminator. Rides the `scheduling_poll` (ROK-2311)
- * `NotificationType`, so channel prefs, the prefs UI and the web notification
- * router need no change (spec D5).
+ * `NotificationType`, governed by the "Scheduling polls" settings row; the
+ * web notification router keys on the payload, so it needs no change.
  */
 export const UNANIMOUS_SUBTYPE = 'scheduling_poll_unanimous_time';
 

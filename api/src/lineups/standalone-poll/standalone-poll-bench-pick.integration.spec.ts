@@ -30,6 +30,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { nonEmpty } from '../../common/testing/narrow';
+import { expectLineupDmTypes } from '../../common/testing/lineup-dm-type-pin';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { revalidateBenchPick } from './standalone-poll-bench-pick.helpers';
 
@@ -248,6 +249,7 @@ async function pollDmTitles(
       .select({
         userId: schema.notifications.userId,
         title: schema.notifications.title,
+        type: schema.notifications.type,
       })
       .from(schema.notifications)
       .where(
@@ -256,6 +258,7 @@ async function pollDmTitles(
           'scheduling_poll',
         ]),
       );
+    expectLineupDmTypes(rows);
     result = userIds.map((userId) => ({
       userId,
       titles: rows
