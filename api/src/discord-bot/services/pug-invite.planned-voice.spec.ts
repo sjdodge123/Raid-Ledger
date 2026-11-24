@@ -10,6 +10,13 @@ import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { SettingsService } from '../../settings/settings.service';
 import * as schema from '../../drizzle/schema';
 
+// ROK-2305: the Discord-switch read is its own query; these specs stub the
+// DB by call order, so the switch is mocked (on) here and proven against a
+// real DB in pug-invite-dm-switch.integration.spec.ts.
+jest.mock('./pug-invite-dm-prefs.helpers', () => ({
+  isMemberInviteDmMuted: jest.fn().mockResolvedValue(false),
+}));
+
 const START = new Date(Date.now() + 3 * 24 * 3_600_000);
 
 /**

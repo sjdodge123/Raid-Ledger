@@ -35,6 +35,13 @@ done
 
 [[ -z "$SLOT" ]] && { echo '{"ok":false,"error":"missing_slot"}' >&2; exit 2; }
 [[ "$SLOT" =~ ^[0-9]+$ ]] || { echo '{"ok":false,"error":"invalid_slot"}' >&2; exit 2; }
+# ROK-2289: a slot above RUNNER_SLOTS has no runner — never grant it to a waiter.
+SLOT=$((10#$SLOT))
+if (( SLOT < 1 || SLOT > RUNNER_SLOTS )); then
+    jq -nc --argjson s "$SLOT" --argjson max "$RUNNER_SLOTS" \
+        '{ok:false, error:"slot_out_of_range", slot:$s, max:$max}' >&2
+    exit 2
+fi
 
 # ROK-1331 M11 — bookend lease-advance with a paired timer. The duration
 # covers stale eviction + branch-match destroy + claim flip + clear-flag,

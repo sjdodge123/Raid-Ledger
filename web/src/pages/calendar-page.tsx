@@ -6,6 +6,7 @@ import { CalendarView, MiniCalendar } from '../components/calendar';
 import { CalendarMobileToolbar, type CalendarViewMode } from '../components/calendar/calendar-mobile-toolbar';
 import { CalendarMobileNav } from '../components/calendar/calendar-mobile-nav';
 import { parseDateParam } from '../components/calendar/parse-date-param';
+import { isPhoneCalendarWidth } from '../components/calendar/phone-calendar-width';
 import { useGameTime } from '../hooks/use-game-time';
 import { useAuth } from '../hooks/use-auth';
 import { useGameRegistry } from '../hooks/use-game-registry';
@@ -18,17 +19,20 @@ import { useCalendarLayerToggles, type CalendarLayerToggles } from './calendar/u
 import '../components/calendar/calendar-styles.css';
 
 const DEEP_LINK_VIEWS: readonly CalendarViewMode[] = ['month', 'week', 'day'];
+/** ROK-2303: phones offer Schedule / Month / Day, so only those two grid views deep-link there. */
+const PHONE_DEEP_LINK_VIEWS: readonly CalendarViewMode[] = ['month', 'day'];
 
 /**
- * The view the page opens in. Phones (<768px) always open in Schedule; wider
- * screens honour a valid `?view=month|week|day` deep link and otherwise open
- * in Month. Seeding from the URL stops CalendarView's mount sync from
- * overwriting `?view=week` with the Month default.
+ * The view the page opens in. Phones (<768px) honour a valid `?view=day|month`
+ * (Back from an event opened in Day view lands there) and otherwise open in
+ * Schedule; wider screens honour `?view=month|week|day` and otherwise open in
+ * Month. Seeding from the URL stops CalendarView's mount sync from overwriting
+ * `?view=week` with the Month default.
  */
 function initialCalendarView(viewParam: string | null, width: number): CalendarViewMode {
-    if (width < 768) return 'schedule';
-    const match = DEEP_LINK_VIEWS.find((v) => v === viewParam);
-    return match ?? 'month';
+    const phone = isPhoneCalendarWidth(width);
+    const match = (phone ? PHONE_DEEP_LINK_VIEWS : DEEP_LINK_VIEWS).find((v) => v === viewParam);
+    return match ?? (phone ? 'schedule' : 'month');
 }
 
 /**
@@ -36,8 +40,8 @@ function initialCalendarView(viewParam: string | null, width: number): CalendarV
  * mounted (Back/Forward, a link to `/calendar?view=day&date=…`), since the grid
  * follows page state, not the URL. The grid's own URL sync writes with
  * `replace`, so REPLACE entries are skipped — a view click during the mount
- * sync survives. Like a fresh load: no `view` opens Month (phones stay in
- * Schedule), no `date` opens today, an invalid `date` keeps the current one.
+ * sync survives. Like a fresh load: no `view` opens Month (Schedule on a
+ * phone), no `date` opens today, an invalid `date` keeps the current one.
  */
 function useAdoptNavigatedLocation(
     searchParams: URLSearchParams,
@@ -55,7 +59,7 @@ function useAdoptNavigatedLocation(
         if (navigationType === NavigationType.Replace) return;
         const date = dateParam === null ? new Date() : parseDateParam(dateParam);
         if (date) setCurrentDate(date);
-        if (window.innerWidth >= 768) setCalendarView(initialCalendarView(viewParam, window.innerWidth));
+        setCalendarView(initialCalendarView(viewParam, window.innerWidth));
     }, [key, navigationType, viewParam, dateParam, setCalendarView, setCurrentDate]);
 }
 

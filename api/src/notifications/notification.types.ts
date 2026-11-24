@@ -19,6 +19,12 @@ export interface CreateNotificationInput {
   expiresAt?: Date;
   /** Skip the Discord DM dispatch (e.g., when a custom Discord DM is sent separately) */
   skipDiscord?: boolean;
+  /**
+   * With `skipDiscord`: the caller sends its own DM using the returned row id,
+   * so bell off + Discord on still stores a hidden row (ROK-2290). Without it a
+   * `skipDiscord` input with the bell off is not stored at all.
+   */
+  callerSendsDm?: true;
 }
 
 export interface NotificationDto {

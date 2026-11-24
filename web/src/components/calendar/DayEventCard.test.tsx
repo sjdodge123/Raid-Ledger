@@ -130,7 +130,7 @@ function createGenericRoster(opts: {
 
 const noopOverlap = () => false;
 
-function renderCard(event?: CalendarEvent, overlapFn?: (s: Date, e: Date) => boolean) {
+function renderCard(event?: CalendarEvent, overlapFn?: (s: Date, e: Date) => boolean, onOpen?: (e: CalendarEvent) => void) {
     const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false } },
     });
@@ -140,6 +140,7 @@ function renderCard(event?: CalendarEvent, overlapFn?: (s: Date, e: Date) => boo
                 <DayEventCard
                     event={event ?? createMockEvent()}
                     eventOverlapsGameTime={overlapFn ?? noopOverlap}
+                    {...(onOpen ? { onOpen } : {})}
                 />
             </MemoryRouter>
         </QueryClientProvider>,
@@ -472,5 +473,47 @@ describe('DayEventCard — hub suffix (ROK-1893)', () => {
         const { container } = renderCard(createMockEvent({ hub: null }));
         expect(container.querySelector('.day-event-game')?.textContent).toBe('World of Warcraft');
         expect(screen.queryByTestId('event-hub-label')).not.toBeInTheDocument();
+    });
+});
+
+describe('DayEventCard — onOpen hands the open to the calendar (ROK-2303)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUser = { id: 99, username: 'Viewer' };
+        mockIsAuthenticated = true;
+        mockRosterData = createGenericRoster();
+        mockRosterLoading = false;
+        mockSignupIsPending = false;
+        mockCancelIsPending = false;
+    });
+
+    function block(container: HTMLElement): Element {
+        const el = container.querySelector('.day-event-block');
+        if (!el) throw new Error('no .day-event-block rendered');
+        return el;
+    }
+
+    it('a click on the card calls onOpen with the event', () => {
+        const onOpen = vi.fn();
+        const event = createMockEvent();
+        const { container } = renderCard(event, undefined, onOpen);
+        fireEvent.click(block(container));
+        expect(onOpen).toHaveBeenCalledTimes(1);
+        expect(onOpen).toHaveBeenCalledWith(event);
+    });
+
+    it('Enter and Space on the card call onOpen', () => {
+        const onOpen = vi.fn();
+        const { container } = renderCard(undefined, undefined, onOpen);
+        fireEvent.keyDown(block(container), { key: 'Enter' });
+        fireEvent.keyDown(block(container), { key: ' ' });
+        expect(onOpen).toHaveBeenCalledTimes(2);
+    });
+
+    it('a click on a button inside the card does not open the event', () => {
+        const onOpen = vi.fn();
+        renderCard(undefined, undefined, onOpen);
+        fireEvent.click(screen.getByRole('button', { name: /Join \(/ }));
+        expect(onOpen).not.toHaveBeenCalled();
     });
 });

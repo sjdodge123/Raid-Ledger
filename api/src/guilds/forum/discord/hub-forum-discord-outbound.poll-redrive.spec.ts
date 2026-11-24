@@ -4,6 +4,8 @@
  * re-drive (reopen / S6 retry) must rename only: writing the text root body
  * back would leave the starter as text + embed (AC2: content '').
  */
+import { Logger } from '@nestjs/common';
+import { DiscordAPIError } from 'discord.js';
 import type { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
 import type { SchedulingPollForumCard } from '../../../lineups/scheduling/scheduling-poll-forum-card';
 import type { SettingsService } from '../../../settings/settings.service';
@@ -131,5 +133,46 @@ describe('ROK-2295 M-1: a poll post re-driven by thread.updated', () => {
       { threadId: 'post-1', messageId: 'post-1' },
       expect.stringContaining('Scheduling poll for **WoW**'),
     );
+  });
+});
+
+function discordError(code: number): DiscordAPIError {
+  return new DiscordAPIError(
+    { code, message: `code ${String(code)}` },
+    code,
+    400,
+    'PATCH',
+    '/channels/post-1',
+    {},
+  );
+}
+
+describe('ROK-2301 MINOR-2: renaming an auto-archived hub poll post (50083)', () => {
+  beforeEach(() => jest.clearAllMocks());
+  afterEach(() => jest.restoreAllMocks());
+
+  it('is skipped quietly: the link is synced, never failed, nothing warned', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const debug = jest
+      .spyOn(Logger.prototype, 'debug')
+      .mockImplementation(() => undefined);
+    const t = setup({ matchId: 42 });
+    t.gateway.renameThread.mockRejectedValueOnce(discordError(50083));
+    await t.svc.retry(LINK, 'thread.updated');
+    expect(links.markFailed).not.toHaveBeenCalled();
+    expect(links.markSynced).toHaveBeenCalledWith({}, 11, NOW);
+    expect(warn).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledTimes(1);
+  });
+
+  it('a different Discord error still marks the link failed', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const t = setup({ matchId: 42 });
+    t.gateway.renameThread.mockRejectedValueOnce(discordError(50013));
+    await t.svc.retry(LINK, 'thread.updated');
+    expect(links.markFailed).toHaveBeenCalledWith({}, 11, 'code 50013');
+    expect(links.markSynced).not.toHaveBeenCalled();
   });
 });

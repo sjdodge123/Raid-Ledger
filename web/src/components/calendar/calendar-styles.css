@@ -708,24 +708,64 @@
     position: relative;
 }
 
-/* Day view above the phone layout: event content expands beyond its time-slot
-   height. Below it (max-width: 768px) a card keeps react-big-calendar's
-   time-sized height and clips its content instead, so it never hangs over a
-   later event and takes its taps (ROK-2299) — see "Responsive day view". */
+/* Day view above the phone layout (ROK-2304): hours are 100px tall and each
+   card keeps react-big-calendar's time-sized height and clips its content to
+   its slot, so no card paints over a later one. A 60-minute card shows in
+   full; a 30-minute card shows its pill, title and meta row. Below 768px the
+   phone keeps its 44px hours (ROK-2299) — see "Responsive day view". */
 @media (min-width: 769px) {
-    .calendar-view-day .rbc-time-view .rbc-event {
-        overflow: visible;
-        height: auto !important;
+    .calendar-view-day .rbc-timeslot-group {
         min-height: 100px;
     }
 
-    .calendar-view-day .rbc-time-view .rbc-event-content {
-        overflow: visible;
-        height: auto;
+    .calendar-view-day .day-event-block {
+        min-height: 0;
+        overflow: hidden;
     }
 
-    .calendar-view-day .day-event-block {
-        height: auto;
+    /* Every row is a fixed whole-line height (title 1 line, meta 1 line,
+       description 2 lines) and never shrinks, so the card's clip falls
+       between rows: a 100px card shows all three, a 50px card shows pill +
+       title + meta and hides the description whole. */
+    .calendar-view-day .day-event-content {
+        padding-top: 0.5rem;
+        gap: 0.25rem;
+    }
+
+    .calendar-view-day .day-event-content > * {
+        flex-shrink: 0;
+    }
+
+    .calendar-view-day .day-event-title,
+    .calendar-view-day .day-event-meta > * {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .calendar-view-day .day-event-meta {
+        flex-wrap: nowrap;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .calendar-view-day .day-event-time {
+        flex-shrink: 0;
+    }
+
+    /* In a narrow column the creator gives way before the game name. */
+    .calendar-view-day .day-event-creator {
+        flex-shrink: 100;
+    }
+
+    .calendar-view-day .day-event-description {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        overflow: hidden;
+        margin-top: 0;
     }
 }
 
@@ -1024,7 +1064,7 @@
 
 /* Responsive day view */
 @media (max-width: 768px) {
-    /* ROK-2299: time-sized and clipped on the phone (desktop: content-tall). */
+    /* ROK-2299: time-sized and clipped on the phone (desktop: ROK-2304 block above). */
     .day-event-block {
         flex-direction: column;
         min-height: 0;

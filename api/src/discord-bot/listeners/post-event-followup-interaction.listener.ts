@@ -1,6 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { MessageFlags } from 'discord.js';
 import type { ButtonInteraction } from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -18,7 +18,10 @@ import {
   DiscordListenerBinding,
   gatewayBinding,
 } from './discord-listener-binding';
-import { findLinkedUser } from './signup-interaction.helpers';
+import {
+  findActiveLinkedUser,
+  interactionErrorReply,
+} from './signup-interaction.helpers';
 import {
   handlePollClick,
   handleScheduleClick,
@@ -34,7 +37,12 @@ const LINK_MSG =
 
 /** Terminal outcome of a follow-up button click, emitted to the log (ROK-1425). */
 type FollowupOutcome =
-  'not-linked' | 'event-not-found' | 'not-organizer' | 'schedule' | 'poll';
+  | 'blocked'
+  | 'not-linked'
+  | 'event-not-found'
+  | 'not-organizer'
+  | 'schedule'
+  | 'poll';
 
 const errMsg = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);
@@ -66,6 +74,7 @@ export class PostEventFollowupInteractionListener {
     private readonly moduleRef: ModuleRef,
     private readonly notificationService: NotificationService,
     private readonly settingsService: SettingsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private get deps(): PostEventFollowupDeps {
@@ -76,6 +85,7 @@ export class PostEventFollowupInteractionListener {
       }),
       notificationService: this.notificationService,
       settingsService: this.settingsService,
+      eventEmitter: this.eventEmitter,
       logger: this.logger,
     };
   }
@@ -125,7 +135,7 @@ export class PostEventFollowupInteractionListener {
         error,
       );
       await interaction.editReply({
-        content: 'Something went wrong. Please try again.',
+        content: interactionErrorReply(error),
       });
     }
   }
@@ -154,7 +164,11 @@ export class PostEventFollowupInteractionListener {
     interaction: ButtonInteraction,
     parsed: FollowupButtonParsed,
   ): Promise<FollowupOutcome> {
-    const user = await findLinkedUser(interaction.user.id, { db: this.db });
+    const user = await findActiveLinkedUser(interaction, {
+      db: this.db,
+      logger: this.logger,
+    });
+    if (user === false) return 'blocked';
     if (!user) {
       await interaction.editReply({ content: LINK_MSG });
       return 'not-linked';

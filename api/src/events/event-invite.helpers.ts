@@ -207,6 +207,7 @@ export async function emitMemberInvite(
     message: `${inviterName} invited you to "${event.title}"`,
     payload: { eventId, invitedBy: inviterName },
     skipDiscord: true,
+    callerSendsDm: true,
   });
   if (notification) {
     emitInviteCreated(eventEmitter, event, eventId, discordId, notification.id);

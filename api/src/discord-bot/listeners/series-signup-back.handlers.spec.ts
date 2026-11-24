@@ -7,13 +7,25 @@ import {
   routeSeriesBack,
 } from './series-signup-back.handlers';
 import type { SeriesInteractionDeps } from './series-signup-interaction.handlers';
-import { fetchEvent, findLinkedUser } from './signup-interaction.helpers';
+import {
+  fetchEvent,
+  findActiveLinkedUser,
+  findLinkedUser,
+} from './signup-interaction.helpers';
 
-jest.mock('./signup-interaction.helpers', () => ({
-  ...jest.requireActual<object>('./signup-interaction.helpers'),
-  findLinkedUser: jest.fn(),
-  fetchEvent: jest.fn(),
-}));
+// ROK-2298: findActiveLinkedUser defaults to the mocked findLinkedUser, so
+// the active-user cases keep their setup; blocked cases override it.
+jest.mock('./signup-interaction.helpers', () => {
+  const findLinkedUser = jest.fn();
+  return {
+    ...jest.requireActual<object>('./signup-interaction.helpers'),
+    fetchEvent: jest.fn(),
+    findLinkedUser,
+    findActiveLinkedUser: jest.fn((i: { user: { id: string } }) =>
+      findLinkedUser(i.user.id),
+    ),
+  };
+});
 
 const mockedUser = findLinkedUser as jest.Mock;
 const mockedEvent = fetchEvent as jest.Mock;
@@ -155,6 +167,16 @@ describe('handleSeriesCharacterBack (ROK-2228)', () => {
     expect(i.deferReply).not.toHaveBeenCalled();
     expect(deps.charactersService.findAllForUser).toHaveBeenCalledWith(5, 3);
     expect(sentCustomIds(i)).toEqual(['series_char:42']);
+  });
+
+  it('ROK-2298: a blocked account gets no picker re-render (A10)', async () => {
+    (findActiveLinkedUser as jest.Mock).mockResolvedValueOnce(false);
+    const deps = makeDeps();
+    const i = backButton('char_back:series_char:42');
+    await handleSeriesCharacterBack(i, target, deps);
+    expect(mockedEvent).not.toHaveBeenCalled();
+    expect(deps.charactersService.findAllForUser).not.toHaveBeenCalled();
+    expect(i.editReply).not.toHaveBeenCalled();
   });
 
   it('returns quietly when the interaction has expired', async () => {

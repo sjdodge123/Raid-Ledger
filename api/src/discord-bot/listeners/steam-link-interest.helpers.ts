@@ -12,6 +12,7 @@ import {
   discoverGameViaItad,
   type DiscoveryDeps,
 } from '../../steam/steam-itad-discovery.helpers';
+import { resolveDiscordAccount } from '../../users/discord-account-status.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -41,20 +42,21 @@ export async function findGameBySteamAppId(
 /**
  * Find a Raid Ledger user linked to a Discord account.
  *
+ * ROK-2298: `blocked` is true for a banned or deactivated account (shared
+ * `resolveDiscordAccount`); callers stay silent on passive paths and reply
+ * with `ACCOUNT_BLOCKED_REPLY` on DM buttons — never a write.
+ *
  * @param db - Drizzle database instance
  * @param discordId - Discord user ID string
- * @returns User with id, or null if not linked
+ * @returns User id + blocked flag, or null if not linked
  */
 export async function findLinkedRlUser(
   db: Db,
   discordId: string,
-): Promise<{ id: number } | null> {
-  const [user] = await db
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordId))
-    .limit(1);
-  return user ?? null;
+): Promise<{ id: number; blocked: boolean } | null> {
+  const account = await resolveDiscordAccount(db, discordId);
+  if (account.kind === 'unlinked') return null;
+  return { id: account.user.id, blocked: account.kind === 'blocked' };
 }
 
 /** Sources that count as "hearted" — matches HEART_SOURCES in igdb-interest.helpers. */

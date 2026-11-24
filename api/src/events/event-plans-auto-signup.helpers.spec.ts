@@ -3,7 +3,11 @@
  * When an event-plans scheduling poll materializes into an event, the winning
  * option's registered voters are auto-signed-up (mirrors ROK-1031 for lineups).
  */
-import { autoSignupPollVoters } from './event-plans-auto-signup.helpers';
+import {
+  autoSignupPollVoters,
+  signupPlanCreator,
+} from './event-plans-auto-signup.helpers';
+import { accountBlockedError } from '../users/discord-account-status.helpers';
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import type { MockDb } from '../common/testing/drizzle-mock';
 import * as schema from '../drizzle/schema';
@@ -79,5 +83,25 @@ describe('autoSignupPollVoters', () => {
     mockDb.where.mockRejectedValue(new Error('db down'));
     await expect(run(['discord-106'])).resolves.toBeUndefined();
     expect(mockSignupsService.signup).not.toHaveBeenCalled();
+  });
+});
+
+describe('signupPlanCreator (ROK-2298)', () => {
+  it('signs the creator up', async () => {
+    const signup = jest.fn().mockResolvedValue(undefined);
+    await signupPlanCreator({ signup }, 5, 9);
+    expect(signup).toHaveBeenCalledWith(5, 9);
+  });
+
+  it('resolves (so the plan still completes) when the creator is blocked', async () => {
+    const signup = jest.fn().mockRejectedValue(accountBlockedError());
+    await expect(signupPlanCreator({ signup }, 5, 9)).resolves.toBeUndefined();
+  });
+
+  it('rethrows any other signup error', async () => {
+    const signup = jest.fn().mockRejectedValue(new Error('db down'));
+    await expect(signupPlanCreator({ signup }, 5, 9)).rejects.toThrow(
+      'db down',
+    );
   });
 });

@@ -1,3 +1,4 @@
+import { interactionErrorReply } from './signup-interaction.helpers';
 import {
   ActionRowBuilder,
   StringSelectMenuBuilder,
@@ -9,6 +10,8 @@ import { PUG_BUTTON_IDS } from '../discord-bot.constants';
 import type { CharacterDto } from '@raid-ledger/contract';
 import type { PugInviteDeps } from './pug-invite.helpers';
 import {
+  findPugActor,
+  PUG_ACTOR_BLOCKED,
   safeDeferReply,
   buildAcceptedEmbed,
   buildDeclinedEmbed,
@@ -43,10 +46,7 @@ export async function handlePugButtonInteraction(
       `Error handling PUG button for slot ${pugSlotId}`,
       errorStack(error),
     );
-    await safeErrorReply(
-      interaction,
-      'Something went wrong. Please try again.',
-    );
+    await safeErrorReply(interaction, interactionErrorReply(error));
   }
 }
 
@@ -161,7 +161,8 @@ async function resolveAcceptContext(
     return null;
   }
   const sc = event.slotConfig as Record<string, unknown> | null;
-  const linkedUser = await findLinkedUser(deps, interaction.user.id);
+  const linkedUser = await findPugActor(deps, interaction);
+  if (linkedUser === PUG_ACTOR_BLOCKED) return null;
   let characters: CharacterDto[] = [];
   if (linkedUser && event.gameId) {
     const list = await deps.charactersService.findAllForUser(
@@ -171,18 +172,6 @@ async function resolveAcceptContext(
     characters = list.data;
   }
   return { event, linkedUser, characters, isMMO: sc?.type === 'mmo' };
-}
-
-async function findLinkedUser(
-  deps: PugInviteDeps,
-  discordId: string,
-): Promise<{ id: number } | null> {
-  const [user] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordId))
-    .limit(1);
-  return user ?? null;
 }
 
 async function lookupPugSlot(

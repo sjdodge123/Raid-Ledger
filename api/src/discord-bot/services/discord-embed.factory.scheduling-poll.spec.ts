@@ -109,12 +109,15 @@ describe('buildSchedulingPollEmbed — embed content (AC5)', () => {
     );
   });
 
-  it('ends the description with the masked vote link, not a button', () => {
+  it('ends the description with the link line, vote link first, not a button', () => {
     const result = factory.buildSchedulingPollEmbed(basePollData, baseContext);
     expect(result.row).toBeUndefined();
     const description = (result.embed.toJSON().description ?? '').trimEnd();
-    expect(description).toContain('[Vote now \u2197](');
-    expect(description.endsWith(`](${basePollData.pollUrl})`)).toBe(true);
+    // ROK-2301: the last line is the link line. The vote link leads it; a
+    // "Game page" link may follow after " \u00b7 ".
+    const voteLink = (description.split('\n').pop() ?? '').split(' \u00b7 ')[0];
+    expect(voteLink).toBe(`[Vote now \u2197](${basePollData.pollUrl})`);
+    expect(result.embed.toJSON().url).toBe(basePollData.pollUrl);
     expect(description).toContain('/community-lineup/1/schedule/10');
   });
 });

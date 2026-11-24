@@ -8,6 +8,7 @@ import { announcementRowsOnly } from '../discord-bot/services/event-message-rows
 import { isStaff } from '../guilds/guild-access.service';
 import { findHiddenAt } from '../guilds/hub-hidden.helpers';
 import { notHubMutedSql } from './hub-notification-mute.helpers';
+import { resolveStoredDelivery } from './notification-create.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -67,10 +68,11 @@ export async function filterGroupRecipients(
 }
 
 /**
- * D5: users whose group notice cannot be created. `NotificationService.create`
- * returns null (no row, no Discord dispatch) whenever the type's `inApp` is
- * off, so `inApp: false` alone gates the group copy — whatever `discord` says.
- * The plan then falls back to their game copy (Codex r6 P2).
+ * D5: users whose group notice would reach them on no channel. Since ROK-2290
+ * `NotificationService.create` still DMs a member whose `hub_event_tagged`
+ * bell is off but Discord is on (hidden row), so only BOTH switches off (a
+ * missing entry takes its default) gates the group copy. The plan then falls
+ * back to their game copy (Codex r6 P2). Group mutes are applied elsewhere.
  */
 export async function findGroupTypeOff(
   db: Db,
@@ -82,7 +84,9 @@ export async function findGroupTypeOff(
     .select({ userId: t.userId, prefs: t.channelPrefs })
     .from(t)
     .where(inArray(t.userId, [...userIds]));
-  const off = rows.filter((r) => r.prefs.hub_event_tagged?.inApp === false);
+  const off = rows.filter(
+    (r) => resolveStoredDelivery('hub_event_tagged', r.prefs) === 'none',
+  );
   return new Set(off.map((r) => r.userId));
 }
 

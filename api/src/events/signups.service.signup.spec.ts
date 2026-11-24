@@ -256,6 +256,32 @@ describe('SignupsService — signup', () => {
       });
     });
 
+    // ROK-2298: every non-HTTP caller (Discord buttons, PUG invites) reaches
+    // signup() directly, so the service itself must refuse a blocked account.
+    it.each([
+      ['banned', { bannedAt: new Date(), deactivatedAt: new Date() }],
+      ['deactivated', { bannedAt: null, deactivatedAt: new Date() }],
+    ])(
+      'refuses a %s user with ACCOUNT_BLOCKED and writes nothing',
+      async (_l, flags) => {
+        const chain = (rows: unknown[]) => ({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue(rows),
+            }),
+          }),
+        });
+        mockDb.select
+          .mockReturnValueOnce(chain([mockEvent]))
+          .mockReturnValueOnce(chain([{ ...mockUser, ...flags }]));
+        await expect(service.signup(1, 1)).rejects.toMatchObject({
+          response: { code: 'ACCOUNT_BLOCKED' },
+        });
+        expect(mockDb.transaction).not.toHaveBeenCalled();
+        expect(mockDb.insert).not.toHaveBeenCalled();
+      },
+    );
+
     it('should throw NotFoundException when event does not exist', async () => {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({

@@ -16,6 +16,10 @@ import { createDmEmbed, type DmEmbed } from '../embeds/embed-chrome.helpers';
 import { NOTIFICATION_EMBED_AUTHORS } from '../../notifications/notification-embed.helpers';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { errorMessage } from '../../common/error-format.helpers';
+import {
+  ACCOUNT_BLOCKED_REPLY,
+  resolveDiscordAccount,
+} from '../../users/discord-account-status.helpers';
 
 /** Dependencies shared across pug invite handler functions. */
 export interface PugInviteDeps {
@@ -165,4 +169,29 @@ export function buildRoleSelectContent(
 /** Capitalize the first letter of a role name. */
 export function capitalizeRole(role: string): string {
   return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+/** ROK-2298: `findPugActor` result when the clicker's account is blocked. */
+export const PUG_ACTOR_BLOCKED = 'blocked';
+
+/**
+ * ROK-2298: the clicker's linked RL account, or null when unlinked. A banned
+ * or deactivated account gets the blocked reply and `PUG_ACTOR_BLOCKED` —
+ * never null, so it can't fall through to an unlinked/anonymous path (Q5).
+ */
+export async function findPugActor(
+  deps: PugInviteDeps,
+  interaction: {
+    user: { id: string };
+    editReply(options: { content: string; components: [] }): Promise<unknown>;
+  },
+): Promise<{ id: number } | null | typeof PUG_ACTOR_BLOCKED> {
+  const account = await resolveDiscordAccount(deps.db, interaction.user.id);
+  if (account.kind === 'unlinked') return null;
+  if (account.kind === 'linked') return account.user;
+  await interaction.editReply({
+    content: ACCOUNT_BLOCKED_REPLY,
+    components: [],
+  });
+  return PUG_ACTOR_BLOCKED;
 }

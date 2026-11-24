@@ -30,10 +30,20 @@ describe('ggRecipientBucket', () => {
     );
   });
 
-  it('only a gg_ready in-app opt-out is opted out (nothing is delivered)', () => {
-    const prefs = { gg_ready: { inApp: false, push: false, discord: true } };
+  it('only gg_ready bell AND Discord off is opted out (nothing is delivered)', () => {
+    const prefs = { gg_ready: { inApp: false, push: false, discord: false } };
     expect(ggRecipientBucket({ ...LIVE, discordId: '81000123', prefs })).toBe(
       'optedOut',
+    );
+  });
+
+  it('bell off + Discord on is still a DM (hidden row, ROK-2290)', () => {
+    const prefs = { gg_ready: { inApp: false, push: false, discord: true } };
+    expect(ggRecipientBucket({ ...LIVE, discordId: '81000123', prefs })).toBe(
+      'dm',
+    );
+    expect(ggRecipientBucket({ ...LIVE, discordId: 'local:a@b', prefs })).toBe(
+      'noDiscord',
     );
   });
 

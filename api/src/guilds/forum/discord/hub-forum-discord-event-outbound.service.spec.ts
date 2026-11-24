@@ -406,3 +406,28 @@ describe('ROK-2295 lane B: a poll post opens with the live poll embed', () => {
     expect(pollCards.build).not.toHaveBeenCalled();
   });
 });
+
+describe('ROK-2301 postView: a poll post name composed by the source', () => {
+  const URL3 = 'https://rl.example/hubs/7?thread=3#forum';
+  const pollBody =
+    'Scheduling poll for **Onyxia**. [Open the poll](/community-lineup/12/schedule/34)';
+
+  it('ROK-2301: a poll source that carries its own post name is named by it', async () => {
+    const { svc } = setup();
+    const name = 'Onyxia — Poll (after Thursday Raid)';
+    mocked.source.mockResolvedValue({
+      kind: 'poll',
+      id: 34,
+      title: 'Onyxia',
+      name,
+      body: pollBody,
+      writeClosesAt: null,
+      eventDetachedAt: null,
+    });
+    const view = await svc.postView(
+      { ...PLAIN, matchId: 34, title: 'Onyxia — Poll', body: pollBody },
+      URL3,
+    );
+    expect(view.name).toBe(name);
+  });
+});

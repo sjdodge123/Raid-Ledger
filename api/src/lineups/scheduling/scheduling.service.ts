@@ -147,7 +147,7 @@ export class SchedulingService {
         this.db,
         match.lineupId,
         { id: userId, ...role },
-        match,
+        { match, requireActive: true },
       );
     }
     const proposed = new Date(proposedTime);
@@ -244,7 +244,7 @@ export class SchedulingService {
       this.db,
       match.lineupId,
       { id: userId, ...(callerRole !== undefined ? { role: callerRole } : {}) },
-      match,
+      { match, requireActive: true },
     );
     const slot = await assertSlotBelongsToMatch(this.db, slotId, matchId);
     // Vote write + member enrollment + the ROK-1544 stamp all commit
@@ -283,8 +283,9 @@ export class SchedulingService {
   /**
    * Retract all votes by a user for slots belonging to a match.
    *
-   * TDB:189: same participation gate as vote/suggest, but WITHOUT the match
-   * argument — so retract stays allowed on an expired poll (no assertPollOpen).
+   * TDB:189: same participation gate as vote/suggest, but WITHOUT the `match`
+   * option — so retract stays allowed on an expired poll (no assertPollOpen).
+   * ROK-2306: and without `requireActive` — see `CallerMayVoteOptions`.
    */
   async retractAllVotes(
     matchId: number,

@@ -1,5 +1,7 @@
 import type { ButtonInteraction } from 'discord.js';
 import type { Logger } from '@nestjs/common';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import * as Sentry from '@sentry/nestjs';
 import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { SchedulingPollResponseDto } from '@raid-ledger/contract';
@@ -9,7 +11,11 @@ import type { NotificationService } from '../../notifications/notification.servi
 import type { SettingsService } from '../../settings/settings.service';
 import { resolvePostEventFollowupRecipients } from '../../notifications/post-event-followup.helpers';
 import { runFollowupFanout } from '../../notifications/post-event-followup-fanout.helpers';
-import { POST_EVENT_FOLLOWUP_BUTTON_IDS } from '../discord-bot.constants';
+import {
+  POST_EVENT_FOLLOWUP_BUTTON_IDS,
+  POST_EVENT_FOLLOWUP_EVENTS,
+  type FollowupPollLinkedPayload,
+} from '../discord-bot.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -19,6 +25,8 @@ export interface PostEventFollowupDeps {
   standalonePollService: Pick<StandalonePollService, 'create'>;
   notificationService: Pick<NotificationService, 'createMany'>;
   settingsService: Pick<SettingsService, 'getClientUrl'>;
+  /** ROK-2301: announces the recorded follow-up poll to the forum listeners. */
+  eventEmitter: Pick<EventEmitter2, 'emit'>;
   logger: Logger;
 }
 
@@ -112,22 +120,48 @@ async function claimPollChoice(db: Db, eventId: number): Promise<boolean> {
 /**
  * Record the poll this prompt opened so the lock-in navigation can resolve the
  * ended event and prefill the create form. Best-effort: a failure here costs
- * prefill, never the poll.
+ * prefill, never the poll. Returns whether the row was written.
  */
 async function recordPollMatch(
   deps: PostEventFollowupDeps,
   eventId: number,
   matchId: number,
-): Promise<void> {
+): Promise<boolean> {
   try {
     await deps.db.execute(sql`
       UPDATE post_event_followup_sent SET match_id = ${matchId}
       WHERE event_id = ${eventId}
     `);
+    return true;
   } catch (error) {
     deps.logger.warn(
       `Follow-up match back-reference failed (${eventId} -> ${matchId}): ${errMsg(error)}`,
     );
+    return false;
+  }
+}
+
+/**
+ * ROK-2301: the poll's create path already named its thread and post before
+ * the row above existed, so they read `<game> — Poll`. Announce the link so
+ * the forum listeners re-derive `<game> — Poll (after <event>)` once (each
+ * skips a name that already matches). Best-effort: never fails the click.
+ */
+function announcePollLinked(
+  deps: PostEventFollowupDeps,
+  eventId: number,
+  matchId: number,
+): void {
+  const payload: FollowupPollLinkedPayload = { matchId, endedEventId: eventId };
+  try {
+    deps.eventEmitter.emit(POST_EVENT_FOLLOWUP_EVENTS.POLL_LINKED, payload);
+  } catch (error) {
+    deps.logger.warn(
+      `Follow-up poll rename announce failed (${eventId} -> ${matchId}): ${errMsg(error)}`,
+    );
+    Sentry.captureException(error, {
+      tags: { post_event_followup: 'poll-linked' },
+    });
   }
 }
 
@@ -216,7 +250,9 @@ export async function handlePollClick(
   }
   const poll = await openFollowupPoll(deps, interaction, event);
   if (!poll) return;
-  await recordPollMatch(deps, event.id, poll.id);
+  if (await recordPollMatch(deps, event.id, poll.id)) {
+    announcePollLinked(deps, event.id, poll.id);
+  }
   await fanOutPoll(deps, event, poll);
   await interaction.editReply({
     content: 'Poll opened — attendees are being invited to vote.',
