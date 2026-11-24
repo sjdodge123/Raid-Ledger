@@ -12,6 +12,7 @@ import {
 import { resolveEventCapacity } from '../../events/signups-signup.helpers';
 import { isSlotVacatedRelevant } from '../../notifications/slot-vacated-relevance.helpers';
 import { defined } from '../../common/defined.helpers';
+import { isDiscordDmMuted } from '../../notifications/discord-dm-mute.helpers';
 
 /** Bundled dependencies passed from the processor. */
 export interface DepartureGraceDeps {
@@ -250,6 +251,11 @@ async function trySendPromoteDM(
 
   const creatorDiscordId = await lookupCreatorDiscord(deps.db, event.creatorId);
   if (!creatorDiscordId) return;
+  // ROK-2317: the promote DM follows the creator's Slot Vacated switch.
+  if (await isDiscordDmMuted(deps.db, { userId: event.creatorId }, 'slot_vacated')) {
+    deps.logger.debug(`Promote DM muted for event ${event.id}`);
+    return;
+  }
 
   const role = assignment.role!;
   const pos = assignment.position;

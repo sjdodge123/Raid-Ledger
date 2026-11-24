@@ -154,10 +154,12 @@ export class EventPlansService {
       .set({ status: 'cancelled', updatedAt: new Date() })
       .where(eq(schema.eventPlans.id, planId))
       .returning();
-    this.safeDmOrganizer(
-      plan.creatorId,
-      `Your event plan "${plan.title}" has been cancelled.`,
-    );
+    // ROK-2317 ruling 5: no "cancelled" DM to the person who cancelled it.
+    if (plan.creatorId !== userId)
+      this.safeDmOrganizer(
+        plan.creatorId,
+        `Your event plan "${plan.title}" has been cancelled.`,
+      );
     return toResponseDto(defined(updated, 'cancelled event plan row'));
   }
 

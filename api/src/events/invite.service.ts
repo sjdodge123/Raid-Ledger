@@ -14,6 +14,7 @@ import { SignupsService } from './signups.service';
 import { PugInviteService } from '../discord-bot/services/pug-invite.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
+import { isDiscordDmMuted } from '../notifications/discord-dm-mute.helpers';
 import {
   findSlotByCode,
   findEventForSlot,
@@ -283,6 +284,11 @@ export class InviteService {
       .where(eq(schema.users.id, userId))
       .limit(1);
     if (!user?.discordId) return;
+    // ROK-2317: "You have joined" follows the Event invites (`new_event`) switch.
+    if (await isDiscordDmMuted(this.db, { userId }, 'new_event')) {
+      this.logger.debug(`Post-claim DM muted for user ${userId}`);
+      return;
+    }
     const clientUrl = await this.settingsService.getTrustedClientUrl();
     const message = buildPostClaimDm(eventTitle, eventId, clientUrl);
     await this.discordClient.sendDirectMessage(user.discordId, message);

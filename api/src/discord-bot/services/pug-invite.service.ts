@@ -308,6 +308,7 @@ export class PugInviteService {
       coverUrl: data.coverUrl,
     });
 
+    // ROK-2317: always sends — the PUG-slot invite is the only way the player hears.
     await this.trySendDm(discordUserId, embed, row, 'PUG invite');
   }
 

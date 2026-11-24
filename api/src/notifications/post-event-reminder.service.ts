@@ -15,6 +15,7 @@ import {
   type DmEmbed,
 } from '../discord-bot/embeds/embed-chrome.helpers';
 import { NOTIFICATION_EMBED_AUTHORS } from './notification-embed.helpers';
+import { isDiscordDmMuted } from './discord-dm-mute.helpers';
 
 /**
  * Post-event PUG onboarding reminder service (ROK-403).
@@ -140,6 +141,11 @@ export class PostEventReminderService {
     const discordId = this.resolvePugDiscordId(pug);
     if (!discordId) return;
     if (!(await this.trackReminderSent(pug))) return;
+    // ROK-2317: account holders follow Post-Event Follow-Ups; no account => sends.
+    if (await isDiscordDmMuted(this.db, { discordId }, 'post_event_followup')) {
+      this.logger.debug(`Post-event DM muted for slot ${pug.pug_slot_id}`);
+      return;
+    }
     const embed = await this.buildPostEventEmbed(
       pug,
       discordId,

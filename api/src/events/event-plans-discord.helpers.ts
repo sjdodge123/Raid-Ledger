@@ -1,8 +1,10 @@
+import { Logger } from '@nestjs/common';
 import { absoluteEmbedImageUrl } from '../discord-bot/services/embed-thumbnail.helpers';
 import { eq, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { isDiscordDmMuted } from '../notifications/discord-dm-mute.helpers';
 import type { PollAnswerResult } from './event-plans-poll.helpers';
 import { buildPollEmbedBody } from './event-plans-poll.helpers';
 import {
@@ -171,13 +173,22 @@ export async function lookupGameInfo(
   return { gameName: game?.name ?? null, gameCoverUrl: game?.coverUrl ?? null };
 }
 
-/** DM the organizer (best effort). */
+const organizerDmLogger = new Logger('EventPlansOrganizerDm');
+
+/**
+ * DM the organizer (best effort). ROK-2317: every organizer DM follows the
+ * Scheduling polls (`scheduling_poll`) Discord switch.
+ */
 export async function dmOrganizer(
   db: PostgresJsDatabase<typeof schema>,
   discordClient: DiscordBotClientService,
   userId: number,
   message: string,
 ): Promise<void> {
+  if (await isDiscordDmMuted(db, { userId }, 'scheduling_poll')) {
+    organizerDmLogger.debug(`Organizer DM muted for user ${userId}`);
+    return;
+  }
   const [user] = await db
     .select({ discordId: schema.users.discordId })
     .from(schema.users)

@@ -118,6 +118,7 @@ async function notifyCreatorWithInvite(
 
   const { embed, row } = buildInviteRelayEmbed(pugUsername, inviteUrl, relay);
   try {
+    // ROK-2317: always sends — direct reply to the adder's own action (ruling 4).
     await clientService.sendEmbedDM(creator.discordId, embed, row);
   } catch (error) {
     logger.warn(
