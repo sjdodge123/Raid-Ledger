@@ -13,6 +13,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { findSlotOrThrow } from './scheduling-event.helpers';
 import { assertUserCanParticipate } from '../lineups-eligibility.helpers';
+import { assertAccountActive } from '../../users/discord-account-status.helpers';
 import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
 import type { SchedulingPollStatus } from '../../discord-bot/services/discord-embed-scheduling.types';
 
@@ -37,6 +38,9 @@ export async function assertCallerMayVote(
    */
   match?: { status: string; linkedEventId?: number | null },
 ): Promise<void> {
+  // ROK-2306: vote/suggest (they pass `match`) refuse a banned/deactivated
+  // account; retract omits `match` and stays open so a blocked user can wind down.
+  if (match) await assertAccountActive(db, caller.id);
   const [lineup] = await db
     .select({
       id: schema.communityLineups.id,

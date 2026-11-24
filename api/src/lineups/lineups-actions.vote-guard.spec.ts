@@ -7,6 +7,10 @@ jest.mock('./lineups-eligibility.helpers', () => ({
   assertUserCanParticipate: jest.fn(),
 }));
 jest.mock('./lineups-voting.helpers', () => ({ toggleVote: jest.fn() }));
+// ROK-2306: the account check is pinned in lineups-actions.vote-blocked.spec.ts.
+jest.mock('../users/discord-account-status.helpers', () => ({
+  assertAccountActive: async () => undefined,
+}));
 jest.mock('./lineups-response.helpers', () => ({
   buildDetailResponse: jest.fn(),
 }));

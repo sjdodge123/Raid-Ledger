@@ -2,6 +2,11 @@
  * Unit tests for SchedulingService (ROK-965).
  * Uses flat drizzle-mock; controls results via terminal methods.
  */
+// ROK-2306: the vote guard's account lookup is pinned in its own spec.
+jest.mock('../../users/discord-account-status.helpers', () => ({
+  ...jest.requireActual<object>('../../users/discord-account-status.helpers'),
+  assertAccountActive: async () => undefined,
+}));
 import { Test } from '@nestjs/testing';
 import {
   NotFoundException,

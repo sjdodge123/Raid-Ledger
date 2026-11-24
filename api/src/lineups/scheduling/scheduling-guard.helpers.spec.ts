@@ -13,10 +13,12 @@ import {
 } from '@nestjs/common';
 import {
   assertCallerMayViewPoll,
+  assertCallerMayVote,
   assertPollLockable,
   assertPollOpen,
 } from './scheduling-guard.helpers';
 import { assertUserCanParticipate } from '../lineups-eligibility.helpers';
+import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 
 jest.mock('../lineups-eligibility.helpers', () => ({
   assertUserCanParticipate: jest.fn(),
@@ -134,5 +136,49 @@ describe('assertCallerMayViewPoll — private poll read gate (TDB:189)', () => {
     await expect(assertCallerMayViewPoll(db, PRIVATE, { id: 5 })).rejects.toBe(
       boom,
     );
+  });
+});
+
+describe('assertCallerMayVote — blocked accounts (ROK-2306)', () => {
+  const MATCH = { status: 'scheduling', linkedEventId: null };
+  const LINEUP_ROW = {
+    id: 1,
+    createdBy: 2,
+    visibility: 'public',
+    ...LIVE_LINEUP,
+  };
+
+  function dbWith(...limitResults: unknown[][]) {
+    const db = createDrizzleMock();
+    for (const r of limitResults) db.limit.mockResolvedValueOnce(r);
+    return db as unknown as Parameters<typeof assertCallerMayVote>[0];
+  }
+
+  beforeEach(() => participate.mockReset());
+
+  it.each([
+    ['banned', { bannedAt: new Date(), deactivatedAt: null }],
+    ['deactivated', { bannedAt: null, deactivatedAt: new Date() }],
+  ])('a vote/suggest by a %s user → 403 ACCOUNT_BLOCKED', async (_l, flags) => {
+    const db = dbWith([flags], [LINEUP_ROW]);
+    await expect(
+      assertCallerMayVote(db, 1, { id: 10, role: 'member' }, MATCH),
+    ).rejects.toMatchObject({
+      status: 403,
+      response: { code: 'ACCOUNT_BLOCKED' },
+    });
+    expect(participate).not.toHaveBeenCalled();
+  });
+
+  it('an active voter passes on to the participation gate', async () => {
+    const db = dbWith([{ bannedAt: null, deactivatedAt: null }], [LINEUP_ROW]);
+    await assertCallerMayVote(db, 1, { id: 10 }, MATCH);
+    expect(participate).toHaveBeenCalledTimes(1);
+  });
+
+  it('retract (no match) skips the account check so a blocked user can wind down', async () => {
+    const db = dbWith([LINEUP_ROW]);
+    await assertCallerMayVote(db, 1, { id: 10 });
+    expect(participate).toHaveBeenCalledTimes(1);
   });
 });
