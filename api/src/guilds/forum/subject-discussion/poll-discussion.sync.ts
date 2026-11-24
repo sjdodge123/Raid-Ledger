@@ -18,7 +18,8 @@ import {
   type LivePollThread,
   type PollSyncRow,
 } from './poll-discussion.queries';
-import { pollTitleWithin } from './poll-discussion.title';
+import { pollTitleNeedsZone, pollTitleWithin } from './poll-discussion.title';
+import { readCommunityTimeZone } from './poll-discussion.zone.query';
 
 export {
   followupEventTitle,
@@ -106,10 +107,18 @@ export function pollWriteClosesAt(
   return stored ?? new Date(ended.getTime() + POLL_CLOSE_GRACE_MS);
 }
 
+/** When the sync runs and the community zone a dated title reads. */
+interface SyncClock {
+  now: Date;
+  /** `DEFAULT_TIMEZONE`, null when unset or not needed (⇒ UTC). */
+  zone: string | null;
+}
+
 /** The fields the poll dictates on its thread. */
-function derived(poll: PollSyncRow, stored: Date | null, now: Date) {
+function derived(poll: PollSyncRow, stored: Date | null, clock: SyncClock) {
+  const { now, zone } = clock;
   return {
-    title: pollTitleWithin(poll, TITLE_MAX, pollThreadTitle),
+    title: pollTitleWithin(poll, TITLE_MAX, pollThreadTitle, zone),
     body: pollThreadRootBody(poll),
     writeClosesAt: pollWriteClosesAt(poll, stored, now),
   };
@@ -118,9 +127,10 @@ function derived(poll: PollSyncRow, stored: Date | null, now: Date) {
 async function insertPollThread(
   tx: DbOrTx,
   poll: PollSyncRow,
-  now: Date,
+  clock: SyncClock,
 ): Promise<void> {
   if (poll.guildId === null) return;
+  const { now } = clock;
   await tx
     .insert(schema.hubForumThreads)
     .values({
@@ -130,7 +140,7 @@ async function insertPollThread(
       lastActivityAt: now,
       createdAt: now,
       updatedAt: now,
-      ...derived(poll, null, now),
+      ...derived(poll, null, clock),
     })
     .onConflictDoNothing();
 }
@@ -140,9 +150,10 @@ async function refreshPollThread(
   tx: DbOrTx,
   thread: LivePollThread,
   poll: PollSyncRow,
-  now: Date,
+  clock: SyncClock,
 ): Promise<void> {
-  const next = derived(poll, thread.writeClosesAt, now);
+  const { now } = clock;
+  const next = derived(poll, thread.writeClosesAt, clock);
   const same =
     thread.title === next.title &&
     thread.body === next.body &&
@@ -166,11 +177,13 @@ async function apply(
     await detachPollThreads(tx, matchId, now);
   }
   if (!poll) return;
-  if (action === 'insert' || action === 'move') {
-    await insertPollThread(tx, poll, now);
-  } else if (action === 'refresh' && thread) {
-    await refreshPollThread(tx, thread, poll, now);
-  }
+  const inserts = action === 'insert' || action === 'move';
+  if (!inserts && (action !== 'refresh' || !thread)) return;
+  // Read the community zone only when the title shows the close date.
+  const zone = pollTitleNeedsZone(poll) ? await readCommunityTimeZone(tx) : null;
+  const clock: SyncClock = { now, zone };
+  if (inserts) await insertPollThread(tx, poll, clock);
+  else if (thread) await refreshPollThread(tx, thread, poll, clock);
 }
 
 /** Reconcile one scheduling poll's discussion thread. Idempotent; race-safe. */

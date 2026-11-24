@@ -1,25 +1,39 @@
 /**
- * ROK-2295 / ROK-2301: what a scheduling poll's thread is called. A
- * reschedule poll is `Reschedule: <event>`, a follow-up poll (opened from an
- * ended event's "Schedule a follow-up?" prompt) is
- * `<game> — Poll (after <event>)`, any other poll is its game. The Raid
- * Ledger thread (120) and the Discord post (100) share `pollTitleWithin`,
- * each with its own limit. Pure.
+ * ROK-2295 / ROK-2301 / ROK-2315: what a scheduling poll's thread is called.
+ * Discord's forum sidebar cuts a post title at about 30 characters, so the
+ * part that tells polls apart comes first:
+ * - reschedule poll: `Reschedule: <event> — Poll`;
+ * - follow-up poll (opened from an ended event's "Schedule a follow-up?"
+ *   prompt): `<event> — Follow-up poll`;
+ * - plain poll with a parent-lineup deadline: `Poll · closes Thu 26 Nov — <game>`;
+ * - any other poll: `<game> — Poll`.
+ * The Raid Ledger thread (120) and the Discord post (100) share
+ * `pollTitleWithin`, each with its own limit. Pure.
  */
+import { eventPostDate } from '../discord/hub-forum-discord-event-outbound';
 import type { PollSyncRow } from './poll-discussion.queries';
 
 /** The poll fields a thread title reads. */
 export type PollTitleFields = Pick<
   PollSyncRow,
-  'linkedEventId' | 'linkedEventTitle' | 'gameName' | 'followupOfEventTitle'
+  | 'linkedEventId'
+  | 'linkedEventTitle'
+  | 'gameName'
+  | 'followupOfEventTitle'
+  | 'phaseDeadline'
 >;
 
-const POLL_TAIL = ' — Poll';
-const OPEN = ' (after ';
-const CUT_CLOSE = '…)';
+const FOLLOWUP_TAIL = ' — Follow-up poll';
+const CLOSES = 'Poll · closes ';
+const DASH = ' — ';
+const ELLIPSIS = '…';
 const GAME_FALLBACK = 'Scheduling';
 
 const points = (text: string): string[] => Array.from(text);
+
+/** The first `room` code points of `text`, trailing space dropped. */
+const cutTo = (text: string, room: number): string =>
+  points(text).slice(0, room).join('').trimEnd();
 
 /**
  * ROK-2295: the event a reschedule poll is for, or null (unlinked, gone,
@@ -63,36 +77,73 @@ export function followupEventTitle(
 }
 
 /**
- * `<game> — Poll (after <event>)` in at most `max` code points. The event
- * title is what gets cut (ending with `…`); null when not even one character
- * of it fits, so the caller falls back to the plain title.
+ * ROK-2315: `<event> — Follow-up poll` in at most `max` code points. The
+ * event title is what gets cut (ending with `…`); null when not even one
+ * character of it fits, so the caller falls back to the plain title.
  */
-export function followupPollTitle(
-  game: string,
-  event: string,
-  max: number,
-): string | null {
-  const head = `${game.trim() || GAME_FALLBACK}${POLL_TAIL}${OPEN}`;
-  const whole = `${head}${event})`;
+export function followupPollTitle(event: string, max: number): string | null {
+  const whole = `${event}${FOLLOWUP_TAIL}`;
   if (points(whole).length <= max) return whole;
-  const room = max - points(head).length - points(CUT_CLOSE).length;
+  const room = max - points(FOLLOWUP_TAIL).length - points(ELLIPSIS).length;
   if (room < 1) return null;
-  const cut = points(event).slice(0, room).join('').trimEnd();
-  return `${head}${cut}${CUT_CLOSE}`;
+  return `${cutTo(event, room)}${ELLIPSIS}${FOLLOWUP_TAIL}`;
 }
 
 /**
- * The poll's full thread title within `max`: the follow-up form when it
- * applies and fits, else `plain(<subject>)`, the caller's own
- * `<subject> — Poll` cut.
+ * ROK-2315: `Poll · closes <date> — <game>` in at most `max` code points.
+ * The game is what gets cut (ending with `…`); null when not even one
+ * character of it fits.
+ */
+export function deadlinePollTitle(
+  game: string,
+  date: string,
+  max: number,
+): string | null {
+  const head = `${CLOSES}${date}${DASH}`;
+  const subject = game.trim() || GAME_FALLBACK;
+  const whole = `${head}${subject}`;
+  if (points(whole).length <= max) return whole;
+  const room = max - points(head).length - points(ELLIPSIS).length;
+  if (room < 1) return null;
+  return `${head}${cutTo(subject, room)}${ELLIPSIS}`;
+}
+
+/** The leading-form title (follow-up or dated) when one applies, else null. */
+function leadingTitle(
+  poll: PollTitleFields,
+  max: number,
+  timeZone: string | null,
+): string | null {
+  const event = followupEventTitle(poll);
+  if (event !== null) return followupPollTitle(event, max);
+  if (poll.linkedEventId !== null || poll.phaseDeadline === null) return null;
+  const date = eventPostDate(poll.phaseDeadline, timeZone);
+  return deadlinePollTitle(poll.gameName, date, max);
+}
+
+/**
+ * The poll's full thread title within `max`: the follow-up or dated form
+ * when it applies and fits, else `plain(<subject>)`, the caller's own
+ * `<subject> — Poll` cut. `timeZone` is the community default
+ * (`DEFAULT_TIMEZONE`) the close date is read in; null ⇒ UTC.
  */
 export function pollTitleWithin(
   poll: PollTitleFields,
   max: number,
   plain: (subject: string) => string,
+  timeZone: string | null,
 ): string {
-  const event = followupEventTitle(poll);
-  const tailed =
-    event === null ? null : followupPollTitle(poll.gameName, event, max);
-  return tailed ?? plain(pollSubjectTitle(poll));
+  return leadingTitle(poll, max, timeZone) ?? plain(pollSubjectTitle(poll));
+}
+
+/**
+ * True when the title reads the close date (a plain, unlinked poll with a
+ * deadline), so a caller knows whether it needs the community timezone.
+ */
+export function pollTitleNeedsZone(poll: PollTitleFields): boolean {
+  return (
+    poll.linkedEventId === null &&
+    poll.phaseDeadline !== null &&
+    followupEventTitle(poll) === null
+  );
 }
