@@ -2,7 +2,7 @@
  * ROK-2301 review MAJOR-1: a brand-new follow-up poll is created (and its
  * thread + post named `<game> — Poll`) BEFORE the prompt row records its
  * match id. The click must announce the recorded link afterwards so the
- * forum listeners rename it `(after <event>)`, in that order, and a failed
+ * forum listeners rename it `<event> — Follow-up poll`, in that order, and a failed
  * announce must never fail the click.
  */
 import { Logger } from '@nestjs/common';

@@ -62,7 +62,7 @@ export class PollDiscussionListener {
 
   /**
    * ROK-2301: a follow-up prompt recorded this poll after its thread was
-   * born `<game> — Poll`; the refresh renames it `(after <event>)` once.
+   * born `<game> — Poll`; the refresh renames it `<event> — Follow-up poll` once.
    */
   @OnEvent(POST_EVENT_FOLLOWUP_EVENTS.POLL_LINKED, { async: true })
   onFollowupLinked(payload: unknown): Promise<void> {
