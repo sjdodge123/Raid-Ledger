@@ -790,11 +790,11 @@ describe('PugInviteService', () => {
 
       await service.sendMemberInviteDm(42, 'discord-user-123', 'notif-1');
 
+      expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
       expect(isMemberInviteDmMuted).toHaveBeenCalledWith(
         mockDb,
         'discord-user-123',
       );
-      expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
     });
 
     it('does not report a full event as empty', async () => {
