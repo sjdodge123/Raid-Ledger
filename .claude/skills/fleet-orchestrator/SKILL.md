@@ -136,7 +136,7 @@ without coverage, sharded integration, and e2e — replacing the old
 - Pass `against_env_slug` **alongside** `base_url` so the env admin password is still seeded. A slot URL
   does not self-seed; without it, global setup logs in with the literal `password` and 401s.
 - Still async: wait with repeated blocking `rl_task_wait` calls (≤120 s each) until the task is terminal;
-  use `rl_task_status` only for the one terminal read (operator ruling 2026-11-23; CLAUDE.md "MCP Tools").
+  use `rl_task_status` only for the one terminal read (operator ruling 2026-11-23; CLAUDE.md "MCP Tools" → `docs/runbooks/mcp-tools.md`).
 - The three-call form remains valid and is still the right tool when you need to re-run **one** phase
   after a narrow fix, rather than re-spending the whole gate.
 
