@@ -41,6 +41,9 @@ const ADJUST_TARGET: Record<NotificationType, AdjustTarget> = {
   lineup_steam_nudge: 'settings',
   /** OQ-1 default: the standalone poll payload has no gameId — settings row. */
   community_lineup: 'settings',
+  lineup_lfg_offer: 'settings',
+  scheduling_poll: 'settings',
+  voice_access_lost: 'settings',
   user_deactivated_discord: 'settings',
   user_reactivated_discord: 'settings',
   post_event_followup: 'settings',

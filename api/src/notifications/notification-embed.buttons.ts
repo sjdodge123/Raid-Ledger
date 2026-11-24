@@ -124,6 +124,8 @@ const ROSTER_BUTTON_TYPES = new Set<NotificationType>([
   'bench_promoted',
   'roster_reassigned',
   'tentative_displaced',
+  // ROK-2311: the standalone voice-loss notice (was slot_vacated + subtype).
+  'voice_access_lost',
 ]);
 
 /**
@@ -136,6 +138,9 @@ const PAYLOAD_BUTTONS: Partial<
   Record<NotificationType, (p: Payload, url: string) => ButtonBuilder | null>
 > = {
   community_lineup: buildLineupButton,
+  // ROK-2311: split out of community_lineup (old rows keep the entry above).
+  scheduling_poll: buildLineupButton,
+  lineup_lfg_offer: buildLineupButton,
   post_event_followup: buildLineupButton,
   hub_leader_post: buildGroupButton,
   valheim_claim_suggestion: buildValheimOpenHubButton,
@@ -169,18 +174,25 @@ export function buildPrimaryButton(
     type !== 'missed_event_nudge'
   )
     return null;
-  // ROK-1769: the lost-voice-access DM's button is the way back in.
-  const isSignUp =
-    type === 'new_event' || payload?.subtype === VOICE_ACCESS_LOST_SUBTYPE;
-  const label = isSignUp
-    ? 'Sign Up'
-    : ROSTER_BUTTON_TYPES.has(type)
-      ? 'View Roster'
-      : 'View Event';
   return new ButtonBuilder()
-    .setLabel(label)
+    .setLabel(eventButtonLabel(type, payload))
     .setStyle(ButtonStyle.Link)
     .setURL(`${clientUrl}/events/${eventId}?notif=${notificationId}`);
+}
+
+/**
+ * Label of an event-linked primary button. ROK-1769: the lost-voice-access
+ * DM's button is the way back in. The subtype check stays PERMANENTLY
+ * alongside the ROK-2311 `voice_access_lost` type: removal/reassignment DMs
+ * carry the voice line via `appendVoiceAccessLine` under their own type.
+ */
+function eventButtonLabel(type: NotificationType, payload: Payload): string {
+  const isSignUp =
+    type === 'new_event' ||
+    type === 'voice_access_lost' ||
+    payload?.subtype === VOICE_ACCESS_LOST_SUBTYPE;
+  if (isSignUp) return 'Sign Up';
+  return ROSTER_BUTTON_TYPES.has(type) ? 'View Roster' : 'View Event';
 }
 
 /** Build the primary button for community_lineup DMs based on subtype. */
@@ -297,6 +309,13 @@ function viewLineupButton(clientUrl: string, lineupId: string): ButtonBuilder {
     .setURL(`${clientUrl}/community-lineup/${lineupId}`);
 }
 
+/** Types whose DM carries the lineup inline links (old + ROK-2311 split). */
+const LINEUP_INLINE_TYPES = new Set<NotificationType>([
+  'community_lineup',
+  'scheduling_poll',
+  'lineup_lfg_offer',
+]);
+
 /** Extra buttons to add to the main action row for specific types. */
 export function buildInlineButtons(
   type: NotificationType,
@@ -308,7 +327,7 @@ export function buildInlineButtons(
     if (!lineupId) return [];
     return [viewLineupButton(clientUrl, lineupId)];
   }
-  if (type === 'community_lineup') {
+  if (LINEUP_INLINE_TYPES.has(type)) {
     // ROK-1896 D7: the poll's Hub link sits after the inline links.
     const inline = lineupInlineButtons(payload, clientUrl);
     const hub = buildPollHubButton(payload, clientUrl);

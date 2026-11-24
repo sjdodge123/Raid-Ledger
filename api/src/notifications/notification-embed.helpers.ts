@@ -57,6 +57,10 @@ export const NOTIFICATION_EMBED_STATES: Record<NotificationType, EmbedState> = {
   role_gap_alert: 'needs_you',
   lineup_steam_nudge: 'announcing',
   community_lineup: 'announcing',
+  // ROK-2311: split types keep their parent row's register.
+  lineup_lfg_offer: 'announcing',
+  scheduling_poll: 'announcing',
+  voice_access_lost: 'announcing',
   // ROK-1471: the LFG invite DM announces a group that just formed.
   lfg_invite: 'announcing',
   // ROK-1455: a player-sent invite to a group — same announcing register.
@@ -132,6 +136,9 @@ const TYPE_EMOJI: Record<string, string> = {
   recruitment_reminder: '📢',
   lineup_steam_nudge: '🔗',
   community_lineup: '🎯',
+  lineup_lfg_offer: '🎯',
+  scheduling_poll: '🎯',
+  voice_access_lost: '🚪',
   lfg_invite: '👥',
   lfg_player_invite: '✉️',
   hub_leader_post: '📣',
@@ -169,6 +176,9 @@ const TYPE_LABEL: Record<string, string> = {
   recruitment_reminder: 'Recruitment Reminder',
   lineup_steam_nudge: 'Steam Link Nudge',
   community_lineup: 'Community Lineup',
+  lineup_lfg_offer: 'Community Lineup',
+  scheduling_poll: 'Community Lineup',
+  voice_access_lost: 'Slot Vacated',
   lfg_invite: 'LFG Group Forming',
   lfg_player_invite: 'LFG Invite',
   hub_leader_post: 'Group Post',
@@ -207,6 +217,11 @@ function addVoiceChannelField(
   if (value) embed.addFields({ name: 'Voice Channel', value, inline: true });
 }
 
+const LINEUP_FIELDS = {
+  fields: [['gameName', 'Game']] as [string, string][],
+  voice: false,
+};
+
 /** Field definitions per notification type: [payloadKey, fieldName] pairs + voice flag. */
 const TYPE_FIELD_DEFS: Partial<
   Record<NotificationType, { fields: [string, string][]; voice: boolean }>
@@ -214,6 +229,7 @@ const TYPE_FIELD_DEFS: Partial<
   event_reminder: { fields: [['eventTitle', 'Event']], voice: true },
   new_event: { fields: [['gameName', 'Game']], voice: true },
   slot_vacated: { fields: [['slotName', 'Slot']], voice: true },
+  voice_access_lost: { fields: [['slotName', 'Slot']], voice: true },
   member_returned: { fields: [['slotName', 'Slot']], voice: true },
   event_cancelled: { fields: [['eventTitle', 'Event']], voice: false },
   event_rescheduled: { fields: [], voice: true },
@@ -238,10 +254,10 @@ const TYPE_FIELD_DEFS: Partial<
     ],
     voice: true,
   },
-  community_lineup: {
-    fields: [['gameName', 'Game']],
-    voice: false,
-  },
+  community_lineup: LINEUP_FIELDS,
+  // ROK-2311: split out of community_lineup; old rows keep the entry above.
+  scheduling_poll: LINEUP_FIELDS,
+  lineup_lfg_offer: LINEUP_FIELDS,
 };
 
 /** Types whose DM replaces the description with a structured layout. */
@@ -287,7 +303,8 @@ export function addTypeSpecificFields(
   if (!def) return;
   for (const [key, name] of def.fields) addFieldIf(embed, payload, key, name);
   if (def.voice) addVoiceChannelField(embed, payload);
-  if (type === 'community_lineup') addPollHubField(embed, payload);
+  if (type === 'community_lineup' || type === 'scheduling_poll')
+    addPollHubField(embed, payload);
 }
 
 /** Handle roster_reassigned with conditional newRole field. */
