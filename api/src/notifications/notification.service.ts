@@ -14,7 +14,6 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { findAnnouncementMessage } from '../discord-bot/services/event-message-rows.helpers';
-import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { DiscordNotificationService } from './discord-notification.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
@@ -28,6 +27,10 @@ import {
   mapPreferencesToDto,
 } from './notification-mapping.helpers';
 import { createManyNotifications } from './notification-batch.helpers';
+import {
+  buildNotificationValues,
+  resolveInputDelivery,
+} from './notification-create.helpers';
 import {
   mergePreferences,
   detectDiscordEnabled,
@@ -76,28 +79,22 @@ export class NotificationService {
     input: CreateNotificationInput,
   ): Promise<NotificationDto | null> {
     const prefs = await this.getPreferences(input.userId);
-    if (!this.isCategoryEnabled(input.type, prefs)) {
+    const delivery = resolveInputDelivery(input, prefs);
+    if (delivery === 'none') {
       this.logger.debug(
-        `Skipping notification for user ${input.userId}: ${input.type} in-app disabled`,
+        `Skipping notification for user ${input.userId}: ${input.type} has no channel to deliver on`,
       );
       return null;
     }
 
     const [row] = await this.db
       .insert(schema.notifications)
-      .values({
-        userId: input.userId,
-        type: input.type,
-        title: input.title,
-        message: input.message,
-        payload: input.payload ?? null,
-        expiresAt: input.expiresAt ?? null,
-      })
+      .values(buildNotificationValues(input, delivery))
       .returning();
     const created = defined(row, 'inserted notification');
 
     this.logger.log(
-      `Created notification ${created.id} for user ${input.userId} (${input.type})`,
+      `Created notification ${created.id} for user ${input.userId} (${input.type}, ${delivery})`,
     );
     this.dispatchDiscord(input, created.id);
     return mapNotificationToDto(created);
@@ -122,6 +119,7 @@ export class NotificationService {
         and(
           eq(schema.notifications.userId, userId),
           isNull(schema.notifications.readAt),
+          eq(schema.notifications.inAppHidden, false),
         ),
       )
       .orderBy(desc(schema.notifications.createdAt));
@@ -137,7 +135,12 @@ export class NotificationService {
     const rows = await this.db
       .select()
       .from(schema.notifications)
-      .where(eq(schema.notifications.userId, userId))
+      .where(
+        and(
+          eq(schema.notifications.userId, userId),
+          eq(schema.notifications.inAppHidden, false),
+        ),
+      )
       .orderBy(desc(schema.notifications.createdAt))
       .limit(limit)
       .offset(offset);
@@ -153,6 +156,7 @@ export class NotificationService {
         and(
           eq(schema.notifications.userId, userId),
           isNull(schema.notifications.readAt),
+          eq(schema.notifications.inAppHidden, false),
         ),
       );
     return Number(defined(result, 'unread count row').count);
@@ -187,6 +191,7 @@ export class NotificationService {
         and(
           eq(schema.notifications.userId, userId),
           isNull(schema.notifications.readAt),
+          eq(schema.notifications.inAppHidden, false),
         ),
       );
     this.logger.log(`User ${userId} marked all notifications as read`);
@@ -309,14 +314,6 @@ export class NotificationService {
       .returning();
     this.logger.log(`Cleaned up ${result.length} expired notifications`);
     return result.length;
-  }
-
-  /** Check if in-app notifications are enabled for a given type. */
-  private isCategoryEnabled(
-    type: NotificationType,
-    prefs: NotificationPreferencesDto,
-  ): boolean {
-    return prefs.channelPrefs[type]?.inApp ?? true;
   }
 
   /** Fire-and-forget Discord dispatch. */

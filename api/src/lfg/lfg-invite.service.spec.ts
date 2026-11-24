@@ -439,7 +439,7 @@ describe('LfgInviteService.decline (D12)', () => {
  * group cap, the recipient's 24h budget and the no-repeat horizon on a DM that
  * `NotificationService.create` silently drops.
  */
-describe('recipientOptedOut — every preference that silences the invite (M1)', () => {
+describe('recipientOptedOut — every preference that silences the invite (M1, ROK-2290)', () => {
   const actual = jest.requireActual<typeof helpers>('./lfg-invite.helpers');
 
   /** A db whose only answer is one `user_notification_preferences` row. */
@@ -458,13 +458,20 @@ describe('recipientOptedOut — every preference that silences the invite (M1)',
     return actual.recipientOptedOut(prefsDb(prefs), RECIPIENT);
   }
 
-  it('inApp:false is an opt-out — create() returns null BEFORE dispatchDiscord', async () => {
+  it('inApp:false with discord:true SENDS — create() keeps a hidden row and DMs (ROK-2290)', async () => {
     const prefs = {
       [LFG_INVITE_NOTIFICATION_TYPE]: { inApp: false, discord: true },
     };
     expect(`inApp:false,discord:true ⇒ optedOut=${await optedOut(prefs)}`).toBe(
-      'inApp:false,discord:true ⇒ optedOut=true',
+      'inApp:false,discord:true ⇒ optedOut=false',
     );
+  });
+
+  it('both channels off is an opt-out', async () => {
+    const prefs = {
+      [LFG_INVITE_NOTIFICATION_TYPE]: { inApp: false, discord: false },
+    };
+    await expect(optedOut(prefs)).resolves.toBe(true);
   });
 
   it('discord:false is still an opt-out', async () => {

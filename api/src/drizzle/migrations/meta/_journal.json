@@ -2213,6 +2213,13 @@
       "when": 1795383269551,
       "tag": "0316_forum_chat_copy",
       "breakpoints": true
+    },
+    {
+      "idx": 317,
+      "version": "7",
+      "when": 1795413439884,
+      "tag": "0317_notifications_in_app_hidden",
+      "breakpoints": true
     }
   ]
 }
