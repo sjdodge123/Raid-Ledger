@@ -3000,12 +3000,12 @@ test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
         expect(box!.height).toBeGreaterThanOrEqual(44);
     });
 
-    test('AC6: the better-time trigger is a solid, foreground-coloured button', async ({
+    test('AC6: the better-time trigger is a solid, warning-tinted button', async ({
         page,
     }) => {
         test.skip(
             !isMobile(test.info()),
-            'Mobile-only — the dashed/muted treatment is kept from `sm` up',
+            'Mobile-only — the 44px floor is `min-h-[44px] lg:min-h-9`',
         );
 
         await goToPoll(page, actionsLineupId, actionsMatchId);
@@ -3014,25 +3014,26 @@ test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
         );
         await expect(trigger).toBeVisible({ timeout: 15_000 });
 
-        // Not the ghost: solid border, and the copy is at full foreground
-        // contrast rather than the muted secondary tone.
+        // Not the ghost: a solid border, and the copy wears the warning
+        // token (the `warning-soft` Button) so the poll's way out stands
+        // apart from the vote buttons, never the muted secondary tone.
         const styles = await trigger.evaluate((el) => {
-            // Resolve `--color-foreground` through the engine so the hex in
+            // Resolve `--color-warning` through the engine so the value in
             // index.css and the computed `rgb()` are directly comparable.
             const probe = document.createElement('span');
-            probe.style.color = 'var(--color-foreground)';
+            probe.style.color = 'var(--color-warning)';
             document.body.appendChild(probe);
-            const foreground = getComputedStyle(probe).color;
+            const warning = getComputedStyle(probe).color;
             probe.remove();
             const own = getComputedStyle(el);
             return {
                 borderStyle: own.borderTopStyle,
                 color: own.color,
-                foreground,
+                warning,
             };
         });
-        expect(styles.borderStyle).not.toBe('dashed');
-        expect(styles.color).toBe(styles.foreground);
+        expect(styles.borderStyle).toBe('solid');
+        expect(styles.color).toBe(styles.warning);
 
         // AC1 applies to this action too.
         const box = await trigger.boundingBox();
