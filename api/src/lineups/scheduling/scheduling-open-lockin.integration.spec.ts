@@ -216,7 +216,10 @@ describe('ROK-2024 open lock-in (integration)', () => {
       .where(
         and(
           eq(schema.notifications.userId, userId),
-          inArray(schema.notifications.type, ['community_lineup', 'scheduling_poll']),
+          inArray(schema.notifications.type, [
+            'community_lineup',
+            'scheduling_poll',
+          ]),
         ),
       );
     return rows.map((r) => {

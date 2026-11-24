@@ -250,7 +250,12 @@ async function pollDmTitles(
         title: schema.notifications.title,
       })
       .from(schema.notifications)
-      .where(inArray(schema.notifications.type, ['community_lineup', 'scheduling_poll']));
+      .where(
+        inArray(schema.notifications.type, [
+          'community_lineup',
+          'scheduling_poll',
+        ]),
+      );
     result = userIds.map((userId) => ({
       userId,
       titles: rows

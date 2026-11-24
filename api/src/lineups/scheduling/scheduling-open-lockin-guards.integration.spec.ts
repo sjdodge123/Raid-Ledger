@@ -343,7 +343,10 @@ describe('ROK-2024 open lock-in announcement evidence (integration)', () => {
       .where(
         and(
           eq(schema.notifications.userId, userId),
-          inArray(schema.notifications.type, ['community_lineup', 'scheduling_poll']),
+          inArray(schema.notifications.type, [
+            'community_lineup',
+            'scheduling_poll',
+          ]),
         ),
       );
     return rows.map((r) => {
@@ -471,7 +474,10 @@ describe('ROK-2054 standalone lock-in posts no lineup channel card (integration)
         .where(
           and(
             eq(schema.notifications.userId, dmUserId),
-            inArray(schema.notifications.type, ['community_lineup', 'scheduling_poll']),
+            inArray(schema.notifications.type, [
+              'community_lineup',
+              'scheduling_poll',
+            ]),
           ),
         );
       const ids = rows.map(

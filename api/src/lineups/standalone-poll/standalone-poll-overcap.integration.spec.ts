@@ -136,7 +136,12 @@ async function lineupNotes(userIds: number[]): Promise<LineupNote[]> {
       payload: schema.notifications.payload,
     })
     .from(schema.notifications)
-    .where(inArray(schema.notifications.type, ['community_lineup', 'scheduling_poll']));
+    .where(
+      inArray(schema.notifications.type, [
+        'community_lineup',
+        'scheduling_poll',
+      ]),
+    );
   return rows
     .filter((r) => userIds.includes(r.userId))
     .map((r) => ({
