@@ -112,6 +112,9 @@ export class LineupStarService {
     gameId: number | null,
     callerRole?: string,
   ) {
+    // ROK-2306: deliberate — a blocked account cannot clear a star either
+    // (game-vote toggle-off is refused the same way); only scheduling-poll
+    // retract stays open to a blocked member.
     await assertAccountActive(this.db, userId);
     const [lineup] = await findLineupById(this.db, lineupId);
     if (!lineup) throw new NotFoundException('Lineup not found');
