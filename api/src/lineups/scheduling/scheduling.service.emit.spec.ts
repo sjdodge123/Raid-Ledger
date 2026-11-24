@@ -7,6 +7,11 @@
  * Separate from `scheduling.service.spec.ts`, which is already past the
  * 750-line spec ceiling.
  */
+// ROK-2306: the vote guard's account lookup is pinned in its own spec.
+jest.mock('../../users/discord-account-status.helpers', () => ({
+  ...jest.requireActual<object>('../../users/discord-account-status.helpers'),
+  assertAccountActive: () => Promise.resolve(),
+}));
 import { NotFoundException } from '@nestjs/common';
 import {
   createDrizzleMock,

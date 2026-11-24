@@ -12,12 +12,20 @@ import { LineupStarService } from './lineup-star.service';
 import * as voting from './lineups-voting.helpers';
 import * as query from './lineups-query.helpers';
 import * as response from './lineups-response.helpers';
+import {
+  accountBlockedError,
+  assertAccountActive,
+} from '../users/discord-account-status.helpers';
 
 jest.mock('./lineups-voting.helpers');
 jest.mock('./lineups-query.helpers');
 jest.mock('./lineups-response.helpers');
 jest.mock('./lineups-actions.helpers');
 jest.mock('./lineups-eligibility.helpers');
+jest.mock('../users/discord-account-status.helpers', () => ({
+  ...jest.requireActual<object>('../users/discord-account-status.helpers'),
+  assertAccountActive: jest.fn(),
+}));
 
 const DB = {} as unknown as PostgresJsDatabase<typeof schema>;
 const BOT = { getGuild: () => null } as unknown as DiscordBotClientService;
@@ -61,5 +69,22 @@ describe('LineupStarService.setStar — lifecycle nudge (Codex r10 P2)', () => {
     });
     jest.mocked(voting.setStar).mockResolvedValue('set');
     await expect(makeService(touch).setStar(1, 7, 2)).resolves.toEqual({});
+  });
+});
+
+describe('LineupStarService.setStar — blocked accounts (ROK-2306)', () => {
+  it('a banned/deactivated voter → 403 ACCOUNT_BLOCKED before any read or write', async () => {
+    jest
+      .mocked(assertAccountActive)
+      .mockRejectedValueOnce(accountBlockedError());
+    await expect(
+      makeService(jest.fn()).setStar(1, 7, 2, 'member'),
+    ).rejects.toMatchObject({
+      status: 403,
+      response: { code: 'ACCOUNT_BLOCKED' },
+    });
+    expect(assertAccountActive).toHaveBeenCalledWith(DB, 2);
+    expect(query.findLineupById).not.toHaveBeenCalled();
+    expect(voting.setStar).not.toHaveBeenCalled();
   });
 });

@@ -27,6 +27,7 @@ import { LineupDiscussionReplyThrottleGuard } from '../subject-discussion/lineup
 import { syncLineupDiscussion } from '../subject-discussion/lineup-discussion.sync';
 import { PollDiscussionReplyThrottleGuard } from '../subject-discussion/poll-discussion-throttle.guard';
 import { syncPollDiscussion } from '../subject-discussion/poll-discussion.sync';
+import { ForumChatCopyQueue } from './forum-chat-copy.queue';
 import { neutralise } from './hub-forum-discord-closing-lines';
 import { CLOSING_LINE_COPY } from './hub-forum-discord-closing-lines.copy';
 import {
@@ -51,6 +52,12 @@ beforeEach(() => {
   app.get(LineupDiscussionReplyThrottleGuard, { strict: false }).reset();
   stubForumGateway(ctx.posts.testApp);
   out = stubOutbound(ctx.posts.testApp);
+  // A lock-in also queues the poll→event chat copy (ROK-2297), whose job posts
+  // its rows through createReply after this test ends — into the NEXT test's
+  // spies (1 + 2 = 3 calls). Chat copy has its own specs; keep it out of here.
+  jest
+    .spyOn(app.get(ForumChatCopyQueue, { strict: false }), 'enqueue')
+    .mockResolvedValue(true);
 });
 
 afterEach(() => {
