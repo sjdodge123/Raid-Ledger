@@ -44,6 +44,7 @@ import {
   isEventRescheduling,
 } from './event-rescheduling.sql';
 import { HubForumDiscordEventLockGateway } from './hub-forum-discord-event-lock.gateway';
+import { HubForumDiscordSignupPingQueue } from './hub-forum-discord-signup-pings.queue';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const posts = schema.eventPlanningPosts;
@@ -182,6 +183,7 @@ export class EventPlanningPostsLockSweep {
     private readonly service: EventPlanningPostsService,
     private readonly subjects: EventPlanningSubjectPosts,
     private readonly starters: EventForumStarterCards,
+    private readonly pings: HubForumDiscordSignupPingQueue,
   ) {}
 
   /**
@@ -255,10 +257,16 @@ export class EventPlanningPostsLockSweep {
     return 'open';
   }
 
+  /**
+   * A reopened event post is refreshed, then (ROK-2314 MINOR-1) its signup
+   * flush re-armed for the lines held while it was shut. Not in `refresh`:
+   * `reopenIfPending` runs that from inside the flush itself.
+   */
   private async apply(row: RegistryLockChange, now: Date): Promise<boolean> {
     const res = await this.flip(row, now);
     if (res === 'ok' && !row.readOnly && row.subjectKind === 'event') {
       await this.refresh(row);
+      await this.pings.schedule(row.subjectId);
     }
     return res !== 'failed';
   }

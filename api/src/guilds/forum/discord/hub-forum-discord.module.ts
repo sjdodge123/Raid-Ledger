@@ -19,6 +19,7 @@ import {
   HubForumDiscordEventLockGateway,
   HubForumDiscordEventLockSweep,
 } from './hub-forum-discord-event-lock';
+import { HubEventPostReopenFollowups } from './hub-forum-discord-event-lock.reopen';
 import { HubForumDiscordInboundIngest } from './hub-forum-discord-inbound.ingest';
 import { HubForumDiscordInboundListener } from './hub-forum-discord-inbound.listener';
 import { HubForumDiscordNotices } from './hub-forum-discord-notice';
@@ -129,6 +130,8 @@ import { ForumChatCopyProcessor } from './forum-chat-copy.processor';
     HubForumDiscordReconcileService,
     HubForumDiscordEventLockGateway,
     HubForumDiscordEventLockSweep,
+    // ROK-2314: a reopened post re-sends held replies + signup lines.
+    HubEventPostReopenFollowups,
     HubForumDiscordSignupPings,
     // ROK-2274: the same flush writes lines into the RL event thread.
     EventDiscussionSignupLines,
