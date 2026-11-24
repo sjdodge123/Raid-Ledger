@@ -108,7 +108,7 @@ async function waitDiscussion(
  * ROK-2315: a plain poll with a deadline leads with its close date, read in
  * the community timezone (so only the shape is pinned, not the day).
  */
-export const DATED_POLL_TITLE = /^Poll · closes \w{3} \d{1,2} \w{3} — \S/;
+export const DATED_POLL_TITLE = /^Poll · closes \p{L}{3} \d{1,2} \p{L}{3,4} — \S/u;
 
 /** The RL thread's title — the dated poll title, the Discord post name too. */
 async function threadTitle(ctx: TestContext, d: Discussion): Promise<string> {

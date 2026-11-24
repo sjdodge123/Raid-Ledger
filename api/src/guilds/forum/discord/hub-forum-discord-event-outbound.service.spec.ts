@@ -316,7 +316,7 @@ describe('EventPostOutbound.postView — poll and lineup threads', () => {
       { ...PLAIN, matchId: 34, title: 'Scheduling: Onyxia', body: pollBody },
       URL3,
     );
-    expect(mocked.source).toHaveBeenCalledWith({}, 3);
+    expect(mocked.source).toHaveBeenCalledWith({}, 3, 'UTC');
     expect(view).toEqual({
       name: 'Onyxia — Poll',
       content:

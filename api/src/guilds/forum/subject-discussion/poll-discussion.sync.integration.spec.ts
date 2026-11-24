@@ -15,6 +15,7 @@ import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { LINEUP_LIFECYCLE_EVENTS } from '../../../lineups/lineup-events.constants';
 import { LINEUP_MATCH_EVENTS } from '../../../lineups/lineups-scheduling-hook.helpers';
+import { SettingsService } from '../../../settings/settings.service';
 import { findPollForSync } from './poll-discussion.queries';
 import {
   planPollSync,
@@ -237,6 +238,27 @@ describe('syncPollDiscussion (real db)', () => {
     expect((await liveThread(matchId))?.title).toBe(
       `Poll · closes Thu 22 Jan — ${testApp.seed.game.name}`,
     );
+  });
+
+  it('ROK-2315: the close date is read in the community timezone (DEFAULT_TIMEZONE)', async () => {
+    const settings = testApp.app.get(SettingsService);
+    const zoneKey = schema.SETTING_KEYS.DEFAULT_TIMEZONE;
+    const before = await settings.get(zoneKey);
+    await settings.set(zoneKey, 'America/New_York');
+    try {
+      const guildId = await newHub();
+      // 02:00Z Fri 16 Jan is 21:00 Thu 15 Jan in New York.
+      const phaseDeadline = new Date('2099-01-16T02:00:00Z');
+      const { matchId } = await newPoll({ guildId, phaseDeadline });
+      expect(await syncPollDiscussion(testApp.db, matchId)).toBe('insert');
+      expect((await liveThread(matchId))?.title).toBe(
+        `Poll · closes Thu 15 Jan — ${testApp.seed.game.name}`,
+      );
+    } finally {
+      // Restore so every other spec keeps reading UTC.
+      if (before === null) await settings.delete(zoneKey);
+      else await settings.set(zoneKey, before);
+    }
   });
 
   it('ROK-2295: a reschedule poll is "Reschedule: <event> — Poll"', async () => {
