@@ -28,7 +28,10 @@ let sendEmbedDM: jest.SpyInstance;
 let isConnected: jest.SpyInstance;
 
 /** A member with `discordId`; `discord` sets the invite type's Discord switch. */
-async function seedInvitee(discord: boolean | 'no-row'): Promise<void> {
+async function seedInvitee(
+  discord: boolean | 'no-row',
+  inApp = true,
+): Promise<void> {
   const [user] = nonEmpty(
     await testApp.db
       .insert(schema.users)
@@ -42,7 +45,7 @@ async function seedInvitee(discord: boolean | 'no-row'): Promise<void> {
   );
   if (discord === 'no-row') return;
   const channelPrefs = resolveChannelPrefs({});
-  channelPrefs.new_event = { ...channelPrefs.new_event, discord };
+  channelPrefs.new_event = { ...channelPrefs.new_event, discord, inApp };
   await testApp.db
     .insert(schema.userNotificationPreferences)
     .values({ userId: user.id, channelPrefs });
@@ -92,8 +95,8 @@ describe('member-invite DM honours the Discord switch (ROK-2305)', () => {
     expect(dmRecipients()).toEqual([]);
   });
 
-  it('sends exactly one DM when Discord is on for invites', async () => {
-    await seedInvitee(true);
+  it('sends exactly one DM when Discord is on, even with the bell off (ROK-2290)', async () => {
+    await seedInvitee(true, false);
     const eventId = await createFutureEvent(testApp, adminToken);
 
     await deliverInvite(eventId, INVITEE_DISCORD_ID);

@@ -4632,3 +4632,7 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 
 - **[low]** `rl_env_build_image_from_runner` (fleet task eebd3a32f3a0, slot 2) — `Step 19/81 : COPY . .` failed with `failed to write compressed diff: failed to create diff tar stream: lstat /var/lib/containerd/tmpmounts/containerd-mount3025112068/app/web/public: no such file or directory` (`build_failed`, rc 1, 228s). Not caused by the branch: `web/public` exists in the worktree and on the runner, the diff is one CSS file and one smoke spec, and the identical build passed on one retry (task 54ef944b188c, 512s). No prune, gc or second build ran in the window (gc-sweeper: one disk-only sweep, `pruned=false`, 3s before the failure; `max_image_builds` 1). Seen once.
   Suggested: if it recurs, capture `rl_infra_logs` for containerd/dockerd at the failure second and check whether a Mutagen sync pass touched `web/public` during `COPY`.
+
+### 2026-11-24 — fix/rok-2305-invite-dm-switch (surfaced during the ROK-2305 review)
+
+- **low** `api/src/discord-bot/services/pug-invite.service.ts:90` / `:251` — the PUG-slot invite DM (sent when a PUG slot is claimed or re-sent for a Discord user) does not read the invitee's notification preferences, so a LINKED member who turned Discord off for invites can still get it. ROK-2305 only guards `sendMemberInviteDm`. Pre-existing on origin/main. `Suggested:` run the same `isMemberInviteDmMuted` check (`pug-invite-dm-prefs.helpers.ts`) before the PUG-slot DM for linked users; unlinked Discord users stay unaffected.
