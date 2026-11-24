@@ -10,7 +10,7 @@ import {
   type CharacterBackTarget,
 } from '../utils/character-back-id';
 import {
-  findLinkedUser,
+  findActiveLinkedUser,
   isDiscordInteractionError,
   safeEditReply,
 } from './signup-interaction.helpers';
@@ -78,16 +78,9 @@ async function rerenderCharacterList(
 ): Promise<void> {
   const { eventId } = target;
   const ctx = await loadBackContext(interaction, eventId, deps);
-  if (ctx === 'not_found') {
-    await interaction.editReply({
-      content: 'Event not found.',
-      components: [],
-    });
-    return;
-  }
-  if (!ctx || ctx.characters.length === 0) {
-    const content = 'No characters to pick from. Please sign up again.';
-    await interaction.editReply({ content, components: [], embeds: [] });
+  if (ctx === false) return;
+  if (ctx === 'not_found' || !ctx || ctx.characters.length === 0) {
+    await replyNoCharacterList(interaction, ctx === 'not_found');
     return;
   }
   await showCharacterSelect(
@@ -102,12 +95,32 @@ async function rerenderCharacterList(
   );
 }
 
-/** The linked user's game context for the Back target, or null if unlinked. */
+/** The Back target has no list to show: the event is gone or no characters. */
+async function replyNoCharacterList(
+  interaction: ButtonInteraction,
+  eventMissing: boolean,
+): Promise<void> {
+  if (eventMissing) {
+    await interaction.editReply({
+      content: 'Event not found.',
+      components: [],
+    });
+    return;
+  }
+  const content = 'No characters to pick from. Please sign up again.';
+  await interaction.editReply({ content, components: [], embeds: [] });
+}
+
+/**
+ * The linked user's game context for the Back target, null if unlinked, or
+ * false when the account is blocked (ROK-2298: already replied).
+ */
 async function loadBackContext(
   interaction: ButtonInteraction,
   eventId: number,
   deps: SignupInteractionDeps,
-): Promise<Awaited<ReturnType<typeof loadGameContext>> | null> {
-  const linkedUser = await findLinkedUser(interaction.user.id, deps);
+): Promise<Awaited<ReturnType<typeof loadGameContext>> | null | false> {
+  const linkedUser = await findActiveLinkedUser(interaction, deps);
+  if (linkedUser === false) return false;
   return linkedUser ? loadGameContext(eventId, linkedUser.id, deps) : null;
 }

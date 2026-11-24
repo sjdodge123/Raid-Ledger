@@ -37,8 +37,9 @@ import {
   isDiscordInteractionError,
   safeReply,
   safeEditReply,
-  findLinkedUser,
+  findActiveLinkedUser,
   parseButtonCustomId,
+  interactionErrorReply,
 } from './signup-interaction.helpers';
 import {
   handleExistingSignup,
@@ -166,7 +167,7 @@ export class SignupInteractionListener {
       await safeReply(
         interaction,
         {
-          content: 'Something went wrong. Please try again.',
+          content: interactionErrorReply(error),
           flags: MessageFlags.Ephemeral,
         },
         this.logger,
@@ -225,8 +226,8 @@ export class SignupInteractionListener {
       return;
     }
 
-    const linkedUser = await findLinkedUser(discordUserId, { db: this.db });
-
+    const linkedUser = await findActiveLinkedUser(interaction, deps);
+    if (linkedUser === false) return;
     if (linkedUser) {
       await handleNewLinkedSignup(interaction, eventId, linkedUser, deps);
       return;
@@ -249,7 +250,7 @@ export class SignupInteractionListener {
       await safeReply(
         interaction,
         {
-          content: 'Something went wrong. Please try again.',
+          content: interactionErrorReply(error),
           flags: MessageFlags.Ephemeral,
         },
         this.logger,

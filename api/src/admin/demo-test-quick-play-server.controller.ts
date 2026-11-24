@@ -35,10 +35,8 @@ import type * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
 import { AdHocServerPresenceService } from '../discord-bot/services/ad-hoc-server-presence.service';
-import {
-  findLiveGameAdHocEvent,
-  resolveSteamIdentity,
-} from '../discord-bot/services/ad-hoc-server-presence.helpers';
+import { findLiveGameAdHocEvent } from '../discord-bot/services/ad-hoc-server-presence.helpers';
+import { resolveSteamIdentity } from '../discord-bot/services/ad-hoc-steam-identity.helpers';
 import { steamPlayer } from '../plugins/pelican/presence/presence-events';
 import { DemoModeGuard } from './demo-mode.guard';
 import { parseDemoBody } from './demo-test.utils';

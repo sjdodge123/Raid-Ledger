@@ -2,7 +2,7 @@ import type { ButtonInteraction } from 'discord.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as schema from '../../drizzle/schema';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
-import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
+import { findActiveLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import { showRoleSelect } from './signup-select-wrappers';
 import { resignupIfDeparted } from './signup-reactivation.helpers';
 import { isCancelledStatus } from '../../events/signups-signup.helpers';
@@ -21,6 +21,7 @@ type ExistingSignup = NonNullable<
     ReturnType<SignupInteractionDeps['signupsService']['findByDiscordUser']>
   >
 >;
+type LinkedUser = typeof schema.users.$inferSelect;
 
 /**
  * Handle the Tentative button click.
@@ -41,7 +42,8 @@ export async function handleTentative(
     return;
   }
 
-  const linkedUser = await findLinkedUser(discordUserId, deps);
+  const linkedUser = await findActiveLinkedUser(interaction, deps);
+  if (linkedUser === false) return;
   if (linkedUser) {
     await handleLinkedTentative(interaction, eventId, linkedUser, deps);
     return;
@@ -56,9 +58,15 @@ async function replyExistingTentative(
   existingSignup: ExistingSignup,
   deps: SignupInteractionDeps,
 ): Promise<void> {
+  // ROK-1769: a departed/declined linked member re-signs first (re-slot +
+  // signup_reactivated), then goes tentative. ROK-2298: a blocked account is
+  // refused even on a live row (a status write, not cleanup).
+  const account = await findActiveLinkedUser(interaction, deps);
+  if (account === false) return;
+  const linkedUser = isCancelledStatus(existingSignup.status) ? account : null;
   // ROK-2097: a row this Discord id may see but not manage is not-found.
   const marked = await runOrReplyNotSignedUp(interaction, () =>
-    markExistingTentative(interaction, eventId, existingSignup, deps),
+    markExistingTentative(eventId, existingSignup, linkedUser, deps),
   );
   if (!marked.ok) return;
   await interaction.editReply({
@@ -70,16 +78,11 @@ async function replyExistingTentative(
 
 /** Returns the re-placed slot when a departed/declined row was re-signed. */
 async function markExistingTentative(
-  interaction: ButtonInteraction,
   eventId: number,
   existingSignup: ExistingSignup,
+  linkedUser: LinkedUser | null,
   deps: SignupInteractionDeps,
 ): Promise<string | undefined> {
-  // ROK-1769: a departed/declined linked member re-signs first (re-slot +
-  // signup_reactivated), then goes tentative — same as signupAsTentative.
-  const linkedUser = isCancelledStatus(existingSignup.status)
-    ? await findLinkedUser(interaction.user.id, deps)
-    : null;
   const resignup = await resignupIfDeparted(
     eventId,
     existingSignup,
@@ -143,8 +146,8 @@ export async function handleDecline(
 
   if (existingSignup) {
     if (!(await cancelOrReplyNotFound(interaction, eventId, deps))) return;
-  } else {
-    await createDeclinedSignup(interaction, eventId, deps);
+  } else if (!(await createDeclinedSignup(interaction, eventId, deps))) {
+    return;
   }
 
   await interaction.editReply({
@@ -174,9 +177,10 @@ async function createDeclinedSignup(
   interaction: ButtonInteraction,
   eventId: number,
   deps: SignupInteractionDeps,
-): Promise<void> {
-  const linkedUser = await findLinkedUser(interaction.user.id, deps);
-
+): Promise<boolean> {
+  // ROK-2298 (Q4): a blocked account may not create a declined row.
+  const linkedUser = await findActiveLinkedUser(interaction, deps);
+  if (linkedUser === false) return false;
   if (linkedUser) {
     await deps.signupsService.signup(eventId, linkedUser.id);
     await deps.signupsService.updateStatus(
@@ -192,6 +196,7 @@ async function createDeclinedSignup(
       status: 'declined',
     });
   }
+  return true;
 }
 
 /**

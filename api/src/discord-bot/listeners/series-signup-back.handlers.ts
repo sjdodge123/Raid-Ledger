@@ -13,7 +13,7 @@ import {
 } from '../utils/character-back-id';
 import {
   fetchEvent,
-  findLinkedUser,
+  findActiveLinkedUser,
   isDiscordInteractionError,
   safeEditReply,
 } from './signup-interaction.helpers';
@@ -81,7 +81,8 @@ async function rerenderCharacterList(
   eventId: number,
   deps: SeriesInteractionDeps,
 ): Promise<void> {
-  const user = await findLinkedUser(interaction.user.id, deps);
+  const user = await findActiveLinkedUser(interaction, deps);
+  if (user === false) return;
   if (!user) return replyLinkAccount(interaction, eventId);
   const event = await fetchEvent(eventId, deps);
   if (!event) {

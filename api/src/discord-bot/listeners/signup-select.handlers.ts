@@ -1,6 +1,9 @@
 import type { StringSelectMenuInteraction } from 'discord.js';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
-import { safeEditReply } from './signup-interaction.helpers';
+import {
+  safeEditReply,
+  interactionErrorReply,
+} from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import {
   parseRoleValues,
@@ -106,7 +109,7 @@ async function handleRoleSelectMenu(
     );
     await safeEditReply(
       interaction,
-      { content: 'Something went wrong. Please try again.', components: [] },
+      { content: interactionErrorReply(error), components: [] },
       deps.logger,
     );
   }

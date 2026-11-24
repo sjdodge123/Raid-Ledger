@@ -29,6 +29,7 @@ import {
   type JoinableNight,
 } from './series-signups-plan.helpers';
 import { findRevivableEventIds } from './series-signups-rejoin.queries';
+import { isAccountBlocked } from '../users/discord-account-status.helpers';
 
 /** User-facing error messages (L6 surfaces them in Discord replies). */
 export const SERIES_ERRORS = {
@@ -87,7 +88,8 @@ export async function assertEligibleUser(
     .where(eq(u.id, userId))
     .limit(1);
   if (!user) throw new NotFoundException(`User ${userId} not found`);
-  if (user.deactivatedAt || user.bannedAt || user.kickedAt)
+  // ROK-2298: shared banned/deactivated predicate; series also refuses kicks.
+  if (isAccountBlocked(user) || user.kickedAt)
     throw new ForbiddenException(SERIES_ERRORS.INELIGIBLE);
 }
 
