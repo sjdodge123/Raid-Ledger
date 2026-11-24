@@ -1,7 +1,7 @@
 /**
  * ROK-2301 retroactive rename. On every bot (re)connect the hub reconcile
  * brings each LIVE poll's Raid Ledger thread and its hub Discord post up to
- * the derived name (a follow-up poll reads `<game> — Poll (after <event>)`,
+ * the derived name (a follow-up poll reads `<event> — Follow-up poll`,
  * a pre-ROK-2295 standalone poll drops `Standalone Scheduling Poll`).
  *
  * Live: an attached poll thread (`match_id` set, not detached) that is still

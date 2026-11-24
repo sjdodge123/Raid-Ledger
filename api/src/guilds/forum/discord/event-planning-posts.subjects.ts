@@ -77,7 +77,7 @@ export class EventPlanningSubjectPosts {
     const made = await this.creator.create({
       kind: 'poll',
       subjectId: matchId,
-      title: pollPostTitle(poll),
+      title: pollPostTitle(poll, await this.settings.getDefaultTimezone()),
       body: planningSubjectBody(await getClientUrl(this.settings), {
         kind: 'poll',
         lineupId: poll.lineupId,
@@ -255,7 +255,8 @@ export class EventPlanningSubjectPosts {
     now: Date,
   ): Promise<void> {
     if (!this.discord.isOnline()) return;
-    const name = pollPostTitle(poll);
+    const zone = await this.settings.getDefaultTimezone();
+    const name = pollPostTitle(poll, zone);
     try {
       const res = await this.discord.renameThread(post.discordThreadId, name);
       if (res === 'gone') await markPlanningPostDeleted(this.db, post.id, now);

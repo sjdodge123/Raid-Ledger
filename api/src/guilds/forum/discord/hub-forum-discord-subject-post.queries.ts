@@ -31,7 +31,7 @@ export interface ScheduleSubjectPostSource extends EventThreadWriteState {
   title: string;
   /**
    * ROK-2301: the full post name when the subject composes its own (a poll:
-   * the follow-up `(after <event>)` form); else `subjectPostTitle(kind, title)`.
+   * the follow-up or dated form, ROK-2315); else `subjectPostTitle(kind, title)`.
    */
   name?: string;
   /** The S7 root text. */
@@ -46,11 +46,13 @@ export type SubjectPostSource =
 async function scheduleTitle(
   db: ForumDiscordDb,
   subject: SubjectRef,
+  timeZone: string | null,
 ): Promise<{ title: string; name?: string } | null> {
   if (subject.kind === 'poll') {
     const poll = await findPollForSync(db, subject.id);
     if (!poll) return null;
-    return { title: pollSubjectTitle(poll), name: pollPostTitle(poll) };
+    const name = pollPostTitle(poll, timeZone);
+    return { title: pollSubjectTitle(poll), name };
   }
   const lineup = await findLineupForSync(db, subject.id);
   return lineup ? { title: lineup.title } : null;
@@ -73,10 +75,15 @@ async function findSubjectThreadRow(db: ForumDiscordDb, threadId: number) {
   return row ?? null;
 }
 
-/** The subject thread `threadId` with its subject; null for a plain thread. */
+/**
+ * The subject thread `threadId` with its subject; null for a plain thread.
+ * `timeZone` (the community `DEFAULT_TIMEZONE`, null ⇒ UTC) dates a plain
+ * poll's post name (ROK-2315).
+ */
 export async function findSubjectPostSource(
   db: ForumDiscordDb,
   threadId: number,
+  timeZone: string | null,
 ): Promise<SubjectPostSource | null> {
   const row = await findSubjectThreadRow(db, threadId);
   const subject = row ? subjectOf(row) : null;
@@ -85,7 +92,7 @@ export async function findSubjectPostSource(
     const src = await findEventPostSource(db, threadId);
     return src ? { kind: 'event', ...src } : null;
   }
-  const titled = await scheduleTitle(db, subject);
+  const titled = await scheduleTitle(db, subject, timeZone);
   if (titled === null) return null;
   const { body, writeClosesAt, eventDetachedAt } = row;
   const { kind, id } = subject;

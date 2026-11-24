@@ -148,7 +148,8 @@ export class EventPostOutbound {
   async postView(thread: ThreadText, url: string): Promise<PostView> {
     const kind = subjectOf(thread)?.kind;
     if (kind === 'poll' || kind === 'lineup') {
-      const src = await findSubjectPostSource(this.deps.db, thread.id);
+      const zone = await this.deps.timeZone();
+      const src = await findSubjectPostSource(this.deps.db, thread.id, zone);
       if (src) return this.subjectView(src, url, await this.deps.clientUrl());
     }
     const dated =
@@ -179,7 +180,8 @@ export class EventPostOutbound {
   ): Promise<links.ForumLink | null> {
     const { db } = this.deps;
     if (ref.create === false) return links.findThreadLink(db, ref.threadId);
-    const src = await findSubjectPostSource(db, ref.threadId);
+    const zone = await this.deps.timeZone();
+    const src = await findSubjectPostSource(db, ref.threadId, zone);
     if (!src || eventThreadReadOnly(src, this.deps.now())) return null;
     const claimed = await links.claimThreadLink(db, ref.guildId, ref.threadId);
     if (claimed) await this.send(to, claimed, src);
@@ -188,7 +190,8 @@ export class EventPostOutbound {
 
   /** S6: re-send a claimed, still-unsent subject post (never while read-only). */
   async resend(to: EventPostTarget, link: links.ForumLink): Promise<void> {
-    const src = await findSubjectPostSource(this.deps.db, link.threadId);
+    const zone = await this.deps.timeZone();
+    const src = await findSubjectPostSource(this.deps.db, link.threadId, zone);
     if (!src || eventThreadReadOnly(src, this.deps.now())) return;
     await this.send(to, link, src);
   }

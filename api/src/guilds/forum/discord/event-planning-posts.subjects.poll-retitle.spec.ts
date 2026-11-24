@@ -52,10 +52,10 @@ jest.mock('./event-planning-posts.subjects.rules', () => ({
 }));
 jest.mock('./hub-forum-discord-subject', () => ({
   ...jest.requireActual<object>('./hub-forum-discord-subject'),
-  pollPostTitle: jest.fn(() => 'WoW — Poll (after Thursday Raid)'),
+  pollPostTitle: jest.fn(() => 'Thursday Raid — Follow-up poll'),
 }));
 
-const NEW_NAME = 'WoW — Poll (after Thursday Raid)';
+const NEW_NAME = 'Thursday Raid — Follow-up poll';
 
 function discordError(code: number): DiscordAPIError {
   return new DiscordAPIError(
@@ -102,7 +102,9 @@ function setup(online = true) {
   const discord = fakeDiscord(online);
   const subjects = new EventPlanningSubjectPosts(
     {} as unknown as ForumDiscordDb,
-    {} as unknown as SettingsService,
+    {
+      getDefaultTimezone: jest.fn(() => Promise.resolve(null)),
+    } as unknown as SettingsService,
     {} as unknown as EventPlanningPostCreator,
     {} as unknown as SchedulingPollForumCard,
     {} as unknown as SchedulingPollEmbedQueueService,

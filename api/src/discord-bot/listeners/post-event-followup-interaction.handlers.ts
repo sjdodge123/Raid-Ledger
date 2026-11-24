@@ -144,7 +144,7 @@ async function recordPollMatch(
 /**
  * ROK-2301: the poll's create path already named its thread and post before
  * the row above existed, so they read `<game> — Poll`. Announce the link so
- * the forum listeners re-derive `<game> — Poll (after <event>)` once (each
+ * the forum listeners re-derive `<event> — Follow-up poll` once (each
  * skips a name that already matches). Best-effort: never fails the click.
  */
 function announcePollLinked(

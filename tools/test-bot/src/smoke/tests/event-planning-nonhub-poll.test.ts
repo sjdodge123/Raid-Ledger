@@ -4,7 +4,8 @@
  * the only bound forum, so the resolver picks it — ROK-2208 `setup`):
  *  1. no post before any vote (a sync never creates one);
  *  2. the first vote — a slot suggested by a voter linked to the companion
- *     bot's Discord id (the suggest auto-votes) — creates `<title> — Poll`
+ *     bot's Discord id (the suggest auto-votes) — creates
+ *     `Poll · closes <date> — <game>` (ROK-2315)
  *     tagged ONLY `Poll`, its bot starter linking the poll page;
  *  3. that voter gets ONE ping line (`🗳 <@id> voted: <t:…:f>` — ROK-2295:
  *     it lists their slots); changing the vote adds no second line (anchor: the lock-in line lands after it);
@@ -37,12 +38,12 @@ import {
   cleanup,
   expectInPost,
   expectLockedArchived,
+  DATED_POLL_TITLE,
   lockIn,
   type Poll,
 } from "./hub-poll-forum.test.js";
 
 const FIXTURES = "/admin/test/hub-forum-discord";
-const POLL_SUFFIX = " — Poll";
 /** Fixture-user slot no other smoke uses (1, 5–9 are taken). */
 const VOTER_SLOT = 4;
 
@@ -99,14 +100,13 @@ async function expectPollPost(forum: ForumChannel): Promise<ThreadChannel> {
       names = [...active.threads.values()].map((t) => t.name);
       return (
         active.threads.find(
-          (t) =>
-            t.name.endsWith(POLL_SUFFIX) && t.name.length > POLL_SUFFIX.length,
+          (t) => DATED_POLL_TITLE.test(t.name),
         ) ?? null
       );
     }, TIMEOUT_MS);
   } catch {
     return fail(
-      `ROK-2272 S10: the first vote should create a "<title>${POLL_SUFFIX}" post`,
+      'ROK-2315: the first vote should create a "Poll · closes <date> — <game>" post',
       names,
     );
   }
