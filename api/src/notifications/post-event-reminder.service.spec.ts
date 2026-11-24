@@ -9,6 +9,11 @@ import { DEFAULT_CLIENT_URL } from '../settings/settings-bot.helpers';
 import type { EmbedBuilder } from 'discord.js';
 import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
 import { NOTIFICATION_EMBED_AUTHORS } from './notification-embed.helpers';
+import { isDiscordDmMuted } from './discord-dm-mute.helpers';
+
+jest.mock('./discord-dm-mute.helpers', () => ({
+  isDiscordDmMuted: jest.fn().mockResolvedValue(false),
+}));
 
 /**
  * Helper to make a qualifying PUG row from the raw SQL query result shape.
@@ -94,6 +99,36 @@ describe('PostEventReminderService', () => {
     }).compile();
 
     service = module.get<PostEventReminderService>(PostEventReminderService);
+  });
+
+  describe('Post-Event Follow-Ups Discord switch (ROK-2317)', () => {
+    beforeEach(() => {
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([{ id: 1 }]),
+          }),
+        }),
+      });
+    });
+
+    it('skips the DM when the account has Post-Event Follow-Ups Discord off', async () => {
+      mockDb.execute.mockResolvedValue([makePugRow()]);
+      jest.mocked(isDiscordDmMuted).mockResolvedValueOnce(true);
+      await service.handlePostEventReminders();
+      expect(isDiscordDmMuted).toHaveBeenCalledWith(
+        mockDb,
+        { discordId: '123456789' },
+        'post_event_followup',
+      );
+      expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
+    });
+
+    it('still sends when the switch check says not muted', async () => {
+      mockDb.execute.mockResolvedValue([makePugRow()]);
+      await service.handlePostEventReminders();
+      expect(mockClientService.sendEmbedDM).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('handlePostEventReminders', () => {

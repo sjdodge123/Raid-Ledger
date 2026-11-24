@@ -16,6 +16,10 @@ import {
 import type { Job } from 'bullmq';
 import type { DepartureGraceJobData } from '../queues/departure-grace.queue';
 
+jest.mock('../../notifications/discord-dm-mute.helpers', () => ({
+  isDiscordDmMuted: jest.fn().mockResolvedValue(false),
+}));
+
 function makeJob(data: DepartureGraceJobData) {
   return { data } as Job<DepartureGraceJobData>;
 }
