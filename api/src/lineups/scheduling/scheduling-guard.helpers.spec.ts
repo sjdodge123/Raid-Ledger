@@ -141,6 +141,8 @@ describe('assertCallerMayViewPoll — private poll read gate (TDB:189)', () => {
 
 describe('assertCallerMayVote — blocked accounts (ROK-2306)', () => {
   const MATCH = { status: 'scheduling', linkedEventId: null };
+  /** What vote and suggest pass. */
+  const VOTE = { match: MATCH, requireActive: true };
   const LINEUP_ROW = {
     id: 1,
     createdBy: 2,
@@ -162,7 +164,7 @@ describe('assertCallerMayVote — blocked accounts (ROK-2306)', () => {
   ])('a vote/suggest by a %s user → 403 ACCOUNT_BLOCKED', async (_l, flags) => {
     const db = dbWith([flags], [LINEUP_ROW]);
     await expect(
-      assertCallerMayVote(db, 1, { id: 10, role: 'member' }, MATCH),
+      assertCallerMayVote(db, 1, { id: 10, role: 'member' }, VOTE),
     ).rejects.toMatchObject({
       status: 403,
       response: { code: 'ACCOUNT_BLOCKED' },
@@ -172,13 +174,21 @@ describe('assertCallerMayVote — blocked accounts (ROK-2306)', () => {
 
   it('an active voter passes on to the participation gate', async () => {
     const db = dbWith([{ bannedAt: null, deactivatedAt: null }], [LINEUP_ROW]);
-    await assertCallerMayVote(db, 1, { id: 10 }, MATCH);
+    await assertCallerMayVote(db, 1, { id: 10 }, VOTE);
     expect(participate).toHaveBeenCalledTimes(1);
   });
 
-  it('retract (no match) skips the account check so a blocked user can wind down', async () => {
+  it('without requireActive (retract) the account check is skipped', async () => {
     const db = dbWith([LINEUP_ROW]);
     await assertCallerMayVote(db, 1, { id: 10 });
+    // The one queued row is the lineup: an account read would eat it → 404.
+    expect(participate).toHaveBeenCalledTimes(1);
+  });
+
+  it('`match` alone no longer implies the account check', async () => {
+    const db = dbWith([LINEUP_ROW]);
+    await assertCallerMayVote(db, 1, { id: 10 }, { match: MATCH });
+    // The one queued row is the lineup: an account read would eat it → 404.
     expect(participate).toHaveBeenCalledTimes(1);
   });
 });
