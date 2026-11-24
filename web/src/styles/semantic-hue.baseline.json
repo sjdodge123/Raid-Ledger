@@ -99,7 +99,6 @@
   "components/players/mobile-player-card.tsx": 1,
   "components/players/players-mobile-toolbar.tsx": 1,
   "components/profile/CharacterCard.tsx": 8,
-  "components/profile/NotificationPreferencesSection.tsx": 3,
   "components/profile/UserEventSignups.tsx": 5,
   "components/profile/my-watched-games-section.tsx": 5,
   "components/profile/profile-sidebar.tsx": 2,
