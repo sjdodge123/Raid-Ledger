@@ -627,6 +627,31 @@ not the daily flow.
 - Discord MCP + Chrome MCP (need local Electron / Chrome with CDP).
 - Sentry, Linear, GitHub clients (network, not compute-heavy).
 
+## Slot count = the runners that exist (ROK-2289)
+
+`RUNNER_SLOTS` in `/srv/rl-infra/.env` (default `2`, `_state.sh`) is the one
+source of truth for how many slots the fleet offers. `claims.json` can carry
+more rows than that — `init-state` never shrinks it, and slots 3–4 got rows
+while the `extra-slots` profile was on — so `claim` and `status` both cap at
+`RUNNER_SLOTS`: a free row above it is never granted, queued on or listed (a
+claimed one stays listed until its holder releases). Before ROK-2289 those
+rows showed as FREE in `rl_status`, and a claim that landed on slot 3/4 died
+with exit 96 because no `rl-runner-3`/`-4` container exists.
+
+**Operator step on the VM after this deploys** (agents cannot do it; ROK-1338).
+Only when `rl status` shows slots 3 and 4 unclaimed:
+
+```bash
+cd /srv/rl-infra && grep '^RUNNER_SLOTS=' .env          # expect RUNNER_SLOTS=2
+sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=2/' .env        # only if it said 3 or 4
+./orchestrator/bin/slots-resize 2                       # drops rows 3-4; refuses if claimed/queued
+```
+
+The `slots-resize` step is tidy-up — the cap already hides the rows — but the
+fleet dashboard reads `claims.json` directly and keeps showing slots 3/4 until
+it runs. To bring slots 3/4 back later, follow the reverse order in "Memory
+hardening" step 4: start the runners, `slots-resize 4`, then `RUNNER_SLOTS=4`.
+
 ## First-time setup (operator-only)
 
 See `proxmox/cloud-init.yaml` for VM provisioning. After the VM is up, the
@@ -1224,7 +1249,8 @@ three places, all fixed together in ROK-1565: the sentinel's summary parser
 
 | Field | Meaning |
 |-------|---------|
-| `gate_verified` | The pre-push gate was satisfied for the synced worktree: the surface-keyed sentinel was written, or the run is `nosurface` (no file needed — the hook allows it outright). |
+| `gate_verified` | The pre-push gate was satisfied for the synced worktree: the surface-keyed sentinel was written, or the run is `nosurface` (no file needed — the hook allows it outright). ROK-2205: never true (and no sentinel is written) when the sync guard run at `rl_validate_ci` dispatch could not confirm the runner's `/workspace` matched the worktree HEAD (or confirmed another HEAD), when the status already says `gate_verified: false`, or when it reports a `synced_head` other than the HEAD recorded at dispatch; every sentinel body records `"gate_verified": true`, and the push hook refuses one that does not. |
+| `gate_error` | ROK-2205: why a green-looking run was not `gate_verified` (e.g. a stale sync); absent otherwise. |
 | `gate_sentinel` | Path of the surface-keyed sentinel; `null` for a `nosurface` run (nothing is written) and whenever `gate_verified` is false. |
 | `gate_tier` | `static` (a green build+tsc+lint run) or `playwright` (the Playwright row PASSed) — set for a `nosurface` pass too — or `null` whenever `gate_verified` is false. |
 | `playwright_verified` | Legacy alias of `gate_verified`, kept for older callers. |
@@ -1307,8 +1333,8 @@ operator's terminal.
   log_tail (~6KB), elapsed_s, waited_s, poll_again_hint}`. Narrate it to the
   operator, then **re-call `rl_task_wait` with the SAME `task_id`** to keep
   waiting — each call is a fresh snapshot. (The old `{error:'timed_out'}` shape is
-  gone.) Prefer `rl_task_status` for a cheap non-blocking one-shot poll every
-  60–90s. **There is no walk-away blocking wait** — to walk away, use the
+  gone.) Agents: an ops lane keeps re-calling `rl_task_wait` until the task is
+  terminal and the Lead never polls; `rl_task_status` is for a one-off read. **There is no walk-away blocking wait** — to walk away, use the
   background push-notify pattern below (`npx rl-task-wait <task_id>` in a
   `run_in_background: true` Bash call, or a backgrounded `rl … wait`), never a
   blocking MCP call.
@@ -1401,9 +1427,36 @@ the purge (otherwise the new values sync straight back from a stale worktree).
    deploy the re-encrypted bundle), then retire the old key everywhere it is set.
 8. Re-check step 1's `ls` on each slot after the next claim — the rotated values
    must not appear in `/workspace`.
-Consequence: a runner has no `tools/test-bot/.env`, so a fleet Discord smoke
-tier SKIPs (FAILs under `--ci`) unless `TEST_BOT_TOKEN` + `TEST_GUILD_ID` are
-exported — GitHub CI runs Discord smoke from its own secrets.
+Consequence: a runner has no `tools/test-bot/.env`. Since ROK-2280 the
+orchestrator forwards `RL_TEST_BOT_TOKEN` and `RL_DISCORD_TEST_GUILD_ID` from
+`/srv/rl-infra/.env` into the runner as `TEST_BOT_TOKEN` / `TEST_GUILD_ID`, only
+for an `rl_validate_ci` task that includes the Discord tier (`--only-e2e`,
+`--with-e2e`, `--fleet`, a full run, the gate-fanout Discord phase). Never for
+`--scoped`, `--static`, `--no-e2e`, `--only-unit`, `--only-integration`,
+`rl_run_on_runner`, `rl validate-ci` (the operator CLI) or a `/push` /
+`validate-ci.sh` `RL_TARGET=remote` self-dispatch. Nothing is written under `/workspace`; the value is passed
+by name (`docker exec -e NAME`), so it is not in argv, task records or the audit
+log. No compose restart is needed. If a key is unset, the task log prints
+`[discord-creds] RL_TEST_BOT_TOKEN unset in /srv/rl-infra/.env — Discord smoke will SKIP (rl-infra/SETUP.md §3.2)`,
+the missing key names reach the runner as `RL_DISCORD_CREDS_MISSING`, and the
+gate's SKIP row reads `Fleet runner: companion-bot credentials come from the VM — set <keys> in /srv/rl-infra/.env`.
+A runner run that never gets creds (any of the excluded kinds above) SKIPs with
+`Fleet runner: companion-bot credentials are forwarded only into an rl_validate_ci task that includes the Discord tier …`
+instead — the VM key may well be set; run the tier with `rl_validate_ci`.
+
+Trade-off: the token sits in the environment of a process that runs branch code,
+for Discord-tier runs only. That is narrower than the world-readable file
+ROK-1849 removed, but the same kind of exposure. Gating by task type limits how
+many runs see the token; it is not isolation. Branch code in a Discord-tier run
+has the token in its environment, and another command running in the same
+runner container at the same time (an `rl_run_on_runner` call, say) could read
+it from `/proc/<pid>/environ`.
+
+Shared guild: fleet smoke and GitHub's `discord-smoke` job use one test guild.
+The fleet serialises its own runs (`discord.lock`, slot-N channel sets) but does
+not take GitHub's lease, so a fleet run and a GitHub run can overlap, as they
+could before ROK-1849. Avoid starting a fleet Discord tier while a PR's
+`discord-smoke` job is running.
 
 ### Stale-build sync guard + force-resync (TECH-DEBT 2026-06-02)
 
@@ -1477,6 +1530,7 @@ The operator's inbox for designs, mockups, prototypes and rulings (replaces the 
 - `RL_MEMINFO_PATH` (default `/proc/meminfo`) / `RL_ADMISSION_FILE` (default `$RL_STATE_DIR/admission.json`) — override points; the orchestrator shell tests use them to drive the gate off fixtures.
 - `RL_ADMIN_PASSWORD` (optional, on the rl-infra VM). When set in `/srv/rl-infra/.env`, every env's admin@local user is seeded with this stable password, deterministically across calls and slugs. Without it, env-spin generates a random `rl-<hex>` password per call. **A3-B P4: no MCP tool hands you that value by default** — the terminal `rl_task_status` / `rl_task_wait` of an `rl_env_spin` or `rl_env_deploy` `local-…` task (and `rl_task_inspect`) return `admin_password_available` instead (the `rl_env_spin` dispatch reply carries neither; an `include_credentials: true` spin call gets a `credentials_hint` naming the route below), and the value comes back only from an explicit `rl_task_status({task_id, include_credentials: true})` on the spin's or the deploy chain's `local-…` task id (both task JSONs are stored 0600 on the laptop; the async `rl_env_spin` dispatch reply never carries the password, so re-calling it with `include_credentials` no longer returns it). The operator's own `rl env spin` stdout still prints it — that is a human terminal, not an agent context. **ROK-1534: the credential also rides in the task `cmd`** — `rl_validate_ci({against_env_slug})` threads it to the runner as an `ADMIN_PASSWORD='…'` env prefix, which the task record stores verbatim. Every task-shaped return boundary (`rl_task_status`, `rl_task_wait`, `rl_task_inspect`, `rl_task_list`) now masks `*PASSWORD`/`*TOKEN`/`*SECRET` assignment values in `cmd`/`args_summary` and secret-named `env` keys to `***`, UNCONDITIONALLY — `include_credentials: true` opts into the `admin_password` FIELD, never into a command line. Still uncovered: `log_tail` (unredacted by design) and the VM-side `ps` / stored task JSON, which would need the password routed via stdin instead of an env prefix. `rl_validate_ci({ args: ["--only-e2e"], against_env_slug })` re-asserts admin@local to a known password (RL_ADMIN_PASSWORD when set, else a fresh `rl-ci-<hex>`) via the rl-docker-proxy and threads it as `ADMIN_PASSWORD` into the runner so Playwright's global-setup authenticates against the env regardless of whether RL_ADMIN_PASSWORD is set (ROK-1368).
 - `RL_OPERATOR_DISCORD_ID` (optional, on the rl-infra VM). Your own Discord user id (snowflake — digits only; enable Developer Mode → right-click yourself → Copy User ID). When set in `/srv/rl-infra/.env`, env-spin passes it to bootstrap-admin as `FLEET_ADMIN_DISCORD_ID` on both the fresh and the idempotent path, and bootstrap-admin upserts that one id as an `admin` row. You then sign in to any fleet env with Discord OAuth and land as an admin instead of an ordinary member — no mid-test switch to admin@local just to reach an admin surface. Discord login preserves `role` (it updates only username/avatar), so the promotion survives every subsequent login. **This is fleet-only and cannot fire in production:** bootstrap-admin refuses unless `FLEET_ADMIN_DISCORD_ID` is set *and* `DEMO_MODE === 'true'`, and the production allinone entrypoint sets neither. **ROK-1537:** with it set, that Discord id is admin from its first login (env-spin also passes it to the app container as `FLEET_ADMIN_DISCORD_ID`, which switches the first-login promotion below off). A value that is not a Discord snowflake (digits only) is ignored with one stderr warning and treated as unset, so first-login promotion stays on and `operator_admin` reports `first-login`. Unset it and the **first real Discord login** on each fresh env is promoted instead (see `FLEET_FIRST_DISCORD_LOGIN_ADMIN`). `rl_env_spin` / `rl_env_deploy` report which case applies as `operator_admin: 'configured' | 'first-login' | 'none'`, and `rl_fleet_health` lists `operator_discord_id_unset` under `config_warnings` while it is unset. Pinned by `rl-infra/orchestrator/test/env-spin-fleet-operator.test.sh` and `api/src/scripts/bootstrap-admin-fleet-operator.spec.ts`.
+- `RL_TEST_BOT_TOKEN` (on the rl-infra VM, ROK-2280). The companion test bot's token. Forwarded into the runner as `TEST_BOT_TOKEN` (with `RL_DISCORD_TEST_GUILD_ID` as `TEST_GUILD_ID`) for Discord-tier `rl_validate_ci` tasks only — not `rl validate-ci`, a `/push` self-dispatch or `rl_run_on_runner`. Unset = the Discord smoke SKIPs, naming the key (`RL_DISCORD_CREDS_MISSING`). Read at the start of each task, so no compose restart. See SETUP.md §3.2.
 - `RL_TEST_BOT_USER_ID` (optional, on the rl-infra VM). The companion test bot's Discord user id (digits only). env-spin passes it to every env's app container as `VOICE_THRESHOLD_BOT_ALLOWLIST`, so under `DEMO_MODE` that bot still counts toward a voice game binding's `minPlayers` (ROK-1711: every other bot is skipped). Unset = the voice smoke cannot reach threshold. Picked up only by a fresh spin. Pinned by `rl-infra/orchestrator/test/env-spin-fleet-operator.test.sh`.
 - `FLEET_FIRST_DISCORD_LOGIN_ADMIN` (set by env-spin, not by you). env-spin passes `FLEET_FIRST_DISCORD_LOGIN_ADMIN=true` to every env's app container. The API (`api/src/auth/fleet-first-login-admin.helpers.ts`) then promotes the first real Discord login to `admin`, only when `DEMO_MODE === 'true'`, the marker is `true`, `FLEET_ADMIN_DISCORD_ID` is empty and no real-Discord admin exists yet (`admin@local` does not count). The promotion runs under an advisory lock, so two simultaneous first logins cannot both win. It is fleet-only: `api/src/auth/fleet-first-login-admin.prod-guard.spec.ts` fails if the marker appears in `Dockerfile.allinone`, the entrypoint or any `docker-compose*.yml`. **Existing envs pick this up only after a destroy + fresh spin.** An idempotent re-spin reuses the container and never re-runs `docker run`. Such an env reports `operator_admin: 'none'`.
 

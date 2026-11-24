@@ -18,6 +18,8 @@ source "$(dirname "$0")/_admission.sh"
 # path task-start uses for nearly every heavy run, so it needs the same guard as
 # run-on-runner: the flush-time repair in cli/rl does not survive a later sync.
 source "$(dirname "$0")/_exec_bits.sh"
+# ROK-2280 — Discord-tier companion-bot credential forwarding.
+source "$(dirname "$0")/_discord_creds.sh"
 
 HEARTBEAT_INTERVAL=30
 # ROK-1470 — admission weight. `heavy` waits for host MemAvailable before the
@@ -209,6 +211,11 @@ PASS_ENV_FLAGS=()
 for _secret in ADMIN_PASSWORD; do
     [[ -n "${!_secret:-}" ]] && PASS_ENV_FLAGS+=(-e "$_secret")
 done
+# ROK-2280 — companion-bot creds, only for a Discord-tier rl_validate_ci run.
+if [[ "${RL_TASK_TOOL:-}" == rl_validate_ci ]] && discord_creds::tier_wanted "$@"; then
+    discord_creds::flags
+    PASS_ENV_FLAGS+=(${DISCORD_CREDS_FLAGS[@]+"${DISCORD_CREDS_FLAGS[@]}"})
+fi
 set +e
 docker exec $EXEC_FLAGS \
     -w /workspace \

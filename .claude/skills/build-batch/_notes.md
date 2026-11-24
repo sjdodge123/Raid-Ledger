@@ -284,7 +284,7 @@ Operator clarified: for ROK-1331 specifically, every rl-fleet call should be mon
 
 The skill itself just trusts the fleet calls to behave per their contracts. If a future story ALSO needs the fix-forward mode, the operator surfaces it via the RESUME doc again. We don't promote on first repetition; we'd want 2-3 examples before deciding it's worth a skill-level affordance (and even then, probably as an opt-in flag like `/build-batch <STORY> --fix-forward-fleet`).
 
-This is the same general principle as `feedback_full_scope_phase_split.md`: defaults stay lean; case-specific knobs live in the RESUME/spec layer, not the skill layer.
+This is the same general principle as `feedback_build_always_uses_teams.md`: defaults stay lean; case-specific knobs live in the RESUME/spec layer, not the skill layer.
 
 ---
 

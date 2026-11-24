@@ -9,6 +9,7 @@ import type { SchedulingPollForumCard } from '../../../lineups/scheduling/schedu
 import type { SettingsService } from '../../../settings/settings.service';
 import { findPollForSync } from '../subject-discussion/poll-discussion.queries';
 import type { EventPlanningPostCreator } from './event-planning-posts.create';
+import type { EventPlanningPostsGateway } from './event-planning-posts.discord';
 import { findLivePlanningPost } from './event-planning-posts.queries';
 import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
@@ -25,9 +26,9 @@ jest.mock('./event-planning-posts.subjects.rules', () => ({
   pollEligible: jest.fn(() => true),
   planningSubjectBody: jest.fn(() => 'body'),
 }));
-jest.mock('../subject-discussion/poll-discussion.sync', () => ({
-  ...jest.requireActual<object>('../subject-discussion/poll-discussion.sync'),
-  pollSubjectTitle: jest.fn(() => 'WoW'),
+jest.mock('./hub-forum-discord-subject', () => ({
+  ...jest.requireActual<object>('./hub-forum-discord-subject'),
+  pollPostTitle: jest.fn(() => 'WoW — Poll'),
 }));
 jest.mock('../../../settings/settings-bot.helpers', () => ({
   getClientUrl: jest.fn(() => Promise.resolve('https://rl')),
@@ -54,6 +55,7 @@ function setup(created: boolean) {
       build: jest.fn().mockResolvedValue(null),
     } as unknown as SchedulingPollForumCard,
     embedSync as unknown as SchedulingPollEmbedQueueService,
+    {} as unknown as EventPlanningPostsGateway,
   );
   const syncPoll = jest.spyOn(subjects, 'syncPoll').mockResolvedValue();
   return { subjects, creator, embedSync, syncPoll };

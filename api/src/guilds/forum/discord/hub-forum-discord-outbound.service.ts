@@ -20,6 +20,7 @@ import {
 import * as links from './hub-forum-discord-links.queries';
 import {
   HubForumDiscordOutboundGateway,
+  isArchivedError,
   type DiscordWriteResult,
   type OutboundAuthor,
   type OutboundTarget,
@@ -261,13 +262,24 @@ export class HubForumDiscordOutboundService {
       const edited = carded
         ? 'ok'
         : await this.gateway.editMessage(job.target, ref, content);
-      if (edited === 'ok') {
-        await this.gateway.renameThread(ref.threadId, name, () =>
-          this.renames.trySpend(ref.threadId),
-        );
-      }
+      if (edited === 'ok') await this.rename(ref.threadId, name);
       await links.markSynced(this.db, link.id, this.now());
     });
+  }
+
+  /**
+   * ROK-2301: an auto-archived post (50083) is skipped quietly, not
+   * unarchived (that would bump an idle post); a later edit renames it.
+   */
+  private async rename(threadId: string, name: string): Promise<void> {
+    try {
+      await this.gateway.renameThread(threadId, name, () =>
+        this.renames.trySpend(threadId),
+      );
+    } catch (err) {
+      if (!isArchivedError(err)) throw err;
+      this.logger.debug(`Rename of archived forum post ${threadId} skipped`);
+    }
   }
 
   private async editReply(job: Job): Promise<void> {

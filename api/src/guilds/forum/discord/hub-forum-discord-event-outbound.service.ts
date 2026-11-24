@@ -267,7 +267,7 @@ export class EventPostOutbound {
     const name =
       src.kind === 'event'
         ? subjectPostTitle('event', src.eventTitle, src.start, zone)
-        : subjectPostTitle(src.kind, src.title);
+        : (src.name ?? subjectPostTitle(src.kind, src.title));
     const content = truncateForDiscord(eventPostBody(src.body, clientUrl), url);
     return { name, content };
   }
