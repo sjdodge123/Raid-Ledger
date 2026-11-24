@@ -57,6 +57,15 @@ describe('runOrReplyNotSignedUp', () => {
 describe('handleTentative — row the Discord id may not manage', () => {
   it('replies not-signed-up instead of marking tentative', async () => {
     const deps = createMockDeps();
+    // ROK-2298: the tentative path resolves the clicker's account before any
+    // write. This Discord id has no user row, so the lookup is `unlinked`.
+    (deps.db.select as jest.Mock).mockReturnValueOnce({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([]),
+        }),
+      }),
+    });
     Object.assign(deps.signupsService, {
       findByDiscordUser: jest.fn().mockResolvedValue({
         id: 7,

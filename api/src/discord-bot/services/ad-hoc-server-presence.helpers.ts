@@ -12,7 +12,6 @@ import * as schema from '../../drizzle/schema';
 import type { ServerPresencePlayer } from '../../plugins/pelican/presence/server-presence.sink';
 import {
   presenceKey,
-  steamIdOf,
   storedPlayerRef,
   type PlayerRef,
 } from '../../plugins/pelican/presence/presence-events';
@@ -141,44 +140,12 @@ export async function findGameVoiceBinding(
   return { id: row.id, config: row.config as GameQuickPlayBinding['config'] };
 }
 
-export interface SteamIdentity {
-  userId: number;
-  discordId: string | null;
-  /** The RL name a linked player shows as: `display_name`, else `username`. */
-  displayName: string;
-}
-
-/** SteamID64 → the linked RL user (`users.steam_id`), if any. */
-export async function resolveSteamIdentity(
-  db: Db,
-  steamId: string,
-): Promise<SteamIdentity | null> {
-  const u = schema.users;
-  const rows = await db
-    .select({
-      userId: u.id,
-      discordId: u.discordId,
-      displayName: sql<string>`coalesce(${u.displayName}, ${u.username})`,
-    })
-    .from(u)
-    .where(eq(u.steamId, steamId))
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-/**
- * ROK-2232: a player's linked RL user — Steam only (`users.steam_id`); any
- * other id kind stays anonymous until a claim exists.
- */
-export function resolvePlayerIdentity(
-  db: Db,
-  player: PlayerRef,
-): Promise<SteamIdentity | null> {
-  const steamId = steamIdOf(player);
-  return steamId === null
-    ? Promise.resolve(null)
-    : resolveSteamIdentity(db, steamId);
-}
+// ROK-2298: identity lookup lives in its own file (re-exported for callers).
+export {
+  resolvePlayerIdentity,
+  resolveSteamIdentity,
+  type SteamIdentity,
+} from './ad-hoc-steam-identity.helpers';
 
 const refOf = (r: { playerId: string | null; idKind: string | null }) => {
   const ref = storedPlayerRef(r.playerId, r.idKind);

@@ -19,7 +19,11 @@ import {
   DiscordListenerBinding,
   gatewayBinding,
 } from './discord-listener-binding';
-import { findLinkedUser } from './signup-interaction.helpers';
+import {
+  findActiveLinkedUser,
+  findLinkedUser,
+  interactionErrorReply,
+} from './signup-interaction.helpers';
 import {
   buildDelayRow,
   checkLateCooldown,
@@ -117,7 +121,7 @@ export class RunningLateInteractionListener {
       );
       await safeEditReply(
         interaction,
-        { content: 'Something went wrong. Please try again.' },
+        { content: interactionErrorReply(error) },
         this.logger,
       );
     }
@@ -195,7 +199,8 @@ export class RunningLateInteractionListener {
     interaction: ButtonInteraction,
     eventId: number,
   ): Promise<void> {
-    const user = await findLinkedUser(interaction.user.id, { db: this.db });
+    const user = await findActiveLinkedUser(interaction, this.deps);
+    if (user === false) return;
     if (!user) return this.reply(interaction, LINK_MSG);
     const event = await lookupEvent(this.deps, eventId);
     if (!event) return this.reply(interaction, 'Event not found.');
@@ -282,7 +287,8 @@ export class RunningLateInteractionListener {
     eventId: number,
     minutes: number,
   ): Promise<void> {
-    const user = await findLinkedUser(interaction.user.id, { db: this.db });
+    const user = await findActiveLinkedUser(interaction, this.deps);
+    if (user === false) return;
     if (!user) return this.replyCleared(interaction, LINK_MSG);
     const event = await lookupEvent(this.deps, eventId);
     if (!event) return this.replyCleared(interaction, 'Event not found.');

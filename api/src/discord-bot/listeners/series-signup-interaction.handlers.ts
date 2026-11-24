@@ -17,7 +17,7 @@ import type { CharacterImportSettings } from '../utils/character-import-link.hel
 import { findActiveMembership } from '../../events/series-signups.queries';
 import { SERIES_ERRORS } from '../../events/series-signups-join.helpers';
 import { SERIES_BUTTON_IDS } from '../series-signup/series-signup.constants';
-import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
+import { findActiveLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import {
   formatJoinedReply,
   type ParsedSeriesCustomId,
@@ -124,7 +124,8 @@ export async function handleJoinSeries(
   eventId: number,
   deps: SeriesInteractionDeps,
 ): Promise<void> {
-  const user = await findLinkedUser(interaction.user.id, deps);
+  const user = await findActiveLinkedUser(interaction, deps);
+  if (user === false) return;
   if (!user) return replyLinkAccount(interaction, eventId);
   const event = await fetchEvent(eventId, deps);
   if (!event) return replyText(interaction, 'Event not found.');
@@ -141,7 +142,8 @@ export async function handleSeriesCharacterPick(
   parsed: ParsedSeriesCustomId,
   deps: SeriesInteractionDeps,
 ): Promise<void> {
-  const user = await findLinkedUser(interaction.user.id, deps);
+  const user = await findActiveLinkedUser(interaction, deps);
+  if (user === false) return;
   if (!user) return replyLinkAccount(interaction, parsed.eventId);
   const event = await fetchEvent(parsed.eventId, deps);
   if (!event) return replyText(interaction, 'Event not found.');
@@ -155,7 +157,8 @@ export async function handleSeriesRolePick(
   parsed: ParsedSeriesCustomId,
   deps: SeriesInteractionDeps,
 ): Promise<void> {
-  const user = await findLinkedUser(interaction.user.id, deps);
+  const user = await findActiveLinkedUser(interaction, deps);
+  if (user === false) return;
   if (!user) return replyLinkAccount(interaction, parsed.eventId);
   const roles = interaction.values.filter(
     (v): v is SeriesRole => v === 'tank' || v === 'healer' || v === 'dps',
@@ -177,7 +180,8 @@ export async function handleSeriesConfirm(
   parsed: ParsedSeriesCustomId,
   deps: SeriesInteractionDeps,
 ): Promise<void> {
-  const user = await findLinkedUser(interaction.user.id, deps);
+  const user = await findActiveLinkedUser(interaction, deps);
+  if (user === false) return;
   if (!user) return replyLinkAccount(interaction, parsed.eventId);
   const dto: JoinSeriesDto = {
     ...(parsed.characterId ? { characterId: parsed.characterId } : {}),

@@ -1,3 +1,4 @@
+import { interactionErrorReply } from './signup-interaction.helpers';
 import type {
   ButtonInteraction,
   StringSelectMenuInteraction,
@@ -8,6 +9,8 @@ import { PUG_BUTTON_IDS } from '../discord-bot.constants';
 import type { PugRole } from '@raid-ledger/contract';
 import type { PugInviteDeps } from './pug-invite.helpers';
 import {
+  findPugActor,
+  PUG_ACTOR_BLOCKED,
   safeDeferUpdate,
   buildAcceptedEmbed,
   safeEditDmEmbed,
@@ -22,6 +25,7 @@ import {
 } from './pug-invite-signup.helpers';
 import { errorStack } from '../../common/error-format.helpers';
 import { defined } from '../../common/defined.helpers';
+import { resolveDiscordAccount } from '../../users/discord-account-status.helpers';
 
 type PugSlot = typeof schema.pugSlots.$inferSelect;
 
@@ -39,10 +43,7 @@ export async function handlePugCharacterSelectMenu(
       `Error handling PUG char select for slot ${pugSlotId}`,
       errorStack(error),
     );
-    await safeErrorReply(
-      interaction,
-      'Something went wrong. Please try again.',
-    );
+    await safeErrorReply(interaction, interactionErrorReply(error));
   }
 }
 
@@ -61,26 +62,11 @@ export async function handlePugRoleSelectMenu(
       `Error handling PUG role select for slot ${pugSlotId}`,
       errorStack(error),
     );
-    await safeErrorReply(
-      interaction,
-      'Something went wrong. Please try again.',
-    );
+    await safeErrorReply(interaction, interactionErrorReply(error));
   }
 }
 
 // --- Internal helpers ---
-
-async function findLinkedUser(
-  deps: PugInviteDeps,
-  discordId: string,
-): Promise<{ id: number } | null> {
-  const [user] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordId))
-    .limit(1);
-  return user ?? null;
-}
 
 async function lookupPugSlot(
   deps: PugInviteDeps,
@@ -123,7 +109,8 @@ async function doPugCharacterSelect(
     });
     return;
   }
-  const linkedUser = await findLinkedUser(deps, interaction.user.id);
+  const linkedUser = await findPugActor(deps, interaction);
+  if (linkedUser === PUG_ACTOR_BLOCKED) return;
   if (!linkedUser) {
     await interaction.editReply({
       content: 'Could not find your linked account.',
@@ -292,8 +279,9 @@ async function resolveCharClassSpec(
   slot: PugSlot,
   characterName: string,
 ): Promise<{ charClass: string | null; charSpec: string | null } | null> {
-  const linkedUser = await findLinkedUser(deps, discordUserId);
-  if (!linkedUser || !slot.eventId) return null;
+  const account = await resolveDiscordAccount(deps.db, discordUserId);
+  if (account.kind !== 'linked' || !slot.eventId) return null;
+  const linkedUser = account.user;
   const [event] = await deps.db
     .select()
     .from(schema.events)

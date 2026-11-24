@@ -205,7 +205,7 @@ export class SteamLinkListener implements OnModuleDestroy {
   ): Promise<void> {
     const existing = await findGameBySteamAppId(this.db, appId);
     const user = await findLinkedRlUser(this.db, message.author.id);
-    if (!user) return;
+    if (!user || user.blocked) return; // ROK-2298: blocked = silent
 
     const game = existing ?? (await this.discoverGame(appId));
     if (!game) return;

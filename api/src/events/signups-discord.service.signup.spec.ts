@@ -510,3 +510,40 @@ describe('SignupsService — signupDiscord auto-slot', () => {
   it('should NOT auto-slot without config', () => testNoAutoSlotNoConfig());
   it('should prefer explicit role', () => testExplicitRoleOverAutoSlot());
 });
+
+// ROK-2298 AC3: a blocked Discord id never produces an anonymous signup.
+describe('SignupsService — signupDiscord refuses blocked accounts', () => {
+  const dto = { discordUserId: 'discord-user-123', discordUsername: 'X' };
+  async function expectBlocked() {
+    await expect(service.signupDiscord(1, dto)).rejects.toMatchObject({
+      response: { code: 'ACCOUNT_BLOCKED' },
+    });
+    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.transaction).not.toHaveBeenCalled();
+    expect(emitSpy).not.toHaveBeenCalled();
+  }
+  it('linked + banned → 403, no anonymous row', async () => {
+    const banned = {
+      ...mockUser,
+      bannedAt: new Date(),
+      deactivatedAt: new Date(),
+    };
+    mockDb.select.mockReturnValueOnce(makeSelectChain([banned]));
+    await expectBlocked();
+  });
+  it('linked + deactivated → 403, no anonymous row', async () => {
+    const off = { ...mockUser, bannedAt: null, deactivatedAt: new Date() };
+    mockDb.select.mockReturnValueOnce(makeSelectChain([off]));
+    await expectBlocked();
+  });
+  it('self-unlinked then banned (unlinked:<id>) → 403, no anonymous row', async () => {
+    const dodged = {
+      ...mockUser,
+      discordId: 'unlinked:discord-user-123',
+      bannedAt: new Date(),
+      deactivatedAt: new Date(),
+    };
+    mockDb.select.mockReturnValueOnce(makeSelectChain([dodged]));
+    await expectBlocked();
+  });
+});
