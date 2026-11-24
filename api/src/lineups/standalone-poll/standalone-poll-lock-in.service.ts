@@ -10,6 +10,7 @@ import {
   Optional,
   forwardRef,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
@@ -44,6 +45,10 @@ import {
   emitPollLockedIn,
   emitStandaloneLineupArchived,
 } from '../lineup-lifecycle-emit.helpers';
+import {
+  EVENT_POST_REOPEN_PORT,
+  type EventPostReopenPort,
+} from './event-post-reopen.port';
 
 /** No-op rejection swallower for fire-and-forget emits. */
 const noop = (): void => {};
@@ -66,6 +71,7 @@ export interface CompletedLockIn {
 @Injectable()
 export class StandalonePollLockInService {
   private readonly logger = new Logger(StandalonePollLockInService.name);
+  private reopenPort: EventPostReopenPort | undefined;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -81,6 +87,8 @@ export class StandalonePollLockInService {
     private readonly guildTag: EventGuildTagService,
     private readonly notificationService: NotificationService,
     @Optional() private readonly events?: EventEmitter2,
+    /** ROK-2314: resolves the forum module's event-post reopen port lazily. */
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   /**
@@ -161,6 +169,9 @@ export class StandalonePollLockInService {
     lockIn: CompletedLockIn,
   ): Promise<void> {
     const { matchId, eventId, startTime } = lockIn;
+    // ROK-2314: the released reschedule lock closed the event's post — open
+    // it again first, or the POLL_LOCKED_IN chat copy hits an archived thread.
+    if (result.linkedEventId) await this.reopenEventPost(result.linkedEventId);
     // ROK-2272 S6: legacy complete + reschedule lock-in both land here.
     emitPollLockedIn(this.events, {
       matchId,
@@ -206,6 +217,33 @@ export class StandalonePollLockInService {
         });
       },
     };
+  }
+
+  /**
+   * ROK-2314: re-sync and flip the event's Discord post now (the event has
+   * already moved and its reschedule lock is released). Best effort: a
+   * failure is logged and the 5-minute lock sweep catches up.
+   */
+  private async reopenEventPost(eventId: number): Promise<void> {
+    try {
+      await this.eventPostReopenPort()?.reopenEventPost(eventId);
+    } catch (err: unknown) {
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Event ${eventId} post reopen failed: ${why}`);
+    }
+  }
+
+  /** The forum module's port; null when it is not bound (e.g. a slim app). */
+  private eventPostReopenPort(): EventPostReopenPort | null {
+    try {
+      this.reopenPort ??= this.moduleRef?.get<EventPostReopenPort>(
+        EVENT_POST_REOPEN_PORT,
+        { strict: false },
+      );
+    } catch {
+      return null;
+    }
+    return this.reopenPort ?? null;
   }
 
   /** Sign up the slot voters (awaited), then fire DMs + announce. */

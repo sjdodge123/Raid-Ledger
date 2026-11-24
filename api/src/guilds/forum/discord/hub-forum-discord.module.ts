@@ -64,6 +64,8 @@ import {
   SchedulingPollEmbedQueueService,
 } from '../../../lineups/scheduling/scheduling-poll-embed.queue';
 import { POLL_FORUM_STARTER_PORT } from '../../../lineups/scheduling/poll-forum-starter.port';
+import { EVENT_POST_REOPEN_PORT } from '../../../lineups/standalone-poll/event-post-reopen.port';
+import { EventPostReopener } from './event-post-reopener';
 import { PollForumStarterSync } from './poll-forum-starter.sync';
 import { PollVoterLines } from './poll-voter-lines.refresh';
 import {
@@ -107,6 +109,9 @@ import { ForumChatCopyProcessor } from './forum-chat-copy.processor';
     PollForumStarterSync,
     PollVoterLines,
     { provide: POLL_FORUM_STARTER_PORT, useExisting: PollForumStarterSync },
+    // ROK-2314: a reschedule lock-in reopens the event post before POLL_LOCKED_IN.
+    EventPostReopener,
+    { provide: EVENT_POST_REOPEN_PORT, useExisting: EventPostReopener },
     HubForumDiscordOutboundService,
     HubForumDiscordOutboundListener,
     // ROK-2292 D8: create the event's forum post when it is announced.
