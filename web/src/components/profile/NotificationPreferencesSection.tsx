@@ -10,7 +10,7 @@ import { useNotifTypeHashFocus } from '../../hooks/use-notif-type-hash-focus';
 import { ChannelIcon } from './notification-channel-icons';
 import { MutedGamesList } from './muted-games-list';
 import { MutedGroupsList } from './muted-groups-list';
-import { NOTIFICATION_TYPE_META } from './notification-type-meta';
+import { NOTIFICATION_TYPE_GROUPS, rowChannels } from './notification-type-meta';
 
 /** All possible channel metadata */
 const ALL_CHANNEL_META: { channel: Channel; label: string }[] = [
@@ -88,28 +88,44 @@ function RowCaption({ caption }: { caption: NotificationRowCaption }) {
     return <div className={`text-xs mt-0.5 ${tone}`} data-testid="notif-row-caption">{caption}</div>;
 }
 
+/** ROK-2311: a column this row's notice never uses (in-app-only / DM-only rows) shows a dash, not a switch. */
+function ChannelNotOffered({ channel }: { channel: Channel }) {
+    return (
+        <div className="w-10 sm:w-12 flex justify-center text-dim" data-testid={`notif-not-offered-${channel}`}>
+            <span aria-hidden="true">—</span>
+            <span className="sr-only">Not sent by {channel}</span>
+        </div>
+    );
+}
+
 function NotificationRow({ type, label, description, visibleChannels, preferences, onToggle }: {
     type: NotificationType; label: string; description: string;
     visibleChannels: { channel: Channel; label: string }[];
     preferences: ReturnType<typeof useNotificationPreferences>['preferences'];
     onToggle: (type: NotificationType, channel: Channel) => void;
 }) {
+    const offered = rowChannels(type, visibleChannels).map((c) => c.channel);
     return (
         <div id={`notif-${type}`} tabIndex={-1}
             className="flex items-center py-3 hover:bg-panel/50 rounded-lg transition-colors -mx-2 px-2 focus:outline-none focus:ring-2 focus:ring-success/80">
             <div className="flex-1 min-w-0 mr-3">
                 <div className="text-sm font-medium text-foreground truncate">{label}</div>
                 <div className="text-xs text-muted truncate">{description}</div>
-                <RowCaption caption={notificationRowCaption(preferences?.channelPrefs[type], visibleChannels.map((c) => c.channel))} />
+                <RowCaption caption={notificationRowCaption(preferences?.channelPrefs[type], offered)} />
             </div>
             <div className="flex gap-2 sm:gap-4 shrink-0">
-                {visibleChannels.map(({ channel }) => (
+                {visibleChannels.map(({ channel }) => offered.includes(channel) ? (
                     <ChannelToggle key={channel} channel={channel} active={preferences?.channelPrefs[type]?.[channel] ?? false}
                         label={label} onToggle={() => onToggle(type, channel)} />
-                ))}
+                ) : <ChannelNotOffered key={channel} channel={channel} />)}
             </div>
         </div>
     );
+}
+
+/** Stable id for a group heading, e.g. "Games & groups" → `notif-group-games-groups`. */
+function groupHeadingId(heading: string): string {
+    return `notif-group-${heading.toLowerCase().replace(/[^a-z]+/g, '-')}`;
 }
 
 function NotificationPreferencesContent({ preferences, visibleChannels, handleToggle, channelAvailability }: {
@@ -122,15 +138,23 @@ function NotificationPreferencesContent({ preferences, visibleChannels, handleTo
         <div>
             <ColumnHeaders visibleChannels={visibleChannels} />
             <div className="border-t border-edge-subtle mb-1" />
-            <div className="divide-y divide-edge-subtle">
-                {NOTIFICATION_TYPE_META.map((meta) => (
-                    <div key={meta.type}>
-                        <NotificationRow {...meta} visibleChannels={visibleChannels} preferences={preferences} onToggle={handleToggle} />
-                        {meta.type === 'subscribed_game' && <MutedGamesList />}
-                        {meta.type === 'hub_leader_post' && <MutedGroupsList />}
+            {NOTIFICATION_TYPE_GROUPS.map((group) => (
+                <section key={group.heading} aria-labelledby={groupHeadingId(group.heading)} data-testid="notif-group">
+                    <h3 id={groupHeadingId(group.heading)}
+                        className="text-[11px] font-semibold uppercase tracking-wider text-dim pt-3.5 pb-1">
+                        {group.heading}
+                    </h3>
+                    <div className="divide-y divide-edge-subtle border-t border-edge-subtle">
+                        {group.rows.map((meta) => (
+                            <div key={meta.type}>
+                                <NotificationRow {...meta} visibleChannels={visibleChannels} preferences={preferences} onToggle={handleToggle} />
+                                {meta.type === 'subscribed_game' && <MutedGamesList />}
+                                {meta.type === 'hub_leader_post' && <MutedGroupsList />}
+                            </div>
+                        ))}
                     </div>
-                ))}
-            </div>
+                </section>
+            ))}
             {channelAvailability?.discord && !channelAvailability.discord.available && channelAvailability.discord.reason && (
                 <p className="text-xs text-muted mt-4 italic">{channelAvailability.discord.reason}</p>
             )}

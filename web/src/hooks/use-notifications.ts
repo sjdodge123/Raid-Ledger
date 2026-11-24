@@ -32,6 +32,8 @@ export type NotificationType =
     | 'level_up'
     | 'missed_event_nudge'
     | 'event_rescheduled'
+    | 'event_delayed'
+    | 'running_late'
     | 'bench_promoted'
     | 'event_cancelled'
     | 'roster_reassigned'
@@ -41,6 +43,12 @@ export type NotificationType =
     | 'role_gap_alert'
     | 'lineup_steam_nudge'
     | 'community_lineup'
+    /** ROK-2311 — split out of `community_lineup`: scheduling-poll notices (lineup-linked + standalone). */
+    | 'scheduling_poll'
+    /** ROK-2311 — split out of `community_lineup`: LFG offers after a lineup (in-app only). */
+    | 'lineup_lfg_offer'
+    /** ROK-2311 — split out of `slot_vacated`: you lost access to an event's private voice channel. */
+    | 'voice_access_lost'
     | 'post_event_followup'
     | 'lfg_invite'
     | 'lfg_player_invite'
