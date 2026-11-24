@@ -12,6 +12,7 @@
  * seven readable day columns (Q11).
  */
 import type { JSX, ReactNode } from 'react';
+import { Button } from '../../ui/button';
 import { Modal } from '../../ui/modal';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { useMediaQuery } from '../../../hooks/use-media-query';
@@ -102,14 +103,14 @@ export function SchedulingBetterTimeSheet(
 /**
  * The button that opens {@link SchedulingBetterTimeSheet}.
  *
- * ROK-1546 (AC6): below `sm` this is the slot ladder's SECOND action, so it
- * uses the same secondary-button recipe as the row-level CTAs in
- * `SchedulingSlotRow` — a solid `border-edge-strong` outline on `bg-surface`
- * with `text-foreground`. The original dashed/muted "ghost" treatment read as
- * disabled chrome on a phone; it is kept from `sm` up, where the wider row and
- * the hover affordance carry it. Colours come from tokens only (fifteen themes
- * remap them), and `text-foreground` on `bg-surface` clears 4.5:1 in both
- * default families.
+ * It is the poll's one way out when no offered time suits, so it has to be
+ * found: at every width it is the shared `Button` in its `warning-soft`
+ * variant (a `/10` warning tint, `/30` border, warning label), which sets it
+ * apart from the emerald vote buttons and the neutral "Doesn't work" ones.
+ * History: ROK-1546 (AC6) replaced a dashed/muted "ghost" that read as
+ * disabled chrome on a phone with a neutral outline below `lg`; the operator
+ * then asked (2026-11-23) for a colour that stands out everywhere. Colours
+ * come from the variant's tokens only (fifteen themes remap them).
  */
 export function SchedulingBetterTimeTrigger({
     onClick,
@@ -117,14 +118,15 @@ export function SchedulingBetterTimeTrigger({
     onClick: () => void;
 }): JSX.Element {
     return (
-        <button
-            type="button"
+        <Button
+            variant="warning-soft"
+            size="sm"
+            fullWidth
             data-testid="scheduling-find-better-time"
             onClick={onClick}
-            className="min-h-[44px] lg:min-h-[36px] w-full inline-flex items-center justify-center gap-2 rounded-lg border border-edge-strong bg-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-emerald-500/60 lg:border-dashed lg:border-edge lg:bg-transparent lg:font-normal lg:text-secondary lg:hover:text-foreground"
         >
             <span aria-hidden="true">+</span>
             None of these work — find a better time
-        </button>
+        </Button>
     );
 }

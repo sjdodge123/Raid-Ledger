@@ -86,7 +86,6 @@
     "components/lineups/cycle-4/CommonGroundThemedRow.tsx": 1,
     "components/lineups/cycle-4/MyNominationsDrawer.tsx": 1,
     "components/lineups/cycle-4/SchedulingAddMembersAction.tsx": 3,
-    "components/lineups/cycle-4/SchedulingBetterTimeSheet.tsx": 1,
     "components/lineups/cycle-4/SchedulingCancelAction.tsx": 1,
     "components/lineups/cycle-4/SchedulingGameRefBanner.tsx": 1,
     "components/lineups/cycle-4/SchedulingManageDropdown.tsx": 1,
