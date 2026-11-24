@@ -176,9 +176,9 @@ const TYPE_LABEL: Record<string, string> = {
   recruitment_reminder: 'Recruitment Reminder',
   lineup_steam_nudge: 'Steam Link Nudge',
   community_lineup: 'Community Lineup',
-  lineup_lfg_offer: 'Community Lineup',
-  scheduling_poll: 'Community Lineup',
-  voice_access_lost: 'Slot Vacated',
+  lineup_lfg_offer: 'LFG Offer',
+  scheduling_poll: 'Scheduling Poll',
+  voice_access_lost: 'Voice Access Removed',
   lfg_invite: 'LFG Group Forming',
   lfg_player_invite: 'LFG Invite',
   hub_leader_post: 'Group Post',
@@ -217,15 +217,16 @@ function addVoiceChannelField(
   if (value) embed.addFields({ name: 'Voice Channel', value, inline: true });
 }
 
-const LINEUP_FIELDS = {
-  fields: [['gameName', 'Game']] as [string, string][],
+/** [payloadKey, fieldName] pairs + whether the voice channel field shows. */
+type TypeFieldDef = { fields: [string, string][]; voice: boolean };
+
+const LINEUP_FIELDS: TypeFieldDef = {
+  fields: [['gameName', 'Game']],
   voice: false,
 };
 
 /** Field definitions per notification type: [payloadKey, fieldName] pairs + voice flag. */
-const TYPE_FIELD_DEFS: Partial<
-  Record<NotificationType, { fields: [string, string][]; voice: boolean }>
-> = {
+const TYPE_FIELD_DEFS: Partial<Record<NotificationType, TypeFieldDef>> = {
   event_reminder: { fields: [['eventTitle', 'Event']], voice: true },
   new_event: { fields: [['gameName', 'Game']], voice: true },
   slot_vacated: { fields: [['slotName', 'Slot']], voice: true },
