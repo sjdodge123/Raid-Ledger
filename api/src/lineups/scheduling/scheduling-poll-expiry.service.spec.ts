@@ -87,7 +87,7 @@ describe('warning DM (S3-AC1, S3-AC5)', () => {
     const arg = notificationService.create.mock.calls[0][0];
     expect(arg).toMatchObject({
       userId: 501,
-      type: 'community_lineup',
+      type: 'scheduling_poll',
       title: 'Your Valheim poll closes soon',
       payload: {
         subtype: 'scheduling_poll_expiry_warning',

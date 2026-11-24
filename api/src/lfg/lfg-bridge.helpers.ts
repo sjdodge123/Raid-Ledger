@@ -28,7 +28,7 @@ export const LFG_BRIDGE_DEDUP_TTL_SECONDS =
 export const BRIDGE_GAMES_IN_BODY = 3;
 
 /** Marker on the notification payload so readers can tell a bridge offer
- * from every other `community_lineup` notification. */
+ * from every other lineup notification. */
 export const LFG_BRIDGE_PAYLOAD_KIND = 'lfg-bridge';
 
 /** A losing nomination whose nominator holds no live intent on the game. */

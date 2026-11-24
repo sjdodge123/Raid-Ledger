@@ -24,8 +24,9 @@ import {
   waitFor,
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { nonEmpty } from '../../common/testing/narrow';
+import { expectLineupDmTypes } from '../../common/testing/lineup-dm-type-pin';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -127,23 +128,29 @@ interface LineupNote {
   eventId: unknown;
 }
 
-/** Every `community_lineup` notification row for `userIds`. */
+/** Every lineup + poll notification row for `userIds`, type pinned per title. */
 async function lineupNotes(userIds: number[]): Promise<LineupNote[]> {
   const rows = await testApp.db
     .select({
       userId: schema.notifications.userId,
       title: schema.notifications.title,
+      type: schema.notifications.type,
       payload: schema.notifications.payload,
     })
     .from(schema.notifications)
-    .where(eq(schema.notifications.type, 'community_lineup'));
-  return rows
-    .filter((r) => userIds.includes(r.userId))
-    .map((r) => ({
-      userId: r.userId,
-      title: r.title,
-      eventId: (r.payload as { eventId?: unknown } | null)?.eventId,
-    }));
+    .where(
+      inArray(schema.notifications.type, [
+        'community_lineup',
+        'scheduling_poll',
+      ]),
+    );
+  const mine = rows.filter((r) => userIds.includes(r.userId));
+  expectLineupDmTypes(mine);
+  return mine.map((r) => ({
+    userId: r.userId,
+    title: r.title,
+    eventId: (r.payload as { eventId?: unknown } | null)?.eventId,
+  }));
 }
 
 /** Wait until every one of `userIds` holds at least one lineup DM row. */

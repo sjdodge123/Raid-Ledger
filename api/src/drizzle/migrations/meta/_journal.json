@@ -2220,6 +2220,20 @@
       "when": 1795413439884,
       "tag": "0317_notifications_in_app_hidden",
       "breakpoints": true
+    },
+    {
+      "idx": 318,
+      "version": "7",
+      "when": 1795539818398,
+      "tag": "0318_notification_prefs_split_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 319,
+      "version": "7",
+      "when": 1795539842541,
+      "tag": "0319_notification_prefs_split_inherit",
+      "breakpoints": true
     }
   ]
 }

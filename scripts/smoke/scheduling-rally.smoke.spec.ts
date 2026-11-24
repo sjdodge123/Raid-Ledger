@@ -531,14 +531,14 @@ test.describe('Scheduling poll — leader-card Poll actions menu (ROK-1618)', ()
             const voter = await seedFixtureVoter(token, 6);
             // A rally counts a member as nudged only when their in-app
             // notification row is created, and that is skipped while their
-            // `community_lineup` in-app pref is off. Slot 6 is a shared
+            // `scheduling_poll` in-app pref is off. Slot 6 is a shared
             // fixture user, so pin the pref instead of trusting its default.
             const prefs = await apiPatch(
                 voter.jwt,
                 '/notifications/preferences',
-                { channelPrefs: { community_lineup: { inApp: true } } },
+                { channelPrefs: { scheduling_poll: { inApp: true } } },
             );
-            expect(prefs?.channelPrefs?.community_lineup?.inApp).toBe(true);
+            expect(prefs?.channelPrefs?.scheduling_poll?.inApp).toBe(true);
             await voteAs(voter.jwt, seeded, seeded.slotId);
             await waitForSlotCounts(token, seeded, seeded.slotId, {
                 yes: 2,

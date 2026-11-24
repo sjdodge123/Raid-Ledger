@@ -13,7 +13,7 @@
  * - The EVENT CREATED channel card is dispatched, and on the standalone route
  *   the slot's yes-voters get no EVENT CREATED DM while the rest do.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -29,6 +29,7 @@ import { NotificationDedupService } from '../../notifications/notification-dedup
 import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../../settings/settings.service';
 import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
+import { expectLineupDmTypes } from '../../common/testing/lineup-dm-type-pin';
 
 const SLOT = new Date('2099-10-10T21:00:00.000Z');
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
@@ -332,20 +333,25 @@ describe('ROK-2024 open lineup lock-in guards (integration)', () => {
 });
 
 describe('ROK-2024 open lock-in announcement evidence (integration)', () => {
-  /** `community_lineup` DM titles + event ids of one user. */
+  /** Lineup + poll DM titles + event ids of one user, type pinned per title. */
   async function dmsOf(userId: number) {
     const rows = await testApp.db
       .select({
         title: schema.notifications.title,
+        type: schema.notifications.type,
         payload: schema.notifications.payload,
       })
       .from(schema.notifications)
       .where(
         and(
           eq(schema.notifications.userId, userId),
-          eq(schema.notifications.type, 'community_lineup'),
+          inArray(schema.notifications.type, [
+            'community_lineup',
+            'scheduling_poll',
+          ]),
         ),
       );
+    expectLineupDmTypes(rows);
     return rows.map((r) => {
       const p = r.payload as { eventId?: unknown } | null;
       return { title: r.title, eventId: p?.eventId };
@@ -466,14 +472,22 @@ describe('ROK-2054 standalone lock-in posts no lineup channel card (integration)
   ): Promise<unknown[]> {
     await waitFor(async () => {
       const rows = await testApp.db
-        .select({ payload: schema.notifications.payload })
+        .select({
+          title: schema.notifications.title,
+          type: schema.notifications.type,
+          payload: schema.notifications.payload,
+        })
         .from(schema.notifications)
         .where(
           and(
             eq(schema.notifications.userId, dmUserId),
-            eq(schema.notifications.type, 'community_lineup'),
+            inArray(schema.notifications.type, [
+              'community_lineup',
+              'scheduling_poll',
+            ]),
           ),
         );
+      expectLineupDmTypes(rows);
       const ids = rows.map(
         (r) => (r.payload as { eventId?: unknown } | null)?.eventId,
       );

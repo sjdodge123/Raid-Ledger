@@ -164,7 +164,7 @@ export function buildVoiceAccessLostInput(
 ): CreateNotificationInput {
   return {
     userId,
-    type: 'slot_vacated',
+    type: 'voice_access_lost',
     title: 'Voice Channel Access Removed',
     message: `You no longer have access to the private voice channel for "${eventTitle}". Sign up for the event again to get your access back.`,
     payload: { eventId, subtype: VOICE_ACCESS_LOST_SUBTYPE },

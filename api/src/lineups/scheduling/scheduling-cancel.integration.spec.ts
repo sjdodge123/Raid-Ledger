@@ -13,7 +13,7 @@
  * Coverage (one `it` per AC / edge case, see spec §Acceptance Criteria
  * + §Edge Cases):
  *   AC4 — cancel WITH reason → match archived; each matched member except
- *         the actor receives a `community_lineup` notification, subtype
+ *         the actor receives a `scheduling_poll` notification, subtype
  *         `scheduling_poll_cancelled`, message contains game name + reason,
  *         payload carries the reason. Actor excluded.
  *   AC5 — cancel WITHOUT reason → message has no "Reason:" suffix; payload
@@ -145,7 +145,7 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
       .where(
         and(
           eq(schema.notifications.userId, userId),
-          eq(schema.notifications.type, 'community_lineup'),
+          eq(schema.notifications.type, 'scheduling_poll'),
         ),
       );
   }
@@ -180,7 +180,7 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
 
     expect(await matchStatus(matchId)).toBe('archived');
 
-    // Both voters get exactly one community_lineup notification.
+    // Both voters get exactly one scheduling_poll notification.
     for (const voter of [voter1, voter2]) {
       const notifs = await findCancelNotifications(voter.id);
       expect(notifs).toHaveLength(1);

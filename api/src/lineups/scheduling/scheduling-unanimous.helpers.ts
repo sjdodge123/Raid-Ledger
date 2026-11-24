@@ -13,9 +13,9 @@ import type { CreateNotificationInput } from '../../notifications/notification.t
 import { formatLockLabel } from './scheduling-poll-expiry.helpers';
 
 /**
- * Payload discriminator. Reuses the existing `community_lineup`
- * `NotificationType`, so channel prefs, the prefs UI and the web notification
- * router need no change (spec D5).
+ * Payload discriminator. Rides the `scheduling_poll` (ROK-2311)
+ * `NotificationType`, governed by the "Scheduling polls" settings row; the
+ * web notification router keys on the payload, so it needs no change.
  */
 export const UNANIMOUS_SUBTYPE = 'scheduling_poll_unanimous_time';
 
@@ -179,7 +179,7 @@ export function buildUnanimousNotification(
   );
   return {
     userId: row.creatorId,
-    type: 'community_lineup',
+    type: 'scheduling_poll',
     title,
     message,
     payload: {

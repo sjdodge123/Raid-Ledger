@@ -44,6 +44,10 @@ const RULING_TABLE: ReadonlyArray<[NotificationType, EmbedState]> = [
   ['role_gap_alert', 'needs_you'],
   ['lineup_steam_nudge', 'announcing'],
   ['community_lineup', 'announcing'],
+  // ROK-2311: split types keep their parent row's register.
+  ['lineup_lfg_offer', 'announcing'],
+  ['scheduling_poll', 'announcing'],
+  ['voice_access_lost', 'announcing'],
   // ROK-1471: the LFG invite DM announces a group that just formed.
   ['lfg_invite', 'announcing'],
   ['lfg_player_invite', 'announcing'],

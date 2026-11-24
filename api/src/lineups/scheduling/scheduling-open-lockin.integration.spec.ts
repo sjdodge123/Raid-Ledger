@@ -14,7 +14,7 @@
  * Each path must announce exactly once, after the slot voters' signups landed
  * — except a reschedule poll, whose event already exists.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -25,6 +25,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { nonEmpty } from '../../common/testing/narrow';
+import { expectLineupDmTypes } from '../../common/testing/lineup-dm-type-pin';
 import { LineupNotificationService } from '../lineup-notification.service';
 
 const SLOT = new Date('2099-10-10T21:00:00.000Z');
@@ -203,22 +204,28 @@ describe('ROK-2024 open lock-in (integration)', () => {
       .values({ lineupId, userId, invitedBy: testApp.seed.adminUser.id });
   }
 
-  /** `community_lineup` DM rows of one user: title + payload subtype. */
+  /** Lineup + poll DM rows of one user (type pinned per title): title +
+   *  payload subtype. */
   async function dmsOf(
     userId: number,
   ): Promise<Array<{ title: string; subtype: unknown; eventId: unknown }>> {
     const rows = await testApp.db
       .select({
         title: schema.notifications.title,
+        type: schema.notifications.type,
         payload: schema.notifications.payload,
       })
       .from(schema.notifications)
       .where(
         and(
           eq(schema.notifications.userId, userId),
-          eq(schema.notifications.type, 'community_lineup'),
+          inArray(schema.notifications.type, [
+            'community_lineup',
+            'scheduling_poll',
+          ]),
         ),
       );
+    expectLineupDmTypes(rows);
     return rows.map((r) => {
       const p = r.payload as { subtype?: unknown; eventId?: unknown } | null;
       return { title: r.title, subtype: p?.subtype, eventId: p?.eventId };

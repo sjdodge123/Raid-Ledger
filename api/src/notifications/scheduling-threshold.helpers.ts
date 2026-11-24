@@ -34,14 +34,14 @@ export function buildThresholdMessage(poll: EligiblePollRow): string {
 
 /**
  * Build a CreateNotificationInput for a threshold-met poll.
- * Notification type is community_lineup with subtype scheduling_poll_threshold_met.
+ * Notification type is scheduling_poll with subtype scheduling_poll_threshold_met.
  */
 export function buildThresholdNotification(
   poll: EligiblePollRow,
 ): CreateNotificationInput {
   return {
     userId: poll.creatorId,
-    type: 'community_lineup',
+    type: 'scheduling_poll',
     title: 'Poll ready for review',
     message: buildThresholdMessage(poll),
     payload: {

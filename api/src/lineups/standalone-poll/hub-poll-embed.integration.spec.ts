@@ -238,7 +238,7 @@ describe('hub poll channel card (ROK-1896)', () => {
   });
 });
 
-/** The `community_lineup` payload of `subtype` handed to `create` for a user. */
+/** The `scheduling_poll` payload of `subtype` handed to `create` for a user. */
 async function payloadFor(
   userId: number,
   subtype: string,
@@ -250,7 +250,7 @@ async function payloadFor(
         type?: string;
         payload?: Record<string, unknown>;
       };
-      if (arg.userId !== userId || arg.type !== 'community_lineup') continue;
+      if (arg.userId !== userId || arg.type !== 'scheduling_poll') continue;
       if (arg.payload?.subtype === subtype) return arg.payload;
     }
     return null;

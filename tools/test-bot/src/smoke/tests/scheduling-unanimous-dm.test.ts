@@ -8,7 +8,7 @@
  * one-click Lock link. Once per poll per time.
  *
  * Asserts (spec §5.4):
- *   1. a `community_lineup` notification lands for the POLL CREATOR with
+ *   1. a `scheduling_poll` notification lands for the POLL CREATOR with
  *      `payload.subtype === 'scheduling_poll_unanimous_time'`;
  *   2. the title is exactly the AC's copy and the message carries the slot's
  *      own `<t:…:f>` token plus the real member count;
@@ -80,14 +80,14 @@ interface TestNotification {
   } | null;
 }
 
-/** The creator's recent community_lineup notifications (empty on error). */
+/** The creator's recent scheduling_poll notifications (empty on error). */
 async function fetchNotifications(
   api: ApiClient,
   userId: number,
 ): Promise<TestNotification[]> {
   const res = await api
     .get<TestNotification[]>(
-      `/admin/test/notifications?userId=${userId}&type=community_lineup&limit=50`,
+      `/admin/test/notifications?userId=${userId}&type=scheduling_poll&limit=50`,
     )
     .catch(() => [] as TestNotification[]);
   return Array.isArray(res) ? res : [];
@@ -281,7 +281,7 @@ async function assertRenderedButtons(
     );
   }
   const r = await api.post<RenderedDm>('/admin/test/render-dm-embed', {
-    type: 'community_lineup',
+    type: 'scheduling_poll',
     title: dm.title,
     message: dm.message,
     ...(dm.payload ? { payload: dm.payload } : {}),

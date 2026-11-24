@@ -145,11 +145,11 @@ describe('scheduling-unanimous.helpers', () => {
   });
 
   describe('buildUnanimousNotification', () => {
-    it('U4: addresses the creator with the lock-capable community_lineup payload', () => {
+    it('U4: addresses the creator with the lock-capable scheduling_poll payload', () => {
       const input = buildUnanimousNotification(makeRow(), 'America/New_York');
 
       expect(input.userId).toBe(77);
-      expect(input.type).toBe('community_lineup');
+      expect(input.type).toBe('scheduling_poll');
       expect(input.title).toBe("Everyone's in for Valheim");
       expect(input.payload).toMatchObject({
         subtype: 'scheduling_poll_unanimous_time',

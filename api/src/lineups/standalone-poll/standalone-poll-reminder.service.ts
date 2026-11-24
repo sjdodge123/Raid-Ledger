@@ -136,7 +136,7 @@ export class StandalonePollReminderService {
     const { title, message } = this.buildCopy(window);
     await this.notificationService.create({
       userId,
-      type: 'community_lineup',
+      type: 'scheduling_poll',
       title,
       message,
       payload: {

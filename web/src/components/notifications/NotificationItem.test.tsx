@@ -228,3 +228,21 @@ describe('NotificationItem — LedgerLink ruleset notice (ROK-2100 B.4)', () => 
         expect(mockMarkRead).toHaveBeenCalledWith('n1');
     });
 });
+
+// ROK-2311 — split types keep their old row's look and payload-driven links.
+describe('NotificationItem — ROK-2311 split types', () => {
+    it('voice_access_lost wears the slot_vacated icon and opens the event', async () => {
+        const user = userEvent.setup();
+        renderItem(makeNotification({ type: 'voice_access_lost', payload: { eventId: 42 } }));
+        expect(document.querySelector('svg[data-icon="voice_access_lost"]')).not.toBeNull();
+        await user.click(screen.getByRole('button'));
+        expect(mockNavigate).toHaveBeenCalledWith('/events/42');
+    });
+
+    it('scheduling_poll links to its poll like a community_lineup notice did', async () => {
+        const user = userEvent.setup();
+        renderItem(makeNotification({ type: 'scheduling_poll', payload: { lineupId: 3, matchId: 9 } }));
+        await user.click(screen.getByRole('button'));
+        expect(mockNavigate).toHaveBeenCalledWith('/community-lineup/3/schedule/9');
+    });
+});

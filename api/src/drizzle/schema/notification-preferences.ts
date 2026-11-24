@@ -3,6 +3,10 @@ import { users } from './users';
 
 /**
  * All supported notification types.
+ *
+ * `new_event` is the EVENT INVITES type (member + character invites; ROK-2311
+ * Q1 relabel). A future "new event announced" notice must get its own type
+ * rather than reuse `new_event`.
  */
 export const NOTIFICATION_TYPES = [
   'slot_vacated',
@@ -24,6 +28,9 @@ export const NOTIFICATION_TYPES = [
   'role_gap_alert',
   'lineup_steam_nudge',
   'community_lineup',
+  'lineup_lfg_offer',
+  'scheduling_poll',
+  'voice_access_lost',
   'user_deactivated_discord',
   'user_reactivated_discord',
   'post_event_followup',
@@ -74,6 +81,10 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   role_gap_alert: { inApp: true, push: true, discord: true },
   lineup_steam_nudge: { inApp: true, push: false, discord: true },
   community_lineup: { inApp: true, push: true, discord: true },
+  // ROK-2311 Q4/Q5/Q7: split out of Community Lineup / Slot Vacated.
+  lineup_lfg_offer: { inApp: true, push: false, discord: false },
+  scheduling_poll: { inApp: true, push: true, discord: true },
+  voice_access_lost: { inApp: true, push: true, discord: true },
   user_deactivated_discord: { inApp: true, push: false, discord: false },
   user_reactivated_discord: { inApp: true, push: false, discord: false },
   post_event_followup: { inApp: true, push: false, discord: true },

@@ -147,12 +147,12 @@ describe('SchedulingThresholdService', () => {
   });
 
   // -----------------------------------------------------------------------
-  // AC7: Notification type = community_lineup,
+  // AC7: Notification type = scheduling_poll,
   //       subtype = scheduling_poll_threshold_met,
   //       sent to poll creator
   // -----------------------------------------------------------------------
   describe('notification content (AC7)', () => {
-    it('sends notification with type community_lineup', async () => {
+    it('sends notification with type scheduling_poll', async () => {
       const poll = makePendingPoll();
       mockDb.execute.mockResolvedValueOnce([poll]);
 
@@ -160,7 +160,7 @@ describe('SchedulingThresholdService', () => {
 
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'community_lineup',
+          type: 'scheduling_poll',
         }),
       );
     });

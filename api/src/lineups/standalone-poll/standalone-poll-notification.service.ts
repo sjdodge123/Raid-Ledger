@@ -162,7 +162,7 @@ export class StandalonePollNotificationService {
   ): Promise<void> {
     await this.notificationService.create({
       userId,
-      type: 'community_lineup',
+      type: 'scheduling_poll',
       title: 'Scheduling poll result',
       message: `The poll chose **${chosenTime}**. You voted for a different time so you weren't auto-signed up — check the event if you'd still like to join!`,
       payload: { subtype: 'lineup_event_created', eventId, ...hub },
@@ -179,7 +179,7 @@ export class StandalonePollNotificationService {
   ): Promise<void> {
     await this.notificationService.create({
       userId,
-      type: 'community_lineup',
+      type: 'scheduling_poll',
       title: 'Auto-signed up',
       message: `You voted for **${eventTime}** — you've been automatically signed up for **${gameName}**!`,
       payload: { subtype: 'lineup_event_created', eventId, ...hub },
@@ -199,7 +199,7 @@ export class StandalonePollNotificationService {
   ): Promise<void> {
     await this.notificationService.create({
       userId,
-      type: 'community_lineup',
+      type: 'scheduling_poll',
       title: 'On the bench',
       message: `You voted for **${eventTime}** — you've been signed up for **${gameName}**, but the roster was full, so you're on the bench for now.`,
       payload: { subtype: 'lineup_event_created', eventId, ...hub },
@@ -271,7 +271,7 @@ export class StandalonePollNotificationService {
       recipientIds.map((userId) =>
         this.notificationService.create({
           userId,
-          type: 'community_lineup',
+          type: 'scheduling_poll',
           title: `Scheduling poll for ${gameName}`,
           message: `${creatorName} started a poll — set your availability so the group can find the best time to play.`,
           payload: { ...basePayload, subtype: 'standalone_scheduling_poll' },
@@ -301,7 +301,7 @@ export class StandalonePollNotificationService {
       recipientIds.map((userId) =>
         this.notificationService.create({
           userId,
-          type: 'community_lineup',
+          type: 'scheduling_poll',
           title: `Event being rescheduled — ${gameName}`,
           message: `The event you signed up for${timeStr} is being rescheduled — vote now to pick the next date.`,
           payload: { ...basePayload, subtype: 'event_rescheduling' },

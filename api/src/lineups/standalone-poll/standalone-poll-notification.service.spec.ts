@@ -353,7 +353,7 @@ describe('StandalonePollNotificationService.notifyAutoBenched (ROK-1874)', () =>
     expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
     expect(mockNotificationService.create).toHaveBeenCalledWith({
       userId: 20,
-      type: 'community_lineup',
+      type: 'scheduling_poll',
       title: 'On the bench',
       message:
         "You voted for **Sun, May 3, 9:00 PM** — you've been signed up for **Elden Ring**, but the roster was full, so you're on the bench for now.",

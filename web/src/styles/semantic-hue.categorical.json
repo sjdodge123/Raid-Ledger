@@ -64,7 +64,6 @@
   "pages/game-detail/GamePricingSummary.tsx": "Price/deal data accents: current-best price and discount chip emerald (an on-sale deal is not success), ITAD brand link, historical-low yellow trend icon",
   "pages/game-detail/taste-vector/AxisBreakdown.tsx": "Taste-vector axis bar fill bg-emerald-500 (progress/data bar)",
   "components/profile/CharacterCard.tsx": "WoW faction badge (Horde red), raid-role fills (healer emerald / dps red), level amber and the gold main-character star (categorical game/marker colours); Delete actions on tokens (S7b)",
-  "components/profile/NotificationPreferencesSection.tsx": "Channel toggle on-state: chip-on emerald tint (a selection/toggle accent, not a status)",
   "components/profile/UserEventSignups.tsx": "Signup count chip + \"View all\" brand link (brand accent, promises nothing)",
   "components/profile/my-watched-games-section.tsx": "Brand spinner, brand link and the primary bg-emerald-600 CTA fill (Button primary)",
   "components/profile/profile-sidebar.tsx": "Active nav link emerald text + tint (selection accent); Game Time set/unset dot on tokens (S7b)",

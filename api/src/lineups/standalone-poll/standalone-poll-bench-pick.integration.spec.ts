@@ -20,7 +20,7 @@
  * fire-and-forget, so the ROK-2025 roster assertions first wait until every
  * voter's poll DM has landed.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -30,6 +30,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { nonEmpty } from '../../common/testing/narrow';
+import { expectLineupDmTypes } from '../../common/testing/lineup-dm-type-pin';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { revalidateBenchPick } from './standalone-poll-bench-pick.helpers';
 
@@ -248,14 +249,22 @@ async function pollDmTitles(
       .select({
         userId: schema.notifications.userId,
         title: schema.notifications.title,
+        type: schema.notifications.type,
       })
       .from(schema.notifications)
-      .where(eq(schema.notifications.type, 'community_lineup'));
+      .where(
+        inArray(schema.notifications.type, [
+          'community_lineup',
+          'scheduling_poll',
+        ]),
+      );
+    const pollDms = rows.filter(
+      (r) => userIds.includes(r.userId) && POLL_DM_TITLES.includes(r.title),
+    );
+    expectLineupDmTypes(pollDms);
     result = userIds.map((userId) => ({
       userId,
-      titles: rows
-        .filter((r) => r.userId === userId && POLL_DM_TITLES.includes(r.title))
-        .map((r) => r.title),
+      titles: pollDms.filter((r) => r.userId === userId).map((r) => r.title),
     }));
     expect(result.filter((r) => r.titles.length === 0)).toEqual([]);
   }, CHAIN_DEADLINE_MS);

@@ -356,7 +356,7 @@ describe('ROK-1769 voice-access DM — listener', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.[0]).toEqual(
       expect.objectContaining({
-        type: 'slot_vacated',
+        type: 'voice_access_lost',
         title: 'Voice Channel Access Removed',
         payload: { eventId: m.eventId, subtype: 'voice_access_lost' },
       }),
@@ -427,7 +427,7 @@ describe('ROK-1769 voice-access DM — listener skips', () => {
   it('sends no DM when the member turned off Discord DMs for this type', async () => {
     const m = await rosteredOnPrivateEvent();
     await testApp.app.get(NotificationService).updatePreferences(m.userId, {
-      channelPrefs: { slot_vacated: { discord: false } },
+      channelPrefs: { voice_access_lost: { discord: false } },
     });
     const p = {
       eventId: m.eventId,

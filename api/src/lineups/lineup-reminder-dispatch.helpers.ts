@@ -4,8 +4,10 @@
  *
  * Composed by `LineupReminderService` (cron) and `SchedulingRemindService`
  * (manual) — each helper checks the dedup cache, builds the copy, and
- * creates a `community_lineup` notification. Kept in its own file to keep
- * the services under the 300-line ESLint ceiling.
+ * creates the notification: vote and nomination reminders are
+ * `community_lineup`, scheduling reminders (cron + manual) are
+ * `scheduling_poll` (ROK-2311). Kept in its own file to keep the services
+ * under the 300-line ESLint ceiling.
  */
 import type { NotificationService } from '../notifications/notification.service';
 import type { NotificationDedupService } from '../notifications/notification-dedup.service';
@@ -54,7 +56,7 @@ export async function sendSchedulingReminder(
   if (await deps.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
   await deps.notificationService.create({
     userId,
-    type: 'community_lineup',
+    type: 'scheduling_poll',
     title: 'Scheduling Reminder',
     message: 'Your match is waiting -- pick a time!',
     // lineupId + matchId are both required for the web notification
@@ -85,14 +87,14 @@ export async function sendManualSchedulingReminder(
   if (alreadySent) return false;
   const created = await deps.notificationService.create({
     userId,
-    type: 'community_lineup',
+    type: 'scheduling_poll',
     title: 'Scheduling Reminder',
     message: 'Your match is waiting -- pick a time!',
     // lineupId + matchId are both required for the web notification
     // click-through (/community-lineup/:lineupId/schedule/:matchId).
     payload: { subtype: 'lineup_scheduling_reminder', lineupId, matchId },
   });
-  // create() returns null when the recipient disabled community_lineup
+  // create() returns null when the recipient disabled scheduling_poll
   // in-app notifications — this path reports counts to the actor's toast,
   // so a suppressed recipient must count as skipped, not reminded.
   return created != null;
