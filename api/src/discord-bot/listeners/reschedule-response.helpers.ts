@@ -12,6 +12,10 @@ import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { SignupsService } from '../../events/signups.service';
+import {
+  EVENT_ENDED_SIGNUP_MESSAGE,
+  isEventOver,
+} from '../../events/event-ended.helpers';
 import { CharactersService } from '../../characters/characters.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
@@ -33,6 +37,23 @@ export interface EventRow {
   cancelledAt: Date | null;
   gameId: number | null;
   slotConfig: unknown;
+}
+
+/** The reschedule lookup's row, with what `isEventOver` reads. */
+export interface RescheduleEventRow extends EventRow {
+  duration: [Date, Date];
+  extendedUntil: Date | null;
+  adHocStatus: string | null;
+}
+
+/** Tell a Confirm/Tentative press the event is over; true when it was. */
+export async function replyIfEventEnded(
+  i: ButtonInteraction,
+  event: RescheduleEventRow,
+): Promise<boolean> {
+  if (!isEventOver(event)) return false;
+  await i.editReply({ content: EVENT_ENDED_SIGNUP_MESSAGE });
+  return true;
 }
 
 /** Dependencies shared across reschedule handler functions. */
@@ -267,7 +288,7 @@ type DmState = 'confirmed' | 'tentative' | 'declined';
 export async function lookupRescheduleEvent(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
-): Promise<EventRow | null> {
+): Promise<RescheduleEventRow | null> {
   const [event] = await db
     .select({
       id: schema.events.id,
@@ -275,6 +296,9 @@ export async function lookupRescheduleEvent(
       cancelledAt: schema.events.cancelledAt,
       gameId: schema.events.gameId,
       slotConfig: schema.events.slotConfig,
+      duration: schema.events.duration,
+      extendedUntil: schema.events.extendedUntil,
+      adHocStatus: schema.events.adHocStatus,
     })
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
