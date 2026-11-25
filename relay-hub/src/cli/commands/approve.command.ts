@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type {
   ApproveOutcome,
   InstancesRepository,
@@ -22,6 +23,10 @@ export async function runApprove(
   if (!id) {
     io.err('hub-admin approve: missing <instanceId>');
     return 2;
+  }
+  if (!z.uuid().safeParse(id).success) {
+    io.err(`hub-admin approve: ${id} is not an instance id (expected a UUID)`);
+    return 1;
   }
   const { ok, text } = MESSAGES[await repo.approve(id)];
   const line = `Instance ${id} ${text}.`;

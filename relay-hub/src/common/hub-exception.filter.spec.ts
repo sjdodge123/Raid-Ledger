@@ -71,6 +71,11 @@ describe('HubExceptionFilter (ROK-1671 L7)', () => {
     filter.catch(new BadRequestException('Unexpected token } in JSON'), host);
     expect(sent).toEqual({ status: 400, body: { error: 'validation_failed' } });
   });
+});
+
+describe('HubExceptionFilter non-Nest http-errors (ROK-1671)', () => {
+  const filter = new HubExceptionFilter();
+
   it.each([
     [413, 'request entity too large', 'unknown'],
     [415, 'unsupported charset "UTF-7"', 'unknown'],

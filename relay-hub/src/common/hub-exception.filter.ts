@@ -49,8 +49,9 @@ function describeError(err: unknown): string {
 /**
  * One error shape for every hub endpoint (L7, ROK-1671): hub errors pass
  * through, Nest's own errors become `{error}` with their status, and anything
- * else is a 500 `{error: 'unknown'}` unless it carries a 4xx `statusCode`. Messages of unexpected errors are never
- * sent or logged: a driver error can carry column values (a token hash).
+ * else is a 500 `{error: 'unknown'}` unless it carries a 4xx `statusCode`.
+ * Messages of unexpected errors are never sent or logged: a driver error
+ * can carry column values (a token hash).
  */
 @Catch()
 export class HubExceptionFilter implements ExceptionFilter {

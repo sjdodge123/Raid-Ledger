@@ -79,7 +79,9 @@ describe('hub-admin dispatcher (ROK-1671)', () => {
     ]);
     expect(h.out.join('\n')).not.toContain('deadbeef');
   });
+});
 
+describe('hub-admin approve (ROK-1671)', () => {
   it.each([
     ['approved', 0],
     ['already_approved', 0],
@@ -97,6 +99,15 @@ describe('hub-admin dispatcher (ROK-1671)', () => {
     const h = harness();
     expect(await h.run('approve')).toBe(2);
     expect(h.repo.approve).not.toHaveBeenCalled();
+  });
+
+  it('approve <non-uuid> exits 1 with one clean line and no DB call', async () => {
+    const h = harness();
+    expect(await h.run('approve', 'not-a-uuid')).toBe(1);
+    expect(h.repo.approve).not.toHaveBeenCalled();
+    expect(h.err).toEqual([
+      'hub-admin approve: not-a-uuid is not an instance id (expected a UUID)',
+    ]);
   });
 
   it('a DB failure is one error line and exit 1', async () => {
