@@ -1,5 +1,5 @@
-// Integration specs run on a UTC clock, like api's (ROK-1595). No DB yet:
-// RH-2b (ROK-1670) adds Postgres and a globalSetup.
+// Integration specs run on a UTC clock, like api's (ROK-1595). They need
+// DATABASE_URL: each file creates its own throwaway database (ROK-1670 L10).
 process.env.TZ = 'UTC';
 
 const base = require('./jest.config.js');
@@ -9,6 +9,6 @@ module.exports = {
   ...base,
   testRegex: '.*\\.integration\\.spec\\.ts$',
   testPathIgnorePatterns: [],
-  testTimeout: 30_000,
+  testTimeout: 60_000,
   forceExit: true,
 };

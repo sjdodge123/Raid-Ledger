@@ -1,3 +1,4 @@
+import './sentry/instrument'; // MUST be first — installs Sentry before Nest loads
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
