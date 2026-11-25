@@ -43,17 +43,17 @@ export class EpochCache {
     const raw = new Promise<string | undefined>((resolve) => {
       resolve(this.read());
     });
-    const result = withTimeout(raw, this.timeoutMs).then(
-      (value) => {
-        if (value !== undefined) this.cached = value;
-        return value;
-      },
-      () => undefined,
-    );
+    // Cache on the RAW read, so a value that lands after `timeoutMs` (the
+    // caller already got undefined) is still kept for the next caller.
+    const settled = raw.then((value) => {
+      if (value !== undefined) this.cached = value;
+      return value;
+    });
+    const result = withTimeout(settled, this.timeoutMs).catch(() => undefined);
     const clear = (): void => {
       if (this.inflight?.result === result) this.inflight = undefined;
     };
-    raw.then(clear, clear);
+    settled.then(clear, clear);
     return result;
   }
 }

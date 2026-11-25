@@ -67,4 +67,20 @@ describe('EpochCache single-flight', () => {
     expect(await cache.current()).toBe('2026-09-23T00:00:00Z');
     expect(read).toHaveBeenCalledTimes(2);
   });
+
+  it('caches a read that settles after the timeout, without a second read', async () => {
+    const read = jest
+      .fn<Promise<string | undefined>, []>()
+      .mockReturnValueOnce(
+        new Promise((resolve) =>
+          setTimeout(() => resolve('2026-09-23T00:00:00Z'), 30),
+        ),
+      )
+      .mockResolvedValue(undefined);
+    const cache = new EpochCache(read, 10, 60_000);
+    expect(await cache.current()).toBeUndefined();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await cache.current()).toBe('2026-09-23T00:00:00Z');
+    expect(read).toHaveBeenCalledTimes(1);
+  });
 });
