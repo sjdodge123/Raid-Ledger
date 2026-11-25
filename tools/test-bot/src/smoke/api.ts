@@ -135,9 +135,18 @@ export class ApiClient {
     return parseJson<T>('GET', path, await this.request('GET', path));
   }
 
-  async post<T = unknown>(path: string, body?: unknown): Promise<T> {
+  /**
+   * @param opts.timeoutMs - overrides the client's per-request limit, for a
+   *   route that legitimately runs long (reset-to-seed, demo install).
+   */
+  async post<T = unknown>(
+    path: string,
+    body?: unknown,
+    opts?: { timeoutMs?: number },
+  ): Promise<T> {
     const json = body ? JSON.stringify(body) : undefined;
-    return parseJson<T>('POST', path, await this.request('POST', path, json));
+    const res = await this.request('POST', path, json, opts?.timeoutMs);
+    return parseJson<T>('POST', path, res);
   }
 
   /** POST to a 204 No Content route: there is no body to parse. */
@@ -170,9 +179,14 @@ export class ApiClient {
    * throws the original 401 error with the re-login failure as its cause.
    * No other status is ever re-sent.
    */
-  private async request(method: Method, path: string, body?: string): Promise<Response> {
+  private async request(
+    method: Method,
+    path: string,
+    body?: string,
+    timeoutMs: number = this.timeoutMs,
+  ): Promise<Response> {
     const sentWith = this.token;
-    let res = await this.send(method, path, body);
+    let res = await this.send(method, path, body, timeoutMs);
     if (res.status === 401 && this.relogin) {
       const original = await httpError(method, path, res);
       try {
@@ -180,7 +194,7 @@ export class ApiClient {
       } catch (err) {
         throw new Error(original.message, { cause: err });
       }
-      res = await this.send(method, path, body);
+      res = await this.send(method, path, body, timeoutMs);
     }
     if (!res.ok) throw await httpError(method, path, res);
     return res;
@@ -206,7 +220,12 @@ export class ApiClient {
     return this.reloginInFlight;
   }
 
-  private send(method: Method, path: string, body?: string): Promise<Response> {
+  private send(
+    method: Method,
+    path: string,
+    body: string | undefined,
+    timeoutMs: number,
+  ): Promise<Response> {
     const init: RequestInit = {
       method,
       headers: {
@@ -215,6 +234,6 @@ export class ApiClient {
       },
       ...(body !== undefined && { body }),
     };
-    return fetchNamed(method, path, `${this.baseUrl}${path}`, init, this.timeoutMs);
+    return fetchNamed(method, path, `${this.baseUrl}${path}`, init, timeoutMs);
   }
 }

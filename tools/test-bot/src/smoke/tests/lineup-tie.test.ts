@@ -23,6 +23,7 @@ import {
 } from '../../helpers/messages.js';
 import { awaitProcessing, assertConditionNeverMet } from '../fixtures.js';
 import { pollForCondition, pollForEmbed } from '../../helpers/polling.js';
+import { SmokeAssertionError } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { ApiClient } from '../api.js';
 import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
@@ -256,7 +257,12 @@ const tiePickEditsSameMessage: SmokeTest = {
       const edited = await pollForCondition(
         async () => {
           const same = await readMessageById(ctx.defaultChannelId, messageId);
-          return same && /DECIDED/.test(embedText(same)) ? same : null;
+          if (!same) {
+            throw new SmokeAssertionError(
+              `Tie message ${messageId} for "${title}" was deleted before the pick edited it`,
+            );
+          }
+          return /DECIDED/.test(embedText(same)) ? same : null;
         },
         ctx.config.timeoutMs,
         { intervalMs: 1500 },

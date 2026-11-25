@@ -58,7 +58,13 @@ for (const file of files) {
   const source = readFileSync(new URL(file, TESTS_DIR), 'utf8');
   if (!source.includes(GRACE_LITERAL)) continue;
   const alias = keyAliasOf(source);
-  mutators.push(...chunksOf(file, source).filter((c) => touchesGrace(c, alias)));
+  const found = chunksOf(file, source).filter((c) => touchesGrace(c, alias));
+  assert.ok(
+    found.length > 0,
+    `${file} mentions ${GRACE_LITERAL} but no \`const X: SmokeTest = {\` chunk ` +
+      'touches it — the scan has drifted from how this file declares its tests',
+  );
+  mutators.push(...found);
 }
 
 assert.ok(

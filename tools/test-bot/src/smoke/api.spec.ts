@@ -281,6 +281,15 @@ await test('a request with no response times out naming the verb, the path and t
   assert.equal(calls.length, 1, `a timed-out request must not be re-sent: expected 1 fetch, got ${calls.length}`);
 });
 
+await test('post() honours a per-request timeout override over the client default', async () => {
+  stubHangingFetch();
+  const quick = new ApiClient(BASE, 'test-token', 30);
+  const started = Date.now();
+  const err = await rejectionOf(quick.post('/admin/test/reset-to-seed', {}, { timeoutMs: 120 }), 'post()');
+  assert.equal(messageOf(err), 'POST /admin/test/reset-to-seed → no response after 120ms (client timeout)');
+  assert.ok(Date.now() - started >= 100, 'the override must replace the 30ms client default');
+});
+
 await test('a transport failure names the request instead of a bare "fetch failed"', async () => {
   globalThis.fetch = (() => Promise.reject(new TypeError('fetch failed'))) as typeof fetch;
   const err = await rejectionOf(api.get('/events/7'), 'get()');
