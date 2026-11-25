@@ -220,7 +220,7 @@ describe('POST /lfg with an active grouping adapter (AC3)', () => {
 
     const again = await post(alice, game.id, 'dungeon:1');
 
-    expect(again.status).toBe(201);
+    expect(again.status).toBe(200);
     expect(await activeKeys(alice.userId, game.id)).toEqual(held);
   });
 
