@@ -10,7 +10,8 @@ describe('NotificationMatrixDemo (ROK-2311)', () => {
         expect(within(demo).getByRole('region', { name: 'Lineups & polls' })).toBeInTheDocument();
         const lfg = demo.querySelector<HTMLElement>('#notif-lineup_lfg_offer');
         if (!lfg) throw new Error('in-app-only row not rendered');
-        expect(within(lfg).getByTestId('notif-not-offered-push')).toHaveTextContent('Not sent by Push');
+        expect(within(lfg).getByTestId('notif-not-offered-discord')).toHaveTextContent('Not sent by Discord');
+        expect(within(demo).queryByTestId('notif-not-offered-push')).toBeNull();
         const dm = demo.querySelector<HTMLElement>('#notif-valheim_claim_suggestion');
         if (!dm) throw new Error('DM-only row not rendered');
         expect(within(dm).getAllByRole('button')).toHaveLength(1);
@@ -37,8 +38,7 @@ describe('NotificationMatrixDemo (ROK-2311)', () => {
         const names = within(row).getAllByRole('button').map((b) => b.getAttribute('aria-label'));
         expect(names).toEqual([
             'Disable Scheduling polls In-App notifications',
-            'Enable Scheduling polls Push notifications',
-            'Disable Scheduling polls Discord notifications',
+            'Enable Scheduling polls Discord notifications',
         ]);
         const on = within(row).getByRole('button', { name: 'Disable Scheduling polls In-App notifications' });
         expect(on.className).toContain('text-success');

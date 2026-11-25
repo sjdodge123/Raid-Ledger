@@ -15,13 +15,13 @@ export interface NotificationTypeGroup {
 
 /**
  * ROK-2311 — rows whose notice never leaves the bell (no Discord DM, no push).
- * Their row hides the Push and Discord switches, so the caption can never read "Discord DM only".
+ * Their row hides the Discord switch, so the caption can never read "Discord DM only".
  */
 export const IN_APP_ONLY_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>(['lineup_lfg_offer']);
 
 /**
  * ROK-2311 — the inverse: rows whose notice is only ever a Discord DM (never the bell, never pushed).
- * Their row hides the bell and Push switches and keeps only Discord.
+ * Their row hides the bell switch and keeps only Discord.
  */
 export const DM_ONLY_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>(['valheim_claim_suggestion']);
 
