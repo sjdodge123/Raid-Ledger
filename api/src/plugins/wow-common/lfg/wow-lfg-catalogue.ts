@@ -62,7 +62,9 @@ export function wowVariantForSlug(slug: string): WowGameVariant | null {
  *
  * @param inst - The instance.
  */
-export function wowGroupKey(inst: Pick<WowLfgInstance, 'category' | 'id'>): string {
+export function wowGroupKey(
+  inst: Pick<WowLfgInstance, 'category' | 'id'>,
+): string {
   return `${inst.category}:${inst.id}`;
 }
 
@@ -131,6 +133,8 @@ export function toWowGroupDescriptor(inst: WowLfgInstance): LfgGroupDescriptor {
     kind: inst.category,
     size: wowInstanceSize(inst),
     rosterShape: wowRosterShapeForSize(inst.maxPlayers, inst.category),
-    ...(lo != null && hi != null ? { levelRange: [lo, hi] as [number, number] } : {}),
+    ...(lo != null && hi != null
+      ? { levelRange: [lo, hi] as [number, number] }
+      : {}),
   };
 }

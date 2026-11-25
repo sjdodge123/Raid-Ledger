@@ -97,7 +97,10 @@ export async function upsertWowHandDetail(
   await db
     .insert(schema.wowLfgHandDetails)
     .values({ intentId, ...values })
-    .onConflictDoUpdate({ target: schema.wowLfgHandDetails.intentId, set: values });
+    .onConflictDoUpdate({
+      target: schema.wowLfgHandDetails.intentId,
+      set: values,
+    });
 }
 
 /**
@@ -180,5 +183,7 @@ export async function readWowLastDetail(
     .where(and(eq(i.userId, who.userId), eq(i.gameId, who.gameId)))
     .orderBy(desc(d.updatedAt))
     .limit(1);
-  return row ? { roles: row.roles.filter(isWowRole), characterId: row.characterId } : null;
+  return row
+    ? { roles: row.roles.filter(isWowRole), characterId: row.characterId }
+    : null;
 }

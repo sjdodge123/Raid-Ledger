@@ -122,7 +122,9 @@ export class WowLfgGroupingAdapter implements LfgGroupingAdapter {
   ): Promise<WowLfgInstance[]> {
     const variant = wowVariantForSlug(slug);
     if (variant === null) return [];
-    return catalogueInstancesFor(variant) ?? this.journalInstances(variant, region);
+    return (
+      catalogueInstancesFor(variant) ?? this.journalInstances(variant, region)
+    );
   }
 
   private async journalInstances(
@@ -130,20 +132,27 @@ export class WowLfgGroupingAdapter implements LfgGroupingAdapter {
     region = WOW_LFG_DEFAULT_REGION,
   ): Promise<WowLfgInstance[]> {
     try {
-      const { dungeons, raids } = await this.blizzard.fetchAllInstances(region, variant);
-      const as = (category: 'dungeon' | 'raid') => (i: (typeof dungeons)[number]): WowLfgInstance => ({
-        id: i.id,
-        name: i.name,
-        ...(i.shortName !== undefined ? { shortName: i.shortName } : {}),
-        expansion: i.expansion,
-        category,
-        maxPlayers: null,
-        minimumLevel: i.minimumLevel ?? null,
-        maximumLevel: i.maximumLevel ?? null,
-      });
+      const { dungeons, raids } = await this.blizzard.fetchAllInstances(
+        region,
+        variant,
+      );
+      const as =
+        (category: 'dungeon' | 'raid') =>
+        (i: (typeof dungeons)[number]): WowLfgInstance => ({
+          id: i.id,
+          name: i.name,
+          ...(i.shortName !== undefined ? { shortName: i.shortName } : {}),
+          expansion: i.expansion,
+          category,
+          maxPlayers: null,
+          minimumLevel: i.minimumLevel ?? null,
+          maximumLevel: i.maximumLevel ?? null,
+        });
       return [...dungeons.map(as('dungeon')), ...raids.map(as('raid'))];
     } catch (err) {
-      this.logger.warn(`WoW LFG journal unavailable (${variant}/${region}): ${String(err)}`);
+      this.logger.warn(
+        `WoW LFG journal unavailable (${variant}/${region}): ${String(err)}`,
+      );
       return [];
     }
   }

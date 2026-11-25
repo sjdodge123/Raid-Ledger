@@ -3,7 +3,10 @@
  * event: an `mmo` roster in the instance's shape, the instance as the event's
  * content, and the instance name as the title.
  */
-import { wowRosterShapeForSize, type SlotConfigDto } from '@raid-ledger/contract';
+import {
+  wowRosterShapeForSize,
+  type SlotConfigDto,
+} from '@raid-ledger/contract';
 import type { WowLfgInstance } from './wow-lfg-catalogue';
 
 /** The non-carryover half of a WoW `LfgLockInPatch`. */

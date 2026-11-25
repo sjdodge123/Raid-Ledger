@@ -9,8 +9,15 @@ const CHAR = '00000000-0000-4000-8000-000000000001';
 
 describe('parseWowHandDetail', () => {
   it('accepts 1..3 distinct roles with or without a character', () => {
-    expect(parseWowHandDetail({ roles: ['tank'] })).toEqual({ roles: ['tank'] });
-    expect(parseWowHandDetail({ roles: ['tank', 'healer', 'dps'], characterId: CHAR })).toEqual({
+    expect(parseWowHandDetail({ roles: ['tank'] })).toEqual({
+      roles: ['tank'],
+    });
+    expect(
+      parseWowHandDetail({
+        roles: ['tank', 'healer', 'dps'],
+        characterId: CHAR,
+      }),
+    ).toEqual({
       roles: ['tank', 'healer', 'dps'],
       characterId: CHAR,
     });

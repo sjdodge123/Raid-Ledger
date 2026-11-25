@@ -26,7 +26,9 @@ const inst = (over: Partial<WowLfgInstance>): WowLfgInstance => ({
 
 describe('wowVariantForSlug', () => {
   it('maps every WoW slug the plugin registers to a variant', () => {
-    expect(ALL_WOW_GAME_SLUGS.filter((s) => wowVariantForSlug(s) === null)).toEqual([]);
+    expect(
+      ALL_WOW_GAME_SLUGS.filter((s) => wowVariantForSlug(s) === null),
+    ).toEqual([]);
   });
 
   it('treats world-of-warcraft-classic as Classic Era, Forever as wow_forever', () => {
@@ -39,13 +41,20 @@ describe('wowVariantForSlug', () => {
 describe('group keys', () => {
   it('mints and parses dungeon/raid keys', () => {
     expect(wowGroupKey({ category: 'raid', id: 409 })).toBe('raid:409');
-    expect(parseWowGroupKey('dungeon:36')).toEqual({ category: 'dungeon', id: 36 });
+    expect(parseWowGroupKey('dungeon:36')).toEqual({
+      category: 'dungeon',
+      id: 36,
+    });
   });
 
-  it.each(['', 'dungeon:', 'dungeon:0', 'arena:3', 'raid:12:heroic', 'dungeon:abc'])(
-    'rejects %p',
-    (key) => expect(parseWowGroupKey(key)).toBeNull(),
-  );
+  it.each([
+    '',
+    'dungeon:',
+    'dungeon:0',
+    'arena:3',
+    'raid:12:heroic',
+    'dungeon:abc',
+  ])('rejects %p', (key) => expect(parseWowGroupKey(key)).toBeNull());
 });
 
 describe('catalogueInstancesFor', () => {
@@ -54,7 +63,9 @@ describe('catalogueInstancesFor', () => {
     const firstRaid = rows.findIndex((r) => r.category === 'raid');
     expect(rows.some((r) => r.category === 'dungeon')).toBe(true);
     expect(firstRaid).toBeGreaterThan(0);
-    expect(rows.slice(firstRaid).every((r) => r.category === 'raid')).toBe(true);
+    expect(rows.slice(firstRaid).every((r) => r.category === 'raid')).toBe(
+      true,
+    );
   });
 
   it('is null for journal-served variants', () => {
@@ -76,9 +87,13 @@ describe('toWowGroupDescriptor', () => {
   });
 
   it('shapes a 40-man raid 4/10/26 and a sizeless raid as 10', () => {
-    const mc = toWowGroupDescriptor(inst({ id: 409, category: 'raid', maxPlayers: 40 }));
+    const mc = toWowGroupDescriptor(
+      inst({ id: 409, category: 'raid', maxPlayers: 40 }),
+    );
     expect(mc.rosterShape).toEqual({ tank: 4, healer: 10, dps: 26 });
-    const journal = toWowGroupDescriptor(inst({ category: 'raid', maxPlayers: null, minimumLevel: null }));
+    const journal = toWowGroupDescriptor(
+      inst({ category: 'raid', maxPlayers: null, minimumLevel: null }),
+    );
     expect(journal.size).toBe(10);
     expect(journal.levelRange).toBeUndefined();
   });
@@ -95,7 +110,9 @@ describe('buildWowLockInFields', () => {
   });
 
   it('locks a 40-man raid into 4/10/26', () => {
-    const f = buildWowLockInFields(inst({ id: 409, name: 'Molten Core', category: 'raid', maxPlayers: 40 }));
+    const f = buildWowLockInFields(
+      inst({ id: 409, name: 'Molten Core', category: 'raid', maxPlayers: 40 }),
+    );
     expect(f.slotConfig).toEqual({ type: 'mmo', tank: 4, healer: 10, dps: 26 });
   });
 });
