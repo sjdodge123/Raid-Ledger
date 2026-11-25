@@ -15,6 +15,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -24,11 +25,15 @@ import type { Response } from 'express';
 import {
   ConvertLfgIntentsSchema,
   CreateLfgIntentSchema,
+  LfgDeleteGroupQuerySchema,
+  LfgGroupListQuerySchema,
+  LfgGroupQuerySchema,
   LfgInviteRequestSchema,
   type LfgInviteResponseDto,
   type LfgConvertResponseDto,
   type LfgClearOfferDto,
   type LfgGroupDetailDto,
+  type LfgGroupListResponseDto,
   type LfgGroupSummaryDto,
   type LfgHeartedGameDto,
   type LfgIntentResponseDto,
@@ -41,6 +46,7 @@ import type { AuthenticatedRequest } from '../auth/types';
 import { LfgService } from './lfg.service';
 import { LfgReadsService } from './lfg-reads.service';
 import { LfgInviteService } from './lfg-invite.service';
+import { parseQuery } from './lfg-query-parse.helpers';
 
 @Controller('lfg')
 @UseGuards(AuthGuard('jwt'))
@@ -115,13 +121,30 @@ export class LfgController {
     return this.service.listOffers(req.user.id);
   }
 
-  /** Group detail. 200 with a zero-count group when nobody is looking. */
+  /** Group detail (`?group=`, default `''`). 200 with a zero-count group when nobody is looking. */
   @Get(':gameId')
   getGroup(
     @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
     @Req() req: AuthenticatedRequest,
   ): Promise<LfgGroupDetailDto> {
-    return this.service.getGroupDetail(req.user.id, gameId);
+    const { group } = parseQuery(LfgGroupQuerySchema, query);
+    return this.service.getGroupDetail(req.user.id, gameId, group);
+  }
+
+  /** ROK-2352: the game's groups, `''` first; `?include=catalogue` adds empty ones. */
+  @Get(':gameId/groups')
+  listGameGroups(
+    @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<LfgGroupListResponseDto> {
+    const { include } = parseQuery(LfgGroupListQuerySchema, query);
+    return this.reads.listGameGroups(
+      req.user.id,
+      gameId,
+      include === 'catalogue',
+    );
   }
 
   /** Group-page read: the windows the live roster could all play in. */
@@ -155,9 +178,11 @@ export class LfgController {
   @HttpCode(HttpStatus.NO_CONTENT)
   withdraw(
     @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
-    return this.service.withdraw(req.user.id, gameId);
+    const { group } = parseQuery(LfgDeleteGroupQuerySchema, query);
+    return this.service.withdraw(req.user.id, gameId, group);
   }
 
   /**

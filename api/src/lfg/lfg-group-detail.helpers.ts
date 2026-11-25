@@ -15,7 +15,28 @@ import {
   listGroupMembers,
   type LfgDb,
 } from './lfg-query.helpers';
-import { findActiveIntent, toIntentDto } from './lfg-write.helpers';
+import { toIntentDto } from './lfg-write.helpers';
+import {
+  findOwnLiveHand,
+  listOwnOtherGroups,
+  resolveDetailGroup,
+  type LfgDetailGroup,
+} from './lfg-group-scope.helpers';
+import {
+  resolveLfgGrouping,
+  type LfgGroupingRegistry,
+} from './lfg-grouping.helpers';
+
+/** `?group` → the scope + label, folding when the game has no active adapter. */
+function resolveGroupFor(
+  game: typeof schema.games.$inferSelect,
+  grouping?: { registry: LfgGroupingRegistry; groupKey: string | undefined },
+): Promise<LfgDetailGroup> {
+  if (!grouping) return Promise.resolve({ scope: null, label: null });
+  const adapter = resolveLfgGrouping(grouping.registry, game.slug);
+  const ctx = { gameId: game.id, gameSlug: game.slug };
+  return resolveDetailGroup(adapter, ctx, grouping.groupKey);
+}
 
 /**
  * Summary, roster, the caller's own live row, the forum thread, the converted
@@ -25,24 +46,32 @@ import { findActiveIntent, toIntentDto } from './lfg-write.helpers';
  * @param game - The already-loaded game row.
  * @param userId - The caller; drives `ownIntent` and `pressWouldSpawnNow`.
  * @param configuredEmoji - The admin indicator-emoji setting (raw), or null.
+ * @param grouping - ROK-2352: registry + `?group`; absent = the whole game, folded.
  */
 export async function readGroupDetail(
   db: LfgDb,
   game: typeof schema.games.$inferSelect,
   userId: number,
   configuredEmoji: string | null = null,
+  grouping?: { registry: LfgGroupingRegistry; groupKey: string | undefined },
 ): Promise<LfgGroupDetailDto> {
-  const [summary, members, own, threadId, convertedEvent] = await Promise.all([
-    getGroupSummary(db, game, userId),
-    listGroupMembers(db, game.id),
-    findActiveIntent(db, userId, game.id),
-    findOpenForumThreadId(db, game.id),
-    readConvertedEvent(db, game.id),
-  ]);
-  const live = own && own.expiresAt > new Date() ? own : null;
+  const group = await resolveGroupFor(game, grouping);
+  const { scope } = group;
+  const [summary, members, live, threadId, convertedEvent, others] =
+    await Promise.all([
+      getGroupSummary(db, game, userId, scope),
+      listGroupMembers(db, game.id, scope),
+      findOwnLiveHand(db, userId, game.id, scope),
+      findOpenForumThreadId(db, game.id),
+      readConvertedEvent(db, game.id),
+      listOwnOtherGroups(db, userId, game.id, group),
+    ]);
   const spawns = groupReadPressWouldSpawnNow(summary, live?.urgency === 'now');
   return {
     ...summary,
+    groupKey: scope ?? '',
+    groupLabel: group.label,
+    ...(group.describe ? { ownOtherGroups: others } : {}),
     members,
     ownIntent: live ? toIntentDto(live) : null,
     threadId,

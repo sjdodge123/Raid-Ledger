@@ -15,11 +15,15 @@ import type {
   LfgHistoryResponseDto,
   LfgOverlapResponseDto,
   LfgSuggestionsResponseDto,
+  LfgGroupListResponseDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
-import { requireGame } from './lfg-query.helpers';
+import { requireGame, requireVisibleGame } from './lfg-query.helpers';
+import { readGroupList } from './lfg-group-list.helpers';
+import { resolveLfgGrouping } from './lfg-grouping.helpers';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { buildOverlapResponse } from './lfg-overlap-grid.helpers';
 import { listGameHistory } from './lfg-history.helpers';
 import { listSuggestions } from './lfg-suggestions.helpers';
@@ -30,6 +34,7 @@ export class LfgReadsService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
+    private readonly pluginRegistry: PluginRegistryService,
   ) {}
 
   /**
@@ -72,5 +77,23 @@ export class LfgReadsService {
       gameId,
       suggestions: await listSuggestions(this.db, gameId, userId),
     };
+  }
+
+  /**
+   * ROK-2352 `GET /lfg/:gameId/groups` — the game's groups, `''` first. A
+   * game with no active `lfg-grouping` adapter is one folded group.
+   *
+   * @param userId - Caller, for `hasOwnIntent`.
+   * @param gameId - The (visible) game.
+   * @param includeCatalogue - `?include=catalogue` adds empty groups.
+   */
+  async listGameGroups(
+    userId: number,
+    gameId: number,
+    includeCatalogue: boolean,
+  ): Promise<LfgGroupListResponseDto> {
+    const game = await requireVisibleGame(this.db, gameId);
+    const adapter = resolveLfgGrouping(this.pluginRegistry, game.slug);
+    return readGroupList(this.db, game, userId, adapter, includeCatalogue);
   }
 }

@@ -164,6 +164,7 @@ export function toIntentDto(row: LfgIntentRow): LfgIntentDto {
     id: row.id,
     userId: row.userId,
     gameId: row.gameId,
+    groupKey: row.groupKey,
     status: row.status as LfgIntentStatus,
     visibility: row.visibility as LfgIntentDto['visibility'],
     createdAt: row.createdAt.toISOString(),
@@ -266,33 +267,7 @@ export async function reviveIntent(
   return defined(row, 'revived intent row');
 }
 
-/**
- * Withdraw: flip the caller's active row to `cleared`. Never touches anyone
- * else's row.
- *
- * @param db - Drizzle handle.
- * @param userId - Intent holder.
- * @param gameId - Game to withdraw from.
- * @returns True when a row was cleared, false when the caller held none.
- */
-export async function clearIntent(
-  db: LfgDb,
-  userId: number,
-  gameId: number,
-): Promise<boolean> {
-  const rows = await db
-    .update(schema.lfgIntents)
-    .set({ status: 'cleared' })
-    .where(
-      and(
-        eq(schema.lfgIntents.userId, userId),
-        eq(schema.lfgIntents.gameId, gameId),
-        eq(schema.lfgIntents.status, 'active'),
-      ),
-    )
-    .returning({ id: schema.lfgIntents.id });
-  return rows.length > 0;
-}
+export { clearIntent } from './lfg-group-scope.helpers';
 
 /**
  * Conversion (AC8): flip every LIVE intent on the game to `converted` and
