@@ -32,7 +32,10 @@
 #                                        # the diff vs origin/main touches
 #                                        # (scripts/scoped-gate-plan.mjs maps
 #                                        # paths to targets; scripts/smoke/** ->
-#                                        # the smoke tsconfig only, docs -> none).
+#                                        # the smoke tsconfig only, other
+#                                        # scripts/** -> shell parse, node:test
+#                                        # specs + scripts/test/run-all.sh,
+#                                        # docs -> none).
 #                                        # REFUSES (exit 2, naming --static or
 #                                        # --full) on contract, migrations,
 #                                        # package*.json, Dockerfile/nginx/
@@ -939,6 +942,19 @@ run_script_node_specs() {
     return 0
   fi
   (cd "$REPO_ROOT" && node --test "${specs[@]}")
+}
+
+# scripts/test/*.test.sh behaviour harnesses, through the same entry point as
+# CI's `scripts-tests` job (scripts/test/run-all.sh). Shell parse and the
+# node:test specs cannot catch a harness break: on PR 2309 a new spec inherited
+# a harness's stub git and only CI went red. Run by the --scoped `scripts`
+# target. RL_SCRIPTS_SHELL_TESTS stops a harness from re-entering this step.
+run_scripts_shell_tests() {
+  if [ -n "${RL_SCRIPTS_SHELL_TESTS:-}" ]; then
+    echo "already inside scripts/test/run-all.sh — not re-entering"
+    return 0
+  fi
+  (cd "$REPO_ROOT" && RL_SCRIPTS_SHELL_TESTS=1 bash scripts/test/run-all.sh)
 }
 
 run_tools_tests() {
@@ -2869,6 +2885,7 @@ run_scoped_gate() {
   if _scoped_has scripts; then
     run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
     run_step "Script node:test specs (scripts/*.spec.mjs)" run_script_node_specs
+    run_step "Shell behaviour tests (scripts/test)" run_scripts_shell_tests
   fi
 }
 
