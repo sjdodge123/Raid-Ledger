@@ -1,0 +1,94 @@
+/**
+ * TDB L3350: Session Replay's rrweb Meta `href` cannot be scrubbed, so a
+ * replay segment recorded on a route whose address IS a secret must never be
+ * sent: the private poll share link, an invite code and the OAuth one-time
+ * code on /auth/success.
+ */
+import { describe, expect, it, vi } from 'vitest';
+import {
+    dropReplayOnSecretRoutes,
+    isSecretRouteUrl,
+    processReplayEvent,
+} from './sentry-replay-secret-routes';
+
+vi.mock('@sentry/react', () => ({
+    browserTracingIntegration: vi.fn(() => ({ name: 'BrowserTracing' })),
+    makeFetchTransport: vi.fn(() => ({ send: vi.fn(), flush: vi.fn() })),
+}));
+
+const SAFE_HREF = 'https://rl.test/events/42';
+const SHARE = 'https://rl.test/p/poll/AbCdEfGhIjKlMnOpQrSt';
+
+function replayEvent(urls: unknown[]): Record<string, unknown> {
+    return { type: 'replay_event', replay_id: 'r1', urls };
+}
+
+describe('isSecretRouteUrl', () => {
+    it.each([
+        SHARE,
+        '/p/poll/AbCdEfGhIjKlMnOpQrSt',
+        '/p/poll/[Filtered]',
+        'https://rl.test/i/ab23cd45',
+        'https://rl.test/auth/success?code=one-time-code',
+        '/auth/success',
+    ])('treats %s as a secret route', (url) => {
+        expect(isSecretRouteUrl(url)).toBe(true);
+    });
+
+    it.each([
+        SAFE_HREF,
+        '/events/1',
+        '/invites',
+        '/auth/successful-thing',
+        '/polls/7',
+        '/',
+    ])('treats %s as an ordinary route', (url) => {
+        expect(isSecretRouteUrl(url)).toBe(false);
+    });
+});
+
+describe('dropReplayOnSecretRoutes', () => {
+    it('drops a replay segment whose urls include a share-token page', () => {
+        expect(dropReplayOnSecretRoutes(replayEvent([SAFE_HREF, SHARE]), SAFE_HREF)).toBeNull();
+    });
+
+    it('drops a replay segment whose urls include an invite or auth-success page', () => {
+        const invite = replayEvent(['https://rl.test/i/ab23cd45']);
+        const auth = replayEvent(['/auth/success?code=xyz']);
+        expect(dropReplayOnSecretRoutes(invite, SAFE_HREF)).toBeNull();
+        expect(dropReplayOnSecretRoutes(auth, SAFE_HREF)).toBeNull();
+    });
+
+    it('drops a segment flushed while the tab is still on a secret route', () => {
+        expect(dropReplayOnSecretRoutes(replayEvent([]), SHARE)).toBeNull();
+    });
+
+    it('keeps a replay segment that never touched a secret route', () => {
+        const event = replayEvent([SAFE_HREF, '/events/43']);
+        expect(dropReplayOnSecretRoutes(event, SAFE_HREF)).toBe(event);
+    });
+
+    it('never drops a non-replay event (errors keep their scrubbed reporting)', () => {
+        const error = { type: undefined, request: { url: SHARE } };
+        expect(dropReplayOnSecretRoutes(error, SHARE)).toBe(error);
+    });
+});
+
+describe('processReplayEvent', () => {
+    it('drops a share-page segment', () => {
+        expect(processReplayEvent(replayEvent([SHARE]))).toBeNull();
+    });
+
+    it('scrubs the urls of a segment it keeps', () => {
+        const kept = processReplayEvent(replayEvent(['/join?token=abc']));
+        expect(kept).toEqual(expect.objectContaining({ urls: ['/join?token=[Filtered]'] }));
+    });
+
+    it('is the processEvent of the ScrubReplayUrls integration', async () => {
+        const { buildSentryOptions } = await import('./sentry-options');
+        const integrations = buildSentryOptions(() => undefined).integrations;
+        const list = Array.isArray(integrations) ? integrations : [];
+        const scrubber = list.find((i) => i.name === 'ScrubReplayUrls');
+        expect(scrubber?.processEvent).toBe(processReplayEvent);
+    });
+});
