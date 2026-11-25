@@ -27,7 +27,8 @@ export interface HubAuthedRequest {
 
 const BEARER = /^Bearer (\S+)$/;
 const isUuid = (id: string): boolean => z.uuid().safeParse(id).success;
-const invalid = (): HubHttpException =>
+/** The generic L2 401 body; shared so the guard and the routes cannot drift. */
+export const invalidToken = (): HubHttpException =>
   hubError(401, 'unknown', 'invalid_token');
 
 /** Constant-time compare of two hex hashes; a length mismatch is just false. */
@@ -51,12 +52,12 @@ export class HubBearerGuard implements CanActivate {
     const token = BEARER.exec(req.headers.authorization ?? '')?.[1];
     const id = req.params['id'];
     if (!token || !TOKEN_PATTERN.test(token) || !id || !isUuid(id)) {
-      throw invalid();
+      throw invalidToken();
     }
     const row = await this.repo.findById(id);
     const tokenHash = hashToken(token);
     if (!row?.tokenHash || !hashesMatch(row.tokenHash, tokenHash)) {
-      throw invalid();
+      throw invalidToken();
     }
     if (row.status === 'revoked') throw hubError(401, 'revoked');
     req.hubInstance = { instanceId: id, tokenHash, status: row.status };

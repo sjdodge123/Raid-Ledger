@@ -13,15 +13,17 @@ import {
   type HubHeartbeatRequest,
   type HubHeartbeatResponse,
 } from '@raid-ledger/contract';
-import { HubBearerGuard, type HubAuth } from '../auth/bearer.guard';
+import {
+  HubBearerGuard,
+  invalidToken,
+  type HubAuth,
+} from '../auth/bearer.guard';
 import { HubInstance } from '../auth/hub-instance.decorator';
 import { hubError } from '../common/hub-errors';
 import { ZodBodyPipe } from '../common/zod-body.pipe';
 import { EpochService } from '../health/epoch.service';
 import { InstancesLifecycleRepository } from './instances-lifecycle.repository';
 import type { EpochSource } from './instances.service';
-
-const gone = () => hubError(401, 'unknown', 'invalid_token');
 
 /** `POST /api/v1/instances/:id/heartbeat` and `DELETE /api/v1/instances/:id` (ROK-1672). */
 @Controller('v1/instances/:id')
@@ -49,7 +51,7 @@ export class HeartbeatController {
         body.version,
       ))
     ) {
-      throw gone();
+      throw invalidToken();
     }
     return {
       schemaVersion: HUB_SCHEMA_VERSION,
@@ -63,7 +65,7 @@ export class HeartbeatController {
   @HttpCode(204)
   async disconnect(@HubInstance() auth: HubAuth): Promise<void> {
     if (!(await this.lifecycle.disconnect(auth.instanceId, auth.tokenHash))) {
-      throw gone();
+      throw invalidToken();
     }
   }
 }
