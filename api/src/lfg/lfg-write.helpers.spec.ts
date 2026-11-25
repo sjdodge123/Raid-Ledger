@@ -41,6 +41,7 @@ function intentRow(overrides: Partial<LfgIntentRow> = {}): LfgIntentRow {
     id: 7,
     userId: 11,
     gameId: 22,
+    groupKey: '',
     status: 'active',
     visibility: 'local',
     urgency: 'week',

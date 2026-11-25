@@ -120,6 +120,7 @@ function seedOpenRow(overrides: Partial<LfmMessageRow> = {}): LfmMessageRow {
   const row: LfmMessageRow = {
     id: 'row-1',
     gameId: GAME_ID,
+    groupKey: '',
     guildId: 'guild-1',
     channelId: 'chan-1',
     messageId: 'msg-1',
@@ -168,6 +169,7 @@ function wireStore(): void {
       );
     }
     rows.push({
+      groupKey: '',
       ...input,
       threadId: input.threadId ?? null,
       postKind: input.postKind ?? 'text',

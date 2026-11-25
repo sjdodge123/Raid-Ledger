@@ -60,6 +60,7 @@ function row(overrides: Partial<LfmMessageRow> = {}): LfmMessageRow {
   return {
     id: 'row-1',
     gameId: 42,
+    groupKey: '',
     guildId: 'guild-1',
     channelId: THREAD_ID,
     messageId: 'starter-1',
