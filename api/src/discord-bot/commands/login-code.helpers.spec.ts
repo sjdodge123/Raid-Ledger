@@ -1,8 +1,11 @@
 /**
  * ROK-2370 — pure helpers for `/login code:` (copy, button id, attempt limit).
  */
+import { Logger } from '@nestjs/common';
 import { ButtonStyle } from 'discord.js';
 import {
+  SIGNIN_CODE_FAIL_GLOBAL_KEY,
+  noteFailedSigninCodeLookup,
   SIGNIN_CODE_APPROVE_LABEL,
   SIGNIN_CODE_ATTEMPT_MAX,
   SIGNIN_CODE_INVALID_COPY,
@@ -126,6 +129,7 @@ describe('signin-code flows', () => {
   } as const;
 
   function deps(over: Partial<SigninCodeDeps> = {}): SigninCodeDeps & {
+    redis: ReturnType<typeof fakeRedis>;
     store: { findPending: jest.Mock; approve: jest.Mock };
   } {
     return {
@@ -171,6 +175,7 @@ describe('signin-code flows', () => {
       content: SIGNIN_CODE_INVALID_COPY,
       components: [],
     });
+    expect(d.redis.keys.get(SIGNIN_CODE_FAIL_GLOBAL_KEY)).toBe(1);
   });
 
   it('a refused clicker gets the /login refusal and the code is NOT approved', async () => {
@@ -205,5 +210,22 @@ describe('signin-code flows', () => {
       content: SIGNIN_CODE_INVALID_COPY,
       components: [],
     });
+  });
+});
+
+describe('noteFailedSigninCodeLookup (spec: global brute-force alarm)', () => {
+  it('warns once, when the 51st failed lookup lands inside the window', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const redis = fakeRedis();
+    for (let i = 0; i < 50; i += 1) await noteFailedSigninCodeLookup(redis);
+    expect(warn).not.toHaveBeenCalled();
+    await noteFailedSigninCodeLookup(redis);
+    await noteFailedSigninCodeLookup(redis);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('51 failed code lookups');
+    expect(redis.expire).toHaveBeenCalledWith(SIGNIN_CODE_FAIL_GLOBAL_KEY, 600);
+    warn.mockRestore();
   });
 });

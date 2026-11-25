@@ -4,7 +4,10 @@
  * that read the code before another request consumed it.
  */
 import type Redis from 'ioredis';
-import { createRedisMock, type RedisMockHandle } from '../common/testing/redis-mock';
+import {
+  createRedisMock,
+  type RedisMockHandle,
+} from '../common/testing/redis-mock';
 import {
   approvalKey,
   codeKey,

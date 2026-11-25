@@ -5,6 +5,7 @@
  * it on the code, which the waiting browser tab then collects by polling.
  * The command class only wires services into {@link SigninCodeDeps}.
  */
+import { Logger } from '@nestjs/common';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import type {
   PendingSigninCode,
@@ -33,6 +34,34 @@ export const SIGNIN_CODE_APPROVE_LABEL = 'Yes, sign me in';
 /** One copy for unknown AND expired codes (no oracle). */
 export const SIGNIN_CODE_INVALID_COPY =
   "That code isn't valid or has expired. Start again on the sign-in page.";
+
+/** Spec: warn when more than 50 code lookups fail guild-wide in 10 minutes. */
+export const SIGNIN_CODE_FAIL_ALARM = 50;
+export const SIGNIN_CODE_FAIL_GLOBAL_KEY = 'signin-code:fail:global';
+
+const logger = new Logger('SigninCode');
+
+/**
+ * Count one failed code lookup guild-wide; the lookup that crosses
+ * {@link SIGNIN_CODE_FAIL_ALARM} inside the window logs one warning (a
+ * brute-force alarm — the per-member limit cannot see many accounts).
+ */
+export async function noteFailedSigninCodeLookup(
+  redis: LoginRateLimitRedis,
+): Promise<void> {
+  const count = await redis.incr(SIGNIN_CODE_FAIL_GLOBAL_KEY);
+  if (count === 1) {
+    await redis.expire(
+      SIGNIN_CODE_FAIL_GLOBAL_KEY,
+      SIGNIN_CODE_ATTEMPT_WINDOW_SECONDS,
+    );
+  }
+  if (count === SIGNIN_CODE_FAIL_ALARM + 1) {
+    logger.warn(
+      `signin-code: ${count} failed code lookups in 10 minutes (possible brute force)`,
+    );
+  }
+}
 
 /** Redis key of a member's code-attempt counter. */
 export function signinCodeAttemptKey(discordId: string): string {
@@ -179,7 +208,10 @@ export async function replyToSigninCode(
   }
   const code = normaliseSigninCode(typed);
   const pending = code ? await deps.store.findPending(code) : null;
-  if (!pending) return void (await reply(SIGNIN_CODE_INVALID_COPY));
+  if (!pending) {
+    await noteFailedSigninCodeLookup(deps.redis);
+    return void (await reply(SIGNIN_CODE_INVALID_COPY));
+  }
   await reply(signinCodeConfirmCopy(pending.code, displayName), [
     buildSigninCodeConfirmRow(pending.code),
   ]);

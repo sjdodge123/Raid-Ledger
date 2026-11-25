@@ -4,11 +4,13 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
+  Logger,
   Post,
   Req,
   Res,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { Request, Response } from 'express';
 import {
   SigninCodePollRequestSchema,
@@ -43,6 +45,8 @@ import { SigninCodeStore, type SigninCodeApproval } from './signin-code.store';
  */
 @Controller('auth/discord/signin-code')
 export class SigninCodeController {
+  private readonly logger = new Logger(SigninCodeController.name);
+
   constructor(
     private readonly store: SigninCodeStore,
     private readonly magicLinkService: MagicLinkService,
@@ -55,9 +59,10 @@ export class SigninCodeController {
   @RateLimit('signinStart')
   @Post()
   @HttpCode(HttpStatus.OK)
-  async start(): Promise<SigninCodeStartResponseDto> {
+  async start(@Req() req: Request): Promise<SigninCodeStartResponseDto> {
     const deviceSecret = generateDeviceSecret();
     const { code, expiresAt } = await this.store.create(deviceSecret);
+    this.logger.log(`signin-code started ip=${ipHash8(req.ip)}`);
     return {
       code,
       deviceSecret,
@@ -105,15 +110,27 @@ export class SigninCodeController {
       authService: this.authService,
       refreshService: this.refreshService,
     };
-    if (approval.kind === 'existing') {
-      const user: MagicLinkUser = await this.magicLinkService.redeem(
-        approval.token,
-      );
-      const msg = INVALID_MAGIC_LINK_MESSAGE;
-      return issueLinkSession(deps, user, 'magic', msg, req, res);
-    }
-    const user = await this.signinLinkService.redeem(approval.token);
-    const msg = INVALID_DISCORD_LINK_MESSAGE;
-    return issueLinkSession(deps, user, 'discord-link', msg, req, res);
+    const existing = approval.kind === 'existing';
+    const user: MagicLinkUser = existing
+      ? await this.magicLinkService.redeem(approval.token)
+      : await this.signinLinkService.redeem(approval.token);
+    const session = existing
+      ? await issueLinkSession(deps, user, 'magic', MAGIC_MSG, req, res)
+      : await issueLinkSession(deps, user, 'discord-link', LINK_MSG, req, res);
+    this.logger.log(
+      `signin-code redeemed (${approval.kind}) for user ${user.id}`,
+    );
+    return session;
   }
+}
+
+const MAGIC_MSG = INVALID_MAGIC_LINK_MESSAGE;
+const LINK_MSG = INVALID_DISCORD_LINK_MESSAGE;
+
+/** First 8 hex of sha256(ip) — enough to correlate, never the address. */
+function ipHash8(ip: string | undefined): string {
+  return createHash('sha256')
+    .update(ip ?? 'unknown')
+    .digest('hex')
+    .slice(0, 8);
 }

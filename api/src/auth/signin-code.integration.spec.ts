@@ -6,11 +6,13 @@
  * a session + rl_rt cookie exactly once. Expired codes, unknown secrets and a
  * second approve all fail closed.
  */
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { SigninCodePollResponseSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { AUTH_EVENTS } from './auth.service';
 import { DiscordSigninLinkService } from './discord-signin-link.service';
 import { MagicLinkService } from './magic-link.service';
 import { REFRESH_COOKIE_NAME } from './refresh/refresh-cookie.helpers';
@@ -121,6 +123,38 @@ describe('POST /auth/discord/signin-code/poll', () => {
     const again = await poll(deviceSecret);
     expect(again.body).toEqual({ status: 'expired' });
     expect(refreshCookieOf(again)).toBe(false);
+  });
+
+  it("an existing member approved with src:'cmd' emits one DISCORD_LOGIN", async () => {
+    const discordId = '812345678901234567';
+    const [user] = await testApp.db
+      .insert(schema.users)
+      .values({ discordId, username: 'coder', role: 'member' })
+      .returning();
+    if (!user) throw new Error('insert user failed');
+    const token = await testApp.app
+      .get(MagicLinkService)
+      .generateToken(user.id, { src: 'cmd' });
+    if (token === null) throw new Error('token not minted');
+    const { code, deviceSecret } = await start();
+    const store = testApp.app.get(SigninCodeStore);
+    const display = 'coder';
+    expect(
+      await store.approve(code, {
+        kind: 'existing',
+        token,
+        displayName: display,
+      }),
+    ).toBe(true);
+    const emit = jest.spyOn(testApp.app.get(EventEmitter2), 'emit');
+
+    const res = await poll(deviceSecret);
+
+    expect(res.body).toMatchObject({ status: 'approved' });
+    const logins = emit.mock.calls
+      .filter(([event]) => event === AUTH_EVENTS.DISCORD_LOGIN)
+      .map(([, payload]) => payload);
+    expect(logins).toEqual([{ userId: user.id, discordId }]);
   });
 
   it('lets only the first approve land', async () => {
