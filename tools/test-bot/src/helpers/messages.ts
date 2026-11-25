@@ -200,6 +200,25 @@ export async function messageExists(
 }
 
 /**
+ * Read ONE message by id over REST (never the cache), or null once Discord
+ * answers 10008 "Unknown Message". Unlike a `readLastMessages` window it
+ * cannot miss a message that newer traffic in a shared channel pushed out.
+ */
+export async function readMessageById(
+  channelId: string,
+  messageId: string,
+): Promise<SimpleMessage | null> {
+  const channel = getTextChannel(channelId);
+  try {
+    const msg = await channel.messages.fetch({ message: messageId, force: true });
+    return toSimpleMessage(msg);
+  } catch (err) {
+    if ((err as { code?: unknown }).code === 10008) return null;
+    throw err;
+  }
+}
+
+/**
  * The channel's pinned messages from the app bot under test (ROK-1740).
  * A REST read (never the cache), so a fresh pin or unpin is always seen.
  */

@@ -128,8 +128,15 @@ stale_reason() {
   msg="$(holder_msg "$sha")" || return 0   # unreadable right now: not stale
   hid="$(field run_id <<< "$msg")"; hatt="$(field run_attempt <<< "$msg")"
   hat="$(field acquired_at <<< "$msg")"
-  if [ -n "$hat" ] && [ $(( $(now) - hat )) -gt "$STALE_S" ]; then
-    echo "held for $(mins $(( $(now) - hat ))) (> $(mins "$STALE_S"))"; return 0
+  # TDB:3194 — these come from a commit message anyone with refs write can
+  # author; bash arithmetic would expand `a[$(cmd)]`, so only digits get there.
+  case "$hat" in *[!0-9]*) echo "holder acquired_at is malformed"; return 0 ;; esac
+  case "$hid" in *[!0-9]*) echo "holder run_id is malformed"; return 0 ;; esac
+  if [ -n "$hat" ] && [ $(( 10#$hat - $(now) )) -gt "$STALE_S" ]; then
+    echo "holder acquired_at is in the future"; return 0
+  fi
+  if [ -n "$hat" ] && [ $(( $(now) - 10#$hat )) -gt "$STALE_S" ]; then
+    echo "held for $(mins $(( $(now) - 10#$hat ))) (> $(mins "$STALE_S"))"; return 0
   fi
   if [ "$hid" = "$RUN_ID" ] && [ "$hatt" != "$RUN_ATTEMPT" ]; then
     echo "left by attempt ${hatt} of this same run"; return 0

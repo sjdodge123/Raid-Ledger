@@ -7,13 +7,14 @@
  * composer must not develop a second idea of what "matches" means, or the modal
  * and the slash command disagree about the same library.
  */
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
   buildGameNameMatchFilter,
   gameRelevanceOrder,
 } from '../../igdb/game-search-relevance.helpers';
+import { VISIBILITY_FILTER } from '../../igdb/igdb-visibility.helpers';
 import { LFG_COMPOSER_MAX_CANDIDATES } from './lfg-composer.constants';
 import type { LfgComposerGame } from './lfg-composer-search.helpers';
 
@@ -44,7 +45,7 @@ export async function searchComposerGames(
   return db
     .select({ id: schema.games.id, name: schema.games.name })
     .from(schema.games)
-    .where(buildGameNameMatchFilter(term))
+    .where(and(buildGameNameMatchFilter(term), VISIBILITY_FILTER()))
     .orderBy(...gameRelevanceOrder(term))
     .limit(LFG_COMPOSER_MAX_CANDIDATES);
 }
@@ -64,7 +65,12 @@ export async function searchComposerGamesFuzzy(
   return db
     .select({ id: schema.games.id, name: schema.games.name })
     .from(schema.games)
-    .where(sql`${similarity} >= ${LFG_COMPOSER_TRIGRAM_THRESHOLD}`)
+    .where(
+      and(
+        sql`${similarity} >= ${LFG_COMPOSER_TRIGRAM_THRESHOLD}`,
+        VISIBILITY_FILTER(),
+      ),
+    )
     .orderBy(sql`${similarity} DESC`)
     .limit(LFG_COMPOSER_MAX_CANDIDATES);
 }
@@ -74,7 +80,8 @@ export async function searchComposerGamesFuzzy(
  *
  * @param db - Drizzle handle.
  * @param gameId - The picked option's value.
- * @returns The game, or null when it has left the library since the search.
+ * @returns The game, or null when it has left the library (or been hidden or
+ *   banned) since the search.
  */
 export async function findComposerGame(
   db: Db,
@@ -83,7 +90,7 @@ export async function findComposerGame(
   const [row] = await db
     .select({ id: schema.games.id, name: schema.games.name })
     .from(schema.games)
-    .where(eq(schema.games.id, gameId))
+    .where(and(eq(schema.games.id, gameId), VISIBILITY_FILTER()))
     .limit(1);
   return row ?? null;
 }

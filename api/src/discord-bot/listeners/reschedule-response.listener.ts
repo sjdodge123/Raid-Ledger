@@ -20,7 +20,7 @@ import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { SettingsService } from '../../settings/settings.service';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
-import type { EventRow, RescheduleDeps } from './reschedule-response.helpers';
+import type { RescheduleDeps } from './reschedule-response.helpers';
 import {
   DiscordListenerBinding,
   gatewayBinding,
@@ -31,6 +31,8 @@ import {
   parseRoleSelectParts,
   lookupRescheduleEvent,
   findLinkedUserByDiscordId,
+  replyIfEventEnded,
+  type RescheduleEventRow,
   dmEditFor,
   selectDmEditFor,
   editDmEmbed,
@@ -182,6 +184,7 @@ export class RescheduleResponseListener {
   ): Promise<void> {
     const v = await this.validateSignup(i, eventId);
     if (!v) return;
+    if (await replyIfEventEnded(i, v.event)) return;
     const linkedUser = await findLinkedUserByDiscordId(this.db, i.user.id);
     if (linkedUser && (linkedUser.bannedAt || linkedUser.deactivatedAt)) {
       await i.editReply({ content: LFG_BLOCKED_REPLY });
@@ -295,7 +298,7 @@ export class RescheduleResponseListener {
     i: ButtonInteraction,
     eventId: number,
   ): Promise<{
-    event: EventRow;
+    event: RescheduleEventRow;
     signup: { id: number; status: string };
   } | null> {
     const event = await lookupRescheduleEvent(this.db, eventId);

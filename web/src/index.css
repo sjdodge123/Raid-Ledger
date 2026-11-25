@@ -889,6 +889,15 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-red-500\/30 { border-color: rgba(239, 68, 68, 0.3); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-indigo-500\/30 { border-color: rgba(99, 102, 241, 0.3); }
+/* badge-overlay token pin (TDB:2480): a cover badge spelled with the accent tokens (STATUS_STYLES:
+   bg-success/10, text-warning, border-danger/30 …) flips with the family through the variable, not a
+   class rule, so the restore re-declares the DARK @theme values on the overlay itself — every alpha
+   and every descendant on the art follows. Values must equal @theme (badge-overlay.test.ts). */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .badge-overlay {
+    --color-success: #10b981;
+    --color-warning: #f59e0b;
+    --color-danger: #f87171;
+}
 
 /* --- Keep-dark: raw text on a fixed dark panel ---
    The WoW item fallback tooltip (plugins/wow/components/item-fallback-tooltip.tsx) sits on a
