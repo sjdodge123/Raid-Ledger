@@ -402,3 +402,107 @@ describe('insertPollInterests', () => {
     expect(mockDb.insert).not.toHaveBeenCalled();
   });
 });
+
+// ─── ROK-2320: follow-up carryover ─────────────────────────────────────────
+
+describe('autoSignupSlotVoters — follow-up carryover (ROK-2320)', () => {
+  const CHAR_ID = '11111111-1111-4111-8111-111111111111';
+  let svc: { signup: jest.Mock };
+
+  beforeEach(() => {
+    svc = { signup: jest.fn().mockResolvedValue({ assignedSlot: 'tank' }) };
+  });
+
+  it('passes a voter’s carried dto and keeps the no-dto call for the rest', async () => {
+    const carryover = new Map([
+      [10, { characterId: CHAR_ID, preferredRoles: ['tank' as const] }],
+    ]);
+
+    await autoSignupSlotVoters({
+      eventId: EVENT_ID,
+      creatorId: CREATOR_ID,
+      voters: makeVoters(2),
+      signupsService: svc,
+      carryover,
+    });
+
+    expect(svc.signup).toHaveBeenCalledTimes(2);
+    expect(svc.signup).toHaveBeenNthCalledWith(1, EVENT_ID, 10, {
+      characterId: CHAR_ID,
+      preferredRoles: ['tank'],
+    });
+    expect(svc.signup).toHaveBeenNthCalledWith(2, EVENT_ID, 11);
+  });
+
+  it('a bench-picked voter keeps the carried character, not the roles', async () => {
+    const carryover = new Map([
+      [10, { characterId: CHAR_ID, preferredRoles: ['dps' as const] }],
+    ]);
+    svc.signup.mockResolvedValue({ assignedSlot: 'bench' });
+
+    const result = await autoSignupSlotVoters({
+      eventId: EVENT_ID,
+      creatorId: CREATOR_ID,
+      voters: makeVoters(1),
+      signupsService: svc,
+      benchUserIds: new Set([10]),
+      carryover,
+    });
+
+    expect(svc.signup).toHaveBeenCalledWith(EVENT_ID, 10, {
+      slotRole: 'bench',
+      characterId: CHAR_ID,
+    });
+    expect(result).toEqual({ benchedUserIds: [10], failedUserIds: [] });
+  });
+
+  it('retries once with no dto when the carried signup throws', async () => {
+    const carryover = new Map([[10, { preferredRoles: ['healer' as const] }]]);
+    svc.signup
+      .mockRejectedValueOnce(new Error('character gone'))
+      .mockResolvedValueOnce({ assignedSlot: null });
+
+    const result = await autoSignupSlotVoters({
+      eventId: EVENT_ID,
+      creatorId: CREATOR_ID,
+      voters: makeVoters(1),
+      signupsService: svc,
+      carryover,
+    });
+
+    expect(svc.signup).toHaveBeenCalledTimes(2);
+    expect(svc.signup).toHaveBeenNthCalledWith(2, EVENT_ID, 10);
+    expect(result).toEqual({ benchedUserIds: [], failedUserIds: [] });
+  });
+
+  it('reports the voter as failed only when the plain retry throws too', async () => {
+    const carryover = new Map([[10, { preferredRoles: ['dps' as const] }]]);
+    svc.signup.mockRejectedValue(new Error('event gone'));
+
+    const result = await autoSignupSlotVoters({
+      eventId: EVENT_ID,
+      creatorId: CREATOR_ID,
+      voters: makeVoters(1),
+      signupsService: svc,
+      carryover,
+    });
+
+    expect(svc.signup).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ benchedUserIds: [], failedUserIds: [10] });
+  });
+
+  it('a voter with no carryover is never retried', async () => {
+    svc.signup.mockRejectedValue(new Error('event gone'));
+
+    const result = await autoSignupSlotVoters({
+      eventId: EVENT_ID,
+      creatorId: CREATOR_ID,
+      voters: makeVoters(1),
+      signupsService: svc,
+      carryover: new Map(),
+    });
+
+    expect(svc.signup).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ benchedUserIds: [], failedUserIds: [10] });
+  });
+});
