@@ -1,8 +1,13 @@
 /**
  * Dismissible banner prompting users without Steam linked to connect
  * during the lineup building phase (ROK-993).
+ *
+ * ROK-2319: a neutral instruction callout (design-system §4.7) on tokens, so it
+ * follows the app scheme — the old `dark:` variants followed the OS instead —
+ * and the dismiss × is an inventory icon button with a 44px phone target.
  */
 import { useState } from 'react';
+import { Button } from '../ui/button';
 import { useSteamLink } from '../../hooks/use-steam-link';
 import { safeGetItem, safeSetItem } from '../../lib/safe-storage';
 
@@ -22,23 +27,13 @@ function isDismissed(lineupId: number): boolean {
 function BannerActions({ onDismiss }: { onDismiss: () => void }) {
     const { linkSteam, isLinkPending } = useSteamLink();
     return (
-        <div className="ml-4 flex items-center gap-2">
-            <button
-                type="button"
-                onClick={() => { void linkSteam(); }}
-                disabled={isLinkPending}
-                className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
+        <div className="flex shrink-0 items-center gap-1">
+            <Button size="sm" onClick={() => { void linkSteam(); }} disabled={isLinkPending}>
                 Link Steam
-            </button>
-            <button
-                type="button"
-                aria-label="Dismiss"
-                onClick={onDismiss}
-                className="text-blue-500 hover:text-blue-700 dark:text-blue-400"
-            >
-                &times;
-            </button>
+            </Button>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Dismiss" onClick={onDismiss}>
+                <span aria-hidden className="text-lg leading-none">&times;</span>
+            </Button>
         </div>
     );
 }
@@ -56,7 +51,10 @@ export function SteamNudgeBanner({ lineupId, lineupStatus, userSteamId }: SteamN
     };
 
     return (
-        <div className="flex items-center justify-between rounded-lg border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-200">
+        <div
+            data-testid="steam-nudge-banner"
+            className="flex items-center justify-between gap-3 rounded-lg border border-edge bg-overlay/30 px-4 py-2 text-sm text-secondary"
+        >
             <p>Connect your account to include your game library in suggestions.</p>
             <BannerActions onDismiss={handleDismiss} />
         </div>

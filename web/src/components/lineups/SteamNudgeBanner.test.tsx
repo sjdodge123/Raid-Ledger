@@ -188,4 +188,19 @@ describe('SteamNudgeBanner — browser blocks storage (TECH-DEBT L4009)', () => 
 
     expect(screen.queryByText(/link.*steam/i)).not.toBeInTheDocument();
   });
+
+  // ROK-2319: `dark:` follows the OS, not the app scheme — the banner must paint from tokens only,
+  // and the dismiss × must be a 44px phone target (it was 9×20).
+  it('paints from scheme tokens with no dark: variant or raw blue, and gives dismiss a 44px target', () => {
+    renderWithProviders(
+      <SteamNudgeBanner lineupId={7} lineupStatus="building" userSteamId={null} />,
+    );
+    const banner = screen.getByText(/Connect your account/).parentElement;
+    if (!banner) throw new Error('banner container missing');
+    expect(banner).toHaveClass('border-edge', 'bg-overlay/30', 'text-secondary');
+    const classes = [banner, ...Array.from(banner.querySelectorAll('*'))].map((el) => el.getAttribute('class') ?? '').join(' ');
+    expect(classes).not.toMatch(/(?:^|\s)dark:/);
+    expect(classes).not.toMatch(/\b(?:bg|text|border)-blue-\d/);
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toHaveClass('min-h-[44px]', 'min-w-[44px]');
+  });
 });

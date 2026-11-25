@@ -19,6 +19,7 @@ import { RemovableChip } from '../../components/ui/removable-chip';
 import { FILTER_CHIP_BASE } from '../../components/ui/filter-chip-classes';
 import { ModalSearchInput, ModalEmptyState } from '../../components/ui/modal-helpers';
 import { LineupEmptyState } from '../../components/lineups/LineupEmptyState';
+import { NotFoundState } from '../../components/common/not-found-state';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { TabRowDemo } from './tab-row-demo';
 import { RowCapDemo } from './row-cap-demo';
@@ -171,6 +172,12 @@ function EmptyAndLoading(): JSX.Element {
             </StateFrame>
             <StateFrame label="Empty — inside a modal">
                 <div className="w-full"><ModalEmptyState /></div>
+            </StateFrame>
+            <StateFrame label="Not found — page (title + action)" note="NotFoundState, as the catch-all route renders it (ROK-2319).">
+                <div className="w-full"><NotFoundState testId="ds-not-found-page" title="Page not found" message="We couldn't find that page. The link may be old or mistyped." action={{ to: '/', label: 'Go home' }} /></div>
+            </StateFrame>
+            <StateFrame label="Not found — message only" note="The hub's NotFoundNotice shape: no title, no action.">
+                <div className="w-full"><NotFoundState testId="ds-not-found-message" message="This hub doesn't exist or you don't have access to it." /></div>
             </StateFrame>
             <StateFrame label="Loading — route Suspense fallback">
                 <div className="w-full"><LoadingSpinner /></div>

@@ -143,6 +143,9 @@ export const ClaimPage = lazyWithRetry(() =>
 export const SigninLinkPage = lazyWithRetry(() =>
     import('./pages/signin-link-page').then((m) => ({ default: m.SigninLinkPage })),
 );
+export const NotFoundPage = lazyWithRetry(() =>
+    import('./pages/not-found-page').then((m) => ({ default: m.NotFoundPage })),
+);
 export const OnboardingWizardPage = lazyWithRetry(() =>
     import('./pages/onboarding-wizard-page').then((m) => ({ default: m.OnboardingWizardPage })),
 );
