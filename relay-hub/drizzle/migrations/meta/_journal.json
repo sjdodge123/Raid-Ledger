@@ -15,6 +15,13 @@
       "when": 1795584013923,
       "tag": "0001_seed_catalog_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795596664330,
+      "tag": "0002_create_hub_instances",
+      "breakpoints": true
     }
   ]
 }
