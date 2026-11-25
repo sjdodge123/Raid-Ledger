@@ -370,5 +370,43 @@ function describeHeartbeatRaceRh6() {
       expect(service.isRevoked()).toBe(false);
       expect((await service.getStatus()).error).toBeUndefined();
     });
+
+    it('a register that lands between the 401 compare and delete keeps its token', async () => {
+      store.set(SETTING_KEYS.RELAY_ENABLED, 'true');
+      store.set(SETTING_KEYS.RELAY_TOKEN, 'rlh_old');
+      store.set(SETTING_KEYS.RELAY_INSTANCE_ID, INSTANCE_ID);
+      const releaseBeat = holdFetch();
+      const beat = service.handleHeartbeat();
+      await settle();
+      const releaseRead = holdNextTokenRead();
+      releaseBeat(reply(401));
+      await settle(); // the 401 handler's token read is now in flight
+      mockFetch.mockResolvedValueOnce(
+        reply(201, { ...REGISTERED, token: 'rlh_new' }),
+      );
+      const reconnect = service.register();
+      await settle();
+      releaseRead();
+      await Promise.all([beat, reconnect]);
+      expect(store.get(SETTING_KEYS.RELAY_TOKEN)).toBe('rlh_new');
+      expect(service.isRevoked()).toBe(false);
+      expect((await service.getStatus()).error).toBeUndefined();
+    });
   });
+}
+
+/**
+ * Hold the next RELAY_TOKEN read: it sees the value stored when it was
+ * issued (as a DB read does) but resolves only when release() is called.
+ */
+function holdNextTokenRead(): () => void {
+  let release: () => void = () => undefined;
+  let held = false;
+  (mockSettingsService.get as jest.Mock).mockImplementation((key: string) => {
+    const value = store.get(key) ?? null;
+    if (key !== SETTING_KEYS.RELAY_TOKEN || held) return Promise.resolve(value);
+    held = true;
+    return new Promise((resolve) => (release = () => resolve(value)));
+  });
+  return () => release();
 }

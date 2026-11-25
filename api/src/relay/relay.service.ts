@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
-import type { HubTrustTier } from '@raid-ledger/contract';
+import type { HubRegisterResponse, HubTrustTier } from '@raid-ledger/contract';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { SettingsService } from '../settings/settings.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
@@ -24,6 +24,7 @@ import {
   resolveRelayUrl,
   type RelayHubEnv,
 } from './relay-url.helpers';
+import { SerialLock } from './relay-token-lock';
 
 /** Consecutive heartbeat failures that earn one `warn` (AC 11). */
 const HEARTBEAT_WARN_AT = 3;
@@ -58,6 +59,8 @@ export class RelayService {
   private inFlight: Promise<RelayStatus> | null = null;
   /** Bumped by disconnect / disable so a late hub reply writes nothing. */
   private generation = 0;
+  /** Serializes token writes: register's store vs a 401's compare+delete. */
+  private readonly tokenLock = new SerialLock();
 
   constructor(
     private readonly settingsService: SettingsService,
@@ -200,17 +203,30 @@ export class RelayService {
       this.logger.warn(`Relay registration failed: ${message}`);
       return errorStatus(relayUrl, instanceId, message, await this.isEnabled());
     }
+    const { data } = result;
+    return this.tokenLock.run(() =>
+      this.storeRegistration(generation, relayUrl, instanceId, data),
+    );
+  }
+
+  /** Store the issued token, then the flag; runs under `tokenLock`. */
+  private async storeRegistration(
+    generation: number,
+    relayUrl: string,
+    instanceId: string,
+    data: HubRegisterResponse,
+  ): Promise<RelayStatus> {
     if (generation !== this.generation)
       return this.cancelled(relayUrl, instanceId);
-    await this.settingsService.set(SETTING_KEYS.RELAY_TOKEN, result.data.token);
+    await this.settingsService.set(SETTING_KEYS.RELAY_TOKEN, data.token);
     if (generation !== this.generation)
       return this.cancelled(relayUrl, instanceId);
     await this.settingsService.set(SETTING_KEYS.RELAY_ENABLED, 'true');
-    this.trustTier = result.data.trustTier;
+    this.trustTier = data.trustTier;
     this.revoked = false;
     this.heartbeatFailures = 0;
-    this.logger.log(`Registered with relay hub (${result.data.trustTier})`);
-    return connectedStatus(relayUrl, instanceId, result.data.trustTier);
+    this.logger.log(`Registered with relay hub (${data.trustTier})`);
+    return connectedStatus(relayUrl, instanceId, data.trustTier);
   }
 
   /** Submit user feedback to the relay hub. */
@@ -331,14 +347,16 @@ export class RelayService {
       this.heartbeatFailures = 0;
       return;
     }
-    if (result.status === 401) return this.handleRevoked(token);
+    if (result.status === 401)
+      return this.tokenLock.run(() => this.handleRevoked(token));
     this.recordHeartbeatFailure(result.reason);
   }
 
   /**
    * L8: drop the token, keep `relay_enabled`, report `revoked` — only if
    * the rejected token is still the stored one. A late 401 for a token a
-   * reconnect already replaced says nothing about the new one.
+   * reconnect already replaced says nothing about the new one. Runs under
+   * `tokenLock`, so no register can store a token between compare and delete.
    */
   private async handleRevoked(sentToken: string): Promise<void> {
     const current = await this.settingsService.get(SETTING_KEYS.RELAY_TOKEN);
