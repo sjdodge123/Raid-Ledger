@@ -51,6 +51,22 @@ export function planningClosingOnceKey(
   return `hfd:closing:planning:${postId}:${onceKey}`;
 }
 
+/** The subject kinds that can end and reopen. */
+export type ClosingSubject = 'poll' | 'lineup';
+
+/** Outlives every once-key claimed under a generation (L4491). */
+export const CLOSING_GEN_TTL_SECONDS = 2 * CLOSING_ONCE_TTL_SECONDS;
+
+/** Redis key counting a subject's reopens (L4491): ends claim per generation. */
+export function closingGenKey(kind: ClosingSubject, id: number): string {
+  return `hfd:closing:gen:${kind}:${id}`;
+}
+
+/** Generation 0 keeps the bare key (pre-fix keys stay valid); N>0 adds `#gN`. */
+export function genOnceKey(base: string, gen: number): string {
+  return gen === 0 ? base : `${base}#g${gen}`;
+}
+
 /** Why a closing line did or did not go out. */
 export type ClosingOutcome =
   'posted' | 'no-post' | 'closed-post' | 'offline' | 'already' | 'send-failed';
