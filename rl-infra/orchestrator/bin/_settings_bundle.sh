@@ -49,15 +49,20 @@ settings_bundle::payload() {
         printf '{}'
         return 0
     fi
+    # A wrong key passes the PKCS#7 padding check ~1 time in 256, so openssl
+    # can exit 0 with garbage. NULs are stripped inside the substitution (bash
+    # >= 4.4 otherwise prints "ignored null byte" to stderr, which corrupts a
+    # 2>&1 capture); the exit status stays openssl's, not tr's.
     plaintext=$(openssl enc -d -aes-256-cbc -pbkdf2 -salt \
-        -pass env:RL_SETTINGS_BUNDLE_KEY -in "$path" 2>/dev/null) || plaintext=""
+        -pass env:RL_SETTINGS_BUNDLE_KEY -in "$path" 2>/dev/null | tr -d '\000'
+        exit "${PIPESTATUS[0]}") || plaintext=""
     if [[ -z "$plaintext" ]]; then
         SETTINGS_BUNDLE_WARNING="settings bundle at ${path} could not be decrypted (wrong RL_SETTINGS_BUNDLE_KEY or corrupt file) — shared API keys NOT applied"
         printf '{}'
         return 0
     fi
     if ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$plaintext"; then
-        SETTINGS_BUNDLE_WARNING="settings bundle at ${path} did not decrypt to a JSON object — shared API keys NOT applied"
+        SETTINGS_BUNDLE_WARNING="settings bundle at ${path} did not decrypt to a JSON object (most likely a wrong RL_SETTINGS_BUNDLE_KEY; else a bad push) — shared API keys NOT applied"
         printf '{}'
         return 0
     fi
@@ -101,15 +106,26 @@ settings_bundle::freshness_json() {
 }
 
 # Builds the present:true object; falls back to a fixed object if jq fails.
+# A bundle older than RL_SETTINGS_BUNDLE_STALE_HOURS (720 = 30 days) that
+# otherwise reads fine gets a stale warning: keys rotated since the last
+# `rl settings push` are silently missing from every deployed env (TDB:
+# 1244 h old bundle). It does not change `decrypts`.
 settings_bundle::_freshness_object() {
-    jq -nc --arg epoch "$1" --arg count "$2" --argjson decrypts "$3" --arg warn "$4" '
+    local stale_h="${RL_SETTINGS_BUNDLE_STALE_HOURS:-720}"
+    [[ "$stale_h" =~ ^[0-9]+$ ]] || stale_h=720
+    jq -nc --arg epoch "$1" --arg count "$2" --argjson decrypts "$3" --arg warn "$4" \
+        --argjson stale "$stale_h" '
         ($epoch | if . == "" then null else tonumber end) as $e
+        | (if $e == null then null else ((((now - $e) / 360) | round) / 10) end) as $age
         | {present: true,
            mtime: (if $e == null then null else ($e | todate) end),
-           age_hours: (if $e == null then null else ((((now - $e) / 360) | round) / 10) end),
+           age_hours: $age,
            key_count: (if $count == "" then null else ($count | tonumber) end),
            decrypts: $decrypts,
-           warning: (if $warn == "" then null else $warn end)}' 2>/dev/null \
+           warning: (if $warn != "" then $warn
+                     elif $age != null and $age > $stale then
+                       "settings bundle is \(($age / 24) | floor) days old (over \($stale) h) — re-run `rl settings push` so rotated API keys reach deployed envs"
+                     else null end)}' 2>/dev/null \
         || printf '%s\n' '{"present":true,"mtime":null,"age_hours":null,"key_count":null,"decrypts":null,"warning":"settings bundle freshness probe failed"}'
     return 0
 }
