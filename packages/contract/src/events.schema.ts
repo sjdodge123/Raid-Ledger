@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LfgGroupKeySchema } from "./lfg-groups.schema.js";
 import { SignupUserSchema, EventRosterSchema } from "./signups.schema.js";
 import { RosterWithAssignmentsSchema } from "./roster.schema.js";
 import { PugSlotResponseSchema } from "./pug.schema.js";
@@ -68,6 +69,9 @@ export const CreateEventSchema = z
      *  converts the group's live intents to this event and signs its members
      *  up. Never persisted. */
     lfgGameId: z.number().int().positive().optional(),
+    /** ROK-2352: which of the game's LFG groups converts (absent = `''`).
+     *  Requires `lfgGameId`. Never persisted. */
+    lfgGroupKey: LfgGroupKeySchema.optional(),
     /** ROK-1787: tag the event (and every recurring instance) to a guild.
      *  Only an editor of that guild (or an admin) may set it; the guild must
      *  belong to the event's game, so a gameId is required.
@@ -87,6 +91,10 @@ export const CreateEventSchema = z
   .refine((d) => d.lfgGameId === undefined || d.gameId === d.lfgGameId, {
     message: "lfgGameId must match gameId",
     path: ["lfgGameId"],
+  })
+  .refine((d) => d.lfgGroupKey === undefined || d.lfgGameId !== undefined, {
+    message: "lfgGroupKey requires lfgGameId",
+    path: ["lfgGroupKey"],
   })
   .refine((d) => d.guildId == null || d.gameId !== undefined, {
     message: "guildId requires gameId",

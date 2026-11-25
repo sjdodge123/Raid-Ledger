@@ -194,6 +194,8 @@ const blizzard = {
     { id: 'blizzard', kind: 'claim-provider', label: 'Lets players claim their character from the guild roster' },
     // ROK-2187 — produced from `api/src/plugins/wow-common/gg/` (this plugin's folder).
     { id: 'wow-levels', kind: 'gg-card', label: 'GG <year>: levels your WoW characters dinged' },
+    // ROK-2352 — registered once per WoW slug under this one id.
+    { id: 'wow-instance-lfg', kind: 'lfg-grouping', label: 'One LFG group per WoW dungeon or raid, with roles and a character per hand' },
   ],
   // Hub-widget game scope only (web guard W4) — the api manifest's own
   // `gameSlugs` (every WoW variant) is separate and unchanged.
