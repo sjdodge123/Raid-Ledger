@@ -11,7 +11,8 @@ import {
 import { readClaims } from '../lib/api/token-expiry';
 import { toast } from '../lib/toast';
 import { endDeactivatedSession, isDeactivatedResponse } from '../lib/api/deactivated-session';
-import { awaitMagicLinkRedeem } from '../lib/magic-link-redeem';
+import { awaitMagicLinkRedeem, takeMagicLinkAdoption } from '../lib/magic-link-redeem';
+import { recordLastSignin } from '../lib/last-signin';
 import { peekCapturedSigninLinkToken, isSigninLinkPage } from '../lib/magic-link-capture';
 import { clearCapturedQueryToken } from '../lib/query-token-capture';
 import { bumpIdentityEpoch } from '../lib/api/cross-tab-auth';
@@ -177,6 +178,8 @@ export async function fetchCurrentUser(context?: { client: QueryClient }): Promi
 
     const user: User = await response.json();
     localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+    // ROK-2370: a magic link from the Discord bot signed this browser in.
+    if (takeMagicLinkAdoption()) recordLastSignin('discord-app-code', user);
     return user;
 }
 

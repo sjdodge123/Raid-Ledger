@@ -12,6 +12,7 @@ import type { LoginMethodDto } from '@raid-ledger/contract';
 import { LoginBody } from './login/LoginBody';
 import { nativeFetch } from '../lib/api/native-fetch';
 import { safeGetItem, safeSetItem } from '../lib/safe-storage';
+import { recordLastSignin } from '../lib/last-signin';
 
 /** Watches for OAuth error query param and displays a toast */
 function useOAuthErrorHandler(): void {
@@ -114,8 +115,10 @@ export function LoginPage(): JSX.Element {
     useOAuthErrorHandler();
     const { isFirstRun, authProviders, communityName, communityLogoUrl, discordSigninCode } = useCommunityInfo();
     const { isLoading, error, handleLocalLogin } = useLocalLogin(isFirstRun);
-    const handleCodeSignedIn = useCallback(
-        (user: User): void => handlePostLoginRedirect(user, isFirstRun, navigate), [isFirstRun, navigate]);
+    const handleCodeSignedIn = useCallback((user: User): void => {
+        recordLastSignin('discord-app-code', user);
+        handlePostLoginRedirect(user, isFirstRun, navigate);
+    }, [isFirstRun, navigate]);
 
     const handleProviderLogin = (provider: LoginMethodDto): void => {
         setIsRedirecting(true);
@@ -144,7 +147,7 @@ export function LoginPage(): JSX.Element {
 /** Executes the local auth API call and redirects on success */
 async function performLocalLogin({ username, password, login, isFirstRun, navigate }: {
     username: string; password: string;
-    login: (token: string) => Promise<{ role?: string; onboardingCompletedAt: string | null } | null>;
+    login: (token: string) => Promise<User | null>;
     isFirstRun: boolean; navigate: ReturnType<typeof useNavigate>;
 }): Promise<void> {
     const response = await nativeFetch(`${API_BASE_URL}/auth/local`, {
@@ -160,6 +163,7 @@ async function performLocalLogin({ username, password, login, isFirstRun, naviga
     clearSilentGuard();
     const user = await login(data.access_token);
     if (!user) throw new Error('Failed to authenticate');
+    recordLastSignin('password', user);
     toast.success('Logged in successfully!');
     handlePostLoginRedirect(user, isFirstRun, navigate);
 }
