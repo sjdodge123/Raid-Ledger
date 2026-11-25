@@ -119,7 +119,6 @@ function useCodeSignedIn(isFirstRun: boolean): (user: User) => void {
  */
 export function LoginPage(): JSX.Element {
     const [isRedirecting, setIsRedirecting] = useState(false);
-    const navigate = useNavigate();
 
     useOAuthErrorHandler();
     const { isFirstRun, authProviders, communityName, communityLogoUrl, discordSigninCode } = useCommunityInfo();
