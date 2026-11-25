@@ -75,7 +75,7 @@ export function useSigninCode(onApproved: (accessToken: string) => void): {
 } {
     const [state, setState] = useState<SigninCodeState>(initialState);
     const onApprovedRef = useRef(onApproved);
-    onApprovedRef.current = onApproved;
+    useEffect(() => { onApprovedRef.current = onApproved; }, [onApproved]);
 
     const start = useCallback(async (): Promise<void> => {
         clearPendingSigninCode();

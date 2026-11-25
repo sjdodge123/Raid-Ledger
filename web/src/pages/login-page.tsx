@@ -114,9 +114,8 @@ export function LoginPage(): JSX.Element {
     useOAuthErrorHandler();
     const { isFirstRun, authProviders, communityName, communityLogoUrl, discordSigninCode } = useCommunityInfo();
     const { isLoading, error, handleLocalLogin } = useLocalLogin(isFirstRun);
-    const handleCodeSignedIn = useCallback((user: User): void => {
-        handlePostLoginRedirect(user, isFirstRun, navigate);
-    }, [isFirstRun, navigate]);
+    const handleCodeSignedIn = useCallback(
+        (user: User): void => handlePostLoginRedirect(user, isFirstRun, navigate), [isFirstRun, navigate]);
 
     const handleProviderLogin = (provider: LoginMethodDto): void => {
         setIsRedirecting(true);

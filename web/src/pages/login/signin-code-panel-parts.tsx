@@ -7,16 +7,11 @@ import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../components/ui/button';
 import { CopyButton } from '../../components/ui/CopyButton';
+import { formatCountdown } from '../../lib/signin-code';
 
 export const EXPIRED_COPY = 'This code expired.';
 export const START_FAILED_COPY = 'Couldn’t get a code just now. Check your connection and try again.';
 export const SIGNIN_FAILED_COPY = 'Couldn’t sign you in just now. Get a new code and try again.';
-
-/** `m:ss` for a non-negative millisecond count. */
-export function formatCountdown(ms: number): string {
-    const total = Math.max(0, Math.ceil(ms / 1000));
-    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-}
 
 /** Milliseconds left until `expiresAt`, re-rendered every second. */
 function useRemainingMs(expiresAt: string): number {

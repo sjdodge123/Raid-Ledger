@@ -59,6 +59,12 @@ export async function pollSigninCode(deviceSecret: string): Promise<SigninCodePo
     return parsed.success ? parsed.data : { status: 'retry' };
 }
 
+/** `m:ss` for a non-negative millisecond count (the panel's countdown). */
+export function formatCountdown(ms: number): string {
+    const total = Math.max(0, Math.ceil(ms / 1000));
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
 /** Remember the pending code for this tab. A no-op when storage is blocked. */
 export function savePendingSigninCode(code: PendingSigninCode): void {
     safeSessionSetItem(SIGNIN_CODE_STORAGE_KEY, JSON.stringify(code));
@@ -73,7 +79,7 @@ export function clearPendingSigninCode(): void {
 export function readPendingSigninCode(now: number): PendingSigninCode | null {
     const raw = safeSessionGetItem(SIGNIN_CODE_STORAGE_KEY);
     if (!raw) return null;
-    let value: unknown = null;
+    let value: unknown;
     try {
         value = JSON.parse(raw);
     } catch {
