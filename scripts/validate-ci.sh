@@ -255,6 +255,10 @@ FAILURES=0
 migrations_changed=false
 container_changed=false
 playwright_relevant=false
+# ROK-1669: the diff touches the relay hub or a file it builds from — the same
+# paths as ci.yml's relay_hub filter, plus validate-ci.sh itself (a change
+# to the gate must exercise its own rows). Gates the two relay-hub rows.
+relay_hub_changed=false
 discord_smoke_relevant=false
 # ROK-1793 S2 — parallel fleet gate child modes (see _skip_for_parallel_child).
 # Read once and UNSET: the node:test specs and harnesses spawn validate-ci.sh
@@ -574,6 +578,14 @@ detect_scope() {
     echo -e "  Container files changed: ${YELLOW}yes${NC}"
   else
     echo -e "  Container files changed: no"
+  fi
+
+  if echo "$changed_files" \
+    | grep -qE '^relay-hub/|^packages/contract/|^package(-lock)?\.json$|^scripts/check-relay-hub-deps\.|^\.github/workflows/ci\.yml$|^scripts/validate-ci\.sh$'; then
+    relay_hub_changed=true
+    echo -e "  Relay-hub-relevant changes: ${YELLOW}yes${NC}"
+  else
+    echo -e "  Relay-hub-relevant changes: no"
   fi
 
   # Playwright-relevant: web UI, auth (smoke tests log in), demo-test endpoints,
@@ -987,6 +999,37 @@ run_tools_tests() {
 # no gate at all. The workspace carries its own node-environment vitest config;
 # the root one forces jsdom + the web setup file and is not the right runner.
 run_contract_specs() { (cd "$REPO_ROOT" && npm test -w @raid-ledger/contract); }
+
+# ROK-1669 (RH-2a): the relay-hub workspace — the same checks as ci.yml's
+# `relay-hub` job, in its order. Static (no DB, a few seconds), so it runs in
+# BOTH the static and full gates; its integration spec rides in the full gate.
+# Both rows follow the diff (relay_hub_changed, set by detect_scope from the
+# same paths as ci.yml's relay_hub filter) and read SKIPPED when it is not hit.
+_skip_unless_relay_hub_changed() {
+  $relay_hub_changed && return 1
+  STEP_SKIP_REASON="diff does not touch relay-hub/ or the files it depends on"
+  echo -e "${YELLOW}Not run: ${STEP_SKIP_REASON}.${NC}"
+  skip_step
+}
+
+run_relay_hub_checks() {
+  _skip_unless_relay_hub_changed && return 0
+  (
+    cd "$REPO_ROOT" || exit 1
+    [ -f packages/contract/dist/index.js ] || npm run build -w packages/contract || exit 1
+    node scripts/check-relay-hub-deps.mjs || exit 1
+    npm run lint -w @raid-ledger/relay-hub || exit 1
+    npm run typecheck -w @raid-ledger/relay-hub || exit 1
+    npm run build -w @raid-ledger/relay-hub || exit 1
+    npm test -w @raid-ledger/relay-hub
+  )
+}
+
+# No database yet (RH-2b adds Postgres): one Nest boot over supertest.
+run_relay_hub_integration() {
+  _skip_unless_relay_hub_changed && return 0
+  (cd "$REPO_ROOT" && npm run test:integration -w @raid-ledger/relay-hub)
+}
 
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.
 #
@@ -2719,9 +2762,11 @@ run_narrowed_gate() {
     "Lint (all)|" \
     "Bundle size budget|" \
     "Shell parse check (scripts/*.sh)|" \
+    "Relay hub (deps guard, lint, typecheck, build, unit)|" \
     "${unit_step_label}|unit" \
     "Tools unit tests (mcp servers)|" \
     "Integration tests (api)|integration" \
+    "Integration tests (relay-hub)|" \
     "Migration validation|" \
     "Container startup|" \
     "Playwright (desktop + mobile)|" \
@@ -2749,6 +2794,7 @@ run_default_gate() {
     # Static, deterministic check — runs in BOTH static and full gates.
     run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
     run_step "Script node:test specs (scripts/*.spec.mjs)" run_script_node_specs
+    run_step "Relay hub (deps guard, lint, typecheck, build, unit)" run_relay_hub_checks
 
     # Unit + integration are the slow, behavioral checks. In --static (lite
     # gate) mode they're deferred to GitHub CI, which runs them sharded +
@@ -2769,6 +2815,7 @@ run_default_gate() {
       else
         run_step "Integration tests (api)" run_integration_tests
       fi
+      run_step "Integration tests (relay-hub)" run_relay_hub_integration
     fi
 
     # Migration and container checks handle their own SKIPPED/PASS/FAIL
