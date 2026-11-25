@@ -8,7 +8,7 @@ let mockEmbedFactory: Record<'buildEventEmbed', jest.Mock>;
 let mockSettingsService: Record<string, jest.Mock>;
 let mockEventsService: Record<'buildEmbedEventData' | 'findOne', jest.Mock>;
 let mockPugsService: Record<string, jest.Mock>;
-let mockDb: { insert: jest.Mock };
+let mockDb: { insert: jest.Mock; select: jest.Mock };
 let mockReply: jest.Mock;
 
 const mockEmbed = new EmbedBuilder().setTitle('Test');
@@ -64,7 +64,13 @@ function setupEventLinkModule() {
   const insertChain: Record<string, jest.Mock> = {};
   insertChain.values = jest.fn().mockReturnValue(insertChain);
   insertChain.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
-  mockDb = { insert: jest.fn().mockReturnValue(insertChain) };
+  const countChain: Record<string, jest.Mock> = {};
+  countChain.from = jest.fn().mockReturnValue(countChain);
+  countChain.where = jest.fn().mockResolvedValue([{ n: 0 }]);
+  mockDb = {
+    insert: jest.fn().mockReturnValue(insertChain),
+    select: jest.fn().mockReturnValue(countChain),
+  };
 
   listener = new EventLinkListener(
     mockDb as never,
