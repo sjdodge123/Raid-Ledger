@@ -81,6 +81,13 @@ export class LfgController {
         ...(parsed.data.ttlMinutes !== undefined
           ? { ttlMinutes: parsed.data.ttlMinutes }
           : {}),
+        // ROK-2352: folded / adapter-checked by the service.
+        ...(parsed.data.groupKey !== undefined
+          ? { groupKey: parsed.data.groupKey }
+          : {}),
+        ...(parsed.data.handDetail !== undefined
+          ? { handDetail: parsed.data.handDetail }
+          : {}),
       },
     );
     res.status(result.created ? HttpStatus.CREATED : HttpStatus.OK);

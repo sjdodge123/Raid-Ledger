@@ -64,6 +64,15 @@ import {
   type LfgUrgencyRequest,
 } from './lfg-write.helpers';
 import { bumpIntentUrgency, refreshGroupExpiry } from './lfg-urgency.helpers';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { assertHandCap } from './lfg-grouping.helpers';
+import { toConversionTarget } from './lfg-provenance.helpers';
+import {
+  resolvePostGroup,
+  saveHandDetailIfAny,
+  type LfgPostRequest,
+  type ResolvedLfgPost,
+} from './lfg-group-post.helpers';
 import {
   isFirstHand,
   joinsOpenSession,
@@ -111,6 +120,7 @@ export class LfgService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly eventEmitter: EventEmitter2,
     private readonly settingsService: SettingsService,
+    private readonly pluginRegistry: PluginRegistryService,
   ) {}
 
   /**
@@ -126,10 +136,12 @@ export class LfgService {
   async createIntent(
     userId: number,
     gameId: number,
-    opts: LfgUrgencyRequest = WEEK_REQUEST,
+    opts: LfgPostRequest = WEEK_REQUEST,
   ): Promise<CreateIntentResult> {
     const game = await requireVisibleGame(this.db, gameId);
-    const outcome = await this.postUnderGroupLock(userId, gameId, game, opts);
+    // ROK-2352 §3.7: no active adapter → the hand lands in '' (fold).
+    const post = await resolvePostGroup(this.pluginRegistry, game, opts);
+    const outcome = await this.postUnderGroupLock(userId, game, post);
     this.announcePost(gameId, outcome);
     if (outcome.refreshed) {
       return {
@@ -200,18 +212,22 @@ export class LfgService {
    */
   private postUnderGroupLock(
     userId: number,
-    gameId: number,
     game: typeof schema.games.$inferSelect,
-    opts: LfgUrgencyRequest,
+    post: ResolvedLfgPost,
   ): Promise<GroupPostOutcome> {
+    const { id: gameId } = game;
+    const { opts } = post;
     return this.db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${lfgGroupLockKey(gameId)}))`,
       );
+      await assertHandCap(tx, userId, gameId, opts.groupKey);
       const inserted = await insertIntent(tx, userId, gameId, opts);
       const settled: ResolvedExisting = inserted
         ? { row: inserted, bumped: false }
         : await this.resolveExisting(tx, userId, gameId, opts);
+      const hand = { intentId: settled.row.id, userId, gameId };
+      await saveHandDetailIfAny(tx, post, hand);
       const group = await getGroupSummary(tx, game, userId);
       const refreshed = inserted !== null && group.activeCount >= 2;
       if (refreshed) await refreshGroupExpiry(tx, gameId, opts.timezone);
@@ -365,7 +381,7 @@ export class LfgService {
     gameId: number,
     opts: LfgUrgencyRequest,
   ): Promise<ResolvedExisting> {
-    const existing = await findActiveIntent(db, userId, gameId);
+    const existing = await findActiveIntent(db, userId, gameId, opts.groupKey);
     if (!existing) {
       return {
         row: await this.insertOrSettle(db, userId, gameId, opts),
@@ -401,7 +417,7 @@ export class LfgService {
   ): Promise<LfgIntentRow> {
     const retry = await insertIntent(db, userId, gameId, opts);
     if (retry) return retry;
-    const settled = await findActiveIntent(db, userId, gameId);
+    const settled = await findActiveIntent(db, userId, gameId, opts.groupKey);
     if (!settled) {
       throw new InternalServerErrorException(
         'LFG intent vanished between conflict and re-read',
@@ -424,12 +440,4 @@ export class LfgService {
     const group = await getGroupSummary(this.db, game, userId);
     return { ...toIntentDto(fresh ?? row), group };
   }
-}
-
-/** The DTO's one supplied provenance id, without the absent one's key. */
-function toConversionTarget(dto: ConvertLfgIntentsDto): LfgConversionTarget {
-  return {
-    ...(dto.pollId !== undefined ? { pollId: dto.pollId } : {}),
-    ...(dto.eventId !== undefined ? { eventId: dto.eventId } : {}),
-  };
 }

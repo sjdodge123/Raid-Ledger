@@ -28,6 +28,7 @@ import { MEMBER_COLUMNS, toMemberDto } from './lfg-member-projection.helpers';
 import { eligibleUser, type LfgDb } from './lfg-query.helpers';
 // Type-only: erased at compile time, so the `lfg-write.helpers` -> this-file
 // import of `convertedToTarget` cannot become a runtime require cycle.
+import type { ConvertLfgIntentsDto } from '@raid-ledger/contract';
 import type { LfgConversionTarget } from './lfg-write.helpers';
 
 /**
@@ -80,4 +81,14 @@ export async function listConvertedGroupMembers(
     )
     .orderBy(asc(schema.lfgIntents.createdAt), asc(schema.lfgIntents.id));
   return rows.map(toMemberDto);
+}
+
+/** The DTO's one supplied provenance id, without the absent one's key. */
+export function toConversionTarget(
+  dto: ConvertLfgIntentsDto,
+): LfgConversionTarget {
+  return {
+    ...(dto.pollId !== undefined ? { pollId: dto.pollId } : {}),
+    ...(dto.eventId !== undefined ? { eventId: dto.eventId } : {}),
+  };
 }

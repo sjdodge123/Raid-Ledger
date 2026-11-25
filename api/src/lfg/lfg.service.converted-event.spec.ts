@@ -14,6 +14,8 @@ import * as queryHelpers from './lfg-query.helpers';
 import * as writeHelpers from './lfg-write.helpers';
 import * as convertedHelpers from './lfg-converted-event.helpers';
 
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+
 jest.mock('./lfg-query.helpers');
 jest.mock('./lfg-write.helpers');
 jest.mock('./lfg-converted-event.helpers');
@@ -44,6 +46,7 @@ async function buildService(converted: unknown): Promise<LfgService> {
       { provide: DrizzleAsyncProvider, useValue: {} },
       { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       { provide: SettingsService, useValue: { get: jest.fn(() => null) } },
+      { provide: PluginRegistryService, useValue: { getAdapter: jest.fn() } },
     ],
   }).compile();
   return module.get(LfgService);
