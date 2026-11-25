@@ -345,4 +345,34 @@ describe('TDB:3242 — a spawn with no pid never signals pid <= 0', () => {
     expect(raw?.failed_step).toBe('spawn');
     expect(raw?.message).toContain('spawn npx ENOENT');
   });
+
+  it("attaches the 'error' listener before the first task-record write", () => {
+    const id = newLocalTaskId();
+    let recordAtAttach: unknown = 'not attached';
+    mockSpawn.mockImplementationOnce(() => ({
+      pid: undefined,
+      unref: vi.fn(),
+      on: (ev, cb) => {
+        if (ev === 'error') recordAtAttach = readRawLocalTask(id);
+        childHandlers.set(ev, cb);
+      },
+    }));
+    spawnLocalRunner(id, 'rl_env_deploy', { slug: 'rok-test' }, 'rok-test');
+    expect(recordAtAttach, "the 'error' listener must exist before the record is written").toBeNull();
+  });
+
+  it("a spawn 'error' whose record write fails does not throw out of the handler", () => {
+    mockSpawn.mockImplementationOnce(() => ({
+      pid: undefined,
+      unref: vi.fn(),
+      on: (ev, cb) => void childHandlers.set(ev, cb),
+    }));
+    spawnLocalRunner(newLocalTaskId(), 'rl_env_deploy', { slug: 'rok-test' }, 'rok-test');
+    const onError = childHandlers.get('error');
+    expect(onError).toBeTypeOf('function');
+    const fileAsHome = join(homeDir, 'not-a-dir');
+    writeFileSync(fileAsHome, 'x');
+    process.env.HOME = fileAsHome; // tasksDir() now sits under a file → mkdir throws ENOTDIR
+    expect(() => onError?.(new Error('spawn npx ENOENT'))).not.toThrow();
+  });
 });

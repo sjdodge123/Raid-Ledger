@@ -369,28 +369,45 @@ export function spawnLocalRunner(
     ['tsx', runnerEntryPath(), taskId, tool, JSON.stringify(params)],
     { detached: true, stdio: ['ignore', logFd, logFd], cwd: packageDir(), env: process.env },
   );
+  const initial = initialTaskRecord(taskId, tool, argsSummary, child.pid ?? -1);
+  // TDB:3242 — a failed spawn emits 'error'; unhandled, it crashes the server
+  // and the task reads as running forever. Attached before anything below can
+  // throw, so a later spawn error is never an unhandled 'error' event.
+  child.on('error', (err: Error) => recordSpawnFailure(initial, err));
   child.unref();
   closeSync(logFd);
-  const startedAt = new Date().toISOString();
-  const initial: LocalTaskJson = {
+  writeLocalTask(initial);
+  return { task_id: taskId, pid: initial.pid, started_at: initial.started_at };
+}
+
+function initialTaskRecord(
+  taskId: string,
+  tool: LocalTaskJson['tool'],
+  argsSummary: string,
+  pid: number,
+): LocalTaskJson {
+  return {
     task_id: taskId,
     tool,
     slot: null,
     args_summary: argsSummary,
-    started_at: startedAt,
+    started_at: new Date().toISOString(),
     finished_at: null,
     mcp_runtime_status: 'running',
     script_exit_code: null,
     steps: [],
     current_step: 'starting',
     log_path: localLogPath(taskId),
-    pid: child.pid ?? -1,
+    pid,
     failed_step: null,
   };
-  writeLocalTask(initial);
-  // TDB:3242 — a failed spawn emits 'error'; unhandled, it crashes the server
-  // and the task reads as running forever. Record a terminal failure instead.
-  child.on('error', (err: Error) => {
+}
+
+/** Runs inside an event handler on the shared MCP server, so it must never
+ *  throw: a write failure (disk full, HOME gone) leaves the record 'running',
+ *  and its pid -1 then reads as process_died. */
+function recordSpawnFailure(initial: LocalTaskJson, err: Error): void {
+  try {
     writeLocalTask({
       ...initial,
       mcp_runtime_status: 'failed',
@@ -400,6 +417,7 @@ export function spawnLocalRunner(
       error: 'spawn_failed',
       message: `failed to start the local task runner: ${err.message}`,
     });
-  });
-  return { task_id: taskId, pid: initial.pid, started_at: startedAt };
+  } catch {
+    // Swallowed on purpose; see the doc comment.
+  }
 }
