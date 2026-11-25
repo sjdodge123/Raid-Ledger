@@ -4,7 +4,7 @@ import { toast } from '../lib/toast';
 import { useAuth } from '../hooks/use-auth';
 import { consumeAuthRedirect } from '../components/auth';
 import { API_BASE_URL } from '../lib/config';
-import { setAuthMethod, clearSilentGuard, armSilentGuard } from '../lib/api/silent-reauth';
+import { setAuthMethod, clearSilentGuard, armSilentGuard, recordDiscordOAuth } from '../lib/api/silent-reauth';
 import { recordLastSignin } from '../lib/last-signin';
 import { clearAccessToken } from '../lib/api/access-token-store';
 import { TokenResponseSchema } from '@raid-ledger/contract';
@@ -175,6 +175,7 @@ function processAuthCode(
             // ROK-1353: this is a Discord login — record the method (drives
             // the silent re-auth fallback) and reset the one-shot guard.
             setAuthMethod('discord');
+            recordDiscordOAuth();
             clearSilentGuard();
             const user = await login(token);
             if (!user) throw new Error('Failed to authenticate');
