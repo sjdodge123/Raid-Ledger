@@ -173,8 +173,8 @@ describe('insertIntent — group key (ROK-2352)', () => {
 
   it('ROK-2352: conflicts on (user_id, game_id, group_key) WHERE active', async () => {
     await insertIntent(mockDb as unknown as LfgDb, 11, 22);
-    const [arg] = nonEmpty(mockDb.onConflictDoNothing.mock.calls, 'conflict');
-    const conflict = arg as { target: { name: string }[]; where: SQL };
+    const [call] = nonEmpty(mockDb.onConflictDoNothing.mock.calls, 'conflict');
+    const conflict = call[0] as { target: { name: string }[]; where: SQL };
     expect(conflict.target.map((c) => c.name)).toEqual([
       'user_id',
       'game_id',
