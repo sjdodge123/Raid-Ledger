@@ -145,23 +145,37 @@ export type LoginRateLimitResult =
   { allowed: true } | { allowed: false; retryMinutes: number };
 
 /**
- * Count one link request for a member (fixed 10-minute window from the first
- * request). The 4th inside the window is refused with the whole minutes left.
+ * Count one request against a fixed window keyed by `key` (window starts at
+ * the first request). Past `max` it is refused with the whole minutes left.
  * A counter that lost its expiry (incr landed, expire did not) is re-armed so
  * it can never lock a member out forever.
  */
+export async function checkFixedWindowLimit(
+  redis: LoginRateLimitRedis,
+  key: string,
+  max: number,
+  windowSeconds: number,
+): Promise<LoginRateLimitResult> {
+  const count = await redis.incr(key);
+  if (count === 1) await redis.expire(key, windowSeconds);
+  if (count <= max) return { allowed: true };
+  let ttl = await redis.ttl(key);
+  if (ttl < 0) {
+    await redis.expire(key, windowSeconds);
+    ttl = windowSeconds;
+  }
+  return { allowed: false, retryMinutes: Math.max(1, Math.ceil(ttl / 60)) };
+}
+
+/** Count one link request for a member; the 4th inside 10 minutes is refused. */
 export async function checkLoginRateLimit(
   redis: LoginRateLimitRedis,
   discordId: string,
 ): Promise<LoginRateLimitResult> {
-  const key = loginRateLimitKey(discordId);
-  const count = await redis.incr(key);
-  if (count === 1) await redis.expire(key, LOGIN_RATE_LIMIT_WINDOW_SECONDS);
-  if (count <= LOGIN_RATE_LIMIT_MAX) return { allowed: true };
-  let ttl = await redis.ttl(key);
-  if (ttl < 0) {
-    await redis.expire(key, LOGIN_RATE_LIMIT_WINDOW_SECONDS);
-    ttl = LOGIN_RATE_LIMIT_WINDOW_SECONDS;
-  }
-  return { allowed: false, retryMinutes: Math.max(1, Math.ceil(ttl / 60)) };
+  return checkFixedWindowLimit(
+    redis,
+    loginRateLimitKey(discordId),
+    LOGIN_RATE_LIMIT_MAX,
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+  );
 }
