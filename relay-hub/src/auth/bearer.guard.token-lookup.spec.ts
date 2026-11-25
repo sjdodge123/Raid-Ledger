@@ -27,7 +27,7 @@ function row(over: Partial<HubInstanceRow>): HubInstanceRow {
 }
 
 /** A guard on a route with no `:id` (ROK-1674 `crosswalk/contributions`). */
-function harness(rows: HubInstanceRow[]) {
+function harness(rows: HubInstanceRow[], params: Record<string, string> = {}) {
   const findById = jest.fn();
   const findByTokenHash = jest.fn((hash: string) =>
     Promise.resolve(rows.find((r) => r.tokenHash === hash)),
@@ -35,7 +35,7 @@ function harness(rows: HubInstanceRow[]) {
   const repo = { findById, findByTokenHash } as unknown as InstancesRepository;
   const guard = new HubBearerGuard(repo);
   const run = async (authorization: string) => {
-    const req: HubAuthedRequest = { params: {}, headers: { authorization } };
+    const req: HubAuthedRequest = { params, headers: { authorization } };
     const ctx = {
       switchToHttp: () => ({ getRequest: () => req }),
     } as unknown as ExecutionContext;
@@ -85,5 +85,12 @@ describe('HubBearerGuard without a path :id (ROK-1674)', () => {
     const h = harness([row({})]);
     expect(await rejection(h.run('Bearer rlh_short'))).toEqual(INVALID);
     expect(h.findByTokenHash).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on a route whose params are not exactly :id (no hash lookup)', async () => {
+    const h = harness([row({})], { instanceId: A });
+    expect(await rejection(h.run(`Bearer ${TOKEN_A}`))).toEqual(INVALID);
+    expect(h.findByTokenHash).not.toHaveBeenCalled();
+    expect(h.findById).not.toHaveBeenCalled();
   });
 });

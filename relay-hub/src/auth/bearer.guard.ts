@@ -41,9 +41,23 @@ function hashesMatch(stored: string, presented: string): boolean {
 }
 
 /**
+ * Which row a request's token is checked against: the path `:id` (a UUID)
+ * when the route has one; the token's own hash only when the route has no
+ * params at all; `null` (fail closed) for any other param shape.
+ */
+function lookupMode(
+  params: HubAuthedRequest['params'],
+): { readonly id: string } | 'token' | null {
+  const id = params['id'];
+  if (id !== undefined) return isUuid(id) ? { id } : null;
+  return Object.keys(params).length === 0 ? 'token' : null;
+}
+
+/**
  * L1/L2 (ROK-1672): an `rlh_` bearer token is valid only for the instance in
- * the path `:id`. A route with no `:id` (ROK-1674 `crosswalk/contributions`)
- * finds the instance by the token's hash instead (`token_hash` is unique).
+ * the path `:id`. Only a route with NO params at all (ROK-1674
+ * `crosswalk/contributions`) finds the instance by the token's hash
+ * (`token_hash` is unique); any other param shape fails closed.
  * A revoked instance answers `revoked` only to its own token; every other
  * failure is the same generic 401. Logs nothing.
  */
@@ -54,19 +68,15 @@ export class HubBearerGuard implements CanActivate {
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest<HubAuthedRequest>();
     const token = BEARER.exec(req.headers.authorization ?? '')?.[1];
-    const id = req.params['id'];
-    if (
-      !token ||
-      !TOKEN_PATTERN.test(token) ||
-      (id !== undefined && !isUuid(id))
-    ) {
+    const mode = lookupMode(req.params);
+    if (!token || !TOKEN_PATTERN.test(token) || mode === null) {
       throw invalidToken();
     }
     const tokenHash = hashToken(token);
     const row =
-      id === undefined
+      mode === 'token'
         ? await this.repo.findByTokenHash(tokenHash)
-        : await this.repo.findById(id);
+        : await this.repo.findById(mode.id);
     if (!row?.tokenHash || !hashesMatch(row.tokenHash, tokenHash)) {
       throw invalidToken();
     }
