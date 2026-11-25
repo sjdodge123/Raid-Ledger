@@ -240,6 +240,24 @@ export class HubForumDiscordGateway {
   }
 
   /**
+   * ROK-2337 — drop a forum THIS bind just created once its webhook create
+   * timed out: Discord deletes the channel's webhooks with it (a late one
+   * included), and the channel's pending-create entry goes too, so a retry
+   * starts clean. Best-effort; never throws.
+   */
+  async discardCreatedForum(channelId: string): Promise<void> {
+    this.pendingCreates.delete(channelId);
+    try {
+      const forum = await this.requireForum(channelId);
+      await forum.delete(REASON);
+    } catch (err) {
+      this.logger.warn(
+        `Could not delete new forum ${channelId}: ${describe(err)}`,
+      );
+    }
+  }
+
+  /**
    * ROK-2296: the last hub left this channel — delete the bot's webhooks on
    * it (nothing else posts through them). Best-effort; never throws.
    */

@@ -10,6 +10,18 @@ import { RESTEvents, type RateLimitData, type REST } from 'discord.js';
  */
 export const FORUM_WEBHOOK_CREATE_TIMEOUT_MS = 30_000;
 
+/**
+ * ROK-2337 — the bind's `createWebhook` ran past its bound. A 503; the bind
+ * catches this type to discard a forum the same request just created.
+ */
+export class WebhookCreateTimeoutError extends ServiceUnavailableException {
+  constructor() {
+    super(
+      'Discord is slow to create the forum webhook right now. Try again in a minute.',
+    );
+  }
+}
+
 /** ROK-2337 — channel id → its one in-flight `createWebhook` call. */
 export type PendingWebhookCreates = Map<string, Promise<{ id: string }>>;
 
@@ -73,9 +85,7 @@ export async function createWebhookBounded(
   logger.warn(
     `createWebhook on ${channelId} exceeded ${FORUM_WEBHOOK_CREATE_TIMEOUT_MS}ms`,
   );
-  throw new ServiceUnavailableException(
-    'Discord is slow to create the forum webhook right now. Try again in a minute.',
-  );
+  throw new WebhookCreateTimeoutError();
 }
 
 /** Resolves with the value, or null once `ms` passes first. */
