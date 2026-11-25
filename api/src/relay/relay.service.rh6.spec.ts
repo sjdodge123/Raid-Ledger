@@ -67,6 +67,20 @@ beforeEach(() => {
   mockFetch.mockReset();
 });
 
+const savedEnv = {
+  APP_VERSION: process.env.APP_VERSION,
+  RELAY_HUB_URL: process.env.RELAY_HUB_URL,
+};
+
+/** Restore env vars and Logger spies even when an assertion failed. */
+afterEach(() => {
+  for (const [key, value] of Object.entries(savedEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  jest.restoreAllMocks();
+});
+
 function enabledFlagWrites(): unknown[][] {
   return (mockSettingsService.set as jest.Mock).mock.calls.filter(
     ([key]) => key === SETTING_KEYS.RELAY_ENABLED,
@@ -75,12 +89,6 @@ function enabledFlagWrites(): unknown[][] {
 
 function describeRelayHubUrl() {
   describe('hub URL (AC 1)', () => {
-    const saved = process.env.RELAY_HUB_URL;
-    afterEach(() => {
-      if (saved === undefined) delete process.env.RELAY_HUB_URL;
-      else process.env.RELAY_HUB_URL = saved;
-    });
-
     it('RELAY_HUB_URL wins over the relay_url setting for status and calls', async () => {
       process.env.RELAY_HUB_URL = 'http://192.168.0.10:3600/';
       store.set(SETTING_KEYS.RELAY_URL, 'https://other.example.com');
@@ -113,7 +121,6 @@ function describeRelayHubUrl() {
         String(m).includes('RELAY_HUB_URL'),
       );
       expect(envWarns).toHaveLength(1);
-      warn.mockRestore();
     });
   });
 }
@@ -172,13 +179,10 @@ function describeRegisterRh6() {
 function describeRegisterResultRh6() {
   describe('register result (RH-6)', () => {
     it('sends APP_VERSION as the version (AC 7)', async () => {
-      const saved = process.env.APP_VERSION;
       process.env.APP_VERSION = 'v3.1.4';
       mockFetch.mockResolvedValue(reply(201, REGISTERED));
       await service.register();
       expect(sentBody().version).toBe('3.1.4');
-      if (saved === undefined) delete process.env.APP_VERSION;
-      else process.env.APP_VERSION = saved;
     });
 
     it.each([
@@ -216,7 +220,6 @@ function describeHeartbeatRh6() {
     });
 
     it('a 401 deletes the token, reports revoked, never re-registers (AC 10)', async () => {
-      const saved = process.env.RELAY_HUB_URL;
       process.env.RELAY_HUB_URL = 'http://192.168.0.10:3600';
       const bootstrap = new RelayBootstrapService(
         service,
@@ -230,8 +233,6 @@ function describeHeartbeatRh6() {
       expect(store.has(SETTING_KEYS.RELAY_TOKEN)).toBe(false);
       expect((await service.getStatus()).error).toBe('revoked');
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      if (saved === undefined) delete process.env.RELAY_HUB_URL;
-      else process.env.RELAY_HUB_URL = saved;
     });
 
     it('warns once at the third consecutive failure; 1-2 stay debug (AC 11)', async () => {
@@ -244,8 +245,6 @@ function describeHeartbeatRh6() {
       expect(debug).toHaveBeenCalledTimes(2);
       await service.handleHeartbeat();
       expect(warn).toHaveBeenCalledTimes(1);
-      warn.mockRestore();
-      debug.mockRestore();
     });
 
     it('a success resets the failure counter (AC 11)', async () => {
@@ -256,7 +255,6 @@ function describeHeartbeatRh6() {
       mockFetch.mockResolvedValue(reply(503));
       for (let i = 0; i < 5; i++) await service.handleHeartbeat();
       expect(warn).not.toHaveBeenCalled();
-      warn.mockRestore();
     });
   });
 }
