@@ -162,14 +162,18 @@ export class SchedulingPollExpiryService {
     if (!leader && !answered) return false;
     const key = warnDedupKey(poll.matchId, leader);
     if (await this.dedupService.checkAndMarkSent(key, null)) return false;
+    let created: boolean;
     try {
-      await this.sendWarning(poll, leader, timeZone);
+      created = await this.sendWarning(poll, leader, timeZone);
     } catch (err) {
       // Give the claim back so the next tick retries instead of going silent.
       await this.dedupService.releaseKey(key);
       throw err;
     }
-    return true;
+    // Nothing was created (the creator has no channel on for this type):
+    // hand the claim back rather than burn it on a warning nobody received.
+    if (!created) await this.dedupService.releaseKey(key);
+    return created;
   }
 
   /**
@@ -177,12 +181,15 @@ export class SchedulingPollExpiryService {
    *
    * With no leader the DM carries neither `slotId` nor `lockLabel`, so the
    * dispatcher renders no Lock button — there is no time to lock in.
+   *
+   * @returns True when a notification row was created; false when the
+   *   creator's preferences left it no channel to deliver on.
    */
   private async sendWarning(
     poll: ExpiryWarnCandidate,
     leader: SlotWithYesCount | null,
     timeZone: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const copy: WarnCopy = leader
       ? buildExpiryWarnCopy(
           poll.gameName,
@@ -191,7 +198,7 @@ export class SchedulingPollExpiryService {
           timeZone,
         )
       : buildNoLeaderWarnCopy(poll.gameName, poll.phaseDeadline);
-    await this.notificationService.create({
+    const created = await this.notificationService.create({
       userId: poll.creatorId,
       type: 'scheduling_poll',
       title: copy.title,
@@ -207,6 +214,7 @@ export class SchedulingPollExpiryService {
           : {}),
       },
     });
+    return created !== null;
   }
 
   /** Fire one embed sync per newly-expired poll (card or not — see the query doc). */
