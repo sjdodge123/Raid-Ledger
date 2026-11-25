@@ -13,12 +13,19 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as queryHelpers from './lfg-query.helpers';
 import * as writeHelpers from './lfg-write.helpers';
 import * as convertedHelpers from './lfg-converted-event.helpers';
+import * as scopeHelpers from './lfg-group-scope.helpers';
 
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 
 jest.mock('./lfg-query.helpers');
 jest.mock('./lfg-write.helpers');
 jest.mock('./lfg-converted-event.helpers');
+// ROK-2352: the own-hand read moved to the group-scope helpers.
+jest.mock('./lfg-group-scope.helpers', () => ({
+  ...jest.requireActual<typeof scopeHelpers>('./lfg-group-scope.helpers'),
+  findOwnLiveHand: jest.fn(),
+  listOwnOtherGroups: jest.fn(),
+}));
 
 const GAME = { id: 42, name: 'Valheim' };
 const CONVERTED = {
@@ -37,6 +44,8 @@ async function buildService(converted: unknown): Promise<LfgService> {
   jest.mocked(queryHelpers.listGroupMembers).mockResolvedValue([]);
   jest.mocked(queryHelpers.findOpenForumThreadId).mockResolvedValue(null);
   jest.mocked(writeHelpers.findActiveIntent).mockResolvedValue(null);
+  jest.mocked(scopeHelpers.findOwnLiveHand).mockResolvedValue(null);
+  jest.mocked(scopeHelpers.listOwnOtherGroups).mockResolvedValue([]);
   jest
     .mocked(convertedHelpers.readConvertedEvent)
     .mockResolvedValue(converted as never);

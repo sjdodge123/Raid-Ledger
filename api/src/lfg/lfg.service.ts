@@ -174,9 +174,18 @@ export class LfgService {
     gameId: number,
     group?: string,
   ): Promise<void> {
-    const { slug } = await this.requireGame(gameId);
-    const adapter = resolveLfgGrouping(this.pluginRegistry, slug);
-    const scope = resolveWithdrawScope(adapter, group);
+    // No `group` (Discord `/lfg-leave`, internal callers) = every hand, with
+    // no game read; the HTTP route always passes one (schema default `''`).
+    const scope =
+      group === undefined
+        ? null
+        : resolveWithdrawScope(
+            resolveLfgGrouping(
+              this.pluginRegistry,
+              (await this.requireGame(gameId)).slug,
+            ),
+            group,
+          );
     const cleared = await clearIntent(this.db, userId, gameId, scope);
     if (!cleared) {
       throw new NotFoundException('No active LFG intent for this game');

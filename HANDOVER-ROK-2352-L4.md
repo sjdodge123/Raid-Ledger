@@ -37,3 +37,9 @@
 3. Unit specs for `lfg-group-scope.helpers.ts` (dedupe) and `lfg-group-list.helpers.ts` ordering — none yet.
 4. Existing unit specs that pin `toIntentDto` output / `getGroupSummary` call args may need `groupKey: ''` / the extra
    `scope` arg — see lane-check table in the L4 reply.
+
+## Follow-up commit
+- `LfgService.withdraw(userId, gameId, group?)`: `group === undefined` (Discord `/lfg-leave`, internal callers) = every
+  hand, no game read; the HTTP route always passes one (schema default `''`). Keeps the unit mocks and the Discord path.
+- `lfg.service.converted-event.spec.ts` now mocks `findOwnLiveHand` / `listOwnOtherGroups` (the own-hand read moved).
+- lane-check: RESULT PASS (all rows green, plugin-host included — L5 has registered the adapter).
