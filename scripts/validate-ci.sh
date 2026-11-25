@@ -1788,7 +1788,10 @@ run_container_validation() {
     return 0
   fi
 
-  local cname="rl-ci-test-$$"
+  local slot_sfx image_tag cname
+  slot_sfx=$(_container_startup_slot_suffix)
+  image_tag="rl:ci-test${slot_sfx}"
+  cname="rl-ci-test${slot_sfx}-$$"
   # Ensure cleanup on any exit path. The double quotes expand $cname NOW, on
   # purpose: a RETURN trap stays set after this function returns and can fire
   # again on a later return, where this local no longer exists and `set -u`
@@ -1799,26 +1802,46 @@ run_container_validation() {
   # ROK-1331 M13: choose a non-conflicting host port for the allinone container.
   # The fleet VM's rl-dashboard service permanently occupies :8080, so the
   # legacy `docker run -p 8080:80` fails with "port is already allocated".
-  # Resolution order: explicit RL_CONTAINER_STARTUP_PORT > fleet default 8090
-  # (detected via /workspace mount) > laptop default 8080.
-  local host_port="${RL_CONTAINER_STARTUP_PORT:-}"
-  if [ -z "$host_port" ]; then
-    if [ -d /workspace ]; then
-      host_port=8090
-    else
-      host_port=8080
-    fi
-  fi
+  # Resolution order: see _container_startup_port (fleet ports are per slot).
+  local host_port
+  host_port=$(_container_startup_port)
 
-  docker build -f Dockerfile.allinone -t rl:ci-test .
+  docker build -f Dockerfile.allinone -t "$image_tag" .
   docker run --rm -d \
     --name "$cname" \
     -p "${host_port}:80" \
     -e ADMIN_PASSWORD=ci-test \
     -e ENABLE_TELEMETRY=false \
-    rl:ci-test
+    "$image_tag"
 
   _wait_for_container_health "$cname" "$host_port"
+}
+
+# TDB:3795/3861/4085 — every fleet slot used to build `rl:ci-test` and bind
+# host :8090, so two slots' gates in this step at once failed with "port is
+# already allocated". On the fleet (/workspace) with a numeric RL_SLOT the tag,
+# container name and port are keyed to the slot; a laptop run (no /workspace)
+# or an unset/non-numeric RL_SLOT keeps the old tag and port.
+_container_startup_slot_suffix() {
+  local slot="${RL_SLOT:-}"
+  if [ -d /workspace ] && [[ "$slot" =~ ^[0-9]+$ ]]; then
+    echo "-slot${slot}"
+  fi
+}
+
+# Host port: explicit RL_CONTAINER_STARTUP_PORT > fleet 8090+RL_SLOT (8090 when
+# RL_SLOT is unset or non-numeric) > laptop 8080.
+_container_startup_port() {
+  local slot="${RL_SLOT:-}"
+  if [ -n "${RL_CONTAINER_STARTUP_PORT:-}" ]; then
+    echo "$RL_CONTAINER_STARTUP_PORT"
+  elif [ ! -d /workspace ]; then
+    echo 8080
+  elif [[ "$slot" =~ ^[0-9]+$ ]]; then
+    echo $((8090 + 10#$slot))
+  else
+    echo 8090
+  fi
 }
 
 _wait_for_container_health() {
