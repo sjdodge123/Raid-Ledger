@@ -106,15 +106,26 @@ settings_bundle::freshness_json() {
 }
 
 # Builds the present:true object; falls back to a fixed object if jq fails.
+# A bundle older than RL_SETTINGS_BUNDLE_STALE_HOURS (720 = 30 days) that
+# otherwise reads fine gets a stale warning: keys rotated since the last
+# `rl settings push` are silently missing from every deployed env (TDB:
+# 1244 h old bundle). It does not change `decrypts`.
 settings_bundle::_freshness_object() {
-    jq -nc --arg epoch "$1" --arg count "$2" --argjson decrypts "$3" --arg warn "$4" '
+    local stale_h="${RL_SETTINGS_BUNDLE_STALE_HOURS:-720}"
+    [[ "$stale_h" =~ ^[0-9]+$ ]] || stale_h=720
+    jq -nc --arg epoch "$1" --arg count "$2" --argjson decrypts "$3" --arg warn "$4" \
+        --argjson stale "$stale_h" '
         ($epoch | if . == "" then null else tonumber end) as $e
+        | (if $e == null then null else ((((now - $e) / 360) | round) / 10) end) as $age
         | {present: true,
            mtime: (if $e == null then null else ($e | todate) end),
-           age_hours: (if $e == null then null else ((((now - $e) / 360) | round) / 10) end),
+           age_hours: $age,
            key_count: (if $count == "" then null else ($count | tonumber) end),
            decrypts: $decrypts,
-           warning: (if $warn == "" then null else $warn end)}' 2>/dev/null \
+           warning: (if $warn != "" then $warn
+                     elif $age != null and $age > $stale then
+                       "settings bundle is \(($age / 24) | floor) days old (over \($stale) h) — re-run `rl settings push` so rotated API keys reach deployed envs"
+                     else null end)}' 2>/dev/null \
         || printf '%s\n' '{"present":true,"mtime":null,"age_hours":null,"key_count":null,"decrypts":null,"warning":"settings bundle freshness probe failed"}'
     return 0
 }
