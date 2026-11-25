@@ -1,8 +1,10 @@
 /**
  * ROK-2370: the login card's body. Order (operator ruling 2026-11-25):
- * [L3b: last-used card] → top-level provider buttons → "Try another way"
- * disclosure (Discord-app code, then username/password). With no providers
- * the password form shows on its own, as before.
+ * last-used card (when this browser remembers a sign-in) → top-level
+ * provider buttons → "Try another way" disclosure (Discord-app code, then
+ * username/password). With a last-used card, the providers + disclosure sit
+ * under an "or" divider behind "Sign in another way". With no providers the
+ * password form shows on its own, as before.
  */
 import type { JSX } from 'react';
 import type { LoginMethodDto } from '@raid-ledger/contract';
@@ -13,10 +15,13 @@ import { clearPendingSigninCode, readPendingSigninCode } from '../../lib/signin-
 import { LocalLoginForm } from './LocalLoginForm';
 import { SigninCodePanel } from './SigninCodePanel';
 import { SignInAnotherWay, type SignInSection, type SignInSectionId } from './SignInAnotherWay';
+import { LastUsedSigninCard } from './LastUsedSigninCard';
+import { useLastUsedSignin, type LastUsedSignin } from './use-last-used-signin';
 
 export const ANOTHER_WAY_INTRO = 'If the button above doesn’t work in your browser, get a code and confirm it in Discord.';
 export const CODE_SECTION_TITLE = 'Get a code to confirm in Discord';
 export const PASSWORD_SECTION_TITLE = 'Sign in with username';
+export const SIGN_IN_ANOTHER_WAY_TOGGLE = 'Sign in another way';
 
 export interface LoginBodyProps {
     authProviders: LoginMethodDto[];
@@ -28,7 +33,7 @@ export interface LoginBodyProps {
     onLocalLogin: (u: string, p: string) => Promise<void>;
     isLoading: boolean;
     error: string | null;
-    /** A code sign-in finished (route from here; L3b records the last-used marker here). */
+    /** A code sign-in finished (the page records the last-used marker and routes). */
     onCodeSignedIn: (user: User) => void;
 }
 
@@ -69,18 +74,49 @@ function initialDisclosure(props: LoginBodyProps): { open: boolean; section: Sig
     return { open: false, section: undefined };
 }
 
-/** Main login body — provider buttons + disclosure, or the local form alone. */
+/** "or" between the last-used card and the other methods (the Add Character divider idiom). */
+function OrDivider(): JSX.Element {
+    return (
+        <div className="my-4 flex items-center gap-3 text-sm text-muted" aria-hidden="true">
+            <span className="h-px flex-1 bg-edge" />or<span className="h-px flex-1 bg-edge" />
+        </div>
+    );
+}
+
+/** Provider buttons + disclosure; a card tap remounts the disclosure open on its section. */
+function OtherMethods({ props, lastUsed }: { props: LoginBodyProps; lastUsed: LastUsedSignin }): JSX.Element {
+    const initial = initialDisclosure(props);
+    const req = lastUsed.request;
+    return (
+        <>
+            <ProviderButtons providers={props.authProviders} isRedirecting={props.isRedirecting} onLogin={props.onProviderLogin} />
+            <SignInAnotherWay key={req ? `${req.section}-${req.n}` : 'initial'} sections={buildSections(props)}
+                intro={props.discordSigninCode ? ANOTHER_WAY_INTRO : null} defaultOpen={req ? true : initial.open}
+                initialSection={req ? req.section : initial.section} onClose={clearPendingSigninCode} />
+        </>
+    );
+}
+
+/** Main login body — last-used card, provider buttons + disclosure, or the local form alone. */
 export function LoginBody(props: LoginBodyProps): JSX.Element {
+    const lastUsed = useLastUsedSignin({
+        providers: props.authProviders, codeOffered: props.discordSigninCode, onProviderLogin: props.onProviderLogin,
+    });
     if (props.authProviders.length === 0) {
         return <LocalLoginForm onSubmit={props.onLocalLogin} isLoading={props.isLoading} error={props.error} />;
     }
-    const initial = initialDisclosure(props);
+    if (!lastUsed.marker) return <OtherMethods props={props} lastUsed={lastUsed} />;
     return (
         <>
-            {/* L3b (ROK-2370): LastUsedSigninCard renders here; with a marker, the two blocks below sit behind its "Sign in another way". */}
-            <ProviderButtons providers={props.authProviders} isRedirecting={props.isRedirecting} onLogin={props.onProviderLogin} />
-            <SignInAnotherWay sections={buildSections(props)} intro={props.discordSigninCode ? ANOTHER_WAY_INTRO : null}
-                defaultOpen={initial.open} initialSection={initial.section} onClose={clearPendingSigninCode} />
+            <LastUsedSigninCard marker={lastUsed.marker} onContinue={lastUsed.continueWith} onNotYou={lastUsed.notYou} />
+            <OrDivider />
+            {lastUsed.expanded ? <OtherMethods props={props} lastUsed={lastUsed} /> : (
+                <div className="text-center">
+                    <Button variant="ghost" size="sm" aria-expanded={false} onClick={lastUsed.expand}>
+                        {SIGN_IN_ANOTHER_WAY_TOGGLE}
+                    </Button>
+                </div>
+            )}
         </>
     );
 }
