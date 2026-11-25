@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { at } from '../test/defined';
 import { readFileSync } from 'fs';
 import { join, resolve } from 'path';
+import { lightSchemes, parseSchemeGroup } from './light-scheme-css';
 
 /**
  * Static analysis of the badge-overlay CSS rules (ROK-493).
@@ -164,7 +165,7 @@ describe('badge-overlay CSS — every repainted cover-badge class is restored', 
 });
 
 /**
- * A cover badge spelled with an accent token (STATUS_STYLES: `bg-success/20`, `text-warning` …)
+ * A cover badge spelled with an accent token (STATUS_STYLES: `bg-success/10`, `text-warning` …)
  * flips with the family through `--color-<token>`, not a class rule, so the restore is a variable
  * pin on `.badge-overlay` under the light schemes — and its value must be the DARK `@theme` value
  * (TDB:2480).
@@ -174,14 +175,15 @@ const STATUS_SRC = /STATUS_STYLES[^{]*\{[^}]*\}/.exec(read('lib/event-utils.ts')
 const COVER_TOKENS = [...new Set([...STATUS_SRC.matchAll(TOKEN_CLASS)].map((m) => m[1] ?? ''))].sort();
 const themeValue = (token: string) =>
     new RegExp(`@theme\\s*\\{[\\s\\S]*?--color-${token}:\\s*(#[0-9a-fA-F]{3,8})`).exec(css)?.[1];
-const PIN_RULE =
-    /:is\(\[data-scheme="light"\][^()]*\)\s+\.badge-overlay\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+const PIN_MATCH = /:is\(([^()]*)\)\s+\.badge-overlay\s*\{([^}]*)\}/.exec(css);
+const PIN_RULE = PIN_MATCH?.[2] ?? '';
+const PIN_SCHEMES = parseSchemeGroup(PIN_MATCH?.[1] ?? '') ?? [];
 const pinnedValue = (token: string) => new RegExp(`--color-${token}:\\s*(#[0-9a-fA-F]{3,8})`).exec(PIN_RULE)?.[1];
 
 describe('badge-overlay CSS — accent tokens on cover badges keep their dark value (TDB:2480)', () => {
     it('the status badge is spelled with the success / warning / danger tokens', () => {
         expect(COVER_TOKENS).toEqual(['danger', 'success', 'warning']);
-        expect(STATUS_SRC).toContain('bg-success/20');
+        expect(STATUS_SRC).toContain('bg-success/10');
     });
 
     it('STATUS_STYLES carries no raw Tailwind hue', () => {
@@ -195,6 +197,15 @@ describe('badge-overlay CSS — accent tokens on cover badges keep their dark va
             pinnedValue(token)?.toLowerCase(),
             `.badge-overlay under the light schemes must re-declare --color-${token}: ${dark} — the cover badge paints the light shade on dark art`,
         ).toBe(dark?.toLowerCase());
+    });
+
+    it('the token pin covers exactly the light schemes of the shared light token block', () => {
+        const light = lightSchemes(css).map((s) => s.name).sort();
+        expect(light.length, 'no light scheme parsed from index.css').toBeGreaterThan(0);
+        expect(
+            [...PIN_SCHEMES].sort(),
+            'the .badge-overlay token pin must list every light scheme — a dropped one paints the light shade on dark art',
+        ).toEqual(light);
     });
 
     it('the token pin sits inside the badge-overlay block (no !important)', () => {
