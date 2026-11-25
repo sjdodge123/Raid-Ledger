@@ -1021,14 +1021,29 @@ run_relay_hub_checks() {
     npm run lint -w @raid-ledger/relay-hub || exit 1
     npm run typecheck -w @raid-ledger/relay-hub || exit 1
     npm run build -w @raid-ledger/relay-hub || exit 1
-    npm test -w @raid-ledger/relay-hub
+    npm test -w @raid-ledger/relay-hub || exit 1
+    # ROK-1670: the hub's own migration journal + snapshot drift (ci.yml).
+    bash scripts/fix-migration-order.sh --check \
+      --journal relay-hub/drizzle/migrations/meta/_journal.json || exit 1
+    RL_DRIFT_SCHEMA=relay-hub/src/drizzle/schema.ts \
+      RL_DRIFT_MIGRATIONS_DIR=relay-hub/drizzle/migrations \
+      bash scripts/validate-migrations.sh --drift-only
   )
 }
 
-# No database yet (RH-2b adds Postgres): one Nest boot over supertest.
+# ROK-1670: the hub specs need a Postgres server in DATABASE_URL (each file
+# creates its own throwaway database). Without one this step SKIPS
+# and GitHub CI's relay-hub job, which has a Postgres service, is the gate.
 run_relay_hub_integration() {
   _skip_unless_relay_hub_changed && return 0
-  (cd "$REPO_ROOT" && npm run test:integration -w @raid-ledger/relay-hub)
+  if [ -z "${RELAY_HUB_DATABASE_URL:-${DATABASE_URL:-}}" ]; then
+    STEP_SKIP_REASON="no DATABASE_URL / RELAY_HUB_DATABASE_URL (GitHub CI runs it)"
+    echo -e "${YELLOW}Not run: ${STEP_SKIP_REASON}.${NC}"
+    skip_step
+    return 0
+  fi
+  (cd "$REPO_ROOT" && DATABASE_URL="${RELAY_HUB_DATABASE_URL:-$DATABASE_URL}" \
+    npm run test:integration -w @raid-ledger/relay-hub)
 }
 
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.

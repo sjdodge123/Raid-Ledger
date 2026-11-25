@@ -15,6 +15,9 @@
 #   ./scripts/fix-migration-order.sh --check                # Check only (exit 1 if bad)
 #   ./scripts/fix-migration-order.sh --against <ref>        # Auto-fix vs an explicit base
 #   ./scripts/fix-migration-order.sh --check --against <ref> # + merge-order guard, check only
+#   ./scripts/fix-migration-order.sh --check --journal relay-hub/drizzle/migrations/meta/_journal.json
+#       --journal <repo-relative path> checks another workspace's journal
+#       (default: api's). ROK-1670: the relay hub has its own.
 #
 # ROK-1693: the neighbour check below cannot see a NEW entry inserted
 # mid-journal with an older `when` (0176_lfg_invites merged after 0177 and
@@ -28,12 +31,6 @@ set -euo pipefail
 
 JOURNAL="api/src/drizzle/migrations/meta/_journal.json"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-JOURNAL_PATH="$SCRIPT_DIR/$JOURNAL"
-
-if [ ! -f "$JOURNAL_PATH" ]; then
-    echo "ERROR: Journal not found at $JOURNAL_PATH"
-    exit 1
-fi
 
 CHECK_ONLY=false
 AGAINST=""
@@ -41,18 +38,25 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --check) CHECK_ONLY=true ;;
         --against) AGAINST="${2:?--against needs a git ref}"; shift ;;
+        --journal) JOURNAL="${2:?--journal needs a repo-relative path}"; shift ;;
         *) echo "ERROR: unknown argument: $1"; exit 1 ;;
     esac
     shift
 done
 
+JOURNAL_PATH="$SCRIPT_DIR/$JOURNAL"
+if [ ! -f "$JOURNAL_PATH" ]; then
+    echo "ERROR: Journal not found at $JOURNAL_PATH"
+    exit 1
+fi
+
 GUARD="$SCRIPT_DIR/scripts/check-migration-merge-order.mjs"
 if $CHECK_ONLY; then
     if [ -n "$AGAINST" ]; then
-        node "$GUARD" --base "$AGAINST" || exit 1
+        node "$GUARD" --base "$AGAINST" --journal "$JOURNAL" || exit 1
     fi
 else
-    guard_args=(--fix)
+    guard_args=(--fix --journal "$JOURNAL")
     if [ -n "$AGAINST" ]; then guard_args+=(--base "$AGAINST"); fi
     guard_rc=0
     node "$GUARD" "${guard_args[@]}" || guard_rc=$?
