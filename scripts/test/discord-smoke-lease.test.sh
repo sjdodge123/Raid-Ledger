@@ -94,7 +94,7 @@ case "$method $url" in
         esac ;;
     "GET "*/git/commits/aaa)
         msg="$(printf 'discord-smoke lease 0\n\nrun_id=%s\nrun_attempt=1\nrun_url=http://stub.invalid/run\nacquired_at=%s\n' \
-            "$STUB_HOLDER_RUN_ID" "$(date +%s)")"
+            "$STUB_HOLDER_RUN_ID" "${STUB_ACQUIRED_AT:-$(date +%s)}")"
         respond 200 "$(jq -nc --arg m "$msg" '{message: $m}')" ;;
     "DELETE "*/git/refs/locks/discord-smoke/0) respond 204 '' ;;
     *) respond 500 '{}' ;;
@@ -142,6 +142,46 @@ run_case "d: slot held by another run is left alone" same 999
 assert_rc0
 assert_count '^DELETE ' "$CASE_DIR/calls" 0 "another run's lease"
 assert_count "$REF_GET" "$CASE_DIR/calls" 1 "no re-read for another run's lease"
+
+# TDB:3194 — stale_reason must never put a commit-message field into bash
+# arithmetic unvalidated. stale_case <name> <holder run_id> <acquired_at>
+# calls stale_reason aaa 0 (no run-status API call) and records its output.
+stale_case() {
+    CURRENT_TEST_NAME="$1"
+    CASE_DIR="$WORK/stale-$(printf '%s' "$1" | tr -c 'a-z0-9' _)"
+    mkdir -p "$CASE_DIR"
+    : >"$CASE_DIR/calls"
+    (
+        unset GITHUB_TOKEN GITHUB_SERVER_URL LEASE_REF_NAMESPACE LEASE_NAME
+        export PATH="$WORK/bin:$PATH" STUB_DIR="$CASE_DIR" STUB_REGET=same \
+            STUB_HOLDER_RUN_ID="$2" STUB_ACQUIRED_AT="$3"
+        export GITHUB_REPOSITORY=o/r GITHUB_RUN_ID=111 GITHUB_RUN_ATTEMPT=2 \
+            GH_TOKEN=stub-not-a-real-token GITHUB_API_URL=http://stub.invalid \
+            LEASE_POOL_SIZE=1 LEASE_LIB_ONLY=1
+        cd "$CASE_DIR" || exit 1
+        # shellcheck disable=SC1090
+        source "$LEASE_SCRIPT"
+        stale_reason aaa 0
+    ) >"$CASE_DIR/out" 2>&1
+    CASE_RC=$?
+}
+assert_no_pwn() {
+    if [ -e "$CASE_DIR/PWNED" ]; then fail "acquired_at payload executed a command"; else pass; fi
+}
+
+stale_case "e: command-substitution acquired_at is not evaluated" 999 'RUN_ID[$(touch PWNED)]'
+assert_no_pwn
+assert_out '^holder acquired_at is malformed$' "malformed acquired_at is stale"
+
+stale_case "f: malformed run_id is stale" 'RUN_ID[$(touch PWNED)]' "$(date +%s)"
+assert_no_pwn
+assert_out '^holder run_id is malformed$' "malformed run_id is stale"
+
+stale_case "g: future acquired_at is stale" 999 "$(( $(date +%s) + 999999 ))"
+assert_out '^holder acquired_at is in the future$' "future lease is stale"
+
+stale_case "h: fresh numeric lease is not stale" 999 "$(date +%s)"
+if [ -s "$CASE_DIR/out" ]; then fail "fresh lease reported stale: $(tr '\n' '|' <"$CASE_DIR/out")"; else pass; fi
 
 echo
 echo "--- $CURRENT_TEST_FILE: $TEST_PASS_COUNT pass, $TEST_FAIL_COUNT fail ---"

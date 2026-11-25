@@ -250,6 +250,52 @@ await test('a 401 landing after the token was refreshed re-sends without re-logg
   assert.equal(calls.at(-1)?.auth, 'Bearer token-2', 'the late re-send must carry the refreshed token');
 });
 
+/** A fetch that never answers: it rejects only when its AbortSignal fires. */
+function stubHangingFetch(): Call[] {
+  const calls: Call[] = [];
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(input), auth: new Headers(init?.headers).get('Authorization') });
+    const signal = init?.signal;
+    if (!signal) return Promise.reject(new Error('stubHangingFetch: request carried no AbortSignal'));
+    // AbortSignal.timeout's timer is unref'd; hold the loop open until it fires.
+    const keepAlive = setInterval(() => undefined, 1_000);
+    return new Promise<Response>((_resolve, reject) => {
+      signal.addEventListener(
+        'abort',
+        () => {
+          clearInterval(keepAlive);
+          reject(signal.reason);
+        },
+        { once: true },
+      );
+    });
+  }) as typeof fetch;
+  return calls;
+}
+
+await test('a request with no response times out naming the verb, the path and the limit (TDB:4650)', async () => {
+  const calls = stubHangingFetch();
+  const quick = new ApiClient(BASE, 'test-token', 50);
+  const err = await rejectionOf(quick.put('/hubs/9/forum-binding', { forumId: 'x' }), 'put()');
+  assert.equal(messageOf(err), 'PUT /hubs/9/forum-binding → no response after 50ms (client timeout)');
+  assert.equal(calls.length, 1, `a timed-out request must not be re-sent: expected 1 fetch, got ${calls.length}`);
+});
+
+await test('post() honours a per-request timeout override over the client default', async () => {
+  stubHangingFetch();
+  const quick = new ApiClient(BASE, 'test-token', 30);
+  const started = Date.now();
+  const err = await rejectionOf(quick.post('/admin/test/reset-to-seed', {}, { timeoutMs: 120 }), 'post()');
+  assert.equal(messageOf(err), 'POST /admin/test/reset-to-seed → no response after 120ms (client timeout)');
+  assert.ok(Date.now() - started >= 100, 'the override must replace the 30ms client default');
+});
+
+await test('a transport failure names the request instead of a bare "fetch failed"', async () => {
+  globalThis.fetch = (() => Promise.reject(new TypeError('fetch failed'))) as typeof fetch;
+  const err = await rejectionOf(api.get('/events/7'), 'get()');
+  assert.equal(messageOf(err), 'GET /events/7 → fetch failed');
+});
+
 globalThis.fetch = realFetch;
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -18,6 +18,7 @@ import {
   unclaimedOrOwnedBy,
 } from './signups-ownership.helpers';
 import { defined } from '../common/defined.helpers';
+import { EVENT_ENDED_SIGNUP_MESSAGE, isEventOver } from './event-ended.helpers';
 
 export async function fetchEventOrThrow(db: Tx, eventId: number) {
   const [eventRow] = await db
@@ -48,16 +49,8 @@ export function assertEventAcceptingSignups(
       'This event is being rescheduled via a scheduling poll and is no longer accepting signups.',
     );
   }
-  if (event.adHocStatus === 'ended') {
-    throw new ConflictException(
-      'This event has ended and is no longer accepting signups.',
-    );
-  }
-  const effectiveEnd = event.extendedUntil ?? event.duration?.[1];
-  if (effectiveEnd && effectiveEnd < new Date()) {
-    throw new ConflictException(
-      'This event has ended and is no longer accepting signups.',
-    );
+  if (isEventOver(event)) {
+    throw new ConflictException(EVENT_ENDED_SIGNUP_MESSAGE);
   }
 }
 

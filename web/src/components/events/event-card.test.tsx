@@ -223,20 +223,20 @@ describe('EventCard badge-overlay class (ROK-473) — part 1', () => {
         expect(badge).toHaveClass('badge-overlay');
     });
 
-    it('upcoming status badge has emerald color classes', () => {
+    it('upcoming status badge has the success token classes', () => {
         render(<EventCard event={createMockEvent()} signupCount={0} />);
         const badge = screen.getByTestId('event-status-badge');
-        expect(badge.className).toContain('bg-emerald-500/20');
+        expect(badge.className).toContain('bg-success/10');
     });
 
-    it('live status badge has yellow color classes', () => {
+    it('live status badge has the warning token classes', () => {
         const liveEvent = createMockEvent({
             startTime: '2026-02-10T18:00:00Z',
             endTime: '2026-02-10T22:00:00Z',
         });
         render(<EventCard event={liveEvent} signupCount={0} />);
         const badge = screen.getByTestId('event-status-badge');
-        expect(badge.className).toContain('bg-yellow-500/20');
+        expect(badge.className).toContain('bg-warning/10');
     });
 
 });
@@ -260,13 +260,13 @@ describe('EventCard badge-overlay class (ROK-473) — part 2', () => {
         expect(badge.className).toContain('bg-dim/20');
     });
 
-    it('cancelled status badge has red color classes', () => {
+    it('cancelled status badge has the danger token classes', () => {
         const cancelledEvent = createMockEvent({
             cancelledAt: '2026-02-05T00:00:00Z',
         });
         render(<EventCard event={cancelledEvent} signupCount={0} />);
         const badge = screen.getByTestId('event-status-badge');
-        expect(badge.className).toContain('bg-red-500/20');
+        expect(badge.className).toContain('bg-danger/10');
     });
 
     it('game time badge has badge-overlay class when matchesGameTime is true', () => {

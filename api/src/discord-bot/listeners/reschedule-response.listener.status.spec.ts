@@ -14,6 +14,7 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import { isEventOver } from '../../events/event-ended.helpers';
 
 /** Test-friendly interface exposing private members needed by specs */
 interface TestableRescheduleResponseListener {
@@ -109,6 +110,8 @@ const mockSignup = {
 
 let mockEmitter: { emit: jest.Mock };
 
+const HOUR = 3600_000;
+
 async function setupStatusModule() {
   mockDb = createDrizzleMock();
   mockEmitter = { emit: jest.fn() };
@@ -182,6 +185,14 @@ describe('RescheduleResponseListener — status', () => {
     declineSuccessTests();
     declineEdgeCaseTests();
   });
+
+  describe('ended-event guard (Confirm/Tentative)', () => {
+    endedEventGuardTests();
+  });
+});
+
+describe('isEventOver', () => {
+  isEventOverTableTests();
 });
 
 function setupTentativeMocks() {
@@ -231,6 +242,33 @@ function tentativeSuccessTests() {
 }
 
 function tentativeEdgeCaseTests() {
+  it('refuses Tentative once the event has ended, without touching the signup (TDB:2851)', async () => {
+    const past = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const ended = {
+      ...mockEvent,
+      duration: [new Date(past.getTime() - 3600_000), past],
+      extendedUntil: null,
+      adHocStatus: null,
+    };
+    mockDb.limit.mockResolvedValueOnce([ended]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue({
+      ...mockSignup,
+      status: 'declined',
+    });
+    // Unlinked, with a declined row: without the guard the reconfirm runs.
+    mockDb.limit.mockResolvedValueOnce([]);
+    mockDb.limit.mockResolvedValueOnce([{ ...mockSignup, status: 'declined' }]);
+    mockDb.limit.mockResolvedValueOnce([]);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+    );
+    await listener['handleTentative'](interaction, 42);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'This event has ended and is no longer accepting signups.',
+    });
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
   it('replies "Event not found." when event does not exist', async () => {
     mockDb.limit.mockResolvedValueOnce([]);
     const interaction = makeButtonInteraction(
@@ -400,5 +438,101 @@ function declineEdgeCaseTests() {
       content: "You're not signed up for this event.",
     });
     expect(mockDb.update).not.toHaveBeenCalled();
+  });
+}
+
+/** mockEvent with an explicit schedule; `endOffset` is hours from now. */
+function scheduledEvent(
+  endOffset: number,
+  extra: { extendedUntil?: Date | null; adHocStatus?: string | null } = {},
+) {
+  const end = new Date(Date.now() + endOffset * HOUR);
+  return {
+    ...mockEvent,
+    duration: [new Date(end.getTime() - 2 * HOUR), end],
+    extendedUntil: extra.extendedUntil ?? null,
+    adHocStatus: extra.adHocStatus ?? null,
+  };
+}
+
+const ENDED_REPLY = {
+  content: 'This event has ended and is no longer accepting signups.',
+};
+
+function endedEventGuardTests() {
+  it('refuses Confirm once the event has ended, without touching the signup', async () => {
+    mockDb.limit.mockResolvedValueOnce([scheduledEvent(-1)]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.CONFIRM}:42`,
+    );
+    await listener['handleConfirm'](interaction, 42);
+    expect(interaction.editReply).toHaveBeenCalledWith(ENDED_REPLY);
+    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(mockSignupsService.confirmSignup).not.toHaveBeenCalled();
+  });
+
+  it('refuses Tentative on an ended ad-hoc session whose end is still ahead', async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      scheduledEvent(2, { adHocStatus: 'ended' }),
+    ]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+    );
+    await listener['handleTentative'](interaction, 42);
+    expect(interaction.editReply).toHaveBeenCalledWith(ENDED_REPLY);
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['the scheduled end is ahead', scheduledEvent(2)],
+    [
+      'the end passed but extendedUntil is ahead',
+      scheduledEvent(-1, { extendedUntil: new Date(Date.now() + HOUR) }),
+    ],
+  ])('lets Tentative through when %s', async (_label, event) => {
+    mockDb.limit.mockResolvedValueOnce([event]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    mockDb.limit.mockResolvedValueOnce([]);
+    mockDb.limit.mockResolvedValueOnce([mockSignup]);
+    mockDb.limit.mockResolvedValueOnce([]);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+    );
+    await listener['handleTentative'](interaction, 42);
+    expect(interaction.editReply).not.toHaveBeenCalledWith(ENDED_REPLY);
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'tentative' }),
+    );
+  });
+}
+
+function isEventOverTableTests() {
+  const now = new Date('2026-11-25T12:00:00Z');
+  const at = (h: number) => new Date(now.getTime() + h * HOUR);
+  const row = (
+    end: number,
+    extendedUntil: Date | null = null,
+    adHocStatus: string | null = null,
+  ): {
+    duration: [Date, Date];
+    extendedUntil: Date | null;
+    adHocStatus: string | null;
+  } => ({
+    duration: [at(end - 2), at(end)],
+    extendedUntil,
+    adHocStatus,
+  });
+
+  it.each([
+    ['scheduled end passed', row(-1), true],
+    ['scheduled end ahead', row(1), false],
+    ['end passed, extendedUntil ahead', row(-1, at(1)), false],
+    ['end ahead, extendedUntil passed', row(1, at(-1)), true],
+    ['ad-hoc ended, end ahead', row(1, null, 'ended'), true],
+    ['ad-hoc live, end ahead', row(1, null, 'live'), false],
+  ])('%s -> %s', (_label, event, expected) => {
+    expect(isEventOver(event, now)).toBe(expected);
   });
 }

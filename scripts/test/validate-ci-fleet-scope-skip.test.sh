@@ -190,7 +190,9 @@ assert_runs_all() {
     assert_in "$API_JEST" "$NPX" "$1: api jest must run"
     assert_in "$API_INTEGRATION" "$NPX" "$1: api integration must run"
     assert_in "$WEB_VITEST" "$NPX" "$1: web vitest must run"
-    assert_not_in 'SKIPPED — ' "$INVOKE_OUT" "$1: no scope-skip rows"
+    # The relay-hub rows follow the diff on their own reason (ROK-1669); only
+    # a --fleet scope skip is this case's concern.
+    assert_not_in 'SKIPPED — .*--fleet scope' "$INVOKE_OUT" "$1: no scope-skip rows"
     assert_in '^--test .*scripts/[^ ]*\.spec\.mjs' "$NODE" "$1: node:test step reached (stubbed, never nested)"
 }
 
@@ -250,7 +252,24 @@ assert_rc 0 "--full web-only"
 assert_in 'test:cov -w api|jest --coverage' "$NPX"$'\n'"$(cat "$npm_argv_file")" "--full: api unit must run"
 assert_in "$API_INTEGRATION" "$NPX" "--full: api integration must run"
 assert_in 'cwd=.*/web vitest run' "$NPX" "--full: web vitest must run"
-assert_not_in 'SKIPPED — ' "$INVOKE_OUT" "--full: no scope-skip rows"
+assert_not_in 'SKIPPED — .*--fleet scope' "$INVOKE_OUT" "--full: no scope-skip rows"
+
+# ===== H: the relay-hub rows follow the diff (ROK-1669) =====
+HUB_SKIP='^Relay hub \(deps guard, lint, typecheck, build, unit\) +SKIPPED — diff does not touch relay-hub/'
+HUB_INT_SKIP='^Integration tests \(relay-hub\) +SKIPPED — diff does not touch relay-hub/'
+CURRENT_TEST_NAME="H1: a web-only diff skips the relay-hub rows with a reason"
+invoke "web/src/pages/foo.tsx" --full --no-e2e
+assert_rc 0 "--full web-only (hub)"
+assert_in "$HUB_SKIP" "$INVOKE_OUT" "relay-hub checks row SKIPPED with reason"
+assert_in "$HUB_INT_SKIP" "$INVOKE_OUT" "relay-hub integration row SKIPPED with reason"
+assert_not_in 'typecheck -w @raid-ledger/relay-hub' "$(cat "$npm_argv_file")" "hub checks must not run"
+
+CURRENT_TEST_NAME="H2: a relay-hub diff runs both relay-hub rows"
+invoke "relay-hub/src/main.ts" --full --no-e2e
+assert_rc 0 "--full relay-hub"
+assert_not_in 'relay-hub\) +SKIPPED|Relay hub .* +SKIPPED' "$INVOKE_OUT" "relay-hub rows must not be SKIPPED"
+assert_in 'typecheck -w @raid-ledger/relay-hub' "$(cat "$npm_argv_file")" "hub typecheck runs via the workspace script"
+assert_in 'test:integration -w @raid-ledger/relay-hub' "$(cat "$npm_argv_file")" "hub integration runs"
 
 echo
 echo "--- $CURRENT_TEST_FILE: $TEST_PASS_COUNT pass, $TEST_FAIL_COUNT fail ---"

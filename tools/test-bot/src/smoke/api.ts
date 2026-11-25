@@ -32,6 +32,37 @@ async function parseJson<T>(method: string, path: string, res: Response): Promis
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
+/**
+ * Per-request client timeout (TDB:4650). Without one, a request stuck behind
+ * a server-side wait (discord.js's rate-limit queue in `createWebhook`) dies
+ * at Node's 300s default as a bare `fetch failed` that names nothing, and the
+ * server finishes the write after the test's cleanup already ran.
+ */
+export const REQUEST_TIMEOUT_MS = 90_000;
+
+/**
+ * `fetch`, bounded by `timeoutMs`, re-throwing any transport failure with the
+ * verb and path in front. Never retries: a re-sent mutation could apply twice.
+ */
+async function fetchNamed(
+  method: string,
+  path: string,
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new Error(`${method} ${path} → no response after ${timeoutMs}ms (client timeout)`, {
+        cause: err,
+      });
+    }
+    throw new Error(`${method} ${path} → ${errMsg(err)}`, { cause: err });
+  }
+}
+
 interface LoginResponse {
   access_token: string;
   user: { id: number };
@@ -43,11 +74,13 @@ async function fetchLogin(
   email: string,
   password: string,
 ): Promise<LoginResponse> {
-  const res = await fetch(`${baseUrl}/auth/local`, {
+  const init: RequestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
-  });
+  };
+  const url = `${baseUrl}/auth/local`;
+  const res = await fetchNamed('POST', '/auth/local', url, init, REQUEST_TIMEOUT_MS);
   if (!res.ok) throw new Error(`Login failed: ${res.status}`);
   return parseJson<LoginResponse>('POST', '/auth/local', res);
 }
@@ -78,9 +111,11 @@ export class ApiClient {
   /** The re-login in flight; every request that hit the same expiry awaits it. */
   private reloginInFlight: Promise<void> | undefined;
 
+  /** @param timeoutMs - per-request limit; tests pass a small one. */
   constructor(
     private baseUrl: string,
     private token: string,
+    private timeoutMs: number = REQUEST_TIMEOUT_MS,
   ) {}
 
   static async login(
@@ -100,9 +135,18 @@ export class ApiClient {
     return parseJson<T>('GET', path, await this.request('GET', path));
   }
 
-  async post<T = unknown>(path: string, body?: unknown): Promise<T> {
+  /**
+   * @param opts.timeoutMs - overrides the client's per-request limit, for a
+   *   route that legitimately runs long (reset-to-seed, demo install).
+   */
+  async post<T = unknown>(
+    path: string,
+    body?: unknown,
+    opts?: { timeoutMs?: number },
+  ): Promise<T> {
     const json = body ? JSON.stringify(body) : undefined;
-    return parseJson<T>('POST', path, await this.request('POST', path, json));
+    const res = await this.request('POST', path, json, opts?.timeoutMs);
+    return parseJson<T>('POST', path, res);
   }
 
   /** POST to a 204 No Content route: there is no body to parse. */
@@ -135,9 +179,14 @@ export class ApiClient {
    * throws the original 401 error with the re-login failure as its cause.
    * No other status is ever re-sent.
    */
-  private async request(method: Method, path: string, body?: string): Promise<Response> {
+  private async request(
+    method: Method,
+    path: string,
+    body?: string,
+    timeoutMs: number = this.timeoutMs,
+  ): Promise<Response> {
     const sentWith = this.token;
-    let res = await this.send(method, path, body);
+    let res = await this.send(method, path, body, timeoutMs);
     if (res.status === 401 && this.relogin) {
       const original = await httpError(method, path, res);
       try {
@@ -145,7 +194,7 @@ export class ApiClient {
       } catch (err) {
         throw new Error(original.message, { cause: err });
       }
-      res = await this.send(method, path, body);
+      res = await this.send(method, path, body, timeoutMs);
     }
     if (!res.ok) throw await httpError(method, path, res);
     return res;
@@ -171,14 +220,20 @@ export class ApiClient {
     return this.reloginInFlight;
   }
 
-  private send(method: Method, path: string, body?: string): Promise<Response> {
-    return fetch(`${this.baseUrl}${path}`, {
+  private send(
+    method: Method,
+    path: string,
+    body: string | undefined,
+    timeoutMs: number,
+  ): Promise<Response> {
+    const init: RequestInit = {
       method,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.token}`,
       },
       ...(body !== undefined && { body }),
-    });
+    };
+    return fetchNamed(method, path, `${this.baseUrl}${path}`, init, timeoutMs);
   }
 }

@@ -16,9 +16,14 @@
  * Drive path: `/admin/test/lineup/fire-deadline-transition` runs the deadline job
  * that Lane A1 taught to record the tie, so no new DEMO_MODE hook is needed.
  */
-import { readLastMessages, type SimpleMessage } from '../../helpers/messages.js';
+import {
+  readLastMessages,
+  readMessageById,
+  type SimpleMessage,
+} from '../../helpers/messages.js';
 import { awaitProcessing, assertConditionNeverMet } from '../fixtures.js';
 import { pollForCondition, pollForEmbed } from '../../helpers/polling.js';
+import { SmokeAssertionError } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { ApiClient } from '../api.js';
 import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
@@ -215,6 +220,10 @@ const publicTieAnnouncesOnce: SmokeTest = {
 const tiePickEditsSameMessage: SmokeTest = {
   name: 'Picking a tied game edits the same tie message (ROK-1374 AC8/D7)',
   category: 'embed',
+  // TDB:1063 — sets the app-wide grace setting, as lineup-grace-countdown
+  // does; in the parallel pool one's null-reset (5-min default) landed
+  // mid-way through the other and the edit poll timed out.
+  serial: true,
   async run(ctx: TestContext) {
     await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     await ctx.api.post('/admin/test/set-setting', {
@@ -234,16 +243,26 @@ const tiePickEditsSameMessage: SmokeTest = {
       );
       const messageId = announced.id;
 
-      await ctx.api.post(`/lineups/${lineupId}/tiebreaker/pick`, {
-        gameId: gameIds[0],
-      });
+      const hold = await ctx.api.post<{ pickAt: unknown } | null>(
+        `/lineups/${lineupId}/tiebreaker/pick`,
+        { gameId: gameIds[0] },
+      );
+      if (!hold?.pickAt) {
+        throw new Error(`Pick did not stamp tie_pick_at: ${JSON.stringify(hold)}`);
+      }
       await awaitProcessing(ctx.api);
 
+      // By id, not a last-25 window: newer traffic in the shared default
+      // channel can push the tie card out of the window (TDB:1063).
       const edited = await pollForCondition(
         async () => {
-          const msgs = await readLastMessages(ctx.defaultChannelId, 25);
-          const same = msgs.find((m) => m.id === messageId);
-          return same && /DECIDED/.test(embedText(same)) ? same : null;
+          const same = await readMessageById(ctx.defaultChannelId, messageId);
+          if (!same) {
+            throw new SmokeAssertionError(
+              `Tie message ${messageId} for "${title}" was deleted before the pick edited it`,
+            );
+          }
+          return /DECIDED/.test(embedText(same)) ? same : null;
         },
         ctx.config.timeoutMs,
         { intervalMs: 1500 },

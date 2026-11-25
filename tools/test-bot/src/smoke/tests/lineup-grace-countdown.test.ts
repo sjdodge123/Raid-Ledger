@@ -94,6 +94,9 @@ async function fetchLineup(
 const graceCountdown: SmokeTest = {
   name: 'Grace countdown surfaces, clears on un-vote, advances after re-vote (ROK-1253)',
   category: 'flow',
+  // TDB:1063 — sets the app-wide grace setting; serial so its reset cannot
+  // land mid-way through lineup-tie's pick test (and vice versa).
+  serial: true,
   async run(ctx: TestContext) {
     await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     await setSetting(ctx.api, GRACE_KEY, String(GRACE_MS));
