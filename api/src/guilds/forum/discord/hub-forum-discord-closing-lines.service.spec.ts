@@ -17,6 +17,7 @@ import {
   HubForumDiscordClosingLines,
   planningClosingOnceKey,
 } from './hub-forum-discord-closing-lines.service';
+import { CLOSING_GEN_TTL_SECONDS } from './hub-forum-discord-closing-lines.target';
 import {
   findThreadLink,
   isCurrentBindingLink,
@@ -80,20 +81,10 @@ function fakeRedis() {
     ),
     get: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
     expire: jest.fn(() => Promise.resolve(1)),
-    // Applied at exec(), like a real MULTI.
-    multi: jest.fn(() => {
-      const ops: (() => void)[] = [];
-      const tx = {
-        incr: (key: string) => {
-          ops.push(() =>
-            store.set(key, String(Number(store.get(key) ?? 0) + 1)),
-          );
-          return tx;
-        },
-        expire: () => tx,
-        exec: () => Promise.resolve(ops.map((op) => op())),
-      };
-      return tx;
+    incr: jest.fn((key: string) => {
+      const next = Number(store.get(key) ?? 0) + 1;
+      store.set(key, String(next));
+      return Promise.resolve(next);
     }),
   };
 }
@@ -260,6 +251,23 @@ describe('subject entry points (ROK-2272 S8)', () => {
     await svc.pollReopened(4);
     expect(findPoll).not.toHaveBeenCalled();
     expect(redis.store.get(closingGenKey('poll', 4))).toBe('1');
+    expect(redis.expire).toHaveBeenCalledWith(
+      closingGenKey('poll', 4),
+      CLOSING_GEN_TTL_SECONDS,
+    );
+  });
+
+  it('an end refreshes a live generation TTL and leaves generation 0 alone', async () => {
+    const { svc, redis } = build();
+    findPoll.mockResolvedValue(null);
+    await svc.pollCancelled(4, null);
+    expect(redis.expire).not.toHaveBeenCalled();
+    redis.store.set(closingGenKey('poll', 4), '1');
+    await svc.pollCancelled(4, null);
+    expect(redis.expire).toHaveBeenCalledWith(
+      closingGenKey('poll', 4),
+      CLOSING_GEN_TTL_SECONDS,
+    );
   });
 
   it('generation 0 keeps the bare key; a reopened poll claims cancelled#g1', async () => {

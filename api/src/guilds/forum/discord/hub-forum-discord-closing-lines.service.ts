@@ -4,8 +4,9 @@
  * posts ONE closing bot line into the post that already exists (Discord
  * only — the RL page shows the end state itself). Never creates a post just
  * to close it, once per subject end. A reopen bumps the subject's generation
- * so the next end claims a fresh once-key and posts again (L4491). Best-effort: a failed send is logged and the
- * line is lost (nothing re-emits an end); it never throws into the listener.
+ * so the next end claims a fresh once-key and posts again (L4491).
+ * Best-effort: a failed send is logged and the line is lost (nothing
+ * re-emits an end); it never throws into the listener.
  * S10: a non-hub subject (no live hub thread) gets the same line in its
  * registry planning post — target + send arms in `.target.ts`.
  */
@@ -73,7 +74,8 @@ export class HubForumDiscordClosingLines {
    * L4491: every end reads its subject's reopen generation as its FIRST
    * await. The end is emitted before any reopen of it, and one Redis
    * connection is FIFO, so this GET always lands before that reopen's INCR.
-   * Never put another await in front of `endGen`.
+   * Never put another await in front of `endGen`. This also relies on the
+   * listeners calling straight through and on a single API process.
    */
   async pollCancelled(matchId: number, reason: string | null): Promise<void> {
     const gen = await this.endGen('poll', matchId);
@@ -132,11 +134,8 @@ export class HubForumDiscordClosingLines {
 
   private async bumpGen(kind: ClosingSubject, id: number): Promise<void> {
     const key = closingGenKey(kind, id);
-    await this.redis
-      .multi()
-      .incr(key)
-      .expire(key, CLOSING_GEN_TTL_SECONDS)
-      .exec();
+    await this.redis.incr(key);
+    await this.redis.expire(key, CLOSING_GEN_TTL_SECONDS);
   }
 
   private async close(
