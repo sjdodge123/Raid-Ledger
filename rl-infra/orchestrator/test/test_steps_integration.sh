@@ -118,6 +118,27 @@ test_steps_duration_from_step_time() {
     assert_eq "$d1" "null" "a [step-time] for a different name must not stamp this row"
 }
 
+# TDB 2026-10 full-suite flake: under load the parser's `tail` opened the log
+# AFTER a fast command had already written it, and `tail -n 0` dropped those
+# lines. A tail shim that starts 1s late reproduces that deterministically.
+test_steps_parser_starts_late() {
+    CURRENT_TEST_NAME="lines written before the parser's tail opens the log are still parsed"
+    local task_id="latetail1" real_tail shim
+    real_tail=$(command -v tail)
+    shim="$TMP_STATE/shim"; mkdir -p "$shim"
+    printf '#!/bin/sh\nsleep 1\nexec %s "$@"\n' "$real_tail" > "$shim/tail"
+    chmod +x "$shim/tail"
+    PATH="$shim:$PATH" bash "$BIN_DIR/task-start" "$task_id" --tool rl_validate_ci --slot 1 -- \
+        /bin/sh -c "printf '\033[0;32mBuild (all workspaces): PASS\033[0m\n[step-time] Lint (all) 4.5\nLint (all): FAIL\n'" \
+        >/dev/null 2>&1 || true
+    wait_for_terminal "$task_id" 8000 || true
+    sleep 1
+    local out
+    out=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -c '[.steps[] | [.name, .status, .duration_s]]' 2>/dev/null || echo "parse_err")
+    assert_eq "$out" '[["Build (all workspaces)","PASS",null],["Lint (all)","FAIL",4.5]]' \
+        "rows written before tail started must not be dropped"
+}
+
 # Non-matching output lines do NOT pollute steps[].
 test_steps_no_false_positives() {
     CURRENT_TEST_NAME="non-status lines do NOT pollute steps[]"
@@ -137,5 +158,6 @@ run_test "ac-m1-5-ansi" test_steps_ansi_lines
 run_test "duration-null" test_steps_duration_null
 run_test "no-false-positives" test_steps_no_false_positives
 run_test "duration-step-time" test_steps_duration_from_step_time
+run_test "parser-starts-late" test_steps_parser_starts_late
 
 print_test_summary
