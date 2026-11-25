@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from 'drizzle-orm';
 import type {
   InstancesRepository,
   RevokeOutcome,
@@ -62,5 +63,23 @@ describe('hub-admin revoke (ROK-1672)', () => {
     const h = harness();
     expect(await h.run('nope', '--reason', REASON)).toBe(1);
     expect(h.revoke).not.toHaveBeenCalled();
+  });
+
+  it('a failed revoke query never prints the reason (its params) to stderr', async () => {
+    const h = harness();
+    const cause = Object.assign(new Error('terminating connection'), {
+      code: '57P01',
+    });
+    h.revoke.mockRejectedValue(
+      new DrizzleQueryError(
+        'update "hub_instances" set "revoke_reason" = $1 where "instance_id" = $2',
+        [REASON, A],
+        cause,
+      ),
+    );
+    expect(await h.run(A, '--reason', REASON)).toBe(1);
+    expect(h.out).toEqual([]);
+    expect(h.err).toEqual(['hub-admin revoke: database query failed (57P01)']);
+    expect(h.err.join('\n')).not.toContain(REASON);
   });
 });
