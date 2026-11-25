@@ -28,7 +28,7 @@ const STATUS_CLASSES = {
     building: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
     voting: 'bg-warning/10 text-warning border-warning/40',
     decided: 'bg-success/10 text-success border-success/40',
-    archived: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/40',
+    archived: 'bg-overlay text-muted border-edge',
 } as const;
 
 function StatusBadge({ status }: { status: keyof typeof STATUS_LABELS }) {

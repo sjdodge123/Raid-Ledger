@@ -37,4 +37,11 @@ describe('LineupStatusBadge', () => {
         const badge = screen.getByText('Nominating');
         expect(badge).toBeInTheDocument();
     });
+
+    it('paints archived with the neutral token pair so it reads in light schemes (ROK-2319)', () => {
+        render(<LineupStatusBadge status="archived" />);
+        const badge = screen.getByText('Archived');
+        expect(badge).toHaveClass('bg-overlay', 'text-muted');
+        expect(badge.className).not.toMatch(/\b(?:bg|text)-(?:zinc|gray|slate)-\d/);
+    });
 });
