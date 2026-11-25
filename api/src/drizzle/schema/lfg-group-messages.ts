@@ -48,6 +48,8 @@ export const lfgGroupMessages = pgTable(
     threadId: varchar('thread_id', { length: 255 }),
     /** ROK-1471 D2: the surface this row lives on. Pinned at post time, never changes. */
     postKind: text('post_kind').default('text').notNull(),
+    /** ROK-2352: the group this post represents; `''` = the whole-game group. */
+    groupKey: text('group_key').default('').notNull(),
   },
   (table) => [
     // Explicit FK name: drizzle's default for a composite of this table's name
@@ -74,8 +76,9 @@ export const lfgGroupMessages = pgTable(
       'lfg_group_messages_post_kind_check',
       sql`${table.postKind} IN ('forum', 'text')`,
     ),
+    // ROK-2352: name kept (specs + test-bot reference it); now per (game, group).
     uniqueIndex('uq_lfg_group_messages_game_open')
-      .on(table.gameId)
+      .on(table.gameId, table.groupKey)
       .where(sql`${table.state} = 'open'`),
     /** Reverse lookup from a Discord message back to its group. */
     index('idx_lfg_group_messages_message').on(

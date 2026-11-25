@@ -65,17 +65,23 @@ describe('lfg_intents group_key (ROK-2352)', () => {
       'game_id',
       'group_key',
     ]);
-    expect(indexWhere(config, name)).toBe('"lfg_intents"."status" = \'active\'');
+    expect(indexWhere(config, name)).toBe(
+      '"lfg_intents"."status" = \'active\'',
+    );
   });
 
   it('counts live hands per (game, group)', () => {
     const name = 'idx_lfg_intents_game_group_active';
     expect(indexColumns(config, name)).toEqual(['game_id', 'group_key']);
-    expect(indexWhere(config, name)).toBe('"lfg_intents"."status" = \'active\'');
+    expect(indexWhere(config, name)).toBe(
+      '"lfg_intents"."status" = \'active\'',
+    );
   });
 
   it('drops the per-game indexes the group indexes replace', () => {
-    expect(indexColumns(config, 'uq_lfg_intents_user_game_active')).toBeUndefined();
+    expect(
+      indexColumns(config, 'uq_lfg_intents_user_game_active'),
+    ).toBeUndefined();
     expect(indexColumns(config, 'idx_lfg_intents_game_active')).toBeUndefined();
   });
 
@@ -97,9 +103,11 @@ describe('lfg_invites group_key (ROK-2352)', () => {
   });
 
   it('keys the per-group cap on (game, group, sent_at)', () => {
-    expect(
-      indexColumns(config, 'idx_lfg_invites_game_group_sent_at'),
-    ).toEqual(['game_id', 'group_key', 'sent_at']);
+    expect(indexColumns(config, 'idx_lfg_invites_game_group_sent_at')).toEqual([
+      'game_id',
+      'group_key',
+      'sent_at',
+    ]);
   });
 
   it('keys the no-repeat read on (recipient, game, group, sent_at)', () => {
@@ -109,7 +117,9 @@ describe('lfg_invites group_key (ROK-2352)', () => {
   });
 
   it('drops the per-game invite indexes', () => {
-    expect(indexColumns(config, 'idx_lfg_invites_game_sent_at')).toBeUndefined();
+    expect(
+      indexColumns(config, 'idx_lfg_invites_game_sent_at'),
+    ).toBeUndefined();
     expect(
       indexColumns(config, 'idx_lfg_invites_recipient_game_sent_at'),
     ).toBeUndefined();
@@ -135,9 +145,9 @@ describe('wow_lfg_hand_details (ROK-2352 plugin table)', () => {
     const column = config.columns.find((c) => c.name === 'character_id');
     expect(column?.notNull).toBe(false);
     expect(fk('character_id')?.onDelete).toBe('set null');
-    expect(indexColumns(config, 'idx_wow_lfg_hand_details_character_id')).toEqual([
-      'character_id',
-    ]);
+    expect(
+      indexColumns(config, 'idx_wow_lfg_hand_details_character_id'),
+    ).toEqual(['character_id']);
   });
 
   it('CHECKs roles: 1..3 of tank/healer/dps', () => {
