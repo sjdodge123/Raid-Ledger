@@ -93,7 +93,9 @@ function hungSql() {
       let fail: (err: Error) => void = () => undefined;
       const cancel = jest.fn(() => {
         fail(new Error('57014 canceled'));
-        const result = Promise.reject(new Error('connect ECONNREFUSED (cancel)'));
+        const result = Promise.reject(
+          new Error('connect ECONNREFUSED (cancel)'),
+        );
         // Pre-handled, so the assertion below (not jest's own unhandled-
         // rejection hook) judges whether the controller consumed it.
         result.catch(() => undefined);
