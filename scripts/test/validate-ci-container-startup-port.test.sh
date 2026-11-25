@@ -87,8 +87,8 @@ CURRENT_TEST_NAME="AC-M13-5: no literal 127.0.0.1:8080 URLs remain in container-
 assert_not_grep 'http://127\.0\.0\.1:8080/' "$VALIDATE_CI_PATH" \
     "container-startup test must not contain literal http://127.0.0.1:8080/ URLs after M13"
 
-# TDB:3795/3861/4085 — behavioural: two fleet slots must not share the image
-# tag or host port. The helpers are pulled out of validate-ci.sh and the fleet
+# TDB:3795/3861/4085 — behavioural: two fleet slots must not share the
+# container name or host port. The helpers are pulled out of validate-ci.sh and the fleet
 # marker /workspace is pointed at a temp dir (it does not exist on a laptop).
 extract_fn() {
     awk -v name="$1" '
@@ -126,23 +126,28 @@ CURRENT_TEST_NAME="TDB:3795 helpers exist"
 if [ -n "$SLOT_FNS" ] && grep -q '/workspace' <<<"$SLOT_FNS"; then pass; else
     fail "_container_startup_slot_suffix / _container_startup_port not found in validate-ci.sh"
 fi
-CURRENT_TEST_NAME="TDB:3795 fleet slots get distinct tag suffix + port"
+CURRENT_TEST_NAME="TDB:3795 fleet slots get distinct container-name suffix + port"
 assert_target "$FLEET_FNS" 2 - "[-slot2] 8092"
 assert_target "$FLEET_FNS" 3 - "[-slot3] 8093"
-CURRENT_TEST_NAME="TDB:3795 fleet without a numeric RL_SLOT keeps rl:ci-test + 8090"
+CURRENT_TEST_NAME="TDB:3795 fleet without a numeric RL_SLOT keeps rl-ci-test-<pid> + 8090"
 assert_target "$FLEET_FNS" - - "[] 8090"
 assert_target "$FLEET_FNS" 'x;id' - "[] 8090"
 CURRENT_TEST_NAME="TDB:3795 explicit RL_CONTAINER_STARTUP_PORT still wins"
 assert_target "$FLEET_FNS" 2 9555 "[-slot2] 9555"
-CURRENT_TEST_NAME="TDB:3795 laptop keeps rl:ci-test + 8080 even with RL_SLOT set"
+CURRENT_TEST_NAME="TDB:3795 laptop keeps rl-ci-test-<pid> + 8080 even with RL_SLOT set"
 assert_target "$LAPTOP_FNS" - - "[] 8080"
 assert_target "$LAPTOP_FNS" 2 - "[] 8080"
-CURRENT_TEST_NAME="TDB:3795 build, run and container name use the per-slot values"
-assert_grep 'docker build -f Dockerfile\.allinone -t "\$image_tag"' "$VALIDATE_CI_PATH" \
-    "docker build must tag the per-slot image"
-assert_grep '^    "\$image_tag"$' "$VALIDATE_CI_PATH" "docker run must start the per-slot image"
-assert_not_grep '-t rl:ci-test \.' "$VALIDATE_CI_PATH" "fixed rl:ci-test build tag must be gone"
+CURRENT_TEST_NAME="TDB:3795 container name is per slot"
 assert_grep 'cname="rl-ci-test\$\{slot_sfx\}-\$\$"' "$VALIDATE_CI_PATH" "container name must carry the slot"
+# ROK-2171: docker-guard's build-reclaim removes the previous image only for the
+# exact tag rl:ci-test (RECLAIM_TAGS). A per-slot tag leaves a ~2 GB dangling
+# image per gate, so the tag stays shared until the guard learns the new tags.
+CURRENT_TEST_NAME="ROK-2171 image tag stays the shared rl:ci-test"
+assert_grep 'docker build -f Dockerfile\.allinone -t rl:ci-test \.$' "$VALIDATE_CI_PATH" \
+    "docker build must tag rl:ci-test (the tag docker-guard reclaims)"
+assert_grep '^    rl:ci-test$' "$VALIDATE_CI_PATH" "docker run must start rl:ci-test"
+assert_not_grep 'image_tag=|rl:ci-test\$\{' "$VALIDATE_CI_PATH" \
+    "no per-slot image tag until docker-guard RECLAIM_TAGS covers it"
 
 echo
 echo "--- $CURRENT_TEST_FILE: $TEST_PASS_COUNT pass, $TEST_FAIL_COUNT fail ---"

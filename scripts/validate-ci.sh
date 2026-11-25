@@ -1788,9 +1788,13 @@ run_container_validation() {
     return 0
   fi
 
-  local slot_sfx image_tag cname
+  # The container name is per slot; the image tag stays the shared `rl:ci-test`
+  # on purpose: docker-guard's build-reclaim (ROK-2171) removes the previous
+  # image only for that exact tag, so a per-slot tag would leave a ~2 GB
+  # dangling image behind on every gate. A per-slot tag needs the guard's
+  # RECLAIM_TAGS updated in the same rl-infra PR.
+  local slot_sfx cname
   slot_sfx=$(_container_startup_slot_suffix)
-  image_tag="rl:ci-test${slot_sfx}"
   cname="rl-ci-test${slot_sfx}-$$"
   # Ensure cleanup on any exit path. The double quotes expand $cname NOW, on
   # purpose: a RETURN trap stays set after this function returns and can fire
@@ -1806,22 +1810,23 @@ run_container_validation() {
   local host_port
   host_port=$(_container_startup_port)
 
-  docker build -f Dockerfile.allinone -t "$image_tag" .
+  docker build -f Dockerfile.allinone -t rl:ci-test .
   docker run --rm -d \
     --name "$cname" \
     -p "${host_port}:80" \
     -e ADMIN_PASSWORD=ci-test \
     -e ENABLE_TELEMETRY=false \
-    "$image_tag"
+    rl:ci-test
 
   _wait_for_container_health "$cname" "$host_port"
 }
 
 # TDB:3795/3861/4085 — every fleet slot used to build `rl:ci-test` and bind
 # host :8090, so two slots' gates in this step at once failed with "port is
-# already allocated". On the fleet (/workspace) with a numeric RL_SLOT the tag,
-# container name and port are keyed to the slot; a laptop run (no /workspace)
-# or an unset/non-numeric RL_SLOT keeps the old tag and port.
+# already allocated". On the fleet (/workspace) with a numeric RL_SLOT the
+# container name and port are keyed to the slot (the image tag stays shared,
+# see run_container_validation); a laptop run (no /workspace) or an
+# unset/non-numeric RL_SLOT keeps the old name and port.
 _container_startup_slot_suffix() {
   local slot="${RL_SLOT:-}"
   if [ -d /workspace ] && [[ "$slot" =~ ^[0-9]+$ ]]; then
