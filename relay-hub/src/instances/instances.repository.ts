@@ -31,6 +31,18 @@ export class InstancesRepository {
     return rows[0];
   }
 
+  /** The instance holding this token hash (`token_hash` is unique). */
+  async findByTokenHash(
+    tokenHash: string,
+  ): Promise<HubInstanceRow | undefined> {
+    const rows = await this.db
+      .select()
+      .from(hubInstances)
+      .where(eq(hubInstances.tokenHash, tokenHash))
+      .limit(1);
+    return rows[0];
+  }
+
   /**
    * Inserts a pending instance, or replaces a known one's token hash and
    * resets it to pending (L3), in ONE statement. A revoked row is left

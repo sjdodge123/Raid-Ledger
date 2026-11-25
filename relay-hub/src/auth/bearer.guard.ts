@@ -16,6 +16,8 @@ export interface HubAuth {
   /** Hash of the token this request presented (equal to the stored one). */
   readonly tokenHash: string;
   readonly status: HubInstanceStatus;
+  /** `reader` until approved, then `contributor` (ROK-1674 ContributorGuard). */
+  readonly trustTier: string;
 }
 
 /** The request slice the guard reads, plus what it attaches. */
@@ -40,8 +42,10 @@ function hashesMatch(stored: string, presented: string): boolean {
 
 /**
  * L1/L2 (ROK-1672): an `rlh_` bearer token is valid only for the instance in
- * the path `:id`. A revoked instance answers `revoked` only to its own token;
- * every other failure is the same generic 401. Logs nothing.
+ * the path `:id`. A route with no `:id` (ROK-1674 `crosswalk/contributions`)
+ * finds the instance by the token's hash instead (`token_hash` is unique).
+ * A revoked instance answers `revoked` only to its own token; every other
+ * failure is the same generic 401. Logs nothing.
  */
 @Injectable()
 export class HubBearerGuard implements CanActivate {
@@ -51,16 +55,28 @@ export class HubBearerGuard implements CanActivate {
     const req = ctx.switchToHttp().getRequest<HubAuthedRequest>();
     const token = BEARER.exec(req.headers.authorization ?? '')?.[1];
     const id = req.params['id'];
-    if (!token || !TOKEN_PATTERN.test(token) || !id || !isUuid(id)) {
+    if (
+      !token ||
+      !TOKEN_PATTERN.test(token) ||
+      (id !== undefined && !isUuid(id))
+    ) {
       throw invalidToken();
     }
-    const row = await this.repo.findById(id);
     const tokenHash = hashToken(token);
+    const row =
+      id === undefined
+        ? await this.repo.findByTokenHash(tokenHash)
+        : await this.repo.findById(id);
     if (!row?.tokenHash || !hashesMatch(row.tokenHash, tokenHash)) {
       throw invalidToken();
     }
     if (row.status === 'revoked') throw hubError(401, 'revoked');
-    req.hubInstance = { instanceId: id, tokenHash, status: row.status };
+    req.hubInstance = {
+      instanceId: row.instanceId,
+      tokenHash,
+      status: row.status,
+      trustTier: row.trustTier,
+    };
     return true;
   }
 }
