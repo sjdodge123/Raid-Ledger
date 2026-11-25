@@ -8,7 +8,8 @@
 #   2. jest / vitest for each WHOLE touched folder (related tests for a file
 #      sitting directly in api/src or web/src), workers capped
 #   3. the contract's own tests, each touched tool's tests, and node --test
-#      for touched scripts/*.mjs specs (bash -n for scripts/**/*.sh)
+#      for touched scripts/*.mjs specs (bash -n for scripts/**/*.sh), and
+#      scripts/test/run-all.sh (CI's scripts-tests harnesses) for any scripts/ change
 #   4. eslint on the changed files
 #   5. a grep of scripts/smoke/** and tools/test-bot/src/smoke/** for string
 #      literals the diff removed from non-test source (a hit = FAIL)
@@ -40,7 +41,7 @@ ONLY="${LANE_CHECK_ONLY:-}"
 PLAN_ONLY=false
 case "${1:-}" in
   --plan) PLAN_ONLY=true ;;
-  -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
   "") ;;
   *) echo "lane-check: unknown argument $1" >&2; exit 2 ;;
 esac
@@ -247,6 +248,7 @@ smoke_grep() {
       tests:contract-tests) run_step contract-tests "$t" contract_tests ;;
       tests:tool-tests) run_step tool-tests "$t" tool_tests "$t" ;;
       tests:node-test) run_step node-test "$t" node --test "$t" ;;
+      tests:shell-tests) run_step shell-tests "$t" bash "$t" ;;
       lint:bash-n) run_step bash-n "$t" bash -n "$t" ;;
       lint:eslint:*) run_step "eslint" "${k#eslint:}: $t" eslint_files "${k#eslint:}" "$t" ;;
       smoke:smoke-string) run_step smoke-string "$t" smoke_grep "$t" ;;

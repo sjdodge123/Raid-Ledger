@@ -122,6 +122,20 @@ test('validate-ci.sh wires --scoped to this selector and rejects conflicting tie
   }
 });
 
+// PR 2309: a scripts-only diff passed --scoped (shell parse + node specs) and
+// failed CI's scripts-tests job, which also runs scripts/test/run-all.sh.
+test('the --scoped scripts target runs the scripts/test harnesses through CI\'s entry point', () => {
+  const src = readFileSync(join(HERE, 'validate-ci.sh'), 'utf8');
+  const gate = /\nrun_scoped_gate\(\) \{\n([\s\S]*?)\n\}\n/.exec(src)?.[1] ?? '';
+  const scriptsBlock = /if _scoped_has scripts; then\n([\s\S]*?)\n\s*fi/.exec(gate)?.[1] ?? '';
+  assert.match(scriptsBlock, /run_step "[^"]+" run_scripts_shell_tests/,
+    `the scoped scripts block does not run the harnesses:\n${scriptsBlock}`);
+  const fn = /\nrun_scripts_shell_tests\(\) \{\n([\s\S]*?)\n\}\n/.exec(src)?.[1] ?? '';
+  assert.match(fn, /bash scripts\/test\/run-all\.sh/, `run_scripts_shell_tests does not call run-all.sh:\n${fn}`);
+  const ci = readFileSync(join(HERE, '..', '.github', 'workflows', 'ci.yml'), 'utf8');
+  assert.match(ci, /run: \.\/scripts\/test\/run-all\.sh/, 'CI scripts-tests no longer calls run-all.sh — keep both gates on one entry point');
+});
+
 test('the CLI still prints a plan when the script path contains a space', () => {
   const dir = mkdtempSync(join(tmpdir(), 'scoped gate '));
   const copy = join(dir, 'scoped-gate-plan.mjs');
