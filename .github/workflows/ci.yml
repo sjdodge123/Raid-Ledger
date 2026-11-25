@@ -643,8 +643,10 @@ jobs:
       - name: Lint
         run: npm run lint -w @raid-ledger/relay-hub
 
+      # The workspace script, so the hub's own TypeScript (not the root's
+      # hoisted copy) checks src + specs, the same compiler the build uses.
       - name: Typecheck (src + specs)
-        run: npx tsc --noEmit -p relay-hub/tsconfig.json
+        run: npm run typecheck -w @raid-ledger/relay-hub
 
       - name: Build
         run: npm run build -w @raid-ledger/relay-hub

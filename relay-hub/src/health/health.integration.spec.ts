@@ -5,14 +5,20 @@ import request from 'supertest';
 import { HubHealthResponseSchema } from '@raid-ledger/contract';
 import { AppModule } from '../app.module';
 import { configureApp } from '../app.setup';
+import { HUB_CONFIG, loadHubConfig } from '../config/hub-config';
 
 describe('relay-hub health routes (integration)', () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {
+    // A fixed config, not the machine's PORT/HOST/NODE_ENV: a runner's stray
+    // value must not fail a health-route test with a config error.
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(HUB_CONFIG)
+      .useValue(loadHubConfig({ NODE_ENV: 'test' }))
+      .compile();
     app = moduleRef.createNestApplication<INestApplication<App>>();
     configureApp(app);
     await app.init();
