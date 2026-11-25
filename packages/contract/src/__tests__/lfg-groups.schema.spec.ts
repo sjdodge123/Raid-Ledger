@@ -54,7 +54,7 @@ describe('?group= queries', () => {
   });
   it('rejects "*" on reads but accepts it on DELETE (all my hands in the game)', () => {
     expect(LfgGroupQuerySchema.safeParse({ group: '*' }).success).toBe(false);
-    expect(LfgDeleteGroupQuerySchema.parse({ group: '*' })).toEqual({ group: '*' });
+    expect(LfgDeleteGroupQuerySchema.safeParse({ group: '*' }).data).toEqual({ group: '*' });
     expect(LfgDeleteGroupQuerySchema.safeParse({ group: 'Bad' }).success).toBe(false);
   });
 });

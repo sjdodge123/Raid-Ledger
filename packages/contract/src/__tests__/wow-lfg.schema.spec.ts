@@ -55,6 +55,7 @@ describe('wowRosterShapeForSize (§3.4)', () => {
     [40, 'raid', { tank: 4, healer: 10, dps: 26 }],
     [15, 'raid', { tank: 2, healer: 3, dps: 10 }],
     [12, 'raid', { tank: 1, healer: 2, dps: 9 }],
+    [8, 'raid', { tank: 1, healer: 2, dps: 5 }],
   ] as const)('size %i (%s) → %o', (size, kind, shape) => {
     expect(wowRosterShapeForSize(size, kind)).toEqual(shape);
   });
