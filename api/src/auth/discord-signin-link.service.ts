@@ -53,7 +53,11 @@ export class DiscordSigninLinkService {
 
   /** Build `<clientUrl>/signin-link#token=<jwt>` (15m, single use). */
   mint(input: DiscordSigninMintInput, clientUrl: string): string {
-    return buildFragmentLink(clientUrl, SIGNIN_LINK_PATH, this.mintToken(input));
+    return buildFragmentLink(
+      clientUrl,
+      SIGNIN_LINK_PATH,
+      this.mintToken(input),
+    );
   }
 
   /**

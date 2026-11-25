@@ -105,7 +105,9 @@ describe('POST /auth/discord/signin-code/poll', () => {
     const pending = await poll(deviceSecret);
     expect(pending.status).toBe(200);
     expect(pending.body).toMatchObject({ status: 'pending' });
-    expect(await testApp.app.get(SigninCodeStore).findPending(code)).not.toBeNull();
+    expect(
+      await testApp.app.get(SigninCodeStore).findPending(code),
+    ).not.toBeNull();
 
     expect(await approveAsAdmin(code)).toBe(true);
     const approved = await poll(deviceSecret);
@@ -139,7 +141,11 @@ describe('POST /auth/discord/signin-code/poll', () => {
     const store = testApp.app.get(SigninCodeStore);
     const display = 'newbie';
     expect(
-      await store.approve(code, { kind: 'first-time', token, displayName: display }),
+      await store.approve(code, {
+        kind: 'first-time',
+        token,
+        displayName: display,
+      }),
     ).toBe(true);
     const res = await poll(deviceSecret);
     expect(res.body).toMatchObject({ status: 'approved' });
