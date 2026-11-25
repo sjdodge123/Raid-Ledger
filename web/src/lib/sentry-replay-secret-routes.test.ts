@@ -56,6 +56,23 @@ describe('isSecretRouteUrl', () => {
     it('fails closed: an unparseable URL counts as secret', () => {
         expect(isSecretRouteUrl('http://[')).toBe(true);
     });
+
+    // React Router decodes each path segment before matching, so a
+    // percent-encoded prefix still renders the secret page.
+    it.each([
+        '/%68/AbCdEfGhIjKlMnOpQrSt',
+        'https://rl.test/%70/poll/AbCdEfGhIjKlMnOpQrSt',
+        '/p/%70%6Fll/AbCdEfGhIjKlMnOpQrSt',
+        '/%49/ab23cd45',
+        '/%61uth/%73uccess?code=x',
+    ])('decodes path segments like the router: %s is a secret route', (url) => {
+        expect(isSecretRouteUrl(url)).toBe(true);
+    });
+
+    it('fails closed: a malformed percent-encoding counts as secret', () => {
+        expect(isSecretRouteUrl('/%E0%A4%A/AbCdEfGhIjKlMnOpQrSt')).toBe(true);
+        expect(isSecretRouteUrl('/events/%ZZ')).toBe(true);
+    });
 });
 
 describe('dropReplayOnSecretRoutes', () => {

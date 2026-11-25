@@ -35,12 +35,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Whether a URL (absolute or path-relative) is on a secret-address route.
- * An unparseable URL counts as secret: dropping a replay is the safe failure.
+ * Decode a pathname the way React Router does before it matches routes: each
+ * segment is percent-decoded and a decoded `/` stays `%2F`, so `/%68/<t>`
+ * becomes `/h/<t>`. Throws on a malformed escape (`URIError`).
+ */
+function decodePathLikeRouter(pathname: string): string {
+    return pathname
+        .split('/')
+        .map((segment) => decodeURIComponent(segment).replace(/\//g, '%2F'))
+        .join('/');
+}
+
+/**
+ * Whether a URL (absolute or path-relative) is on a secret-address route,
+ * matched against the router-decoded path. An unparseable URL or a malformed
+ * percent-encoding counts as secret: dropping a replay is the safe failure.
  */
 export function isSecretRouteUrl(url: string): boolean {
     try {
-        return SECRET_ROUTE.test(new URL(url, PARSE_BASE).pathname);
+        return SECRET_ROUTE.test(decodePathLikeRouter(new URL(url, PARSE_BASE).pathname));
     } catch {
         return true;
     }
