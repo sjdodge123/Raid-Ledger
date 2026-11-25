@@ -37,7 +37,7 @@ import {
   SchedulingWireframesPage, ServerScheduleWireframesPage, CommunityHubWireframesPage, HubPostsWireframesPage, ViewportProbePage,
   ValheimCharacterPage,
   CompanionLinkPage,
-  ClaimPage, SigninLinkPage,
+  ClaimPage, SigninLinkPage, NotFoundPage,
   GgYearPage,
   GgArchivePage,
   GgLatestRedirect,
@@ -219,6 +219,9 @@ export function AppRoutes() {
         {ProfileRoutes()}
         {AdminSettingsRoutes()}
       </Route>
+
+      {/* ROK-2319: anything unmatched — public, so a signed-out visitor sees it too. Ranks below every other route. */}
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
