@@ -14,10 +14,11 @@
  * - `/i/:code` — a PUG invite code;
  * - `/auth/success?code=` — the OAuth one-time code.
  *
- * So the whole segment is dropped instead. A segment's `urls` hold the address
- * at its last checkout (the Meta href) plus every navigation since, and the
- * current address covers a segment flushed while still on the page. Only these
- * routes lose replay; everything else records exactly as before.
+ * So the whole segment is dropped instead, and so is the rest of that replay
+ * (see `taintedReplayIds`). A segment's `urls` hold the address at its last
+ * checkout plus every navigation since, and the current address covers a
+ * segment flushed while still on the page. Only replays that reached these
+ * routes are lost; everything else records exactly as before.
  */
 import { scrubReplayEventUrls } from './sentry-scrub-events';
 
@@ -60,14 +61,39 @@ export function isSecretRouteUrl(url: string): boolean {
 }
 
 /**
+ * Replay ids that ever touched a secret route in this page. `urls` alone is not
+ * enough: after an error is sampled on a secret route the SDK flushes (clearing
+ * `urls`), then restarts recording under the SAME replay id with a fresh Meta
+ * snapshot of the secret href and no `urls` entry for it (`resume()` after an
+ * idle pause does the same). Every SDK path that starts a recording WITHOUT
+ * that restart (`_initializeRecording`, a session refresh, a buffer checkout)
+ * pushes its href to `urls`, and navigations push theirs. So the first
+ * segment of a replay that could hold a secret href is always caught by
+ * `urls` or the current address, and segments flush in order: tainting its
+ * id there drops every later segment of that recording too.
+ */
+const taintedReplayIds = new Set<string>();
+
+function touchesSecretRoute(event: Record<string, unknown>, currentHref: string): boolean {
+    const urls = Array.isArray(event.urls) ? event.urls : [];
+    const touched = urls.some((url: unknown) => typeof url === 'string' && isSecretRouteUrl(url));
+    return touched || isSecretRouteUrl(currentHref);
+}
+
+/**
  * Drop a `replay_event` that touched a secret-address route (by its `urls` or
- * the current address); every other event passes through untouched.
+ * the current address), and every later segment of the same replay. A segment
+ * without a replay id cannot be tracked, so it is dropped (fail closed). Every
+ * other event passes through untouched.
  */
 export function dropReplayOnSecretRoutes<T>(event: T, currentHref: string): T | null {
     if (!isRecord(event) || event.type !== 'replay_event') return event;
-    const urls = Array.isArray(event.urls) ? event.urls : [];
-    const touched = urls.some((url: unknown) => typeof url === 'string' && isSecretRouteUrl(url));
-    return touched || isSecretRouteUrl(currentHref) ? null : event;
+    const replayId = event.replay_id;
+    if (typeof replayId !== 'string') return null;
+    if (taintedReplayIds.has(replayId)) return null;
+    if (!touchesSecretRoute(event, currentHref)) return event;
+    taintedReplayIds.add(replayId);
+    return null;
 }
 
 /**

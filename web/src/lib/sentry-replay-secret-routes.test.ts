@@ -19,8 +19,10 @@ vi.mock('@sentry/react', () => ({
 const SAFE_HREF = 'https://rl.test/events/42';
 const SHARE = 'https://rl.test/p/poll/AbCdEfGhIjKlMnOpQrSt';
 
-function replayEvent(urls: unknown[]): Record<string, unknown> {
-    return { type: 'replay_event', replay_id: 'r1', urls };
+/** Each call is a fresh replay unless a `replayId` is shared on purpose. */
+let replaySeq = 0;
+function replayEvent(urls: unknown[], replayId = `r${++replaySeq}`): Record<string, unknown> {
+    return { type: 'replay_event', replay_id: replayId, urls };
 }
 
 describe('isSecretRouteUrl', () => {
@@ -94,6 +96,30 @@ describe('dropReplayOnSecretRoutes', () => {
     it('keeps a replay segment that never touched a secret route', () => {
         const event = replayEvent([SAFE_HREF, '/events/43']);
         expect(dropReplayOnSecretRoutes(event, SAFE_HREF)).toBe(event);
+    });
+
+    // After an error is sampled on a secret route the SDK flushes, clears its
+    // urls and restarts recording under the SAME replay id with a fresh Meta
+    // snapshot carrying the secret href; a later segment can look safe.
+    it('keeps dropping a replay once it touched a secret route, even when later segments look safe', () => {
+        expect(dropReplayOnSecretRoutes(replayEvent([SHARE], 'restarted'), SAFE_HREF)).toBeNull();
+        expect(dropReplayOnSecretRoutes(replayEvent([], 'restarted'), SAFE_HREF)).toBeNull();
+        expect(dropReplayOnSecretRoutes(replayEvent([SAFE_HREF], 'restarted'), SAFE_HREF)).toBeNull();
+    });
+
+    it('taints a replay whose segment was dropped for the current address alone', () => {
+        expect(dropReplayOnSecretRoutes(replayEvent([], 'flushed-on-share'), SHARE)).toBeNull();
+        expect(dropReplayOnSecretRoutes(replayEvent([SAFE_HREF], 'flushed-on-share'), SAFE_HREF)).toBeNull();
+    });
+
+    it('does not taint other replays', () => {
+        expect(dropReplayOnSecretRoutes(replayEvent([SHARE], 'tainted'), SAFE_HREF)).toBeNull();
+        const other = replayEvent([SAFE_HREF], 'clean');
+        expect(dropReplayOnSecretRoutes(other, SAFE_HREF)).toBe(other);
+    });
+
+    it('fails closed: a replay segment without a replay id is dropped', () => {
+        expect(dropReplayOnSecretRoutes({ type: 'replay_event', urls: [SAFE_HREF] }, SAFE_HREF)).toBeNull();
     });
 
     it('never drops a non-replay event (errors keep their scrubbed reporting)', () => {
