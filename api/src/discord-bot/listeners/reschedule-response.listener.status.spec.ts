@@ -231,6 +231,33 @@ function tentativeSuccessTests() {
 }
 
 function tentativeEdgeCaseTests() {
+  it('refuses Tentative once the event has ended, without touching the signup (TDB:2851)', async () => {
+    const past = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const ended = {
+      ...mockEvent,
+      duration: [new Date(past.getTime() - 3600_000), past],
+      extendedUntil: null,
+      adHocStatus: null,
+    };
+    mockDb.limit.mockResolvedValueOnce([ended]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue({
+      ...mockSignup,
+      status: 'declined',
+    });
+    // Unlinked, with a declined row: without the guard the reconfirm runs.
+    mockDb.limit.mockResolvedValueOnce([]);
+    mockDb.limit.mockResolvedValueOnce([{ ...mockSignup, status: 'declined' }]);
+    mockDb.limit.mockResolvedValueOnce([]);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+    );
+    await listener['handleTentative'](interaction, 42);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'This event has ended and is no longer accepting signups.',
+    });
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
   it('replies "Event not found." when event does not exist', async () => {
     mockDb.limit.mockResolvedValueOnce([]);
     const interaction = makeButtonInteraction(

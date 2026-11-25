@@ -35,6 +35,40 @@ export interface EventRow {
   slotConfig: unknown;
 }
 
+/** The reschedule lookup's row, with what `hasRescheduleEventEnded` reads. */
+export interface RescheduleEventRow extends EventRow {
+  duration: [Date, Date];
+  extendedUntil: Date | null;
+  adHocStatus: string | null;
+}
+
+/** The reply a Confirm/Tentative press gets once the event is over. */
+export const RESCHEDULE_EVENT_ENDED_REPLY =
+  'This event has ended and is no longer accepting signups.';
+
+/**
+ * Over by the rule `assertEventAcceptingSignups` applies to every other
+ * signup path: an ended ad-hoc session, or an effective end in the past.
+ */
+export function hasRescheduleEventEnded(
+  event: Pick<RescheduleEventRow, 'duration' | 'extendedUntil' | 'adHocStatus'>,
+  now: Date = new Date(),
+): boolean {
+  if (event.adHocStatus === 'ended') return true;
+  const effectiveEnd = event.extendedUntil ?? event.duration?.[1];
+  return !!effectiveEnd && effectiveEnd < now;
+}
+
+/** Tell a Confirm/Tentative press the event is over; true when it was. */
+export async function replyIfEventEnded(
+  i: ButtonInteraction,
+  event: RescheduleEventRow,
+): Promise<boolean> {
+  if (!hasRescheduleEventEnded(event)) return false;
+  await i.editReply({ content: RESCHEDULE_EVENT_ENDED_REPLY });
+  return true;
+}
+
 /** Dependencies shared across reschedule handler functions. */
 export interface RescheduleDeps {
   db: PostgresJsDatabase<typeof schema>;
@@ -267,7 +301,7 @@ type DmState = 'confirmed' | 'tentative' | 'declined';
 export async function lookupRescheduleEvent(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
-): Promise<EventRow | null> {
+): Promise<RescheduleEventRow | null> {
   const [event] = await db
     .select({
       id: schema.events.id,
@@ -275,6 +309,9 @@ export async function lookupRescheduleEvent(
       cancelledAt: schema.events.cancelledAt,
       gameId: schema.events.gameId,
       slotConfig: schema.events.slotConfig,
+      duration: schema.events.duration,
+      extendedUntil: schema.events.extendedUntil,
+      adHocStatus: schema.events.adHocStatus,
     })
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
