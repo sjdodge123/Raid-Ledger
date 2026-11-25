@@ -119,6 +119,25 @@ test_good_bundle() {
     ssb_teardown
 }
 
+# TDB:3618 — a bundle that decrypts fine but is over 30 days old must warn
+# (keys rotated since the last push silently miss every env); decrypts and
+# key_count are unchanged by staleness.
+test_stale_bundle_warns() {
+    CURRENT_TEST_NAME="TDB:3618: a 31-day-old bundle → stale warning, still decrypts:true"
+    ssb_setup
+    ssb_write_bundle '{"a":"1","b":"2"}'
+    # 31.5 days back: touch -d reads local time and strftime writes UTC, so
+    # the half day absorbs any timezone offset and the floor stays 31.
+    touch -d "$(jq -rn 'now - 31 * 86400 - 43200 | strftime("%Y-%m-%dT%H:%M:%S")')" "$RL_SETTINGS_BUNDLE"
+    ssb_probe
+    assert_exit_code "$SSB_RC" 0 "exits 0 on a stale bundle"
+    assert_eq "$(ssb_field decrypts)" "true" "staleness does not flip decrypts"
+    assert_eq "$(ssb_field key_count)" "2" "key_count still reported"
+    assert_contains "$(jq -r '.warning // ""' <<<"$SSB_OUT" 2>/dev/null)" "rl settings push" "a stale bundle warns with the fix"
+    assert_contains "$(jq -r '.warning // ""' <<<"$SSB_OUT" 2>/dev/null)" "31 days old" "the warning states the age"
+    ssb_teardown
+}
+
 test_no_leak() {
     CURRENT_TEST_NAME="TDB:1904: no key name or value ever appears in the output"
     ssb_setup
@@ -161,6 +180,7 @@ run_test "tdb1904-unreadable" test_unreadable
 run_test "tdb1904-no-key" test_no_key
 run_test "tdb1904-wrong-key" test_wrong_key
 run_test "tdb1904-good" test_good_bundle
+run_test "tdb3618-stale" test_stale_bundle_warns
 run_test "tdb1904-no-leak" test_no_leak
 run_test "tdb1904-sentinel-in-value" test_sentinel_in_value
 run_test "tdb1904-status-wiring" test_status_wiring

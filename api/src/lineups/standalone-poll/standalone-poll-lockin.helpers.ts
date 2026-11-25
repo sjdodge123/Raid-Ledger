@@ -28,6 +28,7 @@ import {
   heartPollGameForVoters,
 } from './standalone-poll-voter.helpers';
 import { matchHubPayload } from './poll-hub-payload.helpers';
+import { loadFollowupCarryover } from './followup-signup-carryover.helpers';
 import { revalidateBenchPick } from './standalone-poll-bench-pick.helpers';
 
 /** Everything the lock-in fan-out reaches. */
@@ -181,12 +182,19 @@ async function signUpWithPick(
   voters: { userId: number }[],
 ): Promise<AutoSignupResult> {
   const benchUserIds = await benchPickForVoters(deps, lockIn, voters);
+  // ROK-2320: a follow-up poll's voters keep their source-event character/roles.
+  const carryover = await loadFollowupCarryover(
+    deps,
+    { matchId: lockIn.matchId, eventId: lockIn.eventId },
+    voters.map((v) => v.userId),
+  );
   return autoSignupSlotVoters({
     eventId: lockIn.eventId,
     creatorId: lockIn.creatorId ?? -1,
     voters,
     signupsService: deps.signupsService,
     ...(benchUserIds ? { benchUserIds } : {}),
+    carryover,
   });
 }
 

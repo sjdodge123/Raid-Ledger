@@ -41,6 +41,7 @@ import {
   type LockInClaim,
 } from '../scheduling/scheduling-lockin-claim.helpers';
 import { assertBenchPick } from './standalone-poll-bench-pick.helpers';
+import { signUpCreatorWithCarryover } from './followup-signup-carryover.helpers';
 import { selectCompletionTarget } from './standalone-poll-complete.helpers';
 import {
   assertCanLockInPoll,
@@ -232,12 +233,9 @@ async function createOrRelease(
   }
   const eventIds = event.allEventIds ?? [event.id];
   try {
-    // Today's `POST /events` behaviour: the creator joins every occurrence.
-    for (const id of eventIds) {
-      await deps.signupsService.signup(id, userId, undefined, {
-        skipEndedCheck: true,
-      });
-    }
+    // Today's `POST /events` behaviour: the creator joins every occurrence,
+    // with their follow-up source-event character/roles (ROK-2320).
+    await signUpCreatorWithCarryover(deps, match.id, eventIds, userId);
   } catch (err: unknown) {
     await discardEvents(deps, eventIds, userId);
     await releaseMatchClaim(deps.db, match.id, claim, deps.logger);

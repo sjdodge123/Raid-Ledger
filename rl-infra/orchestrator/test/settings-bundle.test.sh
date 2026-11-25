@@ -89,6 +89,22 @@ test_non_object_plaintext_rejected() {
     sb_teardown
 }
 
+# TDB 2026-11-13 B1 flake: a wrong key decrypts to garbage with exit 0 about
+# 1 time in 256. Stub that outcome (garbage holding a NUL, exit 0): the
+# warning must still name the likely cause and nothing may reach stderr.
+test_garbage_plaintext_names_key() {
+    CURRENT_TEST_NAME="D6: wrong key decrypting to garbage (exit 0) → {} + warning naming the key"
+    sb_setup
+    sb_write_bundle '{"a":"1"}'
+    openssl() { cat >/dev/null 2>&1 </dev/null; printf 'G\000\377\001garbage'; return 0; }
+    settings_bundle::payload > "$RL_STATE_DIR/payload.json" 2> "$RL_STATE_DIR/stderr.txt"
+    unset -f openssl
+    assert_eq "$(cat "$RL_STATE_DIR/payload.json")" "{}" "garbage plaintext yields {}"
+    assert_contains "${SETTINGS_BUNDLE_WARNING:-}" "RL_SETTINGS_BUNDLE_KEY" "the warning names the likely cause"
+    assert_eq "$(cat "$RL_STATE_DIR/stderr.txt")" "" "nothing reaches stderr (no ignored-null-byte warning)"
+    sb_teardown
+}
+
 test_no_key_configured() {
     CURRENT_TEST_NAME="D6: bundle present but no key configured → {} + warning"
     sb_setup
@@ -134,6 +150,7 @@ run_test "d6-roundtrip" test_bundle_roundtrip
 run_test "d6-missing" test_missing_bundle_is_noop
 run_test "d6-wrong-key" test_wrong_key_warns_but_yields_empty
 run_test "d6-non-object" test_non_object_plaintext_rejected
+run_test "d6-garbage-plaintext" test_garbage_plaintext_names_key
 run_test "d6-no-key" test_no_key_configured
 run_test "d6-unreadable" test_unreadable_bundle_warns
 

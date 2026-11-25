@@ -5,8 +5,6 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS, type SettingKey } from '../drizzle/schema/app-settings';
 import { CronJobService } from '../cron-jobs/cron-job.service';
@@ -17,7 +15,8 @@ import {
   readCommitSha,
   shortSha,
 } from './commit-freshness';
-import { fetchLatestRelease, isNewer, normalizeVersion } from './release-check';
+import { fetchLatestRelease, isNewer } from './release-check';
+import { resolveAppVersion } from './app-version.helpers';
 
 /** Delay before the one-off startup check, so it doesn't block boot. */
 export const INITIAL_CHECK_DELAY_MS = 10_000;
@@ -68,17 +67,8 @@ export class VersionCheckService implements OnModuleInit, OnModuleDestroy {
     private readonly settingsService: SettingsService,
     private readonly cronJobService: CronJobService,
   ) {
-    // Prefer APP_VERSION, baked into the image at build time from the git
-    // release tag (docker-publish.yml, and ci.yml's :main build since
-    // ROK-1475) — it can't drift the way a hand-maintained package.json
-    // field can. Fall back to package.json for local dev.
-    this.currentVersion = process.env.APP_VERSION
-      ? normalizeVersion(process.env.APP_VERSION)
-      : (
-          JSON.parse(
-            readFileSync(join(process.cwd(), 'package.json'), 'utf8'),
-          ) as { version: string }
-        ).version;
+    // APP_VERSION (baked in from the release tag) or package.json in dev.
+    this.currentVersion = resolveAppVersion();
   }
 
   onModuleInit() {
