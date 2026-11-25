@@ -41,9 +41,12 @@ export class RelayBootstrapService implements OnApplicationBootstrap {
   async run(): Promise<void> {
     if (this.running || this.attempts >= MAX_BOOTSTRAP_ATTEMPTS) return;
     this.running = true;
+    // Captured before the reads: a disconnect during them cancels the attempt.
+    const generation = this.relay.currentGeneration();
     try {
       if (await this.relay.recoverTokenOnly()) return;
       if (!(await this.shouldRegister())) return;
+      if (generation !== this.relay.currentGeneration()) return;
       this.attempts += 1;
       const status = await this.relay.register();
       if (status.error) {

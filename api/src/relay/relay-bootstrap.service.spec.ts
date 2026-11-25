@@ -212,3 +212,24 @@ describe('RelayBootstrapService — boot never waits (AC 5)', () => {
     expect(rejections).toEqual([]);
   });
 });
+
+describe('RelayBootstrapService — cancellation (Codex RH-6)', () => {
+  it('a disconnect during the eligibility reads cancels the boot registration', async () => {
+    fetchSpy.mockResolvedValue(Response.json(REGISTERED, { status: 201 }));
+    const get = settings.get as jest.Mock;
+    let disconnecting: Promise<void> | undefined;
+    get.mockImplementation((k: string) => {
+      if (k === SETTING_KEYS.RELAY_ENABLED && !disconnecting) {
+        disconnecting = relay.disconnect();
+      }
+      return Promise.resolve(store.get(k) ?? null);
+    });
+    await bootstrap.run();
+    await disconnecting;
+    await settle();
+    expect(registerCalls()).toHaveLength(0);
+    expect(store.get(SETTING_KEYS.RELAY_ENABLED)).toBe('false');
+    expect(store.has(SETTING_KEYS.RELAY_TOKEN)).toBe(false);
+  });
+
+});

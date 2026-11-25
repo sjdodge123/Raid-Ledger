@@ -73,6 +73,15 @@ export class RelayService {
     return this.revoked;
   }
 
+  /**
+   * Bumped by every disconnect / disable. A caller that captures it before
+   * its reads and compares it right before `register()` (which captures it
+   * synchronously) cannot start a registration an admin already cancelled.
+   */
+  currentGeneration(): number {
+    return this.generation;
+  }
+
   /** Let the boot bootstrap retry on the hourly tick while unregistered (L4). */
   setUnregisteredTickHandler(handler: () => Promise<void>): void {
     this.onUnregisteredTick = handler;
