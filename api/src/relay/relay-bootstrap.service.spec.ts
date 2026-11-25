@@ -126,6 +126,24 @@ describe('RelayBootstrapService — token stored without its flag (review fix)',
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('a disconnect between the flag read and the write wins (MINOR-8)', async () => {
+    store.set(SETTING_KEYS.RELAY_TOKEN, 'rlh_x');
+    const get = settings.get as jest.Mock;
+    let disconnecting: Promise<void> | undefined;
+    get.mockImplementation((k: string) => {
+      if (k === SETTING_KEYS.RELAY_ENABLED && !disconnecting) {
+        disconnecting = relay.disconnect();
+      }
+      return Promise.resolve(store.get(k) ?? null);
+    });
+    await relay.recoverTokenOnly();
+    await disconnecting;
+    expect(settings.set).not.toHaveBeenCalledWith(
+      SETTING_KEYS.RELAY_ENABLED,
+      'true',
+    );
+  });
+
   it('recovers on the hourly tick too, then heartbeats', async () => {
     delete process.env.RELAY_HUB_URL;
     bootstrap.onApplicationBootstrap();

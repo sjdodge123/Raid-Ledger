@@ -264,6 +264,7 @@ describeRegisterRh6();
 describeRegisterResultRh6();
 describeHeartbeatRh6();
 describeRegisterRaceRh6();
+describeRegisterRetryRh6();
 
 /** Hold the next fetch open until the returned release() is called. */
 function holdFetch(): (res: Partial<Response>) => void {
@@ -311,7 +312,36 @@ function describeRegisterRaceRh6() {
       expect(a.connected).toBe(true);
     });
 
+    it('a disconnect between the token and flag writes leaves the flag false', async () => {
+      mockFetch.mockResolvedValue(reply(201, REGISTERED));
+      const set = mockSettingsService.set as jest.Mock;
+      let disconnecting: Promise<void> | undefined;
+      set.mockImplementation((key: string, value: string) => {
+        store.set(key, value);
+        if (key === SETTING_KEYS.RELAY_TOKEN)
+          disconnecting = service.disconnect();
+        return Promise.resolve();
+      });
+      await service.register();
+      await disconnecting;
+      expect(enabledFlagWrites()).toEqual([
+        [SETTING_KEYS.RELAY_ENABLED, 'false'],
+      ]);
+    });
+
     it('a register after the in-flight one finished calls the hub again', async () => {
+      mockFetch.mockResolvedValue(reply(201, REGISTERED));
+      await service.register();
+      await service.register();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+}
+
+function describeRegisterRetryRh6() {
+  describe('register after a failed attempt (RH-6 review fix)', () => {
+    it('a register whose hub call rejected lets the next one call the hub', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('down'));
       mockFetch.mockResolvedValue(reply(201, REGISTERED));
       await service.register();
       await service.register();

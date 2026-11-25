@@ -5,7 +5,7 @@
  * Runs only when `RELAY_HUB_URL` is set (M1: the built-in host has no DNS
  * yet), there is no `relay_token`, and an admin has not disconnected
  * (`relay_enabled='false'`). A token stored without its flag is
- * completed instead (see `recoverTokenOnly`). Boot never waits on the hub: the attempt is
+ * completed instead (see `RelayService.recoverTokenOnly`). Boot never waits on the hub: the attempt is
  * detached. A failed attempt is retried on the hourly heartbeat tick, at
  * most {@link MAX_BOOTSTRAP_ATTEMPTS} attempts per process, and never after
  * the hub revoked this instance's token (L8).
@@ -42,7 +42,7 @@ export class RelayBootstrapService implements OnApplicationBootstrap {
     if (this.running || this.attempts >= MAX_BOOTSTRAP_ATTEMPTS) return;
     this.running = true;
     try {
-      if (await this.recoverTokenOnly()) return;
+      if (await this.relay.recoverTokenOnly()) return;
       if (!(await this.shouldRegister())) return;
       this.attempts += 1;
       const status = await this.relay.register();
@@ -58,22 +58,6 @@ export class RelayBootstrapService implements OnApplicationBootstrap {
     } finally {
       this.running = false;
     }
-  }
-
-  /**
-   * A token exists, so there is nothing to register. If `relay_enabled` is
-   * unset, a register stored the token but never wrote the flag (process
-   * died, or the write failed): write it now. An explicit `'false'` stays.
-   */
-  private async recoverTokenOnly(): Promise<boolean> {
-    const token = await this.settings.get(SETTING_KEYS.RELAY_TOKEN);
-    if (token === null) return false;
-    const enabled = await this.settings.get(SETTING_KEYS.RELAY_ENABLED);
-    if (enabled === null) {
-      await this.settings.set(SETTING_KEYS.RELAY_ENABLED, 'true');
-      this.logger.log('Relay token found without its enabled flag; restored');
-    }
-    return true;
   }
 
   /** L2: env set, not revoked, admin has not disconnected (no token). */

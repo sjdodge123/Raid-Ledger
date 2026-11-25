@@ -78,6 +78,24 @@ export class RelayService {
     this.onUnregisteredTick = handler;
   }
 
+  /**
+   * A token exists, so there is nothing to register. If `relay_enabled` is
+   * unset, a register stored the token but never wrote the flag (process
+   * died, or the write failed): write it now, unless a disconnect / disable
+   * landed meanwhile. An explicit `'false'` stays.
+   */
+  async recoverTokenOnly(): Promise<boolean> {
+    const generation = this.generation;
+    const token = await this.settingsService.get(SETTING_KEYS.RELAY_TOKEN);
+    if (token === null) return false;
+    const enabled = await this.settingsService.get(SETTING_KEYS.RELAY_ENABLED);
+    if (enabled === null && generation === this.generation) {
+      await this.settingsService.set(SETTING_KEYS.RELAY_ENABLED, 'true');
+      this.logger.log('Relay token found without its enabled flag; restored');
+    }
+    return true;
+  }
+
   /** Get current relay status for the admin UI. */
   async getStatus(): Promise<RelayStatus> {
     const enabled = await this.isEnabled();
