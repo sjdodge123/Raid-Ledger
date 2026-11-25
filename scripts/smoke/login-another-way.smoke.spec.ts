@@ -6,7 +6,7 @@
  * `/system/status` is patched (the calendar-server-layer idiom) and the code
  * endpoints are fulfilled with a fixed pending code. Nothing global changes.
  * Signed-out context; deterministic waits only. The real end-to-end approval
- * lives in `signin-code.spec.ts`.
+ * lives in `signin-code.smoke.spec.ts`.
  */
 import type { Browser, Page } from '@playwright/test';
 import { test, expect } from './base';
