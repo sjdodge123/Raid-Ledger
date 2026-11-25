@@ -30,6 +30,18 @@ interface McpJsonShape {
   mcpServers: Record<string, McpServerEntry>;
 }
 
+/**
+ * The repo's own MCP server entrypoints — the only programs mcp_health runs.
+ * A worktree's .mcp.json is editable by any agent, so its `command` is never
+ * replayed: a matching entrypoint is probed with the fixed `npx tsx` launcher,
+ * and anything else is reported as skipped.
+ */
+export const KNOWN_ENTRYPOINTS: ReadonlySet<string> = new Set([
+  'tools/mcp-env/src/index.ts',
+  'tools/mcp-discord/src/index.ts',
+  'tools/mcp-rl-fleet/src/index.ts',
+]);
+
 /** Find a local entrypoint path in args (one starting with `tools/` and ending in .ts/.js/.mjs/.cjs). */
 function findLocalEntrypoint(args: string[]): string | null {
   for (const arg of args) {
@@ -40,10 +52,10 @@ function findLocalEntrypoint(args: string[]): string | null {
   return null;
 }
 
-/** Spawn the configured command with --self-check appended; resolve with a HealthStatus. */
-function probeServer(entry: McpServerEntry): Promise<HealthStatus> {
+/** Spawn a known entrypoint with --self-check; resolve with a HealthStatus. */
+function probeEntrypoint(entrypoint: string): Promise<HealthStatus> {
   return new Promise((resolve) => {
-    const argv = [...entry.args, '--self-check'];
+    const argv = ['tsx', entrypoint, '--self-check'];
     let settled = false;
     const finish = (status: HealthStatus): void => {
       if (settled) return;
@@ -54,7 +66,7 @@ function probeServer(entry: McpServerEntry): Promise<HealthStatus> {
     const timer = setTimeout(() => {
       finish({ status: 'unhealthy', error: 'timeout (3s) waiting for --self-check' });
     }, SELF_CHECK_TIMEOUT_MS);
-    execFile(entry.command, argv, { timeout: SELF_CHECK_TIMEOUT_MS }, (err, _stdout, stderr) => {
+    execFile('npx', argv, { timeout: SELF_CHECK_TIMEOUT_MS }, (err, _stdout, stderr) => {
       if (!err) return finish({ status: 'healthy' });
       const code = (err as NodeJS.ErrnoException & { code?: number | string }).code;
       const detail = stderr?.trim() || err.message || 'unknown error';
@@ -72,6 +84,12 @@ async function checkServer(entry: McpServerEntry): Promise<HealthStatus> {
       reason: 'third-party server (no local tools/ entrypoint)',
     };
   }
+  if (!KNOWN_ENTRYPOINTS.has(entrypoint)) {
+    return {
+      status: 'skipped',
+      reason: `entrypoint not in the mcp_health allow-list: ${entrypoint}`,
+    };
+  }
   const absPath = join(PROJECT_DIR, entrypoint);
   try {
     await access(absPath);
@@ -81,7 +99,7 @@ async function checkServer(entry: McpServerEntry): Promise<HealthStatus> {
       error: `entrypoint not found: ${entrypoint}`,
     };
   }
-  return probeServer(entry);
+  return probeEntrypoint(entrypoint);
 }
 
 /** Build the summary string from the per-server results. */
