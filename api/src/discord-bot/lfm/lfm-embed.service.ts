@@ -34,6 +34,7 @@ import {
   type LfgLfmReachedPayload,
 } from '../../lfg/lfg.constants';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
+import { isVisibleGame } from '../../igdb/igdb-visibility.helpers';
 import { getLfgBoardEnabled } from '../../settings/settings-lfg-board.helpers';
 import {
   retireOpenRow,
@@ -167,11 +168,15 @@ export class LfmEmbedService {
     try {
       const game = await loadLfmGame(this.db, payload.gameId);
       if (!game) return;
+      const existing = await findOpenLfmMessage(this.db, game.id);
+      // A hidden or banned game never gets a NEW public post (the rule
+      // `requireVisibleGame` applies to every LFG write); an open one is still
+      // edited, like the group page still reads it.
+      if (!existing && !isVisibleGame(game)) return;
       // ROK-1494 AC7 — `currentView`, never a bare `liveView`: a game whose
       // session has already spawned has an empty live group, and a second
       // LFM_REACHED would otherwise paint `0 looking` over `PLAYING NOW`.
       const view = await currentView(this.db, game);
-      const existing = await findOpenLfmMessage(this.db, game.id);
       if (existing) await this.editRow(existing, view);
       else await this.postNew(game.id, view);
     } catch (err) {
@@ -266,7 +271,7 @@ export class LfmEmbedService {
       try {
         await this.serialized(gameId, async () => {
           const game = await loadLfmGame(this.db, gameId);
-          if (!game) return;
+          if (!game || !isVisibleGame(game)) return;
           await this.postNew(game.id, await currentView(this.db, game));
         });
       } catch (err) {

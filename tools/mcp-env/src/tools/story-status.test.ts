@@ -1,18 +1,36 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock config before importing story-status
 vi.mock('../config.js', () => ({
   PROJECT_DIR: '/fake/project',
 }));
 
-// We need to capture the mock function reference so tests can control it
+// We need to capture the mock function reference so tests can control it.
+// story_status runs every command as an argv array via run(); the mock joins
+// it into one string so the sequence helpers below can match on it. The
+// string-form shell() is recorded separately: story_status must never use it
+// (a pushed branch name in a shell string is a command injection).
 const mockShell = vi.fn();
+const shellStringCalls: string[] = [];
+const runCalls: string[][] = [];
 vi.mock('../shell.js', () => ({
-  shell: (...args: unknown[]) => mockShell(...args),
+  shell: (cmd: string, ...rest: unknown[]) => {
+    shellStringCalls.push(cmd);
+    return mockShell(cmd, ...rest);
+  },
+  run: (file: string, args: readonly string[], ...rest: unknown[]) => {
+    runCalls.push([file, ...args]);
+    // The origin URL lookup is answered here so it does not consume the
+    // per-test call sequence.
+    if (args.includes('get-url')) {
+      return Promise.resolve({ stdout: 'https://github.com/org/repo.git', stderr: '', exitCode: 0 });
+    }
+    return mockShell([file, ...args].join(' '), ...rest);
+  },
 }));
 
 // Import after mocks are registered
-import { execute, TOOL_NAME, TOOL_DESCRIPTION } from './story-status.js';
+import { execute, isSafeBranchName, TOOL_NAME, TOOL_DESCRIPTION } from './story-status.js';
 
 /** Return `value`, or throw naming `label` — a missing element must fail loudly. */
 function must<T>(value: T | undefined, label: string): T {
@@ -75,6 +93,8 @@ function setupShellSequence(opts: {
 describe('story-status tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    shellStringCalls.length = 0;
+    runCalls.length = 0;
   });
 
   // -------------------------------------------------------------------------
@@ -469,6 +489,7 @@ describe('story-status tool', () => {
         mergedBranches: '',
         prJsons: [noPrJson],
       });
+      mockShell.mockResolvedValue(ok(noPrJson));
 
       const result = await execute({ stories: ['ROK-867'] });
 
@@ -505,6 +526,7 @@ describe('story-status tool', () => {
         mergedBranches: '',
         prJsons: [noPrJson],
       });
+      mockShell.mockResolvedValue(ok(noPrJson));
 
       const result = await execute({ stories: ['ROK-867'] });
 
@@ -518,6 +540,7 @@ describe('story-status tool', () => {
         mergedBranches: '',
         prJsons: [noPrJson],
       });
+      mockShell.mockResolvedValue(ok(noPrJson));
 
       const result = await execute({ stories: ['ROK-867'] });
 
@@ -536,6 +559,7 @@ describe('story-status tool', () => {
         mergedBranches: '',
         prJsons: [noPrJson],
       });
+      mockShell.mockResolvedValue(ok(noPrJson));
 
       const result = await execute({ stories: ['ROK-867'] });
 
@@ -550,6 +574,7 @@ describe('story-status tool', () => {
         mergedBranches: '',
         prJsons: [noPrJson],
       });
+      mockShell.mockResolvedValue(ok(noPrJson));
 
       const result = await execute({ stories: ['ROK-867'] });
 
@@ -562,6 +587,7 @@ describe('story-status tool', () => {
         mergedBranches: '',
         prJsons: [noPrJson],
       });
+      mockShell.mockResolvedValue(ok(noPrJson));
 
       const result = await execute({ stories: ['ROK-867'] });
 
@@ -651,6 +677,7 @@ describe('story-status tool', () => {
         mergedBranches: '',
         prJsons: [noPrJson],
       });
+      mockShell.mockResolvedValue(ok(noPrJson));
 
       const result = await execute({ stories: ['ROK-867'] });
 
@@ -672,6 +699,57 @@ describe('story-status tool', () => {
       const result = await execute({ stories: ['ROK-867'] });
 
       expect(result['ROK-867']?.verdict).toBe('not_started');
+    });
+  });
+  // -------------------------------------------------------------------------
+  // Shell injection via a pushed branch name (tech-debt: story-status.ts:113)
+  // -------------------------------------------------------------------------
+
+  describe('hostile branch names', () => {
+    const HOSTILE = 'rok-867-$(touch${IFS}/tmp/pwned)';
+
+    // A default answer so an unfixed build reaches the assertions instead of
+    // crashing on an exhausted call sequence; reset so it cannot leak.
+    afterEach(() => {
+      mockShell.mockReset();
+    });
+
+    it('never builds a shell string, and never hands a hostile branch name to gh', async () => {
+      setupShellSequence({
+        remoteBranches: `  origin/${HOSTILE}\n  origin/rok-867-safe`,
+        mergedBranches: '',
+        prJsons: [noPrJson],
+      });
+      mockShell.mockResolvedValue(ok(noPrJson));
+
+      const result = await execute({ stories: ['ROK-867'] });
+
+      expect(shellStringCalls).toEqual([]);
+      const ghCalls = runCalls.filter(([file]) => file === 'gh');
+      expect(ghCalls.map((argv) => argv.includes(HOSTILE))).toEqual([false]);
+      expect(ghCalls[0]).toEqual([
+        'gh', 'pr', 'list', '--repo', 'https://github.com/org/repo.git',
+        '--head', 'rok-867-safe', '--state', 'all', '--json', 'number,state,url',
+      ]);
+      const story = must(result['ROK-867'], 'ROK-867 result');
+      expect(story.branches.map((b) => [b.name, b.pr])).toEqual([
+        [HOSTILE, null],
+        ['rok-867-safe', null],
+      ]);
+    });
+
+    it('passes PROJECT_DIR as its own argv element, not inside a string', async () => {
+      setupShellSequence({ remoteBranches: '', mergedBranches: '' });
+
+      await execute({ stories: ['ROK-1'] });
+
+      expect(runCalls[0]).toEqual(['git', '-C', '/fake/project', 'fetch', 'origin']);
+    });
+
+    it('rejects branch names starting with "-" (gh would read them as flags)', () => {
+      expect(isSafeBranchName('--repo=evil/repo')).toBe(false);
+      expect(isSafeBranchName('rok-1-a;rm')).toBe(false);
+      expect(isSafeBranchName('rok-1838-fix_thing.v2/sub')).toBe(true);
     });
   });
 });

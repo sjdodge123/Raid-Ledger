@@ -65,7 +65,8 @@ npx_argv_file=$(mktemp -t rl-fleet-scope-npx.XXXXXX)
 diff_file=$(mktemp -t rl-fleet-scope-diff.XXXXXX)
 npm_argv_file=$(mktemp -t rl-fleet-scope-npm.XXXXXX)
 perf_log=$(mktemp -t rl-fleet-scope-perf.XXXXXX)
-trap 'rm -rf "$stub_bin" "$diff_file" "$npx_argv_file" "$npm_argv_file" "$perf_log" "${perf_log}.errors"' EXIT
+node_argv_file=$(mktemp -t rl-fleet-scope-node.XXXXXX)
+trap 'rm -rf "$stub_bin" "$diff_file" "$npx_argv_file" "$npm_argv_file" "$perf_log" "${perf_log}.errors" "$node_argv_file"' EXIT
 
 cat >"$stub_bin/docker" <<'EOF'
 #!/usr/bin/env bash
@@ -102,9 +103,19 @@ if [[ "${1:-}" == "ls-files" && "$*" == *"--others"* ]]; then
 fi
 exec "$REAL_GIT" "$@"
 EOF
+# `node --test` (the "Script node:test specs" step) is recorded and stubbed to
+# pass, as in validate-ci-fleet-flag.test.sh (PR #2109): a real run nested all
+# of scripts/*.spec.mjs inside every case, so one flaky spec failed an
+# unrelated case (M1-T, M1-U) without naming itself. CI runs those specs
+# directly (.github/workflows/ci.yml "Script node:test specs"); this test only
+# needs the gate to reach the step.
 cat >"$stub_bin/node" <<EOF
 #!/usr/bin/env bash
 [[ "\${1:-}" == *check-bundle-size.mjs ]] && exit 0
+if [[ "\${1:-}" == "--test" ]]; then
+  [[ -n "\${STUB_NODE_ARGV_FILE:-}" ]] && echo "\$*" >>"\$STUB_NODE_ARGV_FILE"
+  exit 0
+fi
 exec "$(command -v node)" "\$@"
 EOF
 chmod +x "$stub_bin"/*
@@ -112,10 +123,11 @@ chmod +x "$stub_bin"/*
 INVOKE_OUT=""
 INVOKE_RC=0
 NPX=""
+NODE=""
 # invoke <diff (newline-separated paths)> <validate-ci flags...>
 invoke() {
     local diff="$1"; shift
-    : >"$npx_argv_file"; : >"$npm_argv_file"
+    : >"$npx_argv_file"; : >"$npm_argv_file"; : >"$node_argv_file"
     if [[ -n "$diff" ]]; then printf '%s\n' "$diff" >"$diff_file"; else : >"$diff_file"; fi
     INVOKE_RC=0
     INVOKE_OUT=$(
@@ -124,6 +136,7 @@ invoke() {
         RL_TARGET=remote RL_TARGET_DISPATCHED=1 BASE_URL="$ENV_URL" \
         PERF_LOG_LOCAL="$perf_log" \
         STUB_NPX_ARGV_FILE="$npx_argv_file" STUB_NPM_ARGV_FILE="$npm_argv_file" \
+        STUB_NODE_ARGV_FILE="$node_argv_file" \
         RL_DISCORD_LOCK_DIR="/nonexistent-lock-dir" \
         RL_DEPS_RUNNER_ROOT="/nonexistent-runner-root" \
         RL_WORKSPACE_ROOT="/nonexistent-workspace" \
@@ -132,6 +145,7 @@ invoke() {
     # Strip ANSI colour so row assertions can anchor on ^ and $.
     INVOKE_OUT=$(sed $'s/\x1b\\[[0-9;]*m//g' <<<"$INVOKE_OUT")
     NPX=$(cat "$npx_argv_file")
+    NODE=$(cat "$node_argv_file")
 }
 
 # What each suite looks like in the npx argv log.
@@ -176,7 +190,10 @@ assert_runs_all() {
     assert_in "$API_JEST" "$NPX" "$1: api jest must run"
     assert_in "$API_INTEGRATION" "$NPX" "$1: api integration must run"
     assert_in "$WEB_VITEST" "$NPX" "$1: web vitest must run"
-    assert_not_in 'SKIPPED — ' "$INVOKE_OUT" "$1: no scope-skip rows"
+    # The relay-hub rows follow the diff on their own reason (ROK-1669); only
+    # a --fleet scope skip is this case's concern.
+    assert_not_in 'SKIPPED — .*--fleet scope' "$INVOKE_OUT" "$1: no scope-skip rows"
+    assert_in '^--test .*scripts/[^ ]*\.spec\.mjs' "$NODE" "$1: node:test step reached (stubbed, never nested)"
 }
 
 CURRENT_TEST_NAME="C: --fleet on a contract diff runs every suite"
@@ -235,7 +252,24 @@ assert_rc 0 "--full web-only"
 assert_in 'test:cov -w api|jest --coverage' "$NPX"$'\n'"$(cat "$npm_argv_file")" "--full: api unit must run"
 assert_in "$API_INTEGRATION" "$NPX" "--full: api integration must run"
 assert_in 'cwd=.*/web vitest run' "$NPX" "--full: web vitest must run"
-assert_not_in 'SKIPPED — ' "$INVOKE_OUT" "--full: no scope-skip rows"
+assert_not_in 'SKIPPED — .*--fleet scope' "$INVOKE_OUT" "--full: no scope-skip rows"
+
+# ===== H: the relay-hub rows follow the diff (ROK-1669) =====
+HUB_SKIP='^Relay hub \(deps guard, lint, typecheck, build, unit\) +SKIPPED — diff does not touch relay-hub/'
+HUB_INT_SKIP='^Integration tests \(relay-hub\) +SKIPPED — diff does not touch relay-hub/'
+CURRENT_TEST_NAME="H1: a web-only diff skips the relay-hub rows with a reason"
+invoke "web/src/pages/foo.tsx" --full --no-e2e
+assert_rc 0 "--full web-only (hub)"
+assert_in "$HUB_SKIP" "$INVOKE_OUT" "relay-hub checks row SKIPPED with reason"
+assert_in "$HUB_INT_SKIP" "$INVOKE_OUT" "relay-hub integration row SKIPPED with reason"
+assert_not_in 'typecheck -w @raid-ledger/relay-hub' "$(cat "$npm_argv_file")" "hub checks must not run"
+
+CURRENT_TEST_NAME="H2: a relay-hub diff runs both relay-hub rows"
+invoke "relay-hub/src/main.ts" --full --no-e2e
+assert_rc 0 "--full relay-hub"
+assert_not_in 'relay-hub\) +SKIPPED|Relay hub .* +SKIPPED' "$INVOKE_OUT" "relay-hub rows must not be SKIPPED"
+assert_in 'typecheck -w @raid-ledger/relay-hub' "$(cat "$npm_argv_file")" "hub typecheck runs via the workspace script"
+assert_in 'test:integration -w @raid-ledger/relay-hub' "$(cat "$npm_argv_file")" "hub integration runs"
 
 echo
 echo "--- $CURRENT_TEST_FILE: $TEST_PASS_COUNT pass, $TEST_FAIL_COUNT fail ---"

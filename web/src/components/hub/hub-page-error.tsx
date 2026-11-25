@@ -8,6 +8,7 @@
 import { Suspense, type JSX, type ReactNode } from 'react';
 import type { GuildKind } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
+import { NotFoundState } from '../common/not-found-state';
 import { httpStatusOf } from '../../lib/api/api-error';
 import { useHubModule } from '../../plugins/hub-module';
 import { usePluginsHydrated } from '../../hooks/use-plugins';
@@ -39,7 +40,7 @@ export function LoadingState(): JSX.Element {
 const NOT_FOUND_COPY = "This guild doesn't exist. Check the link and try again.";
 
 export function NotFoundNotice(): JSX.Element {
-    return <Notice testId="guild-not-found"><p className="text-sm text-muted">{NOT_FOUND_COPY}</p></Notice>;
+    return <div className={PAGE}><NotFoundState testId="guild-not-found" message={NOT_FOUND_COPY} /></div>;
 }
 
 interface ErrorStateProps {

@@ -92,6 +92,14 @@ describe('PublicLineupPage (ROK-1067)', () => {
         expect(screen.getByText(/Made with Raid Ledger/i)).toBeInTheDocument();
     });
 
+    it('paints the archived badge as the documented neutral status chip (ROK-2319)', () => {
+        mockPublicLineupResult = { data: makePayload({ status: 'archived' }), isLoading: false, error: null };
+        renderPage();
+        const badge = screen.getByTestId('public-lineup-status-badge');
+        expect(badge).toHaveClass('bg-panel', 'border', 'border-edge', 'text-muted');
+        expect(badge).not.toHaveClass('bg-overlay');
+    });
+
     it('hides the decision block while status === "building"', () => {
         mockPublicLineupResult = {
             data: makePayload({ status: 'building', decision: null }),

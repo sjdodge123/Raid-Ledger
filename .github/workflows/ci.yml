@@ -47,6 +47,7 @@ jobs:
       smoke_tests: ${{ steps.filter.outputs.smoke_tests }}
       container: ${{ steps.filter.outputs.container }}
       tools: ${{ steps.filter.outputs.tools }}
+      relay_hub: ${{ steps.filter.outputs.relay_hub }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -157,6 +158,14 @@ jobs:
               - 'tools/mcp-env/**'
               - 'tools/mcp-discord/**'
               - 'tools/test-bot/**'
+            # ROK-1669: the relay-hub job. A web/src-only change skips it.
+            relay_hub:
+              - 'relay-hub/**'
+              - 'packages/contract/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'scripts/check-relay-hub-deps.*'
+              - '.github/workflows/ci.yml'
 
   # ─── Lint + Build ──────────────────────────────────────────────────
   # Skipped for docs/skills-only PRs (no code changes)
@@ -593,6 +602,61 @@ jobs:
       - name: Test contract schemas
         run: npm test -w @raid-ledger/contract
 
+  # ─── Relay hub (ROK-1669) ─────────────────────────────────────────
+  # The headless relay-hub workspace: dependency-subset guard against
+  # api/package.json, lint, typecheck (specs included), build, unit and
+  # integration (no DB yet). Gates merge through the unit-tests aggregator:
+  # branch protection's required list is not edited.
+  relay-hub:
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.relay_hub == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build contract
+        run: npm run build -w packages/contract
+
+      - name: Dependency subset guard (api/package.json)
+        run: node scripts/check-relay-hub-deps.mjs
+
+      - name: Lint
+        run: npm run lint -w @raid-ledger/relay-hub
+
+      # The workspace script, so the hub's own TypeScript (not the root's
+      # hoisted copy) checks src + specs, the same compiler the build uses.
+      - name: Typecheck (src + specs)
+        run: npm run typecheck -w @raid-ledger/relay-hub
+
+      - name: Build
+        run: npm run build -w @raid-ledger/relay-hub
+
+      - name: Unit tests
+        run: npm test -w @raid-ledger/relay-hub
+
+      - name: Integration tests
+        run: npm run test:integration -w @raid-ledger/relay-hub
+
   # ─── Tools Unit Tests (MCP servers) ───────────────────────────────
   # The MCP-server workspaces under tools/ each ship a Vitest suite that is the
   # behavioral gate for tooling changes. Before ROK-1362 only mcp-rl-fleet ran
@@ -707,7 +771,7 @@ jobs:
   # ─── Unit Tests (summary — required status check) ─────────────────
   unit-tests:
     runs-on: ubuntu-latest
-    needs: [unit-tests-api, unit-tests-web, unit-tests-web-merge, unit-tests-contract]
+    needs: [unit-tests-api, unit-tests-web, unit-tests-web-merge, unit-tests-contract, relay-hub]
     if: always()
     steps:
       - name: Check results
@@ -716,11 +780,12 @@ jobs:
           WEB="${{ needs.unit-tests-web.result }}"
           MERGE="${{ needs.unit-tests-web-merge.result }}"
           CONTRACT="${{ needs.unit-tests-contract.result }}"
+          HUB="${{ needs.relay-hub.result }}"
           # cancelled counts as failed, as in tools-tests: a cancelled shard
           # skips the merge, so coverage would otherwise go unchecked.
-          for X in "$API" "$WEB" "$MERGE" "$CONTRACT"; do
+          for X in "$API" "$WEB" "$MERGE" "$CONTRACT" "$HUB"; do
             if [ "$X" = "failure" ] || [ "$X" = "cancelled" ]; then
-              echo "Unit tests failed (api=$API, web=$WEB, web-merge=$MERGE, contract=$CONTRACT)"
+              echo "Unit tests failed (api=$API, web=$WEB, web-merge=$MERGE, contract=$CONTRACT, relay-hub=$HUB)"
               exit 1
             fi
           done
@@ -729,7 +794,7 @@ jobs:
             echo "Web coverage merge did not succeed (web=$WEB, web-merge=$MERGE)"
             exit 1
           fi
-          echo "Unit tests passed (api=$API, web=$WEB, web-merge=$MERGE, contract=$CONTRACT)"
+          echo "Unit tests passed (api=$API, web=$WEB, web-merge=$MERGE, contract=$CONTRACT, relay-hub=$HUB)"
 
   # ─── Integration Tests (sharded) ───────────────────────────────────
   integration-test-shard:
