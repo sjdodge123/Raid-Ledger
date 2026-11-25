@@ -218,12 +218,15 @@ export class EventLinkListener {
         // ROK-1622: POSTED here would immediately contradict the card the
         // unfurl just rendered; re-derive from the same projection.
         const data = await this.eventsService.buildEmbedEventData(eventId);
-        await insertUnfurlTrackingRow(
+        const tracked = await insertUnfurlTrackingRow(
           this.db,
           { guildId, channelId: message.channel.id, messageId: reply.id },
           eventId,
           data,
         );
+        if (!tracked) {
+          this.logger.debug(`Unfurl for event ${eventId} not tracked: cap`);
+        }
       } catch (err) {
         this.logger.warn(
           `Failed to track unfurl for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
