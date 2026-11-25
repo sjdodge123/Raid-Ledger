@@ -15,9 +15,9 @@ import type {
 } from './lineup-notification-dm.helpers';
 import { DEDUP_TTL } from './lineup-notification.constants';
 import {
-  BOT_LINKS_KEY,
-  escapeLinkLabel,
-  escapeLinkOpeners,
+  DISCORD_MESSAGE_KEY,
+  buildBotLinkMessage,
+  type UserTextEscapes,
 } from '../notifications/notification-embed.discord-text';
 import { votingOpensClause } from './lineup-notification-embed-copy.helpers';
 
@@ -39,14 +39,15 @@ export interface TiebreakerNotificationInfo {
  */
 export function buildTiedGamesList(
   games: ReadonlyArray<{ id: number; name: string }>,
+  esc: UserTextEscapes,
   clientUrl?: string,
 ): string {
   if (games.length === 0) return '';
   const lines = games.slice(0, 15).map((g) => {
-    // Game names are escaped at the source: the links are the bot's own.
+    // Game names go through `esc` at the source: the links are the bot's own.
     const label = clientUrl
-      ? `[**${escapeLinkLabel(g.name)}**](${clientUrl}/games/${g.id})`
-      : `**${escapeLinkOpeners(g.name)}**`;
+      ? `[**${esc.label(g.name)}**](${clientUrl}/games/${g.id})`
+      : `**${esc.text(g.name)}**`;
     return `\u{1F3AE} ${label}`;
   });
   const overflow =
@@ -200,6 +201,7 @@ function formatEventWhen(eventDate: Date, timeZone?: string): string {
 function composeTiebreakerOpenMessage(
   lineup: LineupDmInfo,
   tiebreaker: TiebreakerNotificationInfo,
+  esc: UserTextEscapes,
   clientUrl?: string,
 ): string {
   const cta =
@@ -207,7 +209,7 @@ function composeTiebreakerOpenMessage(
   const deadlineLine = tiebreaker.roundDeadline
     ? ` Round closes <t:${Math.floor(tiebreaker.roundDeadline.getTime() / 1000)}:f>.`
     : '';
-  const ballot = buildTiedGamesList(tiebreaker.tiedGames ?? [], clientUrl);
+  const ballot = buildTiedGamesList(tiebreaker.tiedGames ?? [], esc, clientUrl);
   const ctaLink = clientUrl
     ? `\n\n[${cta}](${clientUrl}/community-lineup/${lineup.id})`
     : '';
@@ -235,16 +237,19 @@ export async function sendTiebreakerOpenDM(
   const key = `lineup-tiebreaker-open-dm:${tiebreaker.id}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
   const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+  const { message, discordMessage } = buildBotLinkMessage((esc) =>
+    composeTiebreakerOpenMessage(lineup, tiebreaker, esc, clientUrl),
+  );
 
   await notificationService.create({
     userId: member.userId,
     type: 'community_lineup',
     title: `Tiebreaker open${titleSuffix}`,
-    message: composeTiebreakerOpenMessage(lineup, tiebreaker, clientUrl),
+    message,
     payload: {
       subtype: 'lineup_tiebreaker_open',
       lineupId: lineup.id,
-      [BOT_LINKS_KEY]: true,
+      [DISCORD_MESSAGE_KEY]: discordMessage,
       tiebreakerId: tiebreaker.id,
       mode: tiebreaker.mode,
     },

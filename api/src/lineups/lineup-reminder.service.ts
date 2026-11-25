@@ -31,7 +31,10 @@ import {
 } from './lineup-tiebreaker-reminder.helpers';
 import { escalateOverdueTiebreakers } from './tiebreaker/tie-escalation.helpers';
 import { resolveLineupReminderTargets } from './lineup-reminder-target.helpers';
-import { BOT_LINKS_KEY } from '../notifications/notification-embed.discord-text';
+import {
+  DISCORD_MESSAGE_KEY,
+  type BotLinkMessage,
+} from '../notifications/notification-embed.discord-text';
 import {
   sendVoteReminder,
   sendSchedulingReminder,
@@ -240,7 +243,7 @@ export class LineupReminderService {
     // recipient, so build it at most once per tick instead of re-querying the
     // tied games for every user (ROK-1151 item 7). Built lazily so a tick where
     // everyone is already deduped still costs zero queries, as before.
-    let message: string | null = null;
+    let message: BotLinkMessage | null = null;
     for (const userId of userIds) {
       const key = `tiebreaker-reminder:${tb.tiebreakerId}:${threshold}:${userId}`;
       if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) continue;
@@ -261,7 +264,7 @@ export class LineupReminderService {
   private async buildTiebreakerMessage(
     tb: ActiveTiebreakerRow,
     threshold: '24h' | '1h',
-  ): Promise<string> {
+  ): Promise<BotLinkMessage> {
     const clientUrl = await this.settingsService.getClientUrl();
     return buildTiebreakerReminderMessage(this.db, tb, threshold, clientUrl);
   }
@@ -270,16 +273,16 @@ export class LineupReminderService {
     tb: ActiveTiebreakerRow,
     userId: number,
     threshold: '24h' | '1h',
-    message: string,
+    message: BotLinkMessage,
   ): Promise<void> {
     await this.notificationService.create({
       userId,
       type: 'community_lineup',
       title: 'Tiebreaker Reminder',
-      message,
+      message: message.message,
       payload: {
         subtype: 'lineup_tiebreaker_reminder',
-        [BOT_LINKS_KEY]: true,
+        [DISCORD_MESSAGE_KEY]: message.discordMessage,
         lineupId: tb.lineupId,
         tiebreakerId: tb.tiebreakerId,
         mode: tb.mode,

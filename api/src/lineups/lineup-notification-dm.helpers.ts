@@ -7,9 +7,9 @@ import type { NotificationService } from '../notifications/notification.service'
 import type { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { DEDUP_TTL } from './lineup-notification.constants';
 import {
-  BOT_LINKS_KEY,
-  escapeLinkLabel,
-  escapeLinkOpeners,
+  DISCORD_MESSAGE_KEY,
+  buildBotLinkMessage,
+  type UserTextEscapes,
 } from '../notifications/notification-embed.discord-text';
 
 /** Shape of a Discord-linked member returned from queries. */
@@ -82,16 +82,15 @@ function composeInviteMessage(lineup: LineupDmInfo): string {
 function composeVotingMessage(
   lineup: LineupDmInfo,
   games: ReadonlyArray<{ id: number; name: string }>,
+  esc: UserTextEscapes,
   baseUrl?: string,
 ): string {
-  // User text is escaped here, at the source: the ballot's links are the bot's.
-  const desc = lineup.description
-    ? `${escapeLinkOpeners(lineup.description)}\n\n`
-    : '';
+  // User text goes through `esc` at the source: the ballot's links are the bot's.
+  const desc = lineup.description ? `${esc.text(lineup.description)}\n\n` : '';
   const deadline = lineup.votingDeadline
     ? `\n\n\u23F0 **Voting closes:** ${discordTs(lineup.votingDeadline)}`
     : '';
-  const ballot = buildBallot(games, baseUrl);
+  const ballot = buildBallot(games, esc, baseUrl);
   return (
     `${desc}Nominations are closed — voting is now open on your private lineup. ` +
     'Pick the games you most want to play; each member gets a limited number ' +
@@ -104,13 +103,14 @@ function composeVotingMessage(
 /** Render up to 15 nominees as a bulleted ballot, matching the channel embed. */
 function buildBallot(
   games: ReadonlyArray<{ id: number; name: string }>,
+  esc: UserTextEscapes,
   baseUrl?: string,
 ): string {
   if (games.length === 0) return '';
   const lines = games.slice(0, 15).map((g) => {
     const label = baseUrl
-      ? `[**${escapeLinkLabel(g.name)}**](${baseUrl}/games/${g.id})`
-      : `**${escapeLinkOpeners(g.name)}**`;
+      ? `[**${esc.label(g.name)}**](${baseUrl}/games/${g.id})`
+      : `**${esc.text(g.name)}**`;
     return `\u{1F3AE} ${label}`;
   });
   const overflow =
@@ -163,16 +163,19 @@ export async function sendVotingDM(
   const key = `lineup-vote-dm:${lineup.id}:${member.userId}:${deadlineTag}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
   const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+  const { message, discordMessage } = buildBotLinkMessage((esc) =>
+    composeVotingMessage(lineup, games, esc, baseUrl),
+  );
 
   await notificationService.create({
     userId: member.userId,
     type: 'community_lineup',
     title: `Time to vote on the Community Lineup${titleSuffix}!`,
-    message: composeVotingMessage(lineup, games, baseUrl),
+    message,
     payload: {
       subtype: 'lineup_voting_open',
       lineupId: lineup.id,
-      [BOT_LINKS_KEY]: true,
+      [DISCORD_MESSAGE_KEY]: discordMessage,
     },
   });
 }

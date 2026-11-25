@@ -37,10 +37,10 @@ function embedService(): DiscordNotificationEmbedService {
   );
 }
 
-/** Run a lineup producer, then render what it created as the Discord DM. */
-async function renderProduced(
+/** Run a lineup producer and return the notification it created. */
+async function produce(
   send: (n: NotificationService, d: NotificationDedupService) => Promise<void>,
-) {
+): Promise<Created> {
   const created: Created[] = [];
   const notifications = {
     create: (arg: Created) => {
@@ -55,6 +55,14 @@ async function renderProduced(
   );
   const input = created[0];
   if (!input) throw new Error('the producer created no notification');
+  return input;
+}
+
+/** Run a lineup producer, then render what it created as the Discord DM. */
+async function renderProduced(
+  send: (n: NotificationService, d: NotificationDedupService) => Promise<void>,
+) {
+  const input = await produce(send);
   const { embed } = await embedService().buildNotificationEmbed(
     { notificationId: 'n-1', ...input },
     'Raid Ledger',
@@ -93,6 +101,45 @@ describe('bot-authored lineup links stay clickable', () => {
       /(^|[^\\])\[Vote in the bracket\]\(https:\/\/raid\.example\/community-lineup\/3\)/,
     );
     expect(description).not.toMatch(LIVE_EVIL);
+  });
+});
+
+describe('the stored in-app message stays raw', () => {
+  const BRACKETED = '[EU] raid';
+  const send = (n: NotificationService, d: NotificationDedupService) =>
+    sendVotingDM(
+      n,
+      d,
+      { id: 3, description: `${BRACKETED} night` },
+      MEMBER,
+      [{ id: 8, name: '[EU] Valheim' }],
+      URL,
+    );
+
+  it('persists bracketed descriptions and game names without backslashes', async () => {
+    const { message } = await produce(send);
+    expect(message).toMatch(/^\[EU\] raid night/);
+    expect(message).toContain(`[**[EU] Valheim**](${URL}/games/8)`);
+    expect(message).not.toContain('\\');
+  });
+
+  it('escapes the same values only in the Discord DM text', async () => {
+    const { description } = await renderProduced(send);
+    expect(description).toContain('\\[EU] raid night');
+    expect(description).toContain(`[**\\[EU\\] Valheim**](${URL}/games/8)`);
+  });
+
+  it('keeps tied game names raw in the stored tiebreaker message', async () => {
+    const tiebreaker = {
+      id: 4,
+      mode: 'veto' as const,
+      tiedGames: [{ id: 8, name: '[EU] Valheim' }],
+    };
+    const { message } = await produce((n, d) =>
+      sendTiebreakerOpenDM(n, d, { id: 3 }, tiebreaker, MEMBER, URL),
+    );
+    expect(message).toContain(`[**[EU] Valheim**](${URL}/games/8)`);
+    expect(message).not.toContain('\\');
   });
 });
 

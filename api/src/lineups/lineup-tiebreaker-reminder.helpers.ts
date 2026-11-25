@@ -13,6 +13,10 @@ import * as schema from '../drizzle/schema';
 import { loadExpectedVoters } from './quorum/quorum-voters.helpers';
 import { findGamesByIds } from './lineups-query.helpers';
 import { buildTiedGamesList } from './lineup-notification-private-dm.helpers';
+import {
+  buildBotLinkMessage,
+  type BotLinkMessage,
+} from '../notifications/notification-embed.discord-text';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -231,16 +235,18 @@ export async function buildTiebreakerReminderMessage(
   tb: ActiveTiebreakerRow,
   threshold: '24h' | '1h',
   clientUrl?: string,
-): Promise<string> {
+): Promise<BotLinkMessage> {
   const headline =
     threshold === '1h'
       ? 'Tiebreaker closing in 1 hour — cast your vote!'
       : "Tiebreaker closing in 24 hours — don't miss your chance to vote.";
   const games = await findGamesByIds(db, tb.tiedGameIds);
-  const ballot = buildTiedGamesList(games, clientUrl);
   const ctaText = tb.mode === 'veto' ? 'Cast your veto' : 'Vote in the bracket';
   const ctaLink = clientUrl
     ? `\n\n[${ctaText}](${clientUrl}/community-lineup/${tb.lineupId})`
     : '';
-  return `${headline}${ballot}${ctaLink}`;
+  return buildBotLinkMessage(
+    (esc) =>
+      `${headline}${buildTiedGamesList(games, esc, clientUrl)}${ctaLink}`,
+  );
 }

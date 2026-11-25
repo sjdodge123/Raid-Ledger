@@ -6,10 +6,11 @@
  * Applied to the DM title/description, to every payload-driven field value
  * (`addFieldIf`) and to the structured bodies' user-text slots. A producer
  * whose message carries the bot's OWN `[label](url)` links (the lineup ballot
- * and tiebreaker CTAs) escapes each user value where it enters the text
- * ({@link escapeLinkLabel} / {@link escapeLinkOpeners}) and sets
- * {@link BOT_LINKS_KEY} in the payload, so the description is not blanket-
- * escaped and its links stay clickable.
+ * and tiebreaker CTAs) builds it twice with {@link buildBotLinkMessage}: the
+ * raw text is the stored in-app `message`, and the copy with each user value
+ * escaped where it enters the text goes in the payload under
+ * {@link DISCORD_MESSAGE_KEY}, which the DM uses instead of blanket-escaping —
+ * so its links stay clickable and the web never shows a backslash.
  */
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import {
@@ -23,11 +24,12 @@ const LIVE_OPEN_BRACKET = /(?<!\\)((?:\\\\)*)\[/g;
 const LIVE_CLOSE_BRACKET = /(?<!\\)((?:\\\\)*)\]/g;
 
 /**
- * Payload flag: the message holds bot-authored masked links and every user
- * value in it was escaped at the source, so the Discord boundary must not
- * blanket-escape the description (the title and fields still are).
+ * Payload key: the Discord rendering of a message that holds bot-authored
+ * masked links, every user value in it escaped at the source. The DM uses it
+ * as the description instead of blanket-escaping the stored (raw) message;
+ * the title and fields are still neutralised.
  */
-export const BOT_LINKS_KEY = 'messageHasBotLinks';
+export const DISCORD_MESSAGE_KEY = 'discordMessage';
 
 /** Discord's embed text limits (a longer value makes `EmbedBuilder` throw). */
 export const DISCORD_LIMITS = {
@@ -47,6 +49,39 @@ export function escapeLinkOpeners(value: string): string {
  */
 export function escapeLinkLabel(value: string): string {
   return escapeLinkOpeners(value).replace(LIVE_CLOSE_BRACKET, '$1\\]');
+}
+
+/** How a bot-link message builder writes each user value it interpolates. */
+export interface UserTextEscapes {
+  /** A user value in running text. */
+  text: (value: string) => string;
+  /** A user value inside a bot link's label. */
+  label: (value: string) => string;
+}
+
+const RAW_USER_TEXT: UserTextEscapes = { text: (v) => v, label: (v) => v };
+const DISCORD_USER_TEXT: UserTextEscapes = {
+  text: escapeLinkOpeners,
+  label: escapeLinkLabel,
+};
+
+/** The stored in-app text and its Discord rendering. */
+export interface BotLinkMessage {
+  message: string;
+  discordMessage: string;
+}
+
+/**
+ * Build a message holding the bot's own links twice: raw for the stored
+ * in-app `message`, user values escaped for the Discord DM.
+ */
+export function buildBotLinkMessage(
+  build: (esc: UserTextEscapes) => string,
+): BotLinkMessage {
+  return {
+    message: build(RAW_USER_TEXT),
+    discordMessage: build(DISCORD_USER_TEXT),
+  };
 }
 
 /**
@@ -81,7 +116,7 @@ export function neutraliseMaskedLinks(text: string): string {
 /**
  * The Discord rendering of ANY notification's title/message: the hub-proposal
  * name escaping, then masked links neutralised for every type — except a
- * message flagged {@link BOT_LINKS_KEY}, already escaped at its source.
+ * message whose payload carries its {@link DISCORD_MESSAGE_KEY} rendering.
  */
 export function notificationDiscordText(input: {
   type: NotificationType;
@@ -90,11 +125,12 @@ export function notificationDiscordText(input: {
   payload?: Record<string, unknown>;
 }): NotificationDmText {
   const text = hubProposalDiscordText(input);
+  const discordMessage = input.payload?.[DISCORD_MESSAGE_KEY];
   return {
     title: neutraliseMaskedLinks(text.title),
     message:
-      input.payload?.[BOT_LINKS_KEY] === true
-        ? text.message
+      typeof discordMessage === 'string'
+        ? discordMessage
         : neutraliseMaskedLinks(text.message),
   };
 }
