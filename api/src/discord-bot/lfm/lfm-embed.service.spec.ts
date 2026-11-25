@@ -32,6 +32,7 @@ import {
   edited,
   EVENT_ID,
   GAME_ID,
+  gameRow,
   LINEUP_ID,
   live,
   MATCH_ID,
@@ -52,6 +53,23 @@ beforeEach(async () => {
 });
 
 describe('LFM_REACHED — the first post (D8a)', () => {
+  it('never posts a new message for a hidden or banned game (TDB:2842)', async () => {
+    for (const flags of [{ hidden: true }, { banned: true }]) {
+      jest
+        .mocked(store)
+        .loadLfmGame.mockResolvedValueOnce(gameRow({ ...flags }));
+      await service.onLfmReached({
+        gameId: GAME_ID,
+        activeCount: 2,
+        urgency: 'week',
+        ttlMinutes: null,
+      });
+    }
+
+    expect(client.sendEmbed).not.toHaveBeenCalled();
+    expect(openRow()).toBeNull();
+  });
+
   it('posts one message and records the row it will be edited from', async () => {
     await service.onLfmReached({
       gameId: GAME_ID,
