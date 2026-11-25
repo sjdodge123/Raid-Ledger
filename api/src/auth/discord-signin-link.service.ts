@@ -53,7 +53,15 @@ export class DiscordSigninLinkService {
 
   /** Build `<clientUrl>/signin-link#token=<jwt>` (15m, single use). */
   mint(input: DiscordSigninMintInput, clientUrl: string): string {
-    const token = signPurposeJwt(
+    return buildFragmentLink(clientUrl, SIGNIN_LINK_PATH, this.mintToken(input));
+  }
+
+  /**
+   * ROK-2370: the bare one-time token `mint` wraps (same claims, same TTL),
+   * for the sign-in code approval, which never builds a URL.
+   */
+  mintToken(input: DiscordSigninMintInput): string {
+    return signPurposeJwt(
       this.jwtService,
       'discord-signin',
       {
@@ -68,7 +76,6 @@ export class DiscordSigninLinkService {
       },
       SIGNIN_LINK_TTL,
     );
-    return buildFragmentLink(clientUrl, SIGNIN_LINK_PATH, token);
   }
 
   /** Exchange a token for its (possibly new) user, exactly once. */
