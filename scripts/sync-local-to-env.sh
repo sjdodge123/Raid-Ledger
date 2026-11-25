@@ -522,8 +522,13 @@ printf "%s\n" "${RL_ENV_JWT_SECRET:-}" "${RL_PUBLIC_DOMAIN:-}" "${RL_ADMIN_PASSW
 $out
 EOF
         if [[ "$sentinel" != "__RL_EOF__" ]]; then
+            # TDB:3196 — never echo payload content: one line of MOTD noise
+            # shifts the fields, and the 4th line is then a secret.
+            local n_lines
+            n_lines=$(printf '%s\n' "$out" | grep -c '' || true)
+            REMOTE_ENV_JWT_SECRET=""; REMOTE_PUBLIC_DOMAIN=""; REMOTE_ADMIN_PASSWORD=""
             INFRA_ENV_READ_RC=8
-            INFRA_ENV_READ_STDERR="truncated/garbled remote payload (sentinel='${sentinel}')"
+            INFRA_ENV_READ_STDERR="truncated/garbled remote payload (sentinel mismatch on line 4; got ${n_lines} line(s), expected 4)"
         fi
     fi
 }
