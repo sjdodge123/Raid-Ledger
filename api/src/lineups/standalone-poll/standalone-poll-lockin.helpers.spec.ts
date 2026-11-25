@@ -25,6 +25,8 @@ import {
 jest.mock('../scheduling/scheduling-query.helpers', () => ({
   findScheduleSlots: jest.fn(),
   findScheduleVotes: jest.fn(),
+  // ROK-2320: an ordinary poll — no follow-up source event, no carryover.
+  findFollowupSourceEventId: jest.fn().mockResolvedValue(null),
 }));
 jest.mock('./standalone-poll-voter.helpers', () => ({
   ...jest.requireActual<object>('./standalone-poll-voter.helpers'),
