@@ -110,14 +110,22 @@ export function writeLocalTask(task: LocalTaskJson): void {
   renameSync(tmp, final);
 }
 
-/** signal-0 liveness probe. Our own child (same uid) → ESRCH = dead. */
+/** signal-0 liveness probe. Our own child (same uid) → ESRCH = dead.
+ *  TDB:3242 — pid <= 0 (a spawn that never got a pid) is dead: kill(-1, 0)
+ *  "succeeds" by probing every process we may signal. */
 export function isPidAlive(pid: number): boolean {
+  if (!isSignalablePid(pid)) return false;
   try {
     process.kill(pid, 0);
     return true;
   } catch (e) {
     return (e as NodeJS.ErrnoException).code === 'EPERM';
   }
+}
+
+/** Only a real child pid may be signalled: 0 and negatives target groups/all. */
+function isSignalablePid(pid: number): boolean {
+  return Number.isInteger(pid) && pid > 0;
 }
 
 /** Read+validate the raw JSON. null when missing/unparseable. */
@@ -301,10 +309,12 @@ export async function cancelLocalTask(
   if (isTerminalStatus(raw.mcp_runtime_status)) {
     return { ok: true, task_id: id, cancelled: true, mcp_runtime_status: raw.mcp_runtime_status };
   }
-  try {
-    process.kill(raw.pid, 'SIGTERM');
-  } catch {
-    /* already gone */
+  if (isSignalablePid(raw.pid)) {
+    try {
+      process.kill(raw.pid, 'SIGTERM');
+    } catch {
+      /* already gone */
+    }
   }
   for (let i = 0; i < 10 && isPidAlive(raw.pid); i++) await sleep(200);
   if (isPidAlive(raw.pid)) {
@@ -362,7 +372,7 @@ export function spawnLocalRunner(
   child.unref();
   closeSync(logFd);
   const startedAt = new Date().toISOString();
-  writeLocalTask({
+  const initial: LocalTaskJson = {
     task_id: taskId,
     tool,
     slot: null,
@@ -376,6 +386,20 @@ export function spawnLocalRunner(
     log_path: localLogPath(taskId),
     pid: child.pid ?? -1,
     failed_step: null,
+  };
+  writeLocalTask(initial);
+  // TDB:3242 — a failed spawn emits 'error'; unhandled, it crashes the server
+  // and the task reads as running forever. Record a terminal failure instead.
+  child.on('error', (err: Error) => {
+    writeLocalTask({
+      ...initial,
+      mcp_runtime_status: 'failed',
+      finished_at: new Date().toISOString(),
+      current_step: null,
+      failed_step: 'spawn',
+      error: 'spawn_failed',
+      message: `failed to start the local task runner: ${err.message}`,
+    });
   });
-  return { task_id: taskId, pid: child.pid ?? -1, started_at: startedAt };
+  return { task_id: taskId, pid: initial.pid, started_at: startedAt };
 }
