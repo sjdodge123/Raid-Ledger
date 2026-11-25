@@ -26,6 +26,11 @@ describe('withCrosswalkLock (L1)', () => {
       },
     );
     expect(result).toBe('done');
-    expect(order).toEqual(['igdb_id:2', 'resident evil', 'steam_app_id:9', 'fn']);
+    expect(order).toEqual([
+      'igdb_id:2',
+      'resident evil',
+      'steam_app_id:9',
+      'fn',
+    ]);
   });
 });

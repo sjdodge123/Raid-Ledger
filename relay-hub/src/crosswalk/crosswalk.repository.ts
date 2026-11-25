@@ -92,7 +92,9 @@ export class CrosswalkTxStore implements CrosswalkStore {
     const rows = await this.tx
       .select({ rlGameId: hubGames.rlGameId })
       .from(hubGames)
-      .where(and(eq(hubGames.normalizedName, normalizedName), notExists(sameKind)))
+      .where(
+        and(eq(hubGames.normalizedName, normalizedName), notExists(sameKind)),
+      )
       .orderBy(asc(hubGames.createdAt), asc(hubGames.rlGameId))
       .limit(1);
     return rows[0]?.rlGameId;
