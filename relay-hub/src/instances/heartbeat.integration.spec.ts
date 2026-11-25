@@ -19,6 +19,7 @@ import {
   runMigrations,
 } from '../scripts/run-migrations';
 import { createTestDatabase, type TestDatabase } from '../test/test-database';
+import { InstancesLifecycleRepository } from './instances-lifecycle.repository';
 import { hashToken } from './tokens';
 
 const FIXTURES = path.resolve(
@@ -183,6 +184,13 @@ it('AC4: hub-admin revoke → 401 revoked on heartbeat, 403 on re-register, list
   expect(row).toMatchObject({ status: 'revoked', revoke_reason: reason });
   expect(row?.token_hash).toBe(hashToken(token));
   expect(row?.revoked_at).toBeInstanceOf(Date);
+  expect(await cli('revoke', id, '--reason', 'a second reason')).toEqual({
+    code: 0,
+    lines: [`Instance ${id} is already revoked; nothing changed.`],
+  });
+  const after = await rowOf(id);
+  expect(after?.revoke_reason).toBe(reason);
+  expect(after?.revoked_at).toEqual(row?.revoked_at);
   expect((await heartbeat(id, `Bearer ${token}`).expect(401)).body).toEqual({
     error: 'revoked',
   });
@@ -211,9 +219,13 @@ it('AC4: revoke without --reason exits 2; an unknown id exits 1', async () => {
 
 it('AC6: no token, hash or revoke reason reaches the logs or CLI output', async () => {
   const id = '0a1b2c3d-9999-4a5b-8c6d-7e8f9a0b1c2d';
+  logs.length = 0;
   const token = await registerId(id);
   const reason = 'AC6-secret-reason-text';
-  logs.length = 0;
+  // Positive control: the capture logger is live, so the checks below bite.
+  expect(logs).toContainEqual(
+    expect.stringContaining(`Instance ${id} registered`),
+  );
   await heartbeat(id, `Bearer ${token}`).expect(200);
   await heartbeat(id, `Bearer rlh_${'C'.repeat(43)}`).expect(401);
   const revoked = await cli('revoke', id, '--reason', reason);
@@ -224,4 +236,35 @@ it('AC6: no token, hash or revoke reason reaches the logs or CLI output', async 
   for (const secret of [token.slice(4), hashToken(token), reason]) {
     expect(all).not.toContain(secret);
   }
+});
+
+it('lifecycle writes re-check the hash and the revoked status (race safety)', async () => {
+  const lifecycle = app.get(InstancesLifecycleRepository);
+  const revokedId = '0a1b2c3d-aaaa-4a5b-8c6d-7e8f9a0b1c2d';
+  const token = await registerId(revokedId);
+  expect((await cli('revoke', revokedId, '--reason', 'race')).code).toBe(0);
+  expect(await lifecycle.disconnect(revokedId, hashToken(token))).toBe(false);
+  expect(
+    await lifecycle.touchHeartbeat(revokedId, hashToken(token), '7.7.7'),
+  ).toBe(false);
+  expect(await rowOf(revokedId)).toMatchObject({
+    status: 'revoked',
+    token_hash: hashToken(token),
+    last_heartbeat_at: null,
+  });
+
+  const movedId = '0a1b2c3d-bbbb-4a5b-8c6d-7e8f9a0b1c2d';
+  const oldToken = await registerId(movedId);
+  const newToken = await registerId(movedId);
+  expect(
+    await lifecycle.touchHeartbeat(movedId, hashToken(oldToken), '7.7.7'),
+  ).toBe(false);
+  expect(await lifecycle.disconnect(movedId, hashToken(oldToken))).toBe(false);
+  const moved = await rowOf(movedId);
+  expect(moved).toMatchObject({
+    status: 'pending',
+    token_hash: hashToken(newToken),
+    last_heartbeat_at: null,
+  });
+  expect(moved?.version).not.toBe('7.7.7');
 });
