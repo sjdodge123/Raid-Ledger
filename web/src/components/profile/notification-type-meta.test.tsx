@@ -93,14 +93,13 @@ describe('rows that offer fewer channels (ROK-2311)', () => {
     it('a not-offered cell names its column for screen readers, not the raw channel key', () => {
         const { container } = renderSection();
         const row = rowOf(container, 'lineup_lfg_offer');
-        expect(within(row).getByTestId('notif-not-offered-push')).toHaveTextContent('Not sent by Push');
         expect(within(row).getByTestId('notif-not-offered-discord')).toHaveTextContent('Not sent by Discord');
         const dmRow = rowOf(container, 'valheim_claim_suggestion');
         expect(within(dmRow).getByTestId('notif-not-offered-inApp')).toHaveTextContent('Not sent by In-App');
     });
 
-    it('a normal row still shows all three switches', () => {
+    it('a normal row shows the In-App and Discord switches, and no Push switch (ROK-2316)', () => {
         const { container } = renderSection();
-        expect(within(rowOf(container, 'slot_vacated')).getAllByRole('button')).toHaveLength(3);
+        expect(within(rowOf(container, 'slot_vacated')).getAllByRole('button')).toHaveLength(2);
     });
 });
