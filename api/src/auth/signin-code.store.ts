@@ -1,9 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
+import { z } from 'zod';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import {
   SIGNIN_CODE_TTL_SECONDS,
   approvalKey,
+  claimKey,
   codeKey,
   deviceKey,
   generateSigninCode,
@@ -32,21 +34,31 @@ export type SigninCodeTake =
   | { status: 'expired' }
   | { status: 'approved'; approval: SigninCodeApproval };
 
-interface CodeRecord {
-  secretHash: string;
-  createdAt: number;
-  expiresAt: number;
-}
+/** The pending record; anything else read back from Redis is expired. */
+const CodeRecordSchema = z.object({
+  secretHash: z.string(),
+  createdAt: z.number(),
+  expiresAt: z.number(),
+});
+type CodeRecord = z.infer<typeof CodeRecordSchema>;
+
+const SigninCodeApprovalSchema = z.object({
+  kind: z.enum(['existing', 'first-time']),
+  token: z.string().min(1),
+  displayName: z.string(),
+});
 
 const CREATE_ATTEMPTS = 5;
 
 /**
- * ROK-2370: Redis-only store for sign-in codes. Three keys per code, all
- * expiring with it: the pending record, the device index (secret hash → code)
- * and the approval. The approval is written with ONE `SET NX` (atomic,
- * single-use: only the first approve lands) and read back with ONE `GETDEL`
- * (atomic, single-use: only one poll takes it). Only a hash of the device
- * secret is stored.
+ * ROK-2370: Redis-only store for sign-in codes. Four keys per code, all
+ * expiring with it: the pending record, the device index (secret hash → code),
+ * the approval and the claim. Each state change is ONE atomic `SET NX`:
+ * the approval (only the first approve lands) and the claim (only one poll
+ * collects it). Neither is deleted on collection — they stay as the code's
+ * tombstone until expiry, so a confirmation or poll that read the code just
+ * before it was collected cannot approve or collect it a second time
+ * (Codex P2). Only a hash of the device secret is stored.
  */
 @Injectable()
 export class SigninCodeStore {
@@ -102,31 +114,51 @@ export class SigninCodeStore {
   }
 
   /**
-   * A poll: pending, expired (unknown secret, gone, or already taken) or the
-   * approval — handed out once, after which the code is gone.
+   * A poll: pending, expired (unknown secret, gone, corrupt or already
+   * taken) or the approval — handed out once, to the poll that wins the
+   * claim. The approval key is never freed early, so it cannot be re-set.
    */
   async takeBySecret(deviceSecret: string): Promise<SigninCodeTake> {
     const devKey = deviceKey(hashDeviceSecret(deviceSecret));
     const code = await this.redis.get(devKey);
     if (!code) return { status: 'expired' };
-    const raw = await this.redis.getdel(approvalKey(code));
-    if (raw) {
-      await this.redis.del(devKey, codeKey(code));
-      return { status: 'approved', approval: parseApproval(raw) };
-    }
+    const raw = await this.redis.get(approvalKey(code));
+    if (raw) return this.claim(code, devKey, raw);
     const record = await this.readRecord(code);
     if (!record) return { status: 'expired' };
     return { status: 'pending', expiresAt: new Date(record.expiresAt) };
   }
 
+  private async claim(
+    code: string,
+    devKey: string,
+    raw: string,
+  ): Promise<SigninCodeTake> {
+    const ttlMs = SIGNIN_CODE_TTL_SECONDS * 1000;
+    const won = await this.redis.set(claimKey(code), '1', 'PX', ttlMs, 'NX');
+    if (won !== 'OK') return { status: 'expired' };
+    await this.redis.del(devKey);
+    const approval = parseJson(SigninCodeApprovalSchema, raw);
+    return approval ? { status: 'approved', approval } : { status: 'expired' };
+  }
+
   private async readRecord(code: string): Promise<CodeRecord | null> {
     const raw = await this.redis.get(codeKey(code));
     if (!raw) return null;
-    const record = JSON.parse(raw) as CodeRecord;
-    return record.expiresAt > Date.now() ? record : null;
+    const record = parseJson(CodeRecordSchema, raw);
+    return record && record.expiresAt > Date.now() ? record : null;
   }
 }
 
-function parseApproval(raw: string): SigninCodeApproval {
-  return JSON.parse(raw) as SigninCodeApproval;
+/** Parse a Redis value against `schema`; malformed or old-shape → null. */
+function parseJson<T>(schema: z.ZodType<T>, raw: string): T | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch (err) {
+    if (err instanceof SyntaxError) return null;
+    throw err;
+  }
+  const parsed = schema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }

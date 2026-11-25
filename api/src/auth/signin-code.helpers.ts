@@ -59,3 +59,11 @@ export function approvalKey(code: string): string {
 export function deviceKey(secretHash: string): string {
   return `signin-code:dev:${secretHash}`;
 }
+
+/**
+ * The single-use claim of an approval (SET NX by the poll that collects it).
+ * Lives a full code TTL, so it outlasts the approval it guards.
+ */
+export function claimKey(code: string): string {
+  return `signin-code:taken:${code}`;
+}
