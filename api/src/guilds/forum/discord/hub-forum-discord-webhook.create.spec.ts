@@ -1,7 +1,7 @@
 /**
  * ROK-2337 — `ensureWebhook` bounds Discord's `createWebhook` (a throttled
- * create used to hold the bind forever) and deletes a webhook that lands
- * after the bind gave up — unless a later bind already reused it.
+ * create used to hold the bind forever). A webhook that lands after the bind
+ * gave up is logged, never deleted; the next bind reuses it (ROK-2296).
  */
 import { EventEmitter } from 'node:events';
 import { Logger, ServiceUnavailableException } from '@nestjs/common';
@@ -65,6 +65,16 @@ function track(p: Promise<string>) {
   return out;
 }
 
+/** Time out one bind, then let Discord's late reply land. */
+async function timeOutThenLand(t: ReturnType<typeof setup>, late: FakeHook) {
+  const first = track(t.gw.ensureWebhook('c1', null));
+  await jest.advanceTimersByTimeAsync(FORUM_WEBHOOK_CREATE_TIMEOUT_MS);
+  t.list.set(late.id, late); // Discord made it; the reply arrives late
+  t.land(late);
+  await jest.advanceTimersByTimeAsync(0);
+  return first;
+}
+
 let warn: jest.SpyInstance;
 beforeEach(() => {
   jest.useFakeTimers();
@@ -92,29 +102,30 @@ describe('ROK-2337 ensureWebhook — bounded createWebhook', () => {
     const out = track(t.gw.ensureWebhook('c1', null));
     await jest.advanceTimersByTimeAsync(FORUM_WEBHOOK_CREATE_TIMEOUT_MS);
     expect(out.value).toBeInstanceOf(ServiceUnavailableException);
+    expect((out.value as ServiceUnavailableException).message).toBe(
+      'Discord is slow to create the forum webhook right now. Try again in a minute.',
+    );
   });
 
-  it('deletes a webhook that lands after the bind gave up', async () => {
+  it('logs a webhook that lands after the bind gave up, never deletes it', async () => {
     const t = setup();
-    track(t.gw.ensureWebhook('c1', null));
-    await jest.advanceTimersByTimeAsync(FORUM_WEBHOOK_CREATE_TIMEOUT_MS);
     const late = hook('h-late');
-    t.land(late);
-    await jest.advanceTimersByTimeAsync(0);
-    expect(late.delete).toHaveBeenCalledTimes(1);
+    const first = await timeOutThenLand(t, late);
+    expect(first.value).toBeInstanceOf(ServiceUnavailableException);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Late webhook h-late on c1'),
+    );
+    expect(late.delete).not.toHaveBeenCalled();
   });
 
-  it('keeps a late webhook a retried bind already reused', async () => {
+  it('the next ensureWebhook reuses the late owned hook, no second create', async () => {
     const t = setup();
-    track(t.gw.ensureWebhook('c1', null));
-    await jest.advanceTimersByTimeAsync(FORUM_WEBHOOK_CREATE_TIMEOUT_MS);
     const late = hook('h-late');
-    t.list.set(late.id, late); // Discord made it; the reply is still queued
+    await timeOutThenLand(t, late);
     const retry = track(t.gw.ensureWebhook('c1', null));
     await jest.advanceTimersByTimeAsync(0);
-    t.land(late);
-    await jest.advanceTimersByTimeAsync(0);
     expect(retry.value).toBe('h-late');
+    expect(t.forum.createWebhook).toHaveBeenCalledTimes(1);
     expect(late.delete).not.toHaveBeenCalled();
   });
 

@@ -18,7 +18,7 @@ import {
   failureOutcome,
   shouldSetDefaultReaction,
 } from './hub-forum-discord-decor';
-import { ForumWebhookCreateGuard } from './hub-forum-discord-webhook.create';
+import { createWebhookBounded } from './hub-forum-discord-webhook.create';
 
 /** A Discord forum as the binding service sees it (no discord.js objects). */
 export interface ForumInfo {
@@ -50,8 +50,6 @@ function describe(err: unknown): string {
 @Injectable()
 export class HubForumDiscordGateway {
   private readonly logger = new Logger(HubForumDiscordGateway.name);
-  /** ROK-2337: bounded create + late-webhook cleanup. */
-  private readonly webhooks = new ForumWebhookCreateGuard(this.logger);
 
   constructor(private readonly client: DiscordBotClientService) {}
 
@@ -118,15 +116,6 @@ export class HubForumDiscordGateway {
     channelId: string,
     webhookId: string | null,
   ): Promise<string> {
-    return this.webhooks.run(channelId, () =>
-      this.findOrCreateWebhook(channelId, webhookId),
-    );
-  }
-
-  private async findOrCreateWebhook(
-    channelId: string,
-    webhookId: string | null,
-  ): Promise<string> {
     const forum = await this.requireForum(channelId);
     const hooks = await forum.fetchWebhooks();
     if (webhookId && hooks.has(webhookId)) return webhookId;
@@ -135,11 +124,11 @@ export class HubForumDiscordGateway {
         h.name === FORUM_WEBHOOK_NAME && this.ownsHook(h) && Boolean(h.token),
     );
     if (own) return own.id;
-    return this.webhooks.create(
+    return createWebhookBounded(
       channelId,
       () => forum.createWebhook({ name: FORUM_WEBHOOK_NAME, reason: REASON }),
       this.client.getClient()?.rest ?? null,
-      REASON,
+      this.logger,
     );
   }
 
