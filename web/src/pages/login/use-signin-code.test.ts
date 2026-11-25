@@ -124,4 +124,39 @@ describe('useSigninCode (ROK-2370)', () => {
         expect(result.current.state.phase).toBe('idle');
         expect(sessionStorage.getItem(SIGNIN_CODE_STORAGE_KEY)).toBeNull();
     });
+
+    it('a start answered after cancel is dropped: nothing saved, still idle', async () => {
+        let answer: (v: typeof pending) => void = () => undefined;
+        vi.mocked(startSigninCode).mockReturnValue(new Promise((r) => { answer = r; }));
+        const { result } = renderHook(() => useSigninCode(vi.fn()));
+        let started: Promise<void> = Promise.resolve();
+        act(() => { started = result.current.start(); });
+        act(() => result.current.cancel());
+        await act(async () => { answer(pending); await started; });
+        expect(result.current.state.phase, 'a stale start must not revive the cancelled panel').toBe('idle');
+        expect(sessionStorage.getItem(SIGNIN_CODE_STORAGE_KEY), 'a stale start must not re-save the code').toBeNull();
+    });
+
+    it('a start answered after unmount is dropped: the abandoned code is not saved', async () => {
+        let answer: (v: typeof pending) => void = () => undefined;
+        vi.mocked(startSigninCode).mockReturnValue(new Promise((r) => { answer = r; }));
+        const { result, unmount } = renderHook(() => useSigninCode(vi.fn()));
+        let started: Promise<void> = Promise.resolve();
+        act(() => { started = result.current.start(); });
+        unmount();
+        await act(async () => { answer(pending); await started; });
+        expect(sessionStorage.getItem(SIGNIN_CODE_STORAGE_KEY), 'an unmounted panel must not save its code').toBeNull();
+    });
+
+    it('only the newest of two overlapping starts is kept', async () => {
+        const answers: Array<(v: typeof pending) => void> = [];
+        vi.mocked(startSigninCode).mockImplementation(() => new Promise((r) => { answers.push(r); }));
+        const { result } = renderHook(() => useSigninCode(vi.fn()));
+        const runs: Promise<void>[] = [];
+        act(() => { runs.push(result.current.start()); runs.push(result.current.start()); });
+        const newer = { ...pending, code: 'NEWR-2M9X' };
+        await act(async () => { answers[1]?.(newer); answers[0]?.(pending); await Promise.all(runs); });
+        expect(JSON.parse(sessionStorage.getItem(SIGNIN_CODE_STORAGE_KEY) ?? 'null'), 'the older answer must not overwrite').toEqual(newer);
+        expect(result.current.state).toEqual({ phase: 'waiting', pending: newer, resumed: false });
+    });
 });

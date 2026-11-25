@@ -69,6 +69,28 @@ function initialState(): SigninCodeState {
     return pending ? { phase: 'waiting', pending, resumed: true } : { phase: 'idle' };
 }
 
+interface StartGuard { begin: () => number; isCurrent: (id: number) => boolean; invalidate: () => void }
+
+/**
+ * A start answered after cancel, unmount or a newer start is stale: its code
+ * must never be saved or shown (it would revive an abandoned code or
+ * overwrite the newer one). Remount-safe for StrictMode's double effects.
+ */
+function useStartGuard(): StartGuard {
+    const seq = useRef(0);
+    const alive = useRef(true);
+    useEffect(() => {
+        alive.current = true;
+        return () => { alive.current = false; };
+    }, []);
+    const [guard] = useState<StartGuard>(() => ({
+        begin: () => ++seq.current,
+        isCurrent: (id) => alive.current && id === seq.current,
+        invalidate: () => { seq.current += 1; },
+    }));
+    return guard;
+}
+
 /** Drive one sign-in code; `onApproved` receives the session's access token. */
 export function useSigninCode(onApproved: (accessToken: string) => void): {
     state: SigninCodeState; start: () => Promise<void>; cancel: () => void;
@@ -76,20 +98,24 @@ export function useSigninCode(onApproved: (accessToken: string) => void): {
     const [state, setState] = useState<SigninCodeState>(initialState);
     const onApprovedRef = useRef(onApproved);
     useEffect(() => { onApprovedRef.current = onApproved; }, [onApproved]);
+    const guard = useStartGuard();
 
     const start = useCallback(async (): Promise<void> => {
+        const id = guard.begin();
         clearPendingSigninCode();
         setState({ phase: 'starting' });
         const pending = await startSigninCode();
+        if (!guard.isCurrent(id)) return;
         if (!pending) return setState({ phase: 'error' });
         savePendingSigninCode(pending);
         setState({ phase: 'waiting', pending, resumed: false });
-    }, []);
+    }, [guard]);
 
     const cancel = useCallback((): void => {
+        guard.invalidate();
         clearPendingSigninCode();
         setState({ phase: 'idle' });
-    }, []);
+    }, [guard]);
 
     useEffect(() => {
         if (state.phase !== 'waiting') return undefined;

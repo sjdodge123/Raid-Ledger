@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { LoginMethodDto } from '@raid-ledger/contract';
 import { LAST_SIGNIN_KEY, type LastSignin } from '../../lib/last-signin';
+import { SIGNIN_CODE_STORAGE_KEY } from '../../lib/signin-code';
 import { TRY_ANOTHER_WAY_LABEL } from './SignInAnotherWay';
 import { LoginBody, SIGN_IN_ANOTHER_WAY_TOGGLE, type LoginBodyProps } from './LoginBody';
 
@@ -28,7 +29,7 @@ function seed(method: LastSignin['method']): void {
 const providerButton = (): HTMLElement | null => screen.queryByRole('button', { name: 'Continue with Discord' });
 const card = (): HTMLElement | null => screen.queryByRole('button', { name: /Continue as Roknua/ });
 
-afterEach(() => localStorage.clear());
+afterEach(() => { localStorage.clear(); sessionStorage.clear(); });
 
 describe('LoginBody last-used card (ROK-2370)', () => {
     it('without a marker: today\'s layout, no card', () => {
@@ -85,5 +86,15 @@ describe('LoginBody last-used card (ROK-2370)', () => {
         render(<LoginBody {...props({ discordSigninCode: false })} />);
         expect(card()).toBeNull();
         expect(providerButton()).toBeInTheDocument();
+    });
+
+    it('with a marker AND a code pending in this tab: the code panel is shown at once (resume after a reload)', () => {
+        seed('discord-app-code');
+        sessionStorage.setItem(SIGNIN_CODE_STORAGE_KEY, JSON.stringify({
+            code: 'K7QD-2M9X', deviceSecret: 's'.repeat(43), expiresAt: '2099-01-01T00:00:00.000Z', pollIntervalMs: 2000,
+        }));
+        render(<LoginBody {...props()} />);
+        expect(card()).toBeInTheDocument();
+        expect(screen.queryByText('code panel'), 'a pending code must not hide behind the collapsed card').toBeInTheDocument();
     });
 });

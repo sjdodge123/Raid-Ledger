@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import type { LoginMethodDto } from '@raid-ledger/contract';
 import { clearLastSignin, readLastSignin, type LastSignin, type LastSigninMethod } from '../../lib/last-signin';
+import { readPendingSigninCode } from '../../lib/signin-code';
 import type { SignInSectionId } from './SignInAnotherWay';
 
 /** A disclosure-open request; `n` bumps the `key` so a repeat tap remounts it open. */
@@ -35,12 +36,17 @@ function isOffered(marker: LastSignin, providers: LoginMethodDto[], codeOffered:
     return true;
 }
 
-/** State behind the last-used card on the login page. */
+/**
+ * State behind the last-used card on the login page. A code still pending in
+ * this tab (e.g. iOS reloaded it on the way back from Discord) shows the other
+ * methods at once, so the code panel mounts and its poll resumes.
+ */
 export function useLastUsedSignin(opts: {
     providers: LoginMethodDto[]; codeOffered: boolean; onProviderLogin: (p: LoginMethodDto) => void;
 }): LastUsedSignin {
     const [stored, setStored] = useState<LastSignin | null>(readLastSignin);
     const [expandedByUser, setExpanded] = useState(false);
+    const [codePendingAtMount] = useState(() => readPendingSigninCode(Date.now()) !== null);
     const [request, setRequest] = useState<DisclosureRequest | null>(null);
     const marker = stored && isOffered(stored, opts.providers, opts.codeOffered) ? stored : null;
     const continueWith = (method: LastSigninMethod): void => {
@@ -51,5 +57,6 @@ export function useLastUsedSignin(opts: {
         setRequest((prev) => ({ section: method, n: (prev?.n ?? 0) + 1 }));
     };
     const notYou = (): void => { clearLastSignin(); setStored(null); };
-    return { marker, expanded: !marker || expandedByUser, expand: () => setExpanded(true), request, continueWith, notYou };
+    const expanded = !marker || expandedByUser || (opts.codeOffered && codePendingAtMount);
+    return { marker, expanded, expand: () => setExpanded(true), request, continueWith, notYou };
 }
