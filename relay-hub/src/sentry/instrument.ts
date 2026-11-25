@@ -6,7 +6,10 @@
  */
 import * as Sentry from '@sentry/nestjs';
 
-/** Sentry v11 dropped `sendDefaultPii`; this is its documented `false`. */
+/**
+ * Sentry v11 dropped `sendDefaultPii`; this is its documented `false`, the
+ * same set as api's `V10_DATA_COLLECTION` (api/src/sentry/instrument.ts).
+ */
 const NO_PII_HEADERS = {
   deny: ['forwarded', '-ip', 'remote-', 'via', '-user'],
 };
@@ -16,7 +19,10 @@ const HUB_DATA_COLLECTION = {
   httpHeaders: { request: NO_PII_HEADERS, response: NO_PII_HEADERS },
   httpBodies: [],
   urlQueryParams: NO_PII_HEADERS,
+  genAI: { inputs: false, outputs: false },
   databaseQueryData: false,
+  queues: false,
+  graphQL: { document: false, variables: false },
 } satisfies Sentry.NodeOptions['dataCollection'];
 
 export interface HubSentryEnv {

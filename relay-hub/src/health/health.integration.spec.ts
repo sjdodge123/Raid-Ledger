@@ -24,11 +24,22 @@ async function bootHub(url: string) {
     connect_timeout: 2,
     onnotice: () => undefined,
   });
+  // Tagged templates hit `apply`; Drizzle's driver queries through
+  // `client.unsafe(...)` (and transactions through `begin`), so count those too.
   const sql: Sql = new Proxy(real, {
     apply(target, thisArg, args: unknown[]) {
       calls.push(args);
       const result: unknown = Reflect.apply(target, thisArg, args);
       return result;
+    },
+    get(target, prop, receiver) {
+      const value: unknown = Reflect.get(target, prop, receiver);
+      if (prop !== 'unsafe' && prop !== 'begin') return value;
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]): unknown => {
+        calls.push(args);
+        return Reflect.apply(value, target, args);
+      };
     },
   });
   // A fixed config, not the machine's PORT/HOST/NODE_ENV: a runner's stray
@@ -118,16 +129,21 @@ describe('relay-hub health routes (integration, DB down)', () => {
   });
 
   it('GET /api/v1/health stays 200 and omits epoch', async () => {
+    const before = hub.calls.length;
     const res = await request(hub.app.getHttpServer())
       .get('/api/v1/health')
       .expect(200);
     expect(res.body).toEqual({ status: 'ok', schemaVersions: [1] });
+    // The epoch read goes through Drizzle (`unsafe`): the counter must see it,
+    // or the /live "no query" assertions below prove nothing.
+    expect(hub.calls.length).toBeGreaterThan(before);
   });
 
   it('GET /api/v1/health/live returns 200 without a query', async () => {
+    const before = hub.calls.length;
     await request(hub.app.getHttpServer())
       .get('/api/v1/health/live')
       .expect(200);
-    expect(hub.calls).toHaveLength(0);
+    expect(hub.calls).toHaveLength(before);
   });
 });

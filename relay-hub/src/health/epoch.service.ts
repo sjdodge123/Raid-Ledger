@@ -10,23 +10,51 @@ export type EpochReader = () => Promise<string | undefined>;
  * L5 (ROK-1670): the catalogue epoch, cached after the first successful read
  * (it changes only on a deliberate reset, which restarts the hub). While it is
  * unknown (DB not reached yet) `current()` returns undefined, never throws.
+ *
+ * Single-flight: one read at a time, shared by every caller, and each caller
+ * waits at most `timeoutMs` from when that read STARTED. A read that timed out
+ * but has not settled (postgres.js holds it until `connect_timeout`) keeps
+ * answering undefined at once, so a DB outage costs one `timeoutMs` wait per
+ * read instead of one per request, and queries never stack up. After
+ * `retryMs` a hung read is abandoned and the next call starts a fresh one.
  */
 export class EpochCache {
   private cached: string | undefined;
+  private inflight:
+    | { readonly result: Promise<string | undefined>; readonly at: number }
+    | undefined;
 
   constructor(
     private readonly read: EpochReader,
     private readonly timeoutMs = 1000,
+    private readonly retryMs = 5000,
   ) {}
 
-  async current(): Promise<string | undefined> {
-    if (this.cached !== undefined) return this.cached;
-    try {
-      this.cached = await withTimeout(this.read(), this.timeoutMs);
-    } catch {
-      return undefined;
+  current(): Promise<string | undefined> {
+    if (this.cached !== undefined) return Promise.resolve(this.cached);
+    const now = Date.now();
+    if (!this.inflight || now - this.inflight.at >= this.retryMs) {
+      this.inflight = { result: this.startRead(), at: now };
     }
-    return this.cached;
+    return this.inflight.result;
+  }
+
+  private startRead(): Promise<string | undefined> {
+    const raw = new Promise<string | undefined>((resolve) => {
+      resolve(this.read());
+    });
+    const result = withTimeout(raw, this.timeoutMs).then(
+      (value) => {
+        if (value !== undefined) this.cached = value;
+        return value;
+      },
+      () => undefined,
+    );
+    const clear = (): void => {
+      if (this.inflight?.result === result) this.inflight = undefined;
+    };
+    raw.then(clear, clear);
+    return result;
   }
 }
 
