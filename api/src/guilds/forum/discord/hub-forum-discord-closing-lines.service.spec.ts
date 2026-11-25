@@ -12,10 +12,12 @@ import {
   markPlanningPostDeleted,
 } from './event-planning-posts.queries';
 import {
+  closingGenKey,
   closingOnceKey,
   HubForumDiscordClosingLines,
   planningClosingOnceKey,
 } from './hub-forum-discord-closing-lines.service';
+import { CLOSING_GEN_TTL_SECONDS } from './hub-forum-discord-closing-lines.target';
 import {
   findThreadLink,
   isCurrentBindingLink,
@@ -77,7 +79,31 @@ function fakeRedis() {
     del: jest.fn((...keys: string[]) =>
       Promise.resolve(keys.filter((k) => store.delete(k)).length),
     ),
+    get: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
+    expire: jest.fn(() => Promise.resolve(1)),
+    incr: jest.fn((key: string) => {
+      const next = Number(store.get(key) ?? 0) + 1;
+      store.set(key, String(next));
+      return Promise.resolve(next);
+    }),
   };
+}
+
+/** A drizzle stand-in whose every select chain resolves to no rows. */
+function emptyDb(): object {
+  const rows = Promise.resolve([]);
+  const q: Record<string, unknown> = {};
+  for (const m of ['select', 'from', 'innerJoin', 'where']) q[m] = () => q;
+  q.limit = () => rows;
+  q.orderBy = () => rows;
+  return q;
+}
+
+/** A promise the test resolves by hand, to park a handler mid-flight. */
+function deferred<T>() {
+  let resolve: (v: T) => void = () => undefined;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
 }
 
 function build(online = true, db: object = {}) {
@@ -206,21 +232,82 @@ describe('subject entry points (ROK-2272 S8)', () => {
     ]);
   });
 
-  it('a lineup reopen clears its decided and aborted keys only', async () => {
+  it('a lineup reopen bumps its generation; no once-key is touched', async () => {
     const { svc, redis } = build();
     findLineup.mockResolvedValue(thread);
     for (const k of ['decided', 'aborted', 'locked-in:9']) {
       redis.store.set(closingOnceKey(8, k), '1');
     }
     await svc.lineupReopened(2);
-    expect([...redis.store.keys()]).toEqual([closingOnceKey(8, 'locked-in:9')]);
+    await svc.lineupReopened(2);
+    expect(redis.store.get(closingGenKey('lineup', 2))).toBe('2');
+    expect(redis.del).not.toHaveBeenCalled();
+    expect(redis.store.size).toBe(4);
   });
 
-  it('a reopen with no live thread clears nothing', async () => {
+  it('a reopen bumps the generation even with no live thread', async () => {
     const { svc, redis } = build();
     findPoll.mockResolvedValue(null);
     await svc.pollReopened(4);
-    expect(redis.del).not.toHaveBeenCalled();
+    expect(findPoll).not.toHaveBeenCalled();
+    expect(redis.store.get(closingGenKey('poll', 4))).toBe('1');
+    expect(redis.expire).toHaveBeenCalledWith(
+      closingGenKey('poll', 4),
+      CLOSING_GEN_TTL_SECONDS,
+    );
+  });
+
+  it('an end refreshes a live generation TTL and leaves generation 0 alone', async () => {
+    const { svc, redis } = build();
+    findPoll.mockResolvedValue(null);
+    await svc.pollCancelled(4, null);
+    expect(redis.expire).not.toHaveBeenCalled();
+    redis.store.set(closingGenKey('poll', 4), '1');
+    await svc.pollCancelled(4, null);
+    expect(redis.expire).toHaveBeenCalledWith(
+      closingGenKey('poll', 4),
+      CLOSING_GEN_TTL_SECONDS,
+    );
+  });
+
+  it('generation 0 keeps the bare key; a reopened poll claims cancelled#g1', async () => {
+    const { svc, redis } = build();
+    findPoll.mockResolvedValue(thread);
+    findLink.mockResolvedValue(sentLink() as never);
+    await svc.pollCancelled(4, null);
+    await svc.pollReopened(4);
+    await svc.pollCancelled(4, null);
+    expect(redis.store.has(closingOnceKey(8, 'cancelled'))).toBe(true);
+    expect(redis.store.has(closingOnceKey(8, 'cancelled#g1'))).toBe(true);
+  });
+
+  it('L4491: a reopen that lands while a cancel is still resolving its target lets the next cancel post', async () => {
+    const { svc, gateway } = build();
+    const parked = deferred<typeof thread>();
+    findPoll.mockReturnValueOnce(parked.promise).mockResolvedValue(thread);
+    findLink.mockResolvedValue(sentLink() as never);
+    const first = svc.pollCancelled(4, null);
+    await svc.pollReopened(4);
+    parked.resolve(thread);
+    await first;
+    await svc.pollCancelled(4, 'Again');
+    expect(gateway.mention.mock.calls).toEqual([
+      ['d-thread', 'Poll cancelled', []],
+      ['d-thread', 'Poll cancelled — Again', []],
+    ]);
+  });
+
+  it('L4491: a lineup reopen racing a decide lets the next end post', async () => {
+    const { svc, gateway } = build(true, emptyDb());
+    const parked = deferred<typeof thread>();
+    findLineup.mockReturnValueOnce(parked.promise).mockResolvedValue(thread);
+    findLink.mockResolvedValue(sentLink() as never);
+    const first = svc.lineupDecided(2);
+    await svc.lineupReopened(2);
+    parked.resolve(thread);
+    await first;
+    await svc.lineupDecided(2);
+    expect(gateway.mention).toHaveBeenCalledTimes(2);
   });
 
   it('ROK-2295 m-3: an unreadable event falls back to the poll subject (game), never the storage title', async () => {
@@ -343,20 +430,20 @@ describe('registry planning posts (ROK-2272 S10)', () => {
     warn.mockRestore();
   });
 
-  it('a reopen forgets the planning end keys only (hub keys untouched)', async () => {
-    const { svc, redis } = build();
+  it('a reopened non-hub lineup posts its next end into the planning post again', async () => {
+    const { svc, gateway, redis } = build();
     findPlanning.mockResolvedValue(
       planningRow({ subjectKind: 'lineup' }) as never,
     );
-    for (const k of ['decided', 'aborted', 'locked-in:9']) {
-      redis.store.set(planningClosingOnceKey(41, k), '1');
-    }
-    redis.store.set(closingOnceKey(41, 'decided'), '1');
+    await svc.lineupAborted(2);
     await svc.lineupReopened(2);
+    await svc.lineupAborted(2);
+    expect(gateway.mention).toHaveBeenCalledTimes(2);
     expect([...redis.store.keys()].sort()).toEqual(
       [
-        planningClosingOnceKey(41, 'locked-in:9'),
-        closingOnceKey(41, 'decided'),
+        closingGenKey('lineup', 2),
+        planningClosingOnceKey(41, 'aborted'),
+        planningClosingOnceKey(41, 'aborted#g1'),
       ].sort(),
     );
   });
