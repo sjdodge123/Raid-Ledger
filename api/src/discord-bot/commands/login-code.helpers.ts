@@ -164,10 +164,13 @@ export async function replyToSigninCode(
   typed: string,
   deps: SigninCodeDeps,
 ): Promise<void> {
-  const reply = (content: string, components: SigninCodeReply['components'] = []) =>
-    interaction.editReply({ content, components });
+  const reply = (
+    content: string,
+    components: SigninCodeReply['components'] = [],
+  ) => interaction.editReply({ content, components });
   const limit = await checkSigninCodeAttempts(deps.redis, interaction.user.id);
-  if (!limit.allowed) return void (await reply(rateLimitedCopy(limit.retryMinutes)));
+  if (!limit.allowed)
+    return void (await reply(rateLimitedCopy(limit.retryMinutes)));
   const { decision, communityName, displayName } = await deps.decide(
     interaction.user,
   );
@@ -211,6 +214,8 @@ export async function approveSigninCode(
     return null;
   }
   const approved = await deps.store.approve(code, approval);
-  await reply(approved ? signinCodeDoneCopy(displayName) : SIGNIN_CODE_INVALID_COPY);
+  await reply(
+    approved ? signinCodeDoneCopy(displayName) : SIGNIN_CODE_INVALID_COPY,
+  );
   return approved ? approval : null;
 }

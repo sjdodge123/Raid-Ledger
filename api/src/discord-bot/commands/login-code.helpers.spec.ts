@@ -119,7 +119,11 @@ describe('checkSigninCodeAttempts', () => {
 describe('signin-code flows', () => {
   const user = { id: '77', username: 'disc-user', avatar: null };
   const pending = { code: 'K7QD-2M9X', expiresAt: new Date() };
-  const grant = { kind: 'existing', userId: 9, clientUrl: 'https://x' } as const;
+  const grant = {
+    kind: 'existing',
+    userId: 9,
+    clientUrl: 'https://x',
+  } as const;
 
   function deps(over: Partial<SigninCodeDeps> = {}): SigninCodeDeps & {
     store: { findPending: jest.Mock; approve: jest.Mock };
