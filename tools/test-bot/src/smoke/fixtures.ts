@@ -292,6 +292,13 @@ export async function triggerClassify(
 }
 
 /**
+ * Reset-to-seed and demo install rebuild the seed data and can outlast the
+ * client's 90s default; cutting one off would start the demo/install fallback
+ * while the reset is still running (TDB:4650 review).
+ */
+const RESET_TIMEOUT_MS = 300_000;
+
+/**
  * Hard reset: wipe events/signups/lineups/characters/voice sessions and
  * re-run demo install (ROK-1186). DEMO_MODE only. Called once at the
  * start of every smoke / Playwright run so tests start from a clean
@@ -304,14 +311,14 @@ export async function triggerClassify(
  */
 export async function resetToSeed(api: ApiClient): Promise<void> {
   try {
-    await api.post("/admin/test/reset-to-seed", {});
+    await api.post("/admin/test/reset-to-seed", {}, { timeoutMs: RESET_TIMEOUT_MS });
     return;
   } catch (err) {
     console.warn(
       `  reset-to-seed failed (${err}) — falling back to demo/install`,
     );
   }
-  await api.post("/admin/settings/demo/install", {}).catch((err) => {
+  await api.post("/admin/settings/demo/install", {}, { timeoutMs: RESET_TIMEOUT_MS }).catch((err) => {
     console.warn(`  demo/install fallback also failed: ${err}`);
   });
 }
