@@ -39,6 +39,10 @@ describe('isSecretRouteUrl', () => {
         '/P/POLL/AbCdEfGhIjKlMnOpQrSt',
         '/H/AbCdEfGhIjKlMnOpQrSt',
         '/Auth/Success?code=x',
+        // Extra slashes still render these pages, so they must still match.
+        '/auth/success//?code=one-time-code',
+        '/auth//success?code=x',
+        '/h//AbCdEfGhIjKlMnOpQrSt',
     ])('treats %s as a secret route', (url) => {
         expect(isSecretRouteUrl(url)).toBe(true);
     });

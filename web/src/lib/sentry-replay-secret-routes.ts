@@ -26,7 +26,7 @@ import { scrubReplayEventUrls } from './sentry-scrub-events';
  * Path prefixes whose address carries a secret. Case-insensitive because
  * React Router matches routes case-insensitively, so `/P/POLL/<t>` renders.
  */
-const SECRET_ROUTE = /^\/(?:p\/poll\/|h\/|i\/|auth\/success\/?$)/i;
+const SECRET_ROUTE = /^\/(?:p\/poll\/|h\/|i\/|auth\/success\/*$)/i;
 
 /** Any base works: only the pathname of a relative URL is read. */
 const PARSE_BASE = 'https://replay.invalid';
@@ -54,7 +54,9 @@ function decodePathLikeRouter(pathname: string): string {
  */
 export function isSecretRouteUrl(url: string): boolean {
     try {
-        return SECRET_ROUTE.test(decodePathLikeRouter(new URL(url, PARSE_BASE).pathname));
+        // Repeated slashes are collapsed first so `//h/<t>` and `/auth//success` still match (fail closed).
+        const path = decodePathLikeRouter(new URL(url, PARSE_BASE).pathname);
+        return SECRET_ROUTE.test(path.replace(/\/{2,}/g, '/'));
     } catch {
         return true;
     }
