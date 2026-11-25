@@ -16,7 +16,7 @@ export type SignInSectionId = 'discord-app-code' | 'password';
 /** One workaround inside the disclosure. */
 export interface SignInSection {
     id: SignInSectionId;
-    /** Label of the collapsed row; also names the open section for assistive tech. */
+    /** Label of the collapsed row (and the sub-heading when `showHeading`). */
     title: string;
     /** Show `title` as a sub-heading while the section is open. */
     showHeading: boolean;
@@ -42,7 +42,7 @@ function SectionRow({ section, active, onOpen }: {
         );
     }
     return (
-        <section aria-label={section.title} data-section={section.id} className="space-y-3">
+        <section data-section={section.id} className="space-y-3">
             {section.showHeading && <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>}
             {section.node}
         </section>

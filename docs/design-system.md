@@ -777,10 +777,12 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
   The lineup Steam nudge (`SteamNudgeBanner`, ROK-2319) is a one-line adopter (`px-4 py-2`) with an inventory
   `Button size="sm"` CTA and a ghost `iconOnly` × (44px on phones). **Never use Tailwind `dark:`** — it follows the
   OS `prefers-color-scheme`, not the app scheme (`index.css` declares no `@custom-variant dark`).
-- **Phone sign-in hint (ROK-2291)** adopts the neutral callout on the login card: `PhoneSignInHint`
-  (`pages/login/PhoneSignInHint.tsx`, `role="note"`, `p-3` like the first-run banner beside it), a
-  `text-foreground` lead phrase and `/login` as `<code>` on `bg-panel`. Rendered only below 1024px
-  (`useMediaQuery(PHONE_MQ)`), with Discord sign-in offered, and never on first run (one callout at a time).
+- **Login "Try another way" (ROK-2370, replaced ROK-2291's phone hint)**: the login card's workarounds sit behind
+  a quiet ghost `Button size="sm"` "Sign in not working? Try another way" (`pages/login/SignInAnotherWay.tsx`,
+  `aria-expanded`), opening a `border-t border-edge` block with an ordered list of sections, one open at a time
+  (Discord-app code, then username/password). The code panel (`SigninCodePanel`) shows the code in a `font-mono`
+  `bg-panel border-edge` tile with a labelled `CopyButton`, and the `/login code:` instruction in this neutral
+  callout (`p-3`). Top-level providers never go inside the disclosure.
 - **Claim your character (ROK-2153)** is the core adopter on hubs: `HubClaimPrompt`
   (`components/hub/claim/`) is a neutral instruction callout `<section aria-label="Claim your character">`
   with an `h2` (`text-base font-semibold text-foreground`), a `text-secondary` body (a shorter one below

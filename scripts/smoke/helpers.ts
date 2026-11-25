@@ -80,16 +80,20 @@ export async function dismissGameTimeCheck(page: Page): Promise<void> {
 
 /**
  * Expand the local login form if OAuth providers (Discord) are shown.
- * Waits for the login page to load, then clicks the toggle to reveal
- * username/password fields if they're hidden behind an OAuth-first layout.
+ * ROK-2370: username/password sits inside the "Sign in not working? Try
+ * another way" disclosure, after the Discord-app code section — open the
+ * disclosure, then the "Sign in with username" section when it is collapsed.
  */
 export async function expandLocalLogin(page: Page) {
     await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-    const toggleBtn = page.getByText('Sign in with username instead');
-    if (await toggleBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-        await toggleBtn.click();
-        await expect(page.locator('#username')).toBeVisible({ timeout: 5_000 });
-    }
+    const trigger = page.getByRole('button', { name: 'Sign in not working? Try another way' });
+    if (!(await trigger.isVisible({ timeout: 5_000 }).catch(() => false))) return;
+    if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
+    const username = page.locator('#username');
+    const passwordRow = page.getByRole('button', { name: 'Sign in with username' });
+    await expect(username.or(passwordRow)).toBeVisible({ timeout: 5_000 });
+    if (await passwordRow.isVisible()) await passwordRow.click();
+    await expect(username).toBeVisible({ timeout: 5_000 });
 }
 
 /**
