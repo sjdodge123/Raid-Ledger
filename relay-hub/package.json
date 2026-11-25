@@ -16,7 +16,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node dist/scripts/run-migrations.js",
     "db:migrate:dev": "ts-node src/scripts/run-migrations.ts",
-    "db:status": "node dist/scripts/run-migrations.js --status"
+    "db:status": "node dist/scripts/run-migrations.js --status",
+    "hub-admin": "node dist/cli/hub-admin.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.11",
