@@ -4,12 +4,14 @@
  *
  *   hub-admin instances [--json]   list registered instances
  *   hub-admin approve <instanceId> approve a pending instance
+ *   hub-admin revoke <instanceId> --reason <text>  revoke an instance
  */
 import type { InstancesRepository } from '../instances/instances.repository';
 import { withCliRepo, type RepoRunner } from './cli-db';
 import type { CliIo } from './cli-io';
 import { runApprove } from './commands/approve.command';
 import { runInstances } from './commands/instances.command';
+import { runRevoke } from './commands/revoke.command';
 
 type Command = (
   repo: InstancesRepository,
@@ -20,12 +22,14 @@ type Command = (
 const COMMANDS: Record<string, Command> = {
   instances: runInstances,
   approve: runApprove,
+  revoke: runRevoke,
 };
 
 export const USAGE = [
   'Usage: hub-admin <command>',
   '  instances [--json]     list registered instances',
   '  approve <instanceId>   approve a pending instance',
+  '  revoke <instanceId> --reason <text>   revoke an instance',
 ].join('\n');
 
 /** Runs one command; resolves to the process exit code. Never throws. */
