@@ -112,13 +112,24 @@ it.each(BAD_BODIES)(
 it('AC2: schemaVersion 2 → 426 schema_unsupported, nothing written', async () => {
   const token = await approvedInstance(app, db.url, crypto.randomUUID());
   const before = await crosswalkCounts(sql);
+  // Items never stored before, so "nothing written" cannot pass on an upsert.
+  const fresh = [steamItem(8_100_001), steamItem(8_100_002)];
   const res = await postContributions(app, token, {
-    ...FIXTURE,
     schemaVersion: 2,
+    items: fresh,
   });
   expect(res.status).toBe(426);
   expect(res.body).toMatchObject({ error: 'schema_unsupported' });
   expect(await crosswalkCounts(sql)).toEqual(before);
+  const values = fresh.map((i) => String(i.steamAppId));
+  const [stored] = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM hub_game_ids
+    WHERE kind = 'steam_app_id' AND value IN ${sql(values)}`;
+  expect(stored?.n).toBe(0);
+  const [games] = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM hub_games
+    WHERE display_name IN ${sql(fresh.map((i) => i.name))}`;
+  expect(games?.n).toBe(0);
 });
 
 it('AC3 + AC7: the fixture → one contract-valid result per item, in order; one count-only log line', async () => {
