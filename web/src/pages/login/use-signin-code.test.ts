@@ -29,19 +29,23 @@ async function flush(): Promise<void> {
     await act(async () => { await Promise.resolve(); });
 }
 
+function setUp(): void {
+    vi.useFakeTimers({ now: NOW });
+    vi.mocked(startSigninCode).mockReset();
+    vi.mocked(pollSigninCode).mockReset();
+    visibility = 'visible';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
+    sessionStorage.clear();
+}
+
+function tearDown(): void {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+}
+
 describe('useSigninCode (ROK-2370)', () => {
-    beforeEach(() => {
-        vi.useFakeTimers({ now: NOW });
-        vi.mocked(startSigninCode).mockReset();
-        vi.mocked(pollSigninCode).mockReset();
-        visibility = 'visible';
-        vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
-        sessionStorage.clear();
-    });
-    afterEach(() => {
-        vi.useRealTimers();
-        vi.restoreAllMocks();
-    });
+    beforeEach(setUp);
+    afterEach(tearDown);
 
     it('starts idle with nothing saved, then waits on a started code and saves it', async () => {
         vi.mocked(startSigninCode).mockResolvedValue(pending);
@@ -124,6 +128,11 @@ describe('useSigninCode (ROK-2370)', () => {
         expect(result.current.state.phase).toBe('idle');
         expect(sessionStorage.getItem(SIGNIN_CODE_STORAGE_KEY)).toBeNull();
     });
+});
+
+describe('useSigninCode stale starts (ROK-2370 review)', () => {
+    beforeEach(setUp);
+    afterEach(tearDown);
 
     it('a start answered after cancel is dropped: nothing saved, still idle', async () => {
         let answer: (v: typeof pending) => void = () => undefined;
