@@ -31,6 +31,7 @@ import { DemoTestRenderDmEmbedController } from './demo-test-render-dm-embed.con
 import { DemoTestRenderPugInviteEmbedController } from './demo-test-render-pug-invite-embed.controller';
 import { DemoTestBackupController } from './demo-test-backup.controller';
 import { DemoTestSignInLinkController } from './demo-test-sign-in-link.controller';
+import { DemoTestSigninCodeController } from './demo-test-signin-code.controller';
 import { DemoTestIntentTokenController } from './demo-test-intent-token.controller';
 import { DemoTestBrowserSessionController } from './demo-test-browser-session.controller';
 import { DemoTestGuildController } from './demo-test-guild.controller';
@@ -154,6 +155,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestRenderPugInviteEmbedController,
     DemoTestBackupController,
     DemoTestSignInLinkController,
+    DemoTestSigninCodeController,
     DemoTestIntentTokenController,
     DemoTestBrowserSessionController,
     DemoTestGuildController,
