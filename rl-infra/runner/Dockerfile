@@ -75,6 +75,8 @@ RUN curl -fsSL https://github.com/sosedoff/pgweb/releases/download/v0.16.2/pgweb
     chmod +x /usr/local/bin/pgweb && \
     rm /tmp/pgweb.zip
 
+# TDB: the Mutagen-synced /workspace is owned by another uid; trust only it.
+RUN git config --system --add safe.directory /workspace
 WORKDIR /workspace
 
 # tmux default session so `rl shell` attaches to a stable name.

@@ -228,7 +228,7 @@ text `-300`/`-400` → a `-700`…`-800` shade (`:692-711`), tinted fills → a 
 `bg-emerald-600`, which steps to emerald-700 `#047857` with a darker emerald-800 `#065f46` hover on light
 (`:871-889`, ROK-1472 ruling 2026-10-04; a disabled button with its own `disabled:bg-*` keeps that paint), and
 `bg-cyan-600` / `bg-cyan-500` (white is 3.62 / 2.37:1 on them), whose `text-foreground` label is forced to `#0f172a` (4.93 / 7.55:1; dawn's own
-foreground was 4.42:1; `brand-fill-forced-white.guard.test.ts`) — and `.badge-overlay` (`:793-818`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
+foreground was 4.42:1; `brand-fill-forced-white.guard.test.ts`) — and `.badge-overlay` (`:793-818`) opts cover-art badges out (raw classes by a per-class restore, the `success` / `warning` / `danger` tokens by a `--color-*` pin on the overlay — TDB:2480) — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple, indigo and teal repaint one step past
 the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`, teal-800 `#115e59`);
@@ -396,6 +396,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `NominatingComposite.tsx`, `VotingComposite.tsx`, `SchedulingComposite.tsx` | `components/lineups/cycle-4/` | Whole-phase page shells — extend these, don't build a fourth |
 | `VoteToggleButton.tsx`, `StarToggleButton.tsx`, `VotesUsedPill.tsx`, `VotingRow.tsx` | `components/lineups/cycle-4/` | Vote/star affordances and the "N of M votes used" pill |
 | `HeroNextStep.tsx`, `ConfirmationPill.tsx`, `UserLink.tsx`, `AnonymousDiscordName.tsx`, `ActivityTimeline.tsx` | `components/common/` | The single through-line "NEXT:" banner, confirmation pill, user mention, account-less Discord signup name + "via Discord" chip (not interactive itself — roster list rows wrap it in the ROK-381 guest-profile link from `lib/guest-profile-link.ts`, the same link slot cards build; never a member profile), activity feed |
+| `NotFoundState` (`not-found-state.tsx`) | `components/common/` (ROK-2319) | **The one not-found state** — centred `py-12` notice: optional `h1` (`text-xl font-semibold text-foreground`), a `text-sm text-muted` sentence, optional router `Link` out drawn with `buttonClass({ variant: 'secondary' })`. Lifted from the hub's `NotFoundNotice` (which renders through it, unchanged on screen); the catch-all route's `NotFoundPage` (`pages/not-found-page.tsx`, `<Route path="*">` outside the AuthGuard) uses it with "Page not found" + "Go home". | Any "this thing doesn't exist" page. Per-entity not-found panels (`GameNotFound`, `LineupNotFound`, …) predate it — new ones use this |
 | `forumByline` (`forum-byline.ts`) + the hub `Pill` "via Discord" | `components/hub/forum/` (ROK-2208) | **New pattern: "via Discord" byline chip on hub Forum messages** — a neutral `Pill` (`title="Posted from Discord"`) after the author name on every Discord-origin thread row and message, guest or linked; a guest shows under their Discord name and avatar. Token-only (the older `AnonymousDiscordName` chip uses raw indigo hues repainted in `index.css`; do not copy that). |
 | `ForumSignupLine` (`forum-signup-line.tsx`), reached through `ForumReplyItemView` | `components/hub/forum/` (ROK-2274) | **New pattern: forum system line** — a muted single-line row in a forum reply list for a `kind: 'signup_line'` reply ("✅ Mirelle signed up as Healer" in an event's Raid Ledger thread) and, since ROK-2297, a `kind: 'copy_header'` reply ("Earlier chat from … · N messages, <range>" above chat copied between an event and its reschedule poll). `ActivityTimeline` is a standalone feed and `ForumMessage` carries avatar/byline/menu, so neither fits inline between replies. No card, no avatar, no byline: `text-sm text-muted` text (a signup line leads with its own emoji; the copy header has none), a `text-xs text-dim` `forumAgo` time, and the forum "⋯" menu with **Delete only**, shown when the server grants `can.delete` (officers), never Edit. It keeps the `forum-reply-<id>` anchor and the `ring-success` deep-link highlight. Not counted in `replyCount` (server). Tokens only. Sample: `/dev/design-system` → primitives → "Forum signup line — system row". | Any app-written line inside a forum thread. Branch on `reply.kind` in `ForumReplyItemView`; do not render a system line through `ForumMessage` |
 | `Layout.tsx`, `Header.tsx`, `Footer.tsx`, `bottom-tab-bar.tsx`, `mobile-page-toolbar.tsx`, `more-drawer.tsx`, `live-region-provider.tsx` | `components/layout/` | App chrome. `live-region-provider` is the a11y announcer — use it, don't `alert()`. The shell's min-height is the VISIBLE viewport, with pinch-zoom and the on-screen keyboard kept out of it and re-read once a rotation settles (a `ResizeObserver` on a hidden fixed layout-viewport sentinel, plus timed reads at 150 and 500 ms; a turn made with the keyboard up floors on the last unfocused height at that width), and `min-h-dvh` as the first-paint fallback (`use-shell-height.ts`). Closing the keyboard on a page no taller than that floor scrolls back to where the field was focused. In DEMO_MODE, `?vpdebug=1` (remembered across tabs until `?vpdebug=0`) shows a live viewport readout just above the footer (`web/src/dev/ViewportReadout.tsx`) for checking a real device. iPad Safari still scrolls or pans any page past the document's end, and fills that area with the root canvas colour (html's `background-color` with body's blended over it; background images don't count). So the canvas (`html`) = `--color-surface`, `body` has no background, and the shell paints `--color-backdrop` — the run-out reads as footer; a chromeless `/p/*` page (no footer, ends on backdrop) keeps the canvas `--color-backdrop` via `html[data-chromeless]`, which `Layout` sets while it renders. Don't set a `body` background, and don't "fix" the band with a taller floor or a footer shadow. The chromeless `/p/*` shell's `<main>` is `flex flex-col`, so a public page fills it with `flex-1` rather than its own `min-h-dvh`; `body` / `#root` carry no `100vh` floor (ROK-1661) — don't add one back. |
@@ -594,6 +595,11 @@ adopter: the Valheim Map pin filter (ROK-1943, the pin-type chips). ROK-1659 had
 `/dev/design-system` gallery (`primitives-section.tsx`, `scheme-controls.tsx`'s Side-by-side toggle)
 now mounts the real component. Its ON label is `text-amber-400`, not the older `text-amber-300` (§6.9).
 
+**Neutral status pill (ROK-2319).** A read-only neutral state (Draft, Archived, bench) is the `StatusChip`
+`neutral` recipe: `bg-panel border border-edge text-muted` (5.7:1 default-dark, 6.9:1 default-light). Render
+`StatusChip tone="neutral"` where you can; a one-off pill that keeps its own geometry copies exactly those classes.
+Never `bg-overlay text-muted` for small text: it is about 4.0:1 in the dark schemes, below AA.
+
 **DON'T** hand-write the chip class strings — render `FilterChip` (or `filterChipClass(pressed)` for a
 non-button that must match). For
 navigation use `NavChip` / `NAV_CHIP_CLASS`, never a hand-written `<Link>` with a pill className. And
@@ -744,6 +750,7 @@ disagree (§6.11).
 className="text-muted text-sm">No nominations yet. Be the first to nominate a game!</p></div>`
 (`LineupEmptyState.tsx`); inside a modal, `ModalEmptyState`. **DON'T** render a full-bleed illustration, a
 bordered card, or a bare "No results" with no next step.
+A missing page or entity is the same shape through `NotFoundState` (§3.2), with a way out (ROK-2319).
 
 ### 4.6 Loading
 
@@ -767,6 +774,9 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
   The admin integration forms use it (IGDB, ITAD, Steam, Co-Optimus, Discord Bot/OAuth, Blizzard; ROK-1652
   ruling 9). A provider's brand appears only as a logo tile (`admin-settings-integration-cards.tsx`'s
   `bg-[#148EFF]`), never as a callout fill.
+  The lineup Steam nudge (`SteamNudgeBanner`, ROK-2319) is a one-line adopter (`px-4 py-2`) with an inventory
+  `Button size="sm"` CTA and a ghost `iconOnly` × (44px on phones). **Never use Tailwind `dark:`** — it follows the
+  OS `prefers-color-scheme`, not the app scheme (`index.css` declares no `@custom-variant dark`).
 - **Phone sign-in hint (ROK-2291)** adopts the neutral callout on the login card: `PhoneSignInHint`
   (`pages/login/PhoneSignInHint.tsx`, `role="note"`, `p-3` like the first-run banner beside it), a
   `text-foreground` lead phrase and `/login` as `<code>` on `bg-panel`. Rendered only below 1024px

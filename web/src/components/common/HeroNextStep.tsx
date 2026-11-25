@@ -33,8 +33,8 @@ export interface HeroNextStepProps {
 }
 
 const TONE_CLS: Record<HeroTone, string> = {
-    action: 'bg-emerald-600/15 border-emerald-500/40 text-emerald-50',
-    waiting: 'bg-cyan-600/10 border-cyan-500/30 text-cyan-50',
+    action: 'bg-emerald-600/15 border-emerald-500/40 text-foreground',
+    waiting: 'bg-cyan-600/10 border-cyan-500/30 text-foreground',
     aborted: 'bg-danger/10 border-danger/40 text-foreground',
     privacy: 'bg-warning/10 border-warning/30 text-foreground',
 };

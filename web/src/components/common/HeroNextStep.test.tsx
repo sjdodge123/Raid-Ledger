@@ -70,6 +70,13 @@ describe('HeroNextStep — four tones rendered', () => {
     expect(root).toHaveAttribute('data-tone', 'action');
   });
 
+  it.each(['action', 'waiting'] as const)('%s tone body text is the foreground token, not a near-white hue (ROK-2319)', (tone) => {
+    render(<HeroNextStep tone={tone} headline="Next" />);
+    const root = screen.getByTestId('hero-next-step');
+    expect(root).toHaveClass('text-foreground');
+    expect(root.className).not.toMatch(/\btext-(?:emerald|cyan)-50\b/);
+  });
+
   it('renders waiting tone', () => {
     render(<HeroNextStep tone="waiting" headline="Sit tight" />);
     expect(screen.getByTestId('hero-next-step')).toHaveAttribute(

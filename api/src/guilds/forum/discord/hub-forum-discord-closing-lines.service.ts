@@ -3,9 +3,10 @@
  * a poll's first vote creates the post; a lock-in, cancel, decide or abort
  * posts ONE closing bot line into the post that already exists (Discord
  * only — the RL page shows the end state itself). Never creates a post just
- * to close it, once per subject end. A reopen forgets the end's once-key so
- * the next end posts again. Best-effort: a failed send is logged and the
- * line is lost (nothing re-emits an end); it never throws into the listener.
+ * to close it, once per subject end. A reopen bumps the subject's generation
+ * so the next end claims a fresh once-key and posts again (L4491).
+ * Best-effort: a failed send is logged and the line is lost (nothing
+ * re-emits an end); it never throws into the listener.
  * S10: a non-hub subject (no live hub thread) gets the same line in its
  * registry planning post — target + send arms in `.target.ts`.
  */
@@ -24,13 +25,16 @@ import {
   type ClosingLine,
 } from './hub-forum-discord-closing-lines';
 import {
+  CLOSING_GEN_TTL_SECONDS,
+  closingGenKey,
+  genOnceKey,
   postHubClosingLine,
   postPlanningClosingLine,
   resolveClosingTarget,
   targetLabel,
-  targetOnceKey,
   type ClosingOutcome,
   type ClosingSendDeps,
+  type ClosingSubject,
   type ClosingTarget,
 } from './hub-forum-discord-closing-lines.target';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
@@ -38,14 +42,12 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 export {
   CLOSING_ONCE_TTL_SECONDS,
+  closingGenKey,
   closingOnceKey,
+  genOnceKey,
   planningClosingOnceKey,
   type ClosingOutcome,
 } from './hub-forum-discord-closing-lines.target';
-
-/** Once-keys that a reopen clears (lock-in keys on its event id instead). */
-export const POLL_END_KEYS = ['cancelled'] as const;
-export const LINEUP_END_KEYS = ['decided', 'aborted'] as const;
 
 @Injectable()
 export class HubForumDiscordClosingLines {
@@ -68,38 +70,46 @@ export class HubForumDiscordClosingLines {
     await this.close(target, line, `locked-in:${eventId}`);
   }
 
+  /*
+   * L4491: every end reads its subject's reopen generation as its FIRST
+   * await. The end is emitted before any reopen of it, and one Redis
+   * connection is FIFO, so this GET always lands before that reopen's INCR.
+   * Never put another await in front of `endGen`. This also relies on the
+   * listeners calling straight through and on a single API process.
+   */
   async pollCancelled(matchId: number, reason: string | null): Promise<void> {
+    const gen = await this.endGen('poll', matchId);
     const target = await resolveClosingTarget(this.db, 'poll', matchId);
     if (!target) return;
-    await this.close(target, { kind: 'poll-cancelled', reason }, 'cancelled');
+    const line = { kind: 'poll-cancelled', reason } as const;
+    await this.close(target, line, genOnceKey('cancelled', gen));
   }
 
   async lineupDecided(lineupId: number): Promise<void> {
+    const gen = await this.endGen('lineup', lineupId);
     const target = await resolveClosingTarget(this.db, 'lineup', lineupId);
     if (!target) return;
     const games = await this.decidedGames(lineupId);
     const line = { kind: 'lineup-decided', lineupId, games } as const;
-    await this.close(target, line, 'decided');
+    await this.close(target, line, genOnceKey('decided', gen));
   }
 
   async lineupAborted(lineupId: number): Promise<void> {
+    const gen = await this.endGen('lineup', lineupId);
     const target = await resolveClosingTarget(this.db, 'lineup', lineupId);
     if (!target) return;
-    await this.close(target, { kind: 'lineup-aborted' }, 'aborted');
+    const line = { kind: 'lineup-aborted' } as const;
+    await this.close(target, line, genOnceKey('aborted', gen));
   }
 
   /** A poll (re-)entered scheduling: its next cancel posts a line again. */
   async pollReopened(matchId: number): Promise<void> {
-    const target = await resolveClosingTarget(this.db, 'poll', matchId);
-    if (!target) return;
-    await this.forget(target, POLL_END_KEYS);
+    await this.bumpGen('poll', matchId);
   }
 
   /** A lineup left decided/archived for an open status: next end posts. */
   async lineupReopened(lineupId: number): Promise<void> {
-    const target = await resolveClosingTarget(this.db, 'lineup', lineupId);
-    if (!target) return;
-    await this.forget(target, LINEUP_END_KEYS);
+    await this.bumpGen('lineup', lineupId);
   }
 
   /**
@@ -114,11 +124,18 @@ export class HubForumDiscordClosingLines {
     return postHubClosingLine(this.deps(), threadId, text, onceKey);
   }
 
-  private async forget(
-    target: ClosingTarget,
-    onceKeys: readonly string[],
-  ): Promise<void> {
-    await this.redis.del(...onceKeys.map((k) => targetOnceKey(target, k)));
+  /** The subject's reopen generation; a live counter's TTL is refreshed. */
+  private async endGen(kind: ClosingSubject, id: number): Promise<number> {
+    const key = closingGenKey(kind, id);
+    const gen = Number((await this.redis.get(key)) ?? 0);
+    if (gen > 0) await this.redis.expire(key, CLOSING_GEN_TTL_SECONDS);
+    return gen;
+  }
+
+  private async bumpGen(kind: ClosingSubject, id: number): Promise<void> {
+    const key = closingGenKey(kind, id);
+    await this.redis.incr(key);
+    await this.redis.expire(key, CLOSING_GEN_TTL_SECONDS);
   }
 
   private async close(

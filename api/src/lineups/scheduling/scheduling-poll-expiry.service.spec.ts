@@ -189,6 +189,20 @@ describe('warning DM — skips and failures (S3-AC5)', () => {
     expect(notificationService.create).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ degraded: true });
   });
+
+  it('releases the key when create() stores nothing, so a later tick can retry', async () => {
+    const { service, notificationService, dedupService } = setup();
+    mocked.findExpiryWarnCandidates.mockResolvedValue([candidate(1)]);
+    // The creator's preferences left the warning no channel to deliver on.
+    notificationService.create.mockResolvedValueOnce(null);
+
+    await service.runSweep();
+
+    expect(notificationService.create).toHaveBeenCalledTimes(1);
+    expect(dedupService.releaseKey).toHaveBeenCalledWith(
+      'sched-poll-expiry-warn:1',
+    );
+  });
 });
 
 /**

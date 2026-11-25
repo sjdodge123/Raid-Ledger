@@ -115,6 +115,9 @@ curl() {
             [[ -z "$ct" || "$args" == *"$ct"* ]] || return 22
             if [[ "$args" == *-I* ]]; then
                 [[ " ${HEAD_FAIL:-} " == *" $tag "* ]] && return 22
+                if [[ " ${HEAD_MISSING:-} " == *" $tag "* ]]; then
+                    [[ "$args" == *"%{http_code}"* ]] && { printf '404'; return 0; }; return 22
+                fi
                 local d; d=$(tr ' ' '\n' <<<"${DIGESTS:-}" | sed -n "s/^${tag}=//p")
                 printf 'HTTP/1.1 200 OK\r\n'
                 [[ -n "$ct" ]] && printf 'Content-Type: %s\r\n' "$ct"
@@ -170,7 +173,7 @@ _setup_gc() {
     PS_IMAGES=""; DIGESTS=""; DOCKER_PS_FAIL=""; RL_REGISTRY_GC_DRY_RUN=0
     LOCAL_IMAGES=""; DOCKER_IMAGES_FAIL=""; TIMEOUT_RC=""; CLEANUP_TIMEOUT_RC=""
     TAGS=""; AGES=""; HEAD_FAIL=""; LIST_FAIL=""; LOCAL_DIGESTS=""; PGREP_RC=""; INDEX_TAGS=""
-    LIST_TAGS=""; NOCT_TAGS=""; ATT_ONLY_TAGS=""; GET_FAIL=""; DELETE_FAIL=""; GET_MISSING=""
+    LIST_TAGS=""; NOCT_TAGS=""; ATT_ONLY_TAGS=""; GET_FAIL=""; DELETE_FAIL=""; GET_MISSING=""; HEAD_MISSING=""
     # shellcheck disable=SC1090
     source "$LIB"
 }
@@ -635,6 +638,21 @@ test_manifest_list_tags() {
     test_teardown
 }
 
+test_kept_tag_head_404_is_skipped() {
+    CURRENT_TEST_NAME="R-p404: a kept tag whose HEAD 404s is logged and skipped; the sweep goes on"
+    _setup_gc
+    TAGS="latest a b c old"; AGES="a=1 b=2 c=300 old=200"; HEAD_MISSING="a"
+    local out err rc=0
+    err=$(registry_gc::sweep force 2>&1 >/dev/null)
+    : > "$CALL_LOG"
+    out=$(registry_gc::sweep force 2>/dev/null) || rc=$?
+    assert_eq "$rc $(jq -r '.error // "none"' <<<"$out")" "0 none" "a 404 kept tag does not abort the sweep"
+    assert_eq "$(jq -r '.deleted | sort | join(",")' <<<"$out")" "c,old" "the doomed tags are still deleted"
+    assert_contains "$err" "rl-allinone:a has no manifest (HEAD 404) — skipped" "the skipped tag is logged"
+    assert_eq "$(grep -c -- '--delete-untagged' "$CALL_LOG")" "0" "GC drops --delete-untagged (the skipped tag's type is unknown)"
+    HEAD_MISSING=""
+}
+
 test_pinned_index_children_protected() {
     CURRENT_TEST_NAME="R-ig: a digest-pinned index no kept tag carries protects its children; unreadable pin aborts"
     _setup_gc
@@ -697,6 +715,7 @@ run_test "r-m-collect-timeout" test_collect_has_timeout
 run_test "r-n-local-images" test_local_images_protected
 run_test "r-o-timeout-pkill" test_collect_timeout_kills_gc
 run_test "r-p-digest-fail-closed" test_unreadable_digest_fails_closed
+run_test "r-p404-kept-tag-skipped" test_kept_tag_head_404_is_skipped
 run_test "r-q-digest-pins" test_digest_pinned_refs_protect
 run_test "r-r-survivor-digest" test_survivors_share_digest
 run_test "r-s-137-cleanup" test_collect_137_and_bounded_cleanup
