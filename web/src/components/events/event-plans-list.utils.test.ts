@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { STATUS_STYLES } from './event-plans-list.utils';
 
 describe('STATUS_STYLES', () => {
-    it('paints the Draft pill with the neutral token pair, never a raw gray', () => {
-        expect(STATUS_STYLES.draft).toEqual({ bg: 'bg-overlay', text: 'text-muted', label: 'Draft' });
+    it('paints the Draft pill with the documented neutral status chip (StatusChip neutral), never a raw gray', () => {
+        expect(STATUS_STYLES.draft).toEqual({ bg: 'bg-panel border border-edge', text: 'text-muted', label: 'Draft' });
     });
 });

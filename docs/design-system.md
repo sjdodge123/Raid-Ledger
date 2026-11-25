@@ -595,6 +595,11 @@ adopter: the Valheim Map pin filter (ROK-1943, the pin-type chips). ROK-1659 had
 `/dev/design-system` gallery (`primitives-section.tsx`, `scheme-controls.tsx`'s Side-by-side toggle)
 now mounts the real component. Its ON label is `text-amber-400`, not the older `text-amber-300` (§6.9).
 
+**Neutral status pill (ROK-2319).** A read-only neutral state (Draft, Archived, bench) is the `StatusChip`
+`neutral` recipe: `bg-panel border border-edge text-muted` (5.7:1 default-dark, 6.9:1 default-light). Render
+`StatusChip tone="neutral"` where you can; a one-off pill that keeps its own geometry copies exactly those classes.
+Never `bg-overlay text-muted` for small text: it is about 4.0:1 in the dark schemes, below AA.
+
 **DON'T** hand-write the chip class strings — render `FilterChip` (or `filterChipClass(pressed)` for a
 non-button that must match). For
 navigation use `NavChip` / `NAV_CHIP_CLASS`, never a hand-written `<Link>` with a pill className. And

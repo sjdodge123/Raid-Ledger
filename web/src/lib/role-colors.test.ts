@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { ROLE_BADGE_CLASSES } from './role-colors';
 
 describe('ROLE_BADGE_CLASSES', () => {
-    it('paints the bench pill with the neutral token pair, never a raw slate', () => {
-        expect(ROLE_BADGE_CLASSES.bench).toBe('bg-overlay text-muted');
+    it('paints the bench pill with the documented neutral status chip (StatusChip neutral), never a raw slate', () => {
+        expect(ROLE_BADGE_CLASSES.bench).toBe('bg-panel border border-edge text-muted');
     });
 });

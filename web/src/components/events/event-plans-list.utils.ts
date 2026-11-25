@@ -5,7 +5,7 @@ export const STATUS_STYLES: Record<EventPlanStatus, { bg: string; text: string; 
     completed: { bg: 'bg-success/10', text: 'text-success', label: 'Completed' },
     expired: { bg: 'bg-warning/10', text: 'text-warning', label: 'Expired' },
     cancelled: { bg: 'bg-danger/10', text: 'text-danger', label: 'Cancelled' },
-    draft: { bg: 'bg-overlay', text: 'text-muted', label: 'Draft' },
+    draft: { bg: 'bg-panel border border-edge', text: 'text-muted', label: 'Draft' },
 };
 
 export const POLL_MODE_LABELS: Record<PollMode, string> = {

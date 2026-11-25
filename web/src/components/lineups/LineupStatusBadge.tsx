@@ -13,7 +13,7 @@ const STATUS_STYLES: Record<LineupStatusDto, string> = {
     building: 'bg-success/10 text-success',
     voting: 'bg-warning/10 text-warning',
     decided: 'bg-busy/10 text-busy',
-    archived: 'bg-overlay text-muted',
+    archived: 'bg-panel border border-edge text-muted',
 };
 
 const STATUS_LABELS: Record<LineupStatusDto, string> = {

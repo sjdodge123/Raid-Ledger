@@ -38,10 +38,10 @@ describe('LineupStatusBadge', () => {
         expect(badge).toBeInTheDocument();
     });
 
-    it('paints archived with the neutral token pair so it reads in light schemes (ROK-2319)', () => {
+    it('paints archived with the documented neutral status chip so it reads in both colour families (ROK-2319)', () => {
         render(<LineupStatusBadge status="archived" />);
         const badge = screen.getByText('Archived');
-        expect(badge).toHaveClass('bg-overlay', 'text-muted');
+        expect(badge).toHaveClass('bg-panel', 'border', 'border-edge', 'text-muted');
         expect(badge.className).not.toMatch(/\b(?:bg|text)-(?:zinc|gray|slate)-\d/);
     });
 });

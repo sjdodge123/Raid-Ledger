@@ -10,7 +10,7 @@ export const ROLE_BADGE_CLASSES: Record<string, string> = {
     dps: 'bg-red-600/30 text-red-300',
     flex: 'bg-purple-600/30 text-purple-300',
     player: 'bg-indigo-600/30 text-indigo-300',
-    bench: 'bg-overlay text-muted',
+    bench: 'bg-panel border border-edge text-muted',
 };
 
 /** Role emoji icons */
