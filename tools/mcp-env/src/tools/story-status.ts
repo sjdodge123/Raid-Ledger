@@ -1,5 +1,5 @@
 import { PROJECT_DIR } from '../config.js';
-import { shell } from '../shell.js';
+import { run } from '../shell.js';
 
 export const TOOL_NAME = 'story_status';
 export const TOOL_DESCRIPTION =
@@ -40,7 +40,7 @@ interface StoryStatusParams {
 
 /** Run `git fetch origin` and throw if it fails. */
 async function fetchOrigin(): Promise<void> {
-  const result = await shell(`git -C ${PROJECT_DIR} fetch origin`, 30_000);
+  const result = await run('git', ['-C', PROJECT_DIR, 'fetch', 'origin'], 30_000);
   if (result.exitCode !== 0) {
     throw new Error(
       `git fetch origin failed (exit ${result.exitCode}): ${result.stderr}`,
@@ -50,16 +50,21 @@ async function fetchOrigin(): Promise<void> {
 
 /** Get all remote branch names from `git branch -r`. */
 async function getRemoteBranches(): Promise<string[]> {
-  const result = await shell(`git -C ${PROJECT_DIR} branch -r`);
+  const result = await run('git', ['-C', PROJECT_DIR, 'branch', '-r']);
   if (result.exitCode !== 0) return [];
   return parseBranchOutput(result.stdout);
 }
 
 /** Get remote branches merged to origin/main. */
 async function getMergedBranches(): Promise<Set<string>> {
-  const result = await shell(
-    `git -C ${PROJECT_DIR} branch -r --merged origin/main`,
-  );
+  const result = await run('git', [
+    '-C',
+    PROJECT_DIR,
+    'branch',
+    '-r',
+    '--merged',
+    'origin/main',
+  ]);
   if (result.exitCode !== 0) return new Set();
   return new Set(parseBranchOutput(result.stdout));
 }
@@ -107,13 +112,49 @@ function stripOriginPrefix(branch: string): string {
   return branch.replace(/^origin\//, '');
 }
 
+/**
+ * Branch names we will hand to `gh`. A pushed branch name is attacker-
+ * controlled, so anything outside this set (shell metacharacters, a leading
+ * `-` that gh would read as a flag) is never passed on.
+ */
+const SAFE_BRANCH_NAME = /^[A-Za-z0-9._/][A-Za-z0-9._/-]*$/;
+
+/** True when `name` is safe to pass to gh as a branch argument. */
+export function isSafeBranchName(name: string): boolean {
+  return SAFE_BRANCH_NAME.test(name);
+}
+
+/** Lazily resolve (once per call) the origin URL that `gh --repo` needs. */
+function originUrlResolver(): () => Promise<string> {
+  let pending: Promise<string> | null = null;
+  return () => {
+    pending ??= run('git', ['-C', PROJECT_DIR, 'remote', 'get-url', 'origin']).then(
+      (r) => {
+        if (r.exitCode !== 0 || r.stdout.length === 0) {
+          throw new Error(
+            `git remote get-url origin failed (exit ${r.exitCode}): ${r.stderr}`,
+          );
+        }
+        return r.stdout;
+      },
+    );
+    return pending;
+  };
+}
+
 /** Query GitHub CLI for PR info on a branch. Throws on gh failure. */
-async function getPrInfo(branch: string): Promise<PrInfo | null> {
+async function getPrInfo(
+  branch: string,
+  getRepoUrl: () => Promise<string>,
+): Promise<PrInfo | null> {
   const branchName = stripOriginPrefix(branch);
-  const cmd =
-    `gh pr list --repo $(git -C ${PROJECT_DIR} remote get-url origin) ` +
-    `--head ${branchName} --state all --json number,state,url`;
-  const result = await shell(cmd, 15_000);
+  if (!isSafeBranchName(branchName)) return null;
+  const repoUrl = await getRepoUrl();
+  const result = await run(
+    'gh',
+    ['pr', 'list', '--repo', repoUrl, '--head', branchName, '--state', 'all', '--json', 'number,state,url'],
+    15_000,
+  );
   if (result.exitCode !== 0) {
     throw new Error(
       `gh CLI failed for branch ${branchName} (exit ${result.exitCode}): ${result.stderr}`,
@@ -134,9 +175,10 @@ function parseFirstPr(stdout: string): PrInfo | null {
 async function checkBranch(
   branch: string,
   mergedSet: Set<string>,
+  getRepoUrl: () => Promise<string>,
 ): Promise<BranchStatus> {
   const merged = mergedSet.has(branch);
-  const pr = await getPrInfo(branch);
+  const pr = await getPrInfo(branch, getRepoUrl);
   return {
     name: stripOriginPrefix(branch),
     on_origin: true,
@@ -159,12 +201,13 @@ async function processStory(
   storyId: string,
   allBranches: string[],
   mergedSet: Set<string>,
+  getRepoUrl: () => Promise<string>,
 ): Promise<[string, StoryResult]> {
   const normalized = normalizeStoryId(storyId);
   const numericId = extractNumericId(storyId);
   const matched = findMatchingBranches(numericId, allBranches);
   const branches = await Promise.all(
-    matched.map((b) => checkBranch(b, mergedSet)),
+    matched.map((b) => checkBranch(b, mergedSet, getRepoUrl)),
   );
   return [normalized, { branches, verdict: deriveVerdict(branches) }];
 }
@@ -181,8 +224,9 @@ export async function execute(
     getRemoteBranches(),
     getMergedBranches(),
   ]);
+  const getRepoUrl = originUrlResolver();
   const entries = await Promise.all(
-    params.stories.map((s) => processStory(s, allBranches, mergedSet)),
+    params.stories.map((s) => processStory(s, allBranches, mergedSet, getRepoUrl)),
   );
   return Object.fromEntries(entries);
 }
