@@ -37,6 +37,7 @@ import { StandalonePollShareService } from './standalone-poll-share.service';
 import { StandalonePollLockInService } from './standalone-poll-lock-in.service';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { isOperatorOrAdmin } from '../../events/controller.helpers';
+import { RateLimit } from '../../throttler/rate-limit.decorator';
 
 /**
  * Omit the schema's absent optional fields so the parsed body satisfies
@@ -170,8 +171,10 @@ export class StandalonePollController {
    * Create a standalone scheduling poll.
    * Skips building/voting and jumps directly to scheduling.
    * No role guard — any authenticated user can create.
+   * TDB L2886: every create fans out DMs, so it has its own tighter throttle.
    */
   @Post()
+  @RateLimit('pollCreate')
   @UseGuards(NotDeactivatedGuard)
   @HttpCode(HttpStatus.CREATED)
   async create(
