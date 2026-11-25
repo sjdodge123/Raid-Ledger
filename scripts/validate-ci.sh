@@ -1788,7 +1788,14 @@ run_container_validation() {
     return 0
   fi
 
-  local cname="rl-ci-test-$$"
+  # The container name is per slot; the image tag stays the shared `rl:ci-test`
+  # on purpose: docker-guard's build-reclaim (ROK-2171) removes the previous
+  # image only for that exact tag, so a per-slot tag would leave a ~2 GB
+  # dangling image behind on every gate. A per-slot tag needs the guard's
+  # RECLAIM_TAGS updated in the same rl-infra PR.
+  local slot_sfx cname
+  slot_sfx=$(_container_startup_slot_suffix)
+  cname="rl-ci-test${slot_sfx}-$$"
   # Ensure cleanup on any exit path. The double quotes expand $cname NOW, on
   # purpose: a RETURN trap stays set after this function returns and can fire
   # again on a later return, where this local no longer exists and `set -u`
@@ -1799,16 +1806,9 @@ run_container_validation() {
   # ROK-1331 M13: choose a non-conflicting host port for the allinone container.
   # The fleet VM's rl-dashboard service permanently occupies :8080, so the
   # legacy `docker run -p 8080:80` fails with "port is already allocated".
-  # Resolution order: explicit RL_CONTAINER_STARTUP_PORT > fleet default 8090
-  # (detected via /workspace mount) > laptop default 8080.
-  local host_port="${RL_CONTAINER_STARTUP_PORT:-}"
-  if [ -z "$host_port" ]; then
-    if [ -d /workspace ]; then
-      host_port=8090
-    else
-      host_port=8080
-    fi
-  fi
+  # Resolution order: see _container_startup_port (fleet ports are per slot).
+  local host_port
+  host_port=$(_container_startup_port) || return 1
 
   docker build -f Dockerfile.allinone -t rl:ci-test .
   docker run --rm -d \
@@ -1819,6 +1819,42 @@ run_container_validation() {
     rl:ci-test
 
   _wait_for_container_health "$cname" "$host_port"
+}
+
+# TDB:3795/3861/4085 — every fleet slot used to build `rl:ci-test` and bind
+# host :8090, so two slots' gates in this step at once failed with "port is
+# already allocated". On the fleet (/workspace) with a numeric RL_SLOT the
+# container name and port are keyed to the slot (the image tag stays shared,
+# see run_container_validation); a laptop run (no /workspace) or an
+# unset/non-numeric RL_SLOT keeps the old name and port.
+_container_startup_slot_suffix() {
+  local slot="${RL_SLOT:-}"
+  if [ -d /workspace ] && [[ "$slot" =~ ^[0-9]+$ ]]; then
+    echo "-slot${slot}"
+  fi
+}
+
+# Host port: explicit RL_CONTAINER_STARTUP_PORT > fleet 8090+RL_SLOT (8090 when
+# RL_SLOT is unset or non-numeric) > laptop 8080. Fleet slots 1-4 map to
+# 8091-8094 (checked free of rl-infra bindings); a slot whose port would pass
+# 65535 is refused (exit 1) rather than handed to `docker run -p`.
+_container_startup_port() {
+  local slot="${RL_SLOT:-}" port
+  if [ -n "${RL_CONTAINER_STARTUP_PORT:-}" ]; then
+    echo "$RL_CONTAINER_STARTUP_PORT"
+  elif [ ! -d /workspace ]; then
+    echo 8080
+  elif [[ "$slot" =~ ^[0-9]+$ ]]; then
+    # Length check first: a 20-digit slot would overflow bash arithmetic.
+    if [ "${#slot}" -le 5 ]; then port=$((8090 + 10#$slot)); fi
+    if [ -z "${port:-}" ] || [ "$port" -gt 65535 ]; then
+      echo "validate-ci: RL_SLOT=$slot gives a container-startup host port above 65535; set RL_CONTAINER_STARTUP_PORT" >&2
+      return 1
+    fi
+    echo "$port"
+  else
+    echo 8090
+  fi
 }
 
 _wait_for_container_health() {
