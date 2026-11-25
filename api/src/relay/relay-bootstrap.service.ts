@@ -15,7 +15,6 @@ import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { SettingsService } from '../settings/settings.service';
 import { RelayService } from './relay.service';
 import { errorMessage } from './relay.helpers';
-import { parseRelayHubEnv } from './relay-url.helpers';
 
 /** Boot attempt plus hourly retries, per process (L4). */
 export const MAX_BOOTSTRAP_ATTEMPTS = 24;
@@ -65,9 +64,7 @@ export class RelayBootstrapService implements OnApplicationBootstrap {
 
   /** L2: env set, not revoked, admin has not disconnected (no token). */
   private async shouldRegister(): Promise<boolean> {
-    if (parseRelayHubEnv(process.env.RELAY_HUB_URL).kind !== 'valid') {
-      return false;
-    }
+    if (this.relay.hubEnv().kind !== 'valid') return false;
     if (this.relay.isRevoked()) return false;
     const enabled = await this.settings.get(SETTING_KEYS.RELAY_ENABLED);
     return enabled !== 'false';

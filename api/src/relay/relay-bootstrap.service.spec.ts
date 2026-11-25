@@ -213,7 +213,7 @@ describe('RelayBootstrapService — boot never waits (AC 5)', () => {
   });
 });
 
-describe('RelayBootstrapService — cancellation (Codex RH-6)', () => {
+describe('RelayBootstrapService — cancellation and env warnings (Codex RH-6)', () => {
   it('a disconnect during the eligibility reads cancels the boot registration', async () => {
     fetchSpy.mockResolvedValue(Response.json(REGISTERED, { status: 201 }));
     const get = settings.get as jest.Mock;
@@ -232,4 +232,16 @@ describe('RelayBootstrapService — cancellation (Codex RH-6)', () => {
     expect(store.has(SETTING_KEYS.RELAY_TOKEN)).toBe(false);
   });
 
+  it('warns once about an invalid RELAY_HUB_URL when there is no token', async () => {
+    process.env.RELAY_HUB_URL = 'ftp://nope';
+    const warn = Logger.prototype.warn as jest.Mock;
+    bootstrap.onApplicationBootstrap();
+    await settle();
+    await relay.handleHeartbeat(); // hourly retry takes the same path
+    const envWarns = warn.mock.calls.filter(([m]) =>
+      String(m).includes('RELAY_HUB_URL'),
+    );
+    expect(envWarns).toHaveLength(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });

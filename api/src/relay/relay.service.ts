@@ -19,7 +19,11 @@ import {
   heartbeatHub,
   registerWithHub,
 } from './relay-hub.client';
-import { parseRelayHubEnv, resolveRelayUrl } from './relay-url.helpers';
+import {
+  parseRelayHubEnv,
+  resolveRelayUrl,
+  type RelayHubEnv,
+} from './relay-url.helpers';
 
 /** Consecutive heartbeat failures that earn one `warn` (AC 11). */
 const HEARTBEAT_WARN_AT = 3;
@@ -80,6 +84,16 @@ export class RelayService {
    */
   currentGeneration(): number {
     return this.generation;
+  }
+
+  /** Parsed `RELAY_HUB_URL`; an invalid value is warned about once (L1). */
+  hubEnv(): RelayHubEnv {
+    const env = parseRelayHubEnv(process.env.RELAY_HUB_URL);
+    if (env.kind === 'invalid' && !this.warnedInvalidEnv) {
+      this.warnedInvalidEnv = true;
+      this.logger.warn('RELAY_HUB_URL is not an http(s) URL; ignoring it');
+    }
+    return env;
   }
 
   /** Let the boot bootstrap retry on the hourly tick while unregistered (L4). */
@@ -263,11 +277,7 @@ export class RelayService {
 
   /** L1: `RELAY_HUB_URL` > `relay_url` setting > built-in default. */
   private async getRelayUrl(): Promise<string> {
-    const env = parseRelayHubEnv(process.env.RELAY_HUB_URL);
-    if (env.kind === 'invalid' && !this.warnedInvalidEnv) {
-      this.warnedInvalidEnv = true;
-      this.logger.warn('RELAY_HUB_URL is not an http(s) URL; ignoring it');
-    }
+    const env = this.hubEnv();
     const setting = await this.settingsService.get(SETTING_KEYS.RELAY_URL);
     return resolveRelayUrl(env, setting);
   }
