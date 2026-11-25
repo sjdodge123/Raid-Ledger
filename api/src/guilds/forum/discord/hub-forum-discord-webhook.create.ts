@@ -10,6 +10,29 @@ import { RESTEvents, type RateLimitData, type REST } from 'discord.js';
  */
 export const FORUM_WEBHOOK_CREATE_TIMEOUT_MS = 30_000;
 
+/** ROK-2337 — channel id → its one in-flight `createWebhook` call. */
+export type PendingWebhookCreates = Map<string, Promise<{ id: string }>>;
+
+/**
+ * Reuse the channel's pending create, else start one. The entry is dropped
+ * only when Discord answers (success or failure), never on a caller's timeout.
+ */
+function startOrJoin(
+  inflight: PendingWebhookCreates,
+  channelId: string,
+  create: () => Promise<{ id: string }>,
+): Promise<{ id: string }> {
+  const existing = inflight.get(channelId);
+  if (existing) return existing;
+  const pending = create();
+  inflight.set(channelId, pending);
+  const clear = (): void => {
+    if (inflight.get(channelId) === pending) inflight.delete(channelId);
+  };
+  pending.then(clear, clear);
+  return pending;
+}
+
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -19,14 +42,17 @@ function describe(err: unknown): string {
  * surfaces. A webhook that lands after the timeout is only LOGGED, never
  * deleted and never waited on: the next `ensureWebhook` reuses a bot-owned
  * "Raid Ledger" hook (ROK-2296), and the last-unbind sweep removes the rest.
+ * A retry while the channel's create is still queued joins that same promise
+ * (`inflight`) with its own bound, so retries never stack extra POSTs.
  */
 export async function createWebhookBounded(
+  inflight: PendingWebhookCreates,
   channelId: string,
   create: () => Promise<{ id: string }>,
   rest: REST | null,
   logger: Logger,
 ): Promise<string> {
-  const pending = create();
+  const pending = startOrJoin(inflight, channelId, create);
   const unwatch = watchRateLimits(rest, channelId, logger);
   try {
     const hook = await raceTimeout(pending, FORUM_WEBHOOK_CREATE_TIMEOUT_MS);

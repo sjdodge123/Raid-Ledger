@@ -18,7 +18,10 @@ import {
   failureOutcome,
   shouldSetDefaultReaction,
 } from './hub-forum-discord-decor';
-import { createWebhookBounded } from './hub-forum-discord-webhook.create';
+import {
+  createWebhookBounded,
+  type PendingWebhookCreates,
+} from './hub-forum-discord-webhook.create';
 
 /** A Discord forum as the binding service sees it (no discord.js objects). */
 export interface ForumInfo {
@@ -50,6 +53,8 @@ function describe(err: unknown): string {
 @Injectable()
 export class HubForumDiscordGateway {
   private readonly logger = new Logger(HubForumDiscordGateway.name);
+  /** ROK-2337 — one in-flight createWebhook per channel, shared by retries. */
+  private readonly pendingCreates: PendingWebhookCreates = new Map();
 
   constructor(private readonly client: DiscordBotClientService) {}
 
@@ -125,6 +130,7 @@ export class HubForumDiscordGateway {
     );
     if (own) return own.id;
     return createWebhookBounded(
+      this.pendingCreates,
       channelId,
       () => forum.createWebhook({ name: FORUM_WEBHOOK_NAME, reason: REASON }),
       this.client.getClient()?.rest ?? null,

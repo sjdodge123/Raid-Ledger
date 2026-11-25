@@ -1,7 +1,8 @@
 /**
  * ROK-2337 — `ensureWebhook` bounds Discord's `createWebhook` (a throttled
  * create used to hold the bind forever). A webhook that lands after the bind
- * gave up is logged, never deleted; the next bind reuses it (ROK-2296).
+ * gave up is logged, never deleted; the next bind reuses it (ROK-2296). A
+ * retry while that create is still queued joins it instead of POSTing again.
  */
 import { EventEmitter } from 'node:events';
 import { Logger, ServiceUnavailableException } from '@nestjs/common';
@@ -127,6 +128,30 @@ describe('ROK-2337 ensureWebhook — bounded createWebhook', () => {
     expect(retry.value).toBe('h-late');
     expect(t.forum.createWebhook).toHaveBeenCalledTimes(1);
     expect(late.delete).not.toHaveBeenCalled();
+  });
+
+  it('a retry while the timed-out create is still pending joins it, no second POST', async () => {
+    const t = setup();
+    const first = track(t.gw.ensureWebhook('c1', null));
+    await jest.advanceTimersByTimeAsync(FORUM_WEBHOOK_CREATE_TIMEOUT_MS);
+    expect(first.value).toBeInstanceOf(ServiceUnavailableException);
+    const retry = track(t.gw.ensureWebhook('c1', null));
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect(t.forum.createWebhook).toHaveBeenCalledTimes(1);
+    t.land(hook('h-shared'));
+    await jest.advanceTimersByTimeAsync(0);
+    expect(retry.value).toBe('h-shared');
+  });
+
+  it('once the pending create settles, a later bind may create again', async () => {
+    const t = setup();
+    const first = track(t.gw.ensureWebhook('c1', null));
+    t.land(hook('h-one'));
+    await jest.advanceTimersByTimeAsync(0);
+    expect(first.value).toBe('h-one');
+    track(t.gw.ensureWebhook('c1', null)); // h-one was since removed
+    await jest.advanceTimersByTimeAsync(0);
+    expect(t.forum.createWebhook).toHaveBeenCalledTimes(2);
   });
 
   it("logs discord.js rate limits on this channel's webhook route", async () => {
