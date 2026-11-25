@@ -21,7 +21,7 @@ import {
   buildAdjustNotificationsUrl,
   buildNotificationSettingsUrl,
 } from './adjust-notifications-url.helpers';
-import { hubProposalDiscordText } from './notification-embed.hub-proposal';
+import { notificationDiscordText } from './notification-embed.hub-proposal';
 
 interface NotificationEmbedInput {
   notificationId: string;
@@ -51,7 +51,7 @@ export class DiscordNotificationEmbedService {
   ): Promise<EmbedResult> {
     const emoji = getEmojiForType(input.type);
     const categoryLabel = getTypeLabel(input.type);
-    const text = hubProposalDiscordText(input);
+    const text = notificationDiscordText(input);
     const embed = createDmEmbed({
       state: notificationEmbedState(input.type),
       communityName,
