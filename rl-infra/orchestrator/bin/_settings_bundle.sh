@@ -49,15 +49,20 @@ settings_bundle::payload() {
         printf '{}'
         return 0
     fi
+    # A wrong key passes the PKCS#7 padding check ~1 time in 256, so openssl
+    # can exit 0 with garbage. NULs are stripped inside the substitution (bash
+    # >= 4.4 otherwise prints "ignored null byte" to stderr, which corrupts a
+    # 2>&1 capture); the exit status stays openssl's, not tr's.
     plaintext=$(openssl enc -d -aes-256-cbc -pbkdf2 -salt \
-        -pass env:RL_SETTINGS_BUNDLE_KEY -in "$path" 2>/dev/null) || plaintext=""
+        -pass env:RL_SETTINGS_BUNDLE_KEY -in "$path" 2>/dev/null | tr -d '\000'
+        exit "${PIPESTATUS[0]}") || plaintext=""
     if [[ -z "$plaintext" ]]; then
         SETTINGS_BUNDLE_WARNING="settings bundle at ${path} could not be decrypted (wrong RL_SETTINGS_BUNDLE_KEY or corrupt file) — shared API keys NOT applied"
         printf '{}'
         return 0
     fi
     if ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$plaintext"; then
-        SETTINGS_BUNDLE_WARNING="settings bundle at ${path} did not decrypt to a JSON object — shared API keys NOT applied"
+        SETTINGS_BUNDLE_WARNING="settings bundle at ${path} did not decrypt to a JSON object (most likely a wrong RL_SETTINGS_BUNDLE_KEY; else a bad push) — shared API keys NOT applied"
         printf '{}'
         return 0
     fi
