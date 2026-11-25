@@ -153,6 +153,43 @@ if [[ -n "$RESOLVE_FN" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# TDB:3196 — a sentinel mismatch reports only the mismatch and a line count,
+# never payload content (one MOTD line shifts RL_ADMIN_PASSWORD onto line 4).
+# ---------------------------------------------------------------------------
+READ_FN=$(awk '
+    /^read_infra_env\(\)/ { in_fn=1; print; next }
+    in_fn && /^}/ { print; in_fn=0; exit }
+    in_fn { print }
+' "$SYNC_SCRIPT")
+if [[ -z "$READ_FN" ]]; then
+    fail "TDB:3196: cannot find read_infra_env() function"
+else
+    READ_SHIM=$(mktemp -t rl-read-infra.XXXXXX)
+    {
+        echo "set -euo pipefail"
+        echo "fake_ssh() { printf '%s\n' 'Welcome to rl-infra' 'jwt-FAKE-SECRET' 'example.invalid' 'admin-FAKE-PASSWORD' '__RL_EOF__'; }"
+        echo "SSH_TO_VM=(fake_ssh)"
+        echo "$READ_FN"
+        echo 'read_infra_env'
+        echo 'echo "rc=$INFRA_ENV_READ_RC"'
+        echo 'echo "stderr=$INFRA_ENV_READ_STDERR"'
+    } > "$READ_SHIM"
+    read_out=$(bash "$READ_SHIM" 2>&1 || true)
+    rm -f "$READ_SHIM"
+    if grep -q '^rc=8$' <<<"$read_out"; then pass; else
+        fail "TDB:3196: MOTD-shifted payload must set rc=8 (got: $read_out)"
+    fi
+    if grep -q 'FAKE' <<<"$read_out"; then
+        fail "TDB:3196: sentinel-mismatch message leaked payload content: $(grep 'FAKE' <<<"$read_out")"
+    else
+        pass
+    fi
+    if grep -q 'sentinel mismatch on line 4; got 5 line(s), expected 4' <<<"$read_out"; then pass; else
+        fail "TDB:3196: expected the mismatch + line count, got: $read_out"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 echo "==="
 echo "sync-local-to-env.test.sh: $PASS passed, $FAIL failed"
 if (( FAIL > 0 )); then
