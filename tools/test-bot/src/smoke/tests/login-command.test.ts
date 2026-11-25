@@ -88,4 +88,49 @@ const loginReturnsPrivateSigninLink: SmokeTest = {
   },
 };
 
-export const loginCommandTests: SmokeTest[] = [loginReturnsPrivateSigninLink];
+interface SigninCodeStart {
+  code?: string;
+}
+
+interface CodeButton {
+  custom_id?: string;
+  url?: string;
+}
+
+/**
+ * ROK-2370: `/login code:<code>` for a live code replies privately with ONE
+ * "Yes, sign me in" button (`signin-code:approve:<CODE>`) and no link. The
+ * button itself cannot be clicked by a bot — the api integration spec covers it.
+ */
+const loginCodeReturnsConfirmCard: SmokeTest = {
+  name: "/login code: replies privately with one sign-in code approve button",
+  category: "command",
+  async run(ctx) {
+    await ctx.api.delete(`/admin/test/login-rate-limit/${ctx.testBotDiscordId}`);
+    const start = await ctx.api.post<SigninCodeStart>("/auth/discord/signin-code", {});
+    if (!start.code) throw new Error("/auth/discord/signin-code returned no code");
+    const res = await ctx.api.post<LoginResponse>("/admin/test/slash-command", {
+      commandName: "login",
+      options: { code: start.code },
+      discordUserId: ctx.testBotDiscordId,
+      guildId: ctx.config.guildId,
+      channelId: ctx.defaultChannelId,
+    });
+    if (res.ephemeral !== true) {
+      throw new Error(`/login code: reply must be ephemeral, got ${describeReply(res)}`);
+    }
+    const buttons = (res.components?.flatMap((r) => r.components ?? []) ?? []) as CodeButton[];
+    const ids = buttons.map((b) => b.custom_id ?? "");
+    if (ids.length !== 1 || ids[0] !== `signin-code:approve:${start.code}` || buttons[0]?.url) {
+      throw new Error(`/login code: expected one approve button, got ${describeReply(res)}`);
+    }
+    if (res.content?.includes("/signin-link")) {
+      throw new Error(`/login code: must not carry a link, got ${describeReply(res)}`);
+    }
+  },
+};
+
+export const loginCommandTests: SmokeTest[] = [
+  loginReturnsPrivateSigninLink,
+  loginCodeReturnsConfirmCard,
+];
