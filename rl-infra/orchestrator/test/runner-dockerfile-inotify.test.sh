@@ -61,7 +61,21 @@ test_dockerfile_inotify_in_apt_install() {
     fi
 }
 
+# TDB 2026-10 (validate-migrations on a runner): git refuses /workspace
+# ("dubious ownership") because Mutagen syncs it under another uid. The image
+# must trust exactly /workspace system-wide — never `*`.
+test_dockerfile_trusts_workspace_for_git() {
+    CURRENT_TEST_NAME="runner Dockerfile marks /workspace (only) as a git safe.directory"
+    [[ -f "$DOCKERFILE" ]] || return
+    local hits
+    hits=$(grep -cE '^RUN git config --system --add safe\.directory /workspace$' "$DOCKERFILE")
+    assert_eq "$hits" "1" "one RUN line sets safe.directory /workspace"
+    hits=$(grep -c "safe.directory '\?\*" "$DOCKERFILE")
+    assert_eq "$hits" "0" "no wildcard safe.directory"
+}
+
 run_test "ac10-inotify-present" test_dockerfile_has_inotify_tools
+run_test "git-safe-directory-workspace" test_dockerfile_trusts_workspace_for_git
 run_test "ac10-inotify-in-apt-block" test_dockerfile_inotify_in_apt_install
 
 print_test_summary
