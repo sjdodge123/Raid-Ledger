@@ -11,7 +11,13 @@ function harness() {
   const out: string[] = [];
   const err: string[] = [];
   const query = jest.fn(() => Promise.reject(new Error('query issued')));
-  const runner: SqlRunner = (_env, fn) => fn(query as unknown as Sql);
+  // `stats` reads inside sql.begin(...) (one snapshot); the fake runs the
+  // callback with the same rejecting query so "query issued" still surfaces.
+  const begin = jest.fn((_options: string, cb: (tx: unknown) => unknown) =>
+    cb(query),
+  );
+  const sql = Object.assign(query, { begin });
+  const runner: SqlRunner = (_env, fn) => fn(sql as unknown as Sql);
   const io = {
     env: {},
     out: (l: string) => out.push(l),
