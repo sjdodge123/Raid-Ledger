@@ -45,7 +45,13 @@ describe('lfg_group_messages schema (ROK-1454 D4)', () => {
       expect(idx?.config.unique).toBe(true);
       expect(
         idx?.config.columns.map((c) => (c as { name: string }).name),
-      ).toEqual(['game_id']);
+      ).toEqual(['game_id', 'group_key']);
+    });
+
+    it("stores group_key NOT NULL with a default, so '' is the whole-game group (ROK-2352)", () => {
+      const column = config.columns.find((c) => c.name === 'group_key');
+      expect(column?.notNull).toBe(true);
+      expect(column?.hasDefault).toBe(true);
     });
 
     it('is PARTIAL on state = open, so a closed group can post again', () => {
