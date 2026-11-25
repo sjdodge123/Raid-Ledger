@@ -86,10 +86,7 @@ describe('RelayBootstrapService — boot registration (AC 2)', () => {
 
   it.each([
     ['RELAY_HUB_URL is unset', () => delete process.env.RELAY_HUB_URL],
-    [
-      'RELAY_HUB_URL is invalid',
-      () => (process.env.RELAY_HUB_URL = 'ftp://x'),
-    ],
+    ['RELAY_HUB_URL is invalid', () => (process.env.RELAY_HUB_URL = 'ftp://x')],
     [
       "relay_enabled is 'false'",
       () => store.set(SETTING_KEYS.RELAY_ENABLED, 'false'),
