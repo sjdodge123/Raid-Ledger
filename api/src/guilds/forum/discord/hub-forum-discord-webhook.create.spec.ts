@@ -146,6 +146,7 @@ describe('ROK-2337 ensureWebhook — bounded createWebhook', () => {
   it('once the pending create settles, a later bind may create again', async () => {
     const t = setup();
     const first = track(t.gw.ensureWebhook('c1', null));
+    await jest.advanceTimersByTimeAsync(0); // reach the createWebhook call
     t.land(hook('h-one'));
     await jest.advanceTimersByTimeAsync(0);
     expect(first.value).toBe('h-one');
