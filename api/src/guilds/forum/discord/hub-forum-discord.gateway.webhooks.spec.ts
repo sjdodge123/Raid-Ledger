@@ -163,7 +163,9 @@ describe('ROK-2296 deleteOwnWebhooks — last-unbind cleanup is best-effort', ()
 describe('ROK-2337 discardCreatedForum — a timed-out bind drops its new forum', () => {
   it('deletes the channel and forgets its pending webhook create', async () => {
     const t = setup([]);
-    t.forum.createWebhook.mockImplementation(() => new Promise(() => undefined));
+    t.forum.createWebhook.mockImplementation(
+      () => new Promise(() => undefined),
+    );
     const pending = t.gw.ensureWebhook('c1', null);
     void pending.catch(() => undefined);
     await new Promise((r) => setImmediate(r));
@@ -177,7 +179,9 @@ describe('ROK-2337 discardCreatedForum — a timed-out bind drops its new forum'
 
   it('resolves (the 503 still surfaces) when Discord refuses the delete', async () => {
     const t = setup([]);
-    t.forum.delete.mockRejectedValueOnce(new Error('50013 Missing Permissions'));
+    t.forum.delete.mockRejectedValueOnce(
+      new Error('50013 Missing Permissions'),
+    );
     await expect(t.gw.discardCreatedForum('c1')).resolves.toBeUndefined();
   });
 });
