@@ -28,7 +28,12 @@ export class CrosswalkMatcherService {
     @Inject(CrosswalkLock) private readonly lock: Pick<CrosswalkLock, 'run'>,
   ) {}
 
-  /** One locked transaction per item, sequentially; results keep item order. */
+  /**
+   * One locked transaction per item, sequentially; results keep item order.
+   * A throwing item (FK violation, deadlock) aborts the rest of the batch:
+   * earlier items stay committed and the caller gets only the exception.
+   * RH-4b settles how that maps to per-item results (MINOR-4, ROK-1673).
+   */
   async matchBatch(
     instanceId: string,
     items: readonly CrosswalkContributionItem[],
