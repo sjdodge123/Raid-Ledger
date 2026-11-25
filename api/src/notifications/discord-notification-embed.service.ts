@@ -21,7 +21,7 @@ import {
   buildAdjustNotificationsUrl,
   buildNotificationSettingsUrl,
 } from './adjust-notifications-url.helpers';
-import { notificationDiscordText } from './notification-embed.hub-proposal';
+import { notificationDiscordText } from './notification-embed.discord-text';
 
 interface NotificationEmbedInput {
   notificationId: string;

@@ -12,6 +12,7 @@
  */
 import type { EmbedBuilder } from 'discord.js';
 import { toStr } from './notification-embed.helpers';
+import { neutraliseMaskedLinks } from './notification-embed.discord-text';
 
 /** Everything the invite DM renders. */
 export interface LfgInviteDmInput {
@@ -72,7 +73,8 @@ export function applyLfgInviteEmbed(
   const memberCount = Number(payload.memberCount);
   embed.setDescription(
     buildLfgInviteLines({
-      gameName: toStr(payload.gameName),
+      // The game name is user text; the `[Join the group]` link is the bot's.
+      gameName: neutraliseMaskedLinks(toStr(payload.gameName)),
       gameSlug: toStr(payload.gameSlug),
       memberCount: Number.isFinite(memberCount) ? memberCount : 0,
       url: typeof payload.url === 'string' ? payload.url : null,
