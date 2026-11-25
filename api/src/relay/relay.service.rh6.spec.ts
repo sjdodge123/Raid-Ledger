@@ -263,3 +263,59 @@ describeRelayHubUrl();
 describeRegisterRh6();
 describeRegisterResultRh6();
 describeHeartbeatRh6();
+describeRegisterRaceRh6();
+
+/** Hold the next fetch open until the returned release() is called. */
+function holdFetch(): (res: Partial<Response>) => void {
+  let release: (res: Partial<Response>) => void = () => undefined;
+  mockFetch.mockReturnValueOnce(
+    new Promise<Partial<Response>>((resolve) => (release = resolve)),
+  );
+  return (res) => release(res);
+}
+
+/** Let pending settings reads and writes settle. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
+}
+
+function describeRegisterRaceRh6() {
+  describe('register vs admin actions (RH-6 review fix)', () => {
+    it.each([
+      ['disconnect()', () => service.disconnect()],
+      [
+        'updateSettings({enabled:false})',
+        () => service.updateSettings({ enabled: false }),
+      ],
+    ])('a late 2xx after %s writes no token and no flag', async (_l, act) => {
+      const release = holdFetch();
+      const pending = service.register();
+      await settle();
+      await act();
+      release(reply(201, REGISTERED));
+      const status = await pending;
+      expect(status.connected).toBe(false);
+      expect(store.has(SETTING_KEYS.RELAY_TOKEN)).toBe(false);
+      expect(store.get(SETTING_KEYS.RELAY_ENABLED)).toBe('false');
+    });
+
+    it('a second register() while one is in flight shares it (one hub call)', async () => {
+      const release = holdFetch();
+      const first = service.register();
+      const second = service.register();
+      await settle();
+      release(reply(201, REGISTERED));
+      const [a, b] = await Promise.all([first, second]);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(a).toEqual(b);
+      expect(a.connected).toBe(true);
+    });
+
+    it('a register after the in-flight one finished calls the hub again', async () => {
+      mockFetch.mockResolvedValue(reply(201, REGISTERED));
+      await service.register();
+      await service.register();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+}

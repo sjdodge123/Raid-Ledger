@@ -50,6 +50,10 @@ export class RelayService {
   private heartbeatFailures = 0;
   private warnedInvalidEnv = false;
   private onUnregisteredTick: (() => Promise<void>) | null = null;
+  /** The one registration in flight; bootstrap and Connect share it. */
+  private inFlight: Promise<RelayStatus> | null = null;
+  /** Bumped by disconnect / disable so a late hub reply writes nothing. */
+  private generation = 0;
 
   constructor(
     private readonly settingsService: SettingsService,
@@ -102,6 +106,7 @@ export class RelayService {
 
   /** Update relay settings (enabled / relay URL). */
   async updateSettings(settings: Partial<RelaySettings>): Promise<void> {
+    if (settings.enabled === false) this.invalidatePending();
     if (settings.enabled !== undefined) {
       await this.settingsService.set(
         SETTING_KEYS.RELAY_ENABLED,
@@ -114,10 +119,34 @@ export class RelayService {
   }
 
   /**
-   * Register this instance with the relay hub. `relay_enabled='true'` is
-   * written only after a 2xx whose body parses, and after the token (AC 3-4).
+   * Register this instance with the relay hub. A call made while one is in
+   * flight shares it, so the hub sees one register.
    */
-  async register(): Promise<RelayStatus> {
+  register(): Promise<RelayStatus> {
+    if (this.inFlight) return this.inFlight;
+    const attempt = this.attemptRegister(this.generation).finally(() => {
+      if (this.inFlight === attempt) this.inFlight = null;
+    });
+    this.inFlight = attempt;
+    return attempt;
+  }
+
+  /** Deregister from the relay hub and clear token. */
+  async disconnect(): Promise<void> {
+    this.invalidatePending();
+    await this.notifyDisconnect();
+    await this.settingsService.set(SETTING_KEYS.RELAY_ENABLED, 'false');
+    await this.settingsService.delete(SETTING_KEYS.RELAY_TOKEN);
+    this.trustTier = null;
+    this.logger.log('Disconnected from relay hub');
+  }
+
+  /**
+   * One hub registration. `relay_enabled='true'` is written only after a
+   * 2xx whose body parses, after the token (AC 3-4), and only if no admin
+   * disconnect / disable happened since the attempt started.
+   */
+  private async attemptRegister(generation: number): Promise<RelayStatus> {
     const relayUrl = await this.getRelayUrl();
     const instanceId = await this.ensureInstanceId();
     const result = await registerWithHub(
@@ -130,22 +159,17 @@ export class RelayService {
       this.logger.warn(`Relay registration failed: ${message}`);
       return errorStatus(relayUrl, instanceId, message, await this.isEnabled());
     }
+    if (generation !== this.generation)
+      return this.cancelled(relayUrl, instanceId);
     await this.settingsService.set(SETTING_KEYS.RELAY_TOKEN, result.data.token);
+    if (generation !== this.generation)
+      return this.cancelled(relayUrl, instanceId);
     await this.settingsService.set(SETTING_KEYS.RELAY_ENABLED, 'true');
     this.trustTier = result.data.trustTier;
     this.revoked = false;
     this.heartbeatFailures = 0;
     this.logger.log(`Registered with relay hub (${result.data.trustTier})`);
     return connectedStatus(relayUrl, instanceId, result.data.trustTier);
-  }
-
-  /** Deregister from the relay hub and clear token. */
-  async disconnect(): Promise<void> {
-    await this.notifyDisconnect();
-    await this.settingsService.set(SETTING_KEYS.RELAY_ENABLED, 'false');
-    await this.settingsService.delete(SETTING_KEYS.RELAY_TOKEN);
-    this.trustTier = null;
-    this.logger.log('Disconnected from relay hub');
   }
 
   /** Submit user feedback to the relay hub. */
@@ -188,6 +212,22 @@ export class RelayService {
   }
 
   // ─── Private helpers ──────────────────────────────────────────
+
+  /** Drop the in-flight attempt; its late reply must write nothing. */
+  private invalidatePending(): void {
+    this.generation += 1;
+    this.inFlight = null;
+  }
+
+  /** Status for an attempt an admin disconnect / disable overtook. */
+  private async cancelled(
+    relayUrl: string,
+    instanceId: string,
+  ): Promise<RelayStatus> {
+    this.logger.log('Relay registration discarded: relay was disconnected');
+    const message = 'Registration cancelled: relay was disconnected';
+    return errorStatus(relayUrl, instanceId, message, await this.isEnabled());
+  }
 
   private async isEnabled(): Promise<boolean> {
     const value = await this.settingsService.get(SETTING_KEYS.RELAY_ENABLED);
