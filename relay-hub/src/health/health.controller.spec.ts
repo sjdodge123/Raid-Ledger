@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import postgres from 'postgres';
 import * as schema from '../drizzle/schema';
 import { EpochService } from './epoch.service';
-import { HealthController } from './health.controller';
+import { HealthController, READY_TIMEOUT_MS } from './health.controller';
 
 const FIXTURE_PATH = join(
   __dirname,
@@ -75,5 +75,57 @@ describe('HealthController', () => {
     expect(err instanceof HttpException && err.getResponse()).toEqual({
       status: 'unavailable',
     });
+  });
+});
+
+/** A client whose queries hang until cancelled (cancel rejects, as postgres.js does). */
+function hungSql() {
+  const real = postgres('postgres://x:y@127.0.0.1:1/none', { max: 1 });
+  const issued: { cancel: jest.Mock }[] = [];
+  const sql = new Proxy(real, {
+    apply() {
+      let fail: (err: Error) => void = () => undefined;
+      const query = Object.assign(
+        new Promise<never>((_resolve, reject) => (fail = reject)),
+        { cancel: jest.fn(() => fail(new Error('57014 canceled'))) },
+      );
+      issued.push(query);
+      return query;
+    },
+  });
+  return { sql, issued, real };
+}
+
+describe('HealthController ready single-flight', () => {
+  const { sql, issued, real } = hungSql();
+  const epoch = new EpochService(drizzle(sql, { schema }));
+  const controller = new HealthController(sql, epoch);
+
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  afterAll(async () => {
+    await real.end({ timeout: 1 });
+  });
+
+  it('shares one hung query between probes and cancels it on timeout', async () => {
+    const probes = [controller.ready(), controller.ready(), controller.ready()];
+    const outcomes = Promise.allSettled(probes);
+    expect(issued).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(READY_TIMEOUT_MS);
+    const statuses = (await outcomes).map((o) =>
+      o.status === 'rejected' && o.reason instanceof HttpException
+        ? o.reason.getStatus()
+        : o.status,
+    );
+    expect(statuses).toEqual([503, 503, 503]);
+    expect(issued[0]?.cancel).toHaveBeenCalled();
+  });
+
+  it('starts a fresh query once the cancelled one has settled', async () => {
+    const before = issued.length;
+    const probe = controller.ready().catch((e: unknown) => e);
+    expect(issued).toHaveLength(before + 1);
+    await jest.advanceTimersByTimeAsync(READY_TIMEOUT_MS);
+    expect(await probe).toBeInstanceOf(HttpException);
   });
 });
