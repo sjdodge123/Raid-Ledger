@@ -59,6 +59,28 @@ export async function pollSigninCode(deviceSecret: string): Promise<SigninCodePo
     return parsed.success ? parsed.data : { status: 'retry' };
 }
 
+/** The display name (else username) in an `/auth/me` body, or null. */
+function accountName(body: unknown): string | null {
+    if (typeof body !== 'object' || body === null) return null;
+    if ('displayName' in body && typeof body.displayName === 'string' && body.displayName) return body.displayName;
+    return 'username' in body && typeof body.username === 'string' && body.username ? body.username : null;
+}
+
+/**
+ * Who an approved code signed in as, WITHOUT adopting the session (no token
+ * stored, no user published) — the panel names the account before it hands
+ * over. `null` on any failure; never rejects.
+ */
+export async function fetchSigninCodeAccountName(accessToken: string): Promise<string | null> {
+    try {
+        const res = await nativeFetch(`${API_BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (!res.ok) return null;
+        return accountName(await res.json());
+    } catch {
+        return null;
+    }
+}
+
 /** `m:ss` for a non-negative millisecond count (the panel's countdown). */
 export function formatCountdown(ms: number): string {
     const total = Math.max(0, Math.ceil(ms / 1000));

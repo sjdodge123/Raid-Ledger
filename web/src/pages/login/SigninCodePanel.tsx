@@ -6,46 +6,21 @@
  * when the member taps "Yes, sign me in" in Discord.
  */
 import type { JSX } from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { useAuth, type User } from '../../hooks/use-auth';
-import { clearSilentGuard, setAuthMethod } from '../../lib/api/silent-reauth';
+import { useEffect, useRef } from 'react';
+import type { User } from '../../hooks/use-auth';
+import { useCodeSignIn } from './use-code-sign-in';
 import { useSigninCode } from './use-signin-code';
 import {
     EXPIRED_COPY, SIGNIN_FAILED_COPY, START_FAILED_COPY,
     SigninCodeMessage, SigninCodeSignedIn, SigninCodeWaiting,
 } from './signin-code-panel-parts';
 
-/** How long the "Signed in as …" line shows before `onSignedIn` routes away. */
-export const SIGNED_IN_HOLD_MS = 1500;
-
-type SignIn = { phase: 'none' } | { phase: 'pending' } | { phase: 'failed' } | { phase: 'done'; user: User };
-
-/** Adopt the approved session the way `/signin-link` does, then hold briefly and hand over. */
-function useCodeSignIn(onSignedIn: (user: User) => void): {
-    signIn: SignIn; adopt: (token: string) => void; signOut: () => void;
-} {
-    const { login, logout } = useAuth();
-    const [signIn, setSignIn] = useState<SignIn>({ phase: 'none' });
-    const adopt = (token: string): void => {
-        setSignIn({ phase: 'pending' });
-        // 'magic', never 'discord': a 'discord' marker arms the silent OAuth bounce.
-        setAuthMethod('magic');
-        clearSilentGuard();
-        void login(token).then((user) => setSignIn(user ? { phase: 'done', user } : { phase: 'failed' }));
-    };
-    useEffect(() => {
-        if (signIn.phase !== 'done') return undefined;
-        const id = window.setTimeout(() => onSignedIn(signIn.user), SIGNED_IN_HOLD_MS);
-        return () => window.clearTimeout(id);
-    }, [signIn, onSignedIn]);
-    const signOut = (): void => { setSignIn({ phase: 'none' }); logout(); };
-    return { signIn, adopt, signOut };
-}
+export { SIGNED_IN_HOLD_MS } from './use-code-sign-in';
 
 /**
  * The code panel. `onSignedIn` receives the signed-in user once the success
- * line has shown — the login page routes from there (and L3b records the
- * "last used" marker there).
+ * line has shown and the session is adopted — the login page records the
+ * "last used" marker and routes from there.
  */
 export function SigninCodePanel({ onSignedIn }: { onSignedIn: (user: User) => void }): JSX.Element {
     const { signIn, adopt, signOut } = useCodeSignIn(onSignedIn);
@@ -57,8 +32,8 @@ export function SigninCodePanel({ onSignedIn }: { onSignedIn: (user: User) => vo
         void start();
     }, [state.phase, start]);
 
-    if (signIn.phase === 'done') {
-        return <SigninCodeSignedIn name={signIn.user.displayName ?? signIn.user.username} onSignOut={signOut} />;
+    if (signIn.phase === 'held') {
+        return <SigninCodeSignedIn name={signIn.name} onSignOut={signOut} />;
     }
     if (signIn.phase === 'failed') {
         return <SigninCodeMessage message={SIGNIN_FAILED_COPY} action="Get a new code" onAction={() => { signOut(); void start(); }} alert />;

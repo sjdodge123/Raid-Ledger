@@ -4,6 +4,7 @@
  * 'discord-app-code' once the "Signed in as …" hold hands over.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useState, type JSX } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import type { SystemStatusDto } from '@raid-ledger/contract';
@@ -78,4 +79,24 @@ describe('LoginPage — ROK-2370 last-used marker writes', () => {
         await waitFor(() => expect(markerMethod(), 'code sign-in must write the marker').toBe('discord-app-code'),
             { timeout: 4000 });
     });
+
+    it('a code sign-in records the marker even when publishing the user swaps the login page out (as RootRedirect does on /)', async () => {
+        let publish: () => void = () => undefined;
+        login.mockImplementation(async () => { publish(); return USER; });
+        function Root(): JSX.Element {
+            const [authed, setAuthed] = useState(false);
+            publish = () => setAuthed(true);
+            return authed ? <p>calendar</p> : <LoginPage />;
+        }
+        vi.mocked(pollSigninCode).mockResolvedValue({
+            status: 'approved', session: { access_token: 'code.jwt' },
+        } as Awaited<ReturnType<typeof pollSigninCode>>);
+        mockStatus({ discordSigninCode: true, authProviders: [discordProvider] });
+        render(<BrowserRouter><Root /></BrowserRouter>);
+        fireEvent.click(screen.getByRole('button', { name: 'Sign in not working? Try another way' }));
+
+        await waitFor(() => expect(login).toHaveBeenCalledWith('code.jwt'), { timeout: 6000 });
+        await waitFor(() => expect(markerMethod(), 'code sign-in must write the marker though the page unmounted')
+            .toBe('discord-app-code'));
+    }, 10_000);
 });
