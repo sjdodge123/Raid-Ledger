@@ -116,7 +116,11 @@ on the theme surface, so the light family's contrast bumps are wrong there. Put
 under every light scheme. Consumer: `event-card.tsx` only — the badges that sit ON the cover art; a
 chip on the themed surface never carries it (ROK-1472). Guarded by `web/src/styles/badge-overlay.test.ts`
 and `web/src/styles/badge-overlay-art-only.guard.test.ts`; the first also fails when a cover badge paints a light-repainted
-class with no restore here (the `SeriesBadge` indigo, the status badge's emerald / yellow `-500`).
+class with no restore here (the `SeriesBadge` indigo, the Game Time cyan). A cover badge spelled with an
+accent token (the status badge's `STATUS_STYLES`: `bg-success/20 text-success border-success/30`, and the
+`warning` / `danger` equivalents) needs no class restore: the same block re-declares `--color-success` /
+`-warning` / `-danger` on `.badge-overlay` itself with the dark `@theme` values, so every alpha and every
+descendant on the art keeps the dark shade (TDB:2480; the test fails if a pinned value drifts from `@theme`).
 
 ---
 
