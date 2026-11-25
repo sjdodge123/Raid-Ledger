@@ -6,7 +6,11 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const mockSpawn = vi.fn((..._a: unknown[]) => ({ pid: 55_555, unref: vi.fn() }));
+type ChildStub = { pid: number | undefined; unref: () => void; on: (ev: string, cb: (e: Error) => void) => void };
+const childHandlers = new Map<string, (e: Error) => void>();
+const mockSpawn = vi.fn(
+  (..._a: unknown[]): ChildStub => ({ pid: 55_555, unref: vi.fn(), on: (ev, cb) => void childHandlers.set(ev, cb) }),
+);
 vi.mock('node:child_process', () => ({ spawn: (...a: unknown[]) => mockSpawn(...a) }));
 
 import {
@@ -67,6 +71,7 @@ beforeEach(() => {
   homeDir = mkdtempSync(join(tmpdir(), 'rl-localtask-'));
   process.env.HOME = homeDir;
   mockSpawn.mockClear();
+  childHandlers.clear();
 });
 afterEach(() => {
   process.env.HOME = prevHome;
@@ -293,5 +298,81 @@ describe('spawnLocalRunner', () => {
     expect(raw?.pid).toBe(55_555);
     expect(raw?.args_summary).toBe('rok-test');
     expect(existsSync(localLogPath(id))).toBe(true);
+  });
+});
+
+describe('TDB:3242 — a spawn with no pid never signals pid <= 0', () => {
+  it('isPidAlive is false for pid -1 and 0', () => {
+    expect(isPidAlive(-1)).toBe(false);
+    expect(isPidAlive(0)).toBe(false);
+  });
+
+  it('a running task with pid -1 reads as process_died, not running', () => {
+    const t = baseTask({ pid: -1 });
+    writeLocalTask(t);
+    expect(readLocalTask(t.task_id).error).toBe('process_died');
+  });
+
+  it('cancelLocalTask never calls process.kill on pid <= 0', async () => {
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    try {
+      for (const pid of [-1, 0]) {
+        const t = baseTask({ pid });
+        writeLocalTask(t);
+        await cancelLocalTask(t.task_id, 'x');
+        expect(readRawLocalTask(t.task_id)?.mcp_runtime_status).toBe('cancelled');
+      }
+      expect(kill.mock.calls.filter(([p]) => p <= 0)).toEqual([]);
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
+  it("a spawn 'error' writes a terminal failed record instead of leaving it running", () => {
+    mockSpawn.mockImplementationOnce(() => ({
+      pid: undefined,
+      unref: vi.fn(),
+      on: (ev, cb) => void childHandlers.set(ev, cb),
+    }));
+    const id = newLocalTaskId();
+    const out = spawnLocalRunner(id, 'rl_env_deploy', { slug: 'rok-test' }, 'rok-test');
+    expect(out.pid).toBe(-1);
+    const onError = childHandlers.get('error');
+    expect(onError, 'spawnLocalRunner must attach an error listener').toBeTypeOf('function');
+    onError?.(new Error('spawn npx ENOENT'));
+    const raw = readRawLocalTask(id);
+    expect(raw?.mcp_runtime_status).toBe('failed');
+    expect(raw?.failed_step).toBe('spawn');
+    expect(raw?.message).toContain('spawn npx ENOENT');
+  });
+
+  it("attaches the 'error' listener before the first task-record write", () => {
+    const id = newLocalTaskId();
+    let recordAtAttach: unknown = 'not attached';
+    mockSpawn.mockImplementationOnce(() => ({
+      pid: undefined,
+      unref: vi.fn(),
+      on: (ev, cb) => {
+        if (ev === 'error') recordAtAttach = readRawLocalTask(id);
+        childHandlers.set(ev, cb);
+      },
+    }));
+    spawnLocalRunner(id, 'rl_env_deploy', { slug: 'rok-test' }, 'rok-test');
+    expect(recordAtAttach, "the 'error' listener must exist before the record is written").toBeNull();
+  });
+
+  it("a spawn 'error' whose record write fails does not throw out of the handler", () => {
+    mockSpawn.mockImplementationOnce(() => ({
+      pid: undefined,
+      unref: vi.fn(),
+      on: (ev, cb) => void childHandlers.set(ev, cb),
+    }));
+    spawnLocalRunner(newLocalTaskId(), 'rl_env_deploy', { slug: 'rok-test' }, 'rok-test');
+    const onError = childHandlers.get('error');
+    expect(onError).toBeTypeOf('function');
+    const fileAsHome = join(homeDir, 'not-a-dir');
+    writeFileSync(fileAsHome, 'x');
+    process.env.HOME = fileAsHome; // tasksDir() now sits under a file → mkdir throws ENOTDIR
+    expect(() => onError?.(new Error('spawn npx ENOENT'))).not.toThrow();
   });
 });
