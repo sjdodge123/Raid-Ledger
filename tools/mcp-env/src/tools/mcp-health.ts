@@ -1,20 +1,20 @@
-import { execFile } from 'node:child_process';
-import { access, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { PROJECT_DIR } from '../config.js';
+import { execFile } from "node:child_process";
+import { access, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { PROJECT_DIR } from "../config.js";
 
-export const TOOL_NAME = 'mcp_health';
+export const TOOL_NAME = "mcp_health";
 export const TOOL_DESCRIPTION =
-  'Diagnose the health of locally-developed MCP servers configured in .mcp.json. ' +
-  'Spawns each local server with --self-check to verify its source loads cleanly. ' +
-  'Third-party servers (e.g. @playwright/mcp) are reported as skipped.';
+  "Diagnose the health of locally-developed MCP servers configured in .mcp.json. " +
+  "Spawns each local server with --self-check to verify its source loads cleanly. " +
+  "Third-party servers (e.g. @playwright/mcp) are reported as skipped.";
 
 const SELF_CHECK_TIMEOUT_MS = 3_000;
 
 type HealthStatus =
-  | { status: 'healthy' }
-  | { status: 'unhealthy'; error: string }
-  | { status: 'skipped'; reason: string };
+  | { status: "healthy" }
+  | { status: "unhealthy"; error: string }
+  | { status: "skipped"; reason: string };
 
 export interface McpHealthResult {
   servers: Record<string, HealthStatus>;
@@ -37,16 +37,16 @@ interface McpJsonShape {
  * and anything else is reported as skipped.
  */
 export const KNOWN_ENTRYPOINTS: ReadonlySet<string> = new Set([
-  'tools/mcp-env/src/index.ts',
-  'tools/mcp-discord/src/index.ts',
-  'tools/mcp-rl-fleet/src/index.ts',
+  "tools/mcp-env/src/index.ts",
+  "tools/mcp-discord/src/index.ts",
+  "tools/mcp-rl-fleet/src/index.ts",
 ]);
 
 /** Find a local entrypoint path in args (one starting with `tools/` and ending in .ts/.js/.mjs/.cjs). */
 function findLocalEntrypoint(args: string[]): string | null {
   for (const arg of args) {
-    if (typeof arg !== 'string') continue;
-    if (!arg.startsWith('tools/')) continue;
+    if (typeof arg !== "string") continue;
+    if (!arg.startsWith("tools/")) continue;
     if (/\.(ts|js|mjs|cjs)$/.test(arg)) return arg;
   }
   return null;
@@ -55,7 +55,7 @@ function findLocalEntrypoint(args: string[]): string | null {
 /** Spawn a known entrypoint with --self-check; resolve with a HealthStatus. */
 function probeEntrypoint(entrypoint: string): Promise<HealthStatus> {
   return new Promise((resolve) => {
-    const argv = ['tsx', entrypoint, '--self-check'];
+    const argv = ["--no-install", "tsx", entrypoint, "--self-check"];
     let settled = false;
     const finish = (status: HealthStatus): void => {
       if (settled) return;
@@ -64,14 +64,26 @@ function probeEntrypoint(entrypoint: string): Promise<HealthStatus> {
       resolve(status);
     };
     const timer = setTimeout(() => {
-      finish({ status: 'unhealthy', error: 'timeout (3s) waiting for --self-check' });
+      finish({
+        status: "unhealthy",
+        error: "timeout (3s) waiting for --self-check",
+      });
     }, SELF_CHECK_TIMEOUT_MS);
-    execFile('npx', argv, { timeout: SELF_CHECK_TIMEOUT_MS }, (err, _stdout, stderr) => {
-      if (!err) return finish({ status: 'healthy' });
-      const code = (err as NodeJS.ErrnoException & { code?: number | string }).code;
-      const detail = stderr?.trim() || err.message || 'unknown error';
-      finish({ status: 'unhealthy', error: `exit ${code ?? '?'}: ${detail}` });
-    });
+    execFile(
+      "npx",
+      argv,
+      { timeout: SELF_CHECK_TIMEOUT_MS, cwd: PROJECT_DIR },
+      (err, _stdout, stderr) => {
+        if (!err) return finish({ status: "healthy" });
+        const code = (err as NodeJS.ErrnoException & { code?: number | string })
+          .code;
+        const detail = stderr?.trim() || err.message || "unknown error";
+        finish({
+          status: "unhealthy",
+          error: `exit ${code ?? "?"}: ${detail}`,
+        });
+      },
+    );
   });
 }
 
@@ -80,13 +92,13 @@ async function checkServer(entry: McpServerEntry): Promise<HealthStatus> {
   const entrypoint = findLocalEntrypoint(entry.args);
   if (!entrypoint) {
     return {
-      status: 'skipped',
-      reason: 'third-party server (no local tools/ entrypoint)',
+      status: "skipped",
+      reason: "third-party server (no local tools/ entrypoint)",
     };
   }
   if (!KNOWN_ENTRYPOINTS.has(entrypoint)) {
     return {
-      status: 'skipped',
+      status: "skipped",
       reason: `entrypoint not in the mcp_health allow-list: ${entrypoint}`,
     };
   }
@@ -95,7 +107,7 @@ async function checkServer(entry: McpServerEntry): Promise<HealthStatus> {
     await access(absPath);
   } catch {
     return {
-      status: 'unhealthy',
+      status: "unhealthy",
       error: `entrypoint not found: ${entrypoint}`,
     };
   }
@@ -108,8 +120,8 @@ function buildSummary(servers: Record<string, HealthStatus>): string {
   let unhealthy = 0;
   let skipped = 0;
   for (const status of Object.values(servers)) {
-    if (status.status === 'healthy') healthy++;
-    else if (status.status === 'unhealthy') unhealthy++;
+    if (status.status === "healthy") healthy++;
+    else if (status.status === "unhealthy") unhealthy++;
     else skipped++;
   }
   return `${healthy} healthy, ${unhealthy} unhealthy, ${skipped} skipped`;
@@ -117,8 +129,8 @@ function buildSummary(servers: Record<string, HealthStatus>): string {
 
 /** Probe every server in .mcp.json and return aggregated health. */
 export async function execute(): Promise<McpHealthResult> {
-  const mcpJsonPath = join(PROJECT_DIR, '.mcp.json');
-  const raw = await readFile(mcpJsonPath, 'utf-8');
+  const mcpJsonPath = join(PROJECT_DIR, ".mcp.json");
+  const raw = await readFile(mcpJsonPath, "utf-8");
   const parsed = JSON.parse(raw) as McpJsonShape;
   const entries = Object.entries(parsed.mcpServers ?? {});
   // Probe concurrently — checkServer isolates per-server errors (it resolves,
