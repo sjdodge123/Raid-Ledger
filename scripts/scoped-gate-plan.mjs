@@ -13,7 +13,8 @@
 // needs checking); exit 3 + the refusal on stderr when --scoped is not enough.
 //
 // Targets: api | web | smoke (scripts/smoke/tsconfig.typecheck.json) |
-// scripts (shell parse + scripts/*.spec.mjs) | tool:<name> (tools/<name>).
+// scripts (shell parse + scripts/*.spec.mjs + the scripts/test/run-all.sh
+// harnesses, as CI's scripts-tests job runs them) | tool:<name> (tools/<name>).
 
 /** Signals that need the full local suite — CLAUDE.md "Escalate to --full". */
 const ESCALATE = [
