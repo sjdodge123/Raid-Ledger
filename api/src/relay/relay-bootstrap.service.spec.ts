@@ -101,6 +101,42 @@ describe('RelayBootstrapService — boot registration (AC 2)', () => {
   });
 });
 
+describe('RelayBootstrapService — token stored without its flag (review fix)', () => {
+  it.each([
+    ['RELAY_HUB_URL set', () => undefined],
+    ['RELAY_HUB_URL unset', () => delete process.env.RELAY_HUB_URL],
+  ])(
+    'writes relay_enabled=true without a hub call (%s)',
+    async (_l, arrange) => {
+      arrange();
+      store.set(SETTING_KEYS.RELAY_TOKEN, 'rlh_x');
+      bootstrap.onApplicationBootstrap();
+      await settle();
+      expect(store.get(SETTING_KEYS.RELAY_ENABLED)).toBe('true');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it("leaves an explicit relay_enabled='false' alone", async () => {
+    store.set(SETTING_KEYS.RELAY_TOKEN, 'rlh_x');
+    store.set(SETTING_KEYS.RELAY_ENABLED, 'false');
+    bootstrap.onApplicationBootstrap();
+    await settle();
+    expect(store.get(SETTING_KEYS.RELAY_ENABLED)).toBe('false');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('recovers on the hourly tick too, then heartbeats', async () => {
+    delete process.env.RELAY_HUB_URL;
+    bootstrap.onApplicationBootstrap();
+    await settle();
+    store.set(SETTING_KEYS.RELAY_TOKEN, 'rlh_x');
+    await relay.handleHeartbeat();
+    expect(store.get(SETTING_KEYS.RELAY_ENABLED)).toBe('true');
+    expect(await relay.isConnected()).toBe(true);
+  });
+});
+
 describe('RelayBootstrapService — retry on the hourly tick (AC 4)', () => {
   it('retries a failed boot registration on the next heartbeat tick', async () => {
     fetchSpy.mockResolvedValueOnce(new Response('down', { status: 503 }));
