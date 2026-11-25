@@ -137,6 +137,17 @@ assert_target "$FLEET_FNS" 2 9555 "[-slot2] 9555"
 CURRENT_TEST_NAME="TDB:3795 laptop keeps rl-ci-test-<pid> + 8080 even with RL_SLOT set"
 assert_target "$LAPTOP_FNS" - - "[] 8080"
 assert_target "$LAPTOP_FNS" 2 - "[] 8080"
+CURRENT_TEST_NAME="REVIEW-I2: a slot whose port passes 65535 is refused"
+assert_target "$FLEET_FNS" 57445 - "[-slot57445] 65535"
+for big in 57446 99999 123456 99999999999999999999; do
+    big_out=$( (unset RL_CONTAINER_STARTUP_PORT; export RL_SLOT="$big"; eval "$FLEET_FNS"; _container_startup_port) 2>&1 )
+    big_rc=$?
+    if [ "$big_rc" -ne 0 ] && grep -q '65535' <<<"$big_out" && ! grep -qE '^[0-9]+$' <<<"$big_out"; then pass; else
+        fail "RL_SLOT=$big: expected exit 1 and a 65535 error, got rc=$big_rc output '$big_out'"
+    fi
+done
+assert_grep 'host_port=\$\(_container_startup_port\) \|\| return 1' "$VALIDATE_CI_PATH" \
+    "run_container_validation must stop when the port helper refuses"
 CURRENT_TEST_NAME="TDB:3795 container name is per slot"
 assert_grep 'cname="rl-ci-test\$\{slot_sfx\}-\$\$"' "$VALIDATE_CI_PATH" "container name must carry the slot"
 # ROK-2171: docker-guard's build-reclaim removes the previous image only for the

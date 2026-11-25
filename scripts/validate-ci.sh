@@ -1808,7 +1808,7 @@ run_container_validation() {
   # legacy `docker run -p 8080:80` fails with "port is already allocated".
   # Resolution order: see _container_startup_port (fleet ports are per slot).
   local host_port
-  host_port=$(_container_startup_port)
+  host_port=$(_container_startup_port) || return 1
 
   docker build -f Dockerfile.allinone -t rl:ci-test .
   docker run --rm -d \
@@ -1835,15 +1835,23 @@ _container_startup_slot_suffix() {
 }
 
 # Host port: explicit RL_CONTAINER_STARTUP_PORT > fleet 8090+RL_SLOT (8090 when
-# RL_SLOT is unset or non-numeric) > laptop 8080.
+# RL_SLOT is unset or non-numeric) > laptop 8080. Fleet slots 1-4 map to
+# 8091-8094 (checked free of rl-infra bindings); a slot whose port would pass
+# 65535 is refused (exit 1) rather than handed to `docker run -p`.
 _container_startup_port() {
-  local slot="${RL_SLOT:-}"
+  local slot="${RL_SLOT:-}" port
   if [ -n "${RL_CONTAINER_STARTUP_PORT:-}" ]; then
     echo "$RL_CONTAINER_STARTUP_PORT"
   elif [ ! -d /workspace ]; then
     echo 8080
   elif [[ "$slot" =~ ^[0-9]+$ ]]; then
-    echo $((8090 + 10#$slot))
+    # Length check first: a 20-digit slot would overflow bash arithmetic.
+    if [ "${#slot}" -le 5 ]; then port=$((8090 + 10#$slot)); fi
+    if [ -z "${port:-}" ] || [ "$port" -gt 65535 ]; then
+      echo "validate-ci: RL_SLOT=$slot gives a container-startup host port above 65535; set RL_CONTAINER_STARTUP_PORT" >&2
+      return 1
+    fi
+    echo "$port"
   else
     echo 8090
   fi
