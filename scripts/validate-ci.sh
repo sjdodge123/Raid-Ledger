@@ -972,6 +972,26 @@ run_tools_tests() {
 # the root one forces jsdom + the web setup file and is not the right runner.
 run_contract_specs() { (cd "$REPO_ROOT" && npm test -w @raid-ledger/contract); }
 
+# ROK-1669 (RH-2a): the relay-hub workspace — the same checks as ci.yml's
+# `relay-hub` job, in its order. Static (no DB, a few seconds), so it runs in
+# BOTH the static and full gates; its integration spec rides in the full gate.
+run_relay_hub_checks() {
+  (
+    cd "$REPO_ROOT" || exit 1
+    [ -f packages/contract/dist/index.js ] || npm run build -w packages/contract || exit 1
+    node scripts/check-relay-hub-deps.mjs || exit 1
+    npm run lint -w @raid-ledger/relay-hub || exit 1
+    npx tsc --noEmit -p relay-hub/tsconfig.json || exit 1
+    npm run build -w @raid-ledger/relay-hub || exit 1
+    npm test -w @raid-ledger/relay-hub
+  )
+}
+
+# No database yet (RH-2b adds Postgres): one Nest boot over supertest.
+run_relay_hub_integration() {
+  (cd "$REPO_ROOT" && npm run test:integration -w @raid-ledger/relay-hub)
+}
+
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.
 #
 # 75% of the container limit leaves headroom for the node process itself and
@@ -2667,9 +2687,11 @@ run_narrowed_gate() {
     "Lint (all)|" \
     "Bundle size budget|" \
     "Shell parse check (scripts/*.sh)|" \
+    "Relay hub (deps guard, lint, typecheck, build, unit)|" \
     "${unit_step_label}|unit" \
     "Tools unit tests (mcp servers)|" \
     "Integration tests (api)|integration" \
+    "Integration tests (relay-hub)|" \
     "Migration validation|" \
     "Container startup|" \
     "Playwright (desktop + mobile)|" \
@@ -2697,6 +2719,7 @@ run_default_gate() {
     # Static, deterministic check — runs in BOTH static and full gates.
     run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
     run_step "Script node:test specs (scripts/*.spec.mjs)" run_script_node_specs
+    run_step "Relay hub (deps guard, lint, typecheck, build, unit)" run_relay_hub_checks
 
     # Unit + integration are the slow, behavioral checks. In --static (lite
     # gate) mode they're deferred to GitHub CI, which runs them sharded +
@@ -2717,6 +2740,7 @@ run_default_gate() {
       else
         run_step "Integration tests (api)" run_integration_tests
       fi
+      run_step "Integration tests (relay-hub)" run_relay_hub_integration
     fi
 
     # Migration and container checks handle their own SKIPPED/PASS/FAIL
