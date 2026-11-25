@@ -157,16 +157,34 @@ describe('ROK-1366: Replay beforeAddRecordingEvent scrubs recorded URLs', () => 
 });
 
 describe('ROK-1366: replay_event urls are scrubbed by an event processor', () => {
-    it('scrubs token URLs in the replay_event url list', () => {
-        const processors = config.integrations
+    // The SDK always sets replay_id on a replay_event; a segment without one
+    // is dropped (fail closed, TDB L3350), so fixtures must carry it.
+    function runProcessors(event: unknown): unknown {
+        return config.integrations
             .map((integration) => integration.processEvent)
-            .filter((fn): fn is Hook => typeof fn === 'function');
-        const out = processors.reduce((event, fn) => fn(event), {
+            .filter((fn): fn is Hook => typeof fn === 'function')
+            .reduce((acc, fn) => fn(acc), event);
+    }
+
+    it('scrubs token URLs in the replay_event url list', () => {
+        const out = runProcessors({
             type: 'replay_event',
+            replay_id: 'replay-scrub',
             urls: ['https://rl.test/events/42', `/join?intent=signup&token=${SECRET}`],
-        } as unknown);
+        });
+        expect(out).not.toBeNull();
         expectNoSecret(out);
         expect((out as { urls: string[] }).urls[0]).toBe('https://rl.test/events/42');
+        expect((out as { urls: string[] }).urls[1]).toContain('token=[Filtered]');
+    });
+
+    it('drops a replay_event that touched a secret-address route (TDB L3350)', () => {
+        const out = runProcessors({
+            type: 'replay_event',
+            replay_id: 'replay-secret',
+            urls: ['https://rl.test/events/42', `https://rl.test/p/poll/${SECRET}`],
+        });
+        expect(out).toBeNull();
     });
 });
 

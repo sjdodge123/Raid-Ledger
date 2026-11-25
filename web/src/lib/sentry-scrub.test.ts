@@ -29,12 +29,20 @@ describe('ROK-1750: scrubTokenFromUrl — poll share token in the path', () => {
         [`https://rl.test/api/scheduling-polls/share/${TOKEN}`, 'https://rl.test/api/scheduling-polls/share/[Filtered]'],
         [`POST /scheduling-polls/share/${TOKEN}/join`, 'POST /scheduling-polls/share/[Filtered]/join'],
         [`https://rl.test/api/scheduling-polls/share/${TOKEN}/join`, 'https://rl.test/api/scheduling-polls/share/[Filtered]/join'],
+        // ROK-1893: the hub invite page carries the same share token.
+        [`https://rl.test/h/${TOKEN}`, 'https://rl.test/h/[Filtered]'],
+        [`/h/${TOKEN}?x=1`, '/h/[Filtered]?x=1'],
     ])('scrubs %s', (input, expected) => {
         expect(scrubTokenFromUrl(input)).toBe(expected);
     });
 
     it('leaves a short non-token segment alone', () => {
         expect(scrubTokenFromUrl('/p/poll/abc')).toBe('/p/poll/abc');
+    });
+
+    it('leaves the /hubs/ pages alone', () => {
+        const url = '/hubs/AbCdEfGhIjKlMnOpQrSt/gallery';
+        expect(scrubTokenFromUrl(url)).toBe(url);
     });
 });
 
