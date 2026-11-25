@@ -48,6 +48,13 @@ export const RATE_LIMIT_TIERS = {
   // ROK-1965 D8: the coarse per-IP guard on hub Gallery uploads; the real
   // allowance is the per-user 20/hour window (hub-media-upload.limits.ts).
   upload: { ttl: 60_000, limit: isTestEnv ? 999_999 : 30 },
+  // TDB L2886: POST /scheduling-polls DMs every game-interested user (or every
+  // invited member) and posts a channel card per poll, so the global 60/min
+  // let one client fan out 60 polls' worth of DMs a minute. 10/min is far
+  // above any real organiser's pace. Lifted in fleet/demo envs like the
+  // browse tiers: Playwright creates many polls from one IP, and the route is
+  // auth-gated (NotDeactivatedGuard) anyway.
+  pollCreate: { ttl: 60_000, limit: isBrowseRelaxed ? 999_999 : 10 },
 } as const;
 
 export type RateLimitTier = keyof typeof RATE_LIMIT_TIERS;

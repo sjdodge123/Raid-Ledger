@@ -355,10 +355,15 @@ fi
 
 # Background parser. tail -F survives potential log rotation. Lines that match
 # PATTERN_STEP_RESULT get appended to steps[] under flock via state::mutate.
+# `-n +1`, not `-n 0`: the log was truncated above, so reading it from the top
+# is exact, while `-n 0` dropped every line the command wrote before tail had
+# opened the file (a fast command under load lost all its step rows — TDB
+# test_steps_integration full-suite flake). Admission lines in the log start
+# with `[` and match neither pattern.
 (
     # ROK-1793 S0: a `[step-time]` line is held until the matching result row.
     pending_name="" pending_dur=""
-    tail -F -n 0 "$LOG_PATH" 2>/dev/null | while IFS= read -r line; do
+    tail -F -n +1 "$LOG_PATH" 2>/dev/null | while IFS= read -r line; do
         if [[ -e "$PARSE_DONE" ]]; then
             break
         fi

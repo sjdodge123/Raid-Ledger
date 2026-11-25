@@ -64,18 +64,36 @@ registry_gc::_children() {
     jq -r '.manifests[]?.digest // empty' <<<"$m" 2>/dev/null
 }
 
+# HTTP status of a manifest HEAD of <$1> (no -f), e.g. 404; empty or 000 on
+# a transport error. Only a 404 lets _kept_scan skip a tag.
+registry_gc::_head_status() {
+    curl -sS --max-time 10 -o /dev/null -w '%{http_code}' -I -H "$_REGISTRY_ACCEPT" \
+        "$(registry_gc::_api)/manifests/$1" 2>/dev/null
+}
+
 # One HEAD per kept tag (<$1>, newline list): `D <digest>` for the tag AND,
 # when it is an index/list or of unreadable type, `D <child>` for each of its
 # children plus `I <tag>`. A DELETE of a child digest (an old standalone tag
 # that equals it) drops the child's revision link and GC then sweeps its
 # layers even without --delete-untagged, breaking the kept index (ROK-2180
 # Codex P1). Calls <$2> (renew callback, optional) before each tag.
-# rc 1 = a digest or a child list is unreadable (fail closed); 3 = callback failed.
+# A tag whose HEAD is a 404 (listed, manifest gone) is logged and skipped
+# with `I <tag>` only. rc 1 = any other unreadable digest or child list (fail
+# closed); 3 = callback failed.
 registry_gc::_kept_scan() {
     local tag h d kids
     for tag in $1; do
         if [[ -n "${2:-}" ]] && ! "$2"; then return 3; fi
         h=$(registry_gc::head "$tag"); d="${h%%|*}"
+        if [[ -z "$d" && "$(registry_gc::_head_status "$tag")" == 404 ]]; then
+            # Listed but its manifest is gone (TDB 2026-11-13: rl-allinone:
+            # rok-1863 aborted every sweep). No DELETE can break a manifest
+            # that does not exist, so skip it rather than wedge the registry.
+            # `I` keeps garbage-collect off --delete-untagged, as for any
+            # tag of unreadable type.
+            echo "registry_gc: kept tag ${RL_REGISTRY_REPO}:$tag has no manifest (HEAD 404) — skipped" >&2
+            echo "I $tag"; continue
+        fi
         if [[ -z "$d" ]]; then
             echo "registry_gc: digest of kept tag ${RL_REGISTRY_REPO}:$tag unreadable" >&2; return 1
         fi

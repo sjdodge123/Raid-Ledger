@@ -10,8 +10,8 @@
  *   - unnamed server player             → `+1 on server` (never a SteamID)
  * and that all three count toward the group (`◌ 3 playing`, ruling 3 / Q4).
  *
- * Lives beside `voice-activity.test.ts` (1441 lines) and reuses its lobby
- * fixtures. Its channels come from the smoke run's filtered pool (non-slot
+ * Lives beside `voice-activity.test.ts` and reuses the lobby
+ * helpers (`voice-lobby.helpers.ts`). Its channels come from the smoke run's filtered pool (non-slot
  * channels unless `SMOKE_CHANNEL_SET` names one; ROK-1623 / shared-guild rules).
  */
 import { setLobbyPresence, type LobbyPresenceMember } from "../fixtures.js";
@@ -25,7 +25,7 @@ import {
   openLobbyRoom,
   twoGames,
   withVoiceBinding,
-} from "./voice-activity.test.js";
+} from "./voice-lobby.helpers.js";
 
 const SERVER = "\u{1F5A5}";
 const VOICE_ON_SERVER = `**Ana** ${SERVER}`;

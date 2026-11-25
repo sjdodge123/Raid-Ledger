@@ -7,6 +7,7 @@ import { EmbedBuilder } from 'discord.js';
 import { formatDurationMs } from '../discord-bot/utils/format-duration';
 import { escapeHubName } from '../discord-bot/services/discord-embed-event-body.helpers';
 import { toStr } from './notification-embed.helpers';
+import { neutraliseMaskedLinks } from './notification-embed.discord-text';
 import {
   dmVoiceFieldValue,
   readPlannedVoice,
@@ -18,7 +19,8 @@ export function applySubscribedGameEmbed(
   payload: Record<string, unknown>,
 ): void {
   const lines: string[] = [];
-  if (payload.gameName) lines.push(`🎮 **${toStr(payload.gameName)}**`);
+  if (payload.gameName)
+    lines.push(`🎮 **${neutraliseMaskedLinks(toStr(payload.gameName))}**`);
   if (payload.startTime) {
     const unix = Math.floor(
       new Date(toStr(payload.startTime)).getTime() / 1000,

@@ -15,9 +15,10 @@
  * base's newest entry AND sit after every base entry in the journal.
  *
  * Usage:
- *   node scripts/check-migration-merge-order.mjs [--base <ref>] [--fix]
+ *   node scripts/check-migration-merge-order.mjs [--base <ref>] [--fix] [--journal <path>]
  *     --base <ref>  base to compare against (default: merge-base HEAD origin/main)
  *     --fix         re-stamp stale entries at the journal tail, in place
+ *     --journal <p> repo-relative journal (default JOURNAL_REL; ROK-1670 relay hub)
  * Exit: 0 ok · 1 violation (or unfixable under --fix) · 3 base unresolvable.
  * Exit 2 is deliberately unused: validate-ci.sh's run_step reads 2 as SKIPPED.
  */
@@ -124,21 +125,23 @@ function git(args) {
 }
 
 function parseArgs(argv) {
-  const opts = { base: null, fix: false };
+  const opts = { base: null, fix: false, journal: JOURNAL_REL };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--fix') opts.fix = true;
     else if (argv[i] === '--base') opts.base = argv[++i];
+    else if (argv[i] === '--journal') opts.journal = argv[++i];
     else throw new Error(`unknown argument: ${argv[i]}`);
   }
   if (opts.base === undefined) throw new Error('--base needs a git ref');
+  if (opts.journal === undefined) throw new Error('--journal needs a path');
   return opts;
 }
 
 /** Base journal entries, or [] when the base predates the journal. */
-function readBaseEntries(ref) {
+function readBaseEntries(ref, journalRel) {
   let raw;
   try {
-    raw = git(['show', `${ref}:${JOURNAL_REL}`]);
+    raw = git(['show', `${ref}:${journalRel}`]);
   } catch {
     return [];
   }
@@ -163,9 +166,9 @@ function main() {
     console.error(`⚠ merge-order guard: cannot resolve base (${opts.base ?? 'merge-base HEAD origin/main'}): ${err.message.split('\n')[0]}`);
     return 3;
   }
-  const journalPath = path.join(REPO_ROOT, JOURNAL_REL);
+  const journalPath = path.join(REPO_ROOT, opts.journal);
   const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
-  const baseEntries = readBaseEntries(base);
+  const baseEntries = readBaseEntries(base, opts.journal);
   const violations = findMergeOrderViolations(baseEntries, journal.entries);
   const label = `${opts.base ?? 'merge-base with origin/main'} (${base.slice(0, 9)})`;
   if (violations.length === 0) {

@@ -255,6 +255,13 @@ FAILURES=0
 migrations_changed=false
 container_changed=false
 playwright_relevant=false
+# ROK-1669: the diff touches the relay hub or a file it builds from — the same
+# paths as ci.yml's relay_hub filter, plus validate-ci.sh itself (a change
+# to the gate must exercise its own rows). Gates the two relay-hub rows.
+relay_hub_changed=false
+# The diff touches the hub's own migrations: gates its merge-order guard, as
+# migrations_changed gates the api one (both need origin/main to resolve).
+relay_hub_migrations_changed=false
 discord_smoke_relevant=false
 # ROK-1793 S2 — parallel fleet gate child modes (see _skip_for_parallel_child).
 # Read once and UNSET: the node:test specs and harnesses spawn validate-ci.sh
@@ -574,6 +581,17 @@ detect_scope() {
     echo -e "  Container files changed: ${YELLOW}yes${NC}"
   else
     echo -e "  Container files changed: no"
+  fi
+
+  if echo "$changed_files" \
+    | grep -qE '^relay-hub/|^packages/contract/|^package(-lock)?\.json$|^scripts/check-relay-hub-deps\.|^scripts/(fix-migration-order\.sh|check-migration-merge-order\.mjs|validate-migrations\.sh)$|^\.github/workflows/ci\.yml$|^scripts/validate-ci\.sh$'; then
+    relay_hub_changed=true
+    echo -e "  Relay-hub-relevant changes: ${YELLOW}yes${NC}"
+  else
+    echo -e "  Relay-hub-relevant changes: no"
+  fi
+  if echo "$changed_files" | grep -q '^relay-hub/drizzle/migrations/'; then
+    relay_hub_migrations_changed=true
   fi
 
   # Playwright-relevant: web UI, auth (smoke tests log in), demo-test endpoints,
@@ -987,6 +1005,60 @@ run_tools_tests() {
 # no gate at all. The workspace carries its own node-environment vitest config;
 # the root one forces jsdom + the web setup file and is not the right runner.
 run_contract_specs() { (cd "$REPO_ROOT" && npm test -w @raid-ledger/contract); }
+
+# ROK-1669 (RH-2a): the relay-hub workspace — the same checks as ci.yml's
+# `relay-hub` job, in its order. Static (no DB, a few seconds), so it runs in
+# BOTH the static and full gates; its integration spec rides in the full gate.
+# Both rows follow the diff (relay_hub_changed, set by detect_scope from the
+# same paths as ci.yml's relay_hub filter) and read SKIPPED when it is not hit.
+_skip_unless_relay_hub_changed() {
+  $relay_hub_changed && return 1
+  STEP_SKIP_REASON="diff does not touch relay-hub/ or the files it depends on"
+  echo -e "${YELLOW}Not run: ${STEP_SKIP_REASON}.${NC}"
+  skip_step
+}
+
+run_relay_hub_checks() {
+  _skip_unless_relay_hub_changed && return 0
+  (
+    cd "$REPO_ROOT" || exit 1
+    [ -f packages/contract/dist/index.js ] || npm run build -w packages/contract || exit 1
+    node scripts/check-relay-hub-deps.mjs || exit 1
+    npm run lint -w @raid-ledger/relay-hub || exit 1
+    npm run typecheck -w @raid-ledger/relay-hub || exit 1
+    npm run build -w @raid-ledger/relay-hub || exit 1
+    npm test -w @raid-ledger/relay-hub || exit 1
+    # ROK-1670: the hub's own migration journal + snapshot drift (ci.yml).
+    bash scripts/fix-migration-order.sh --check \
+      --journal relay-hub/drizzle/migrations/meta/_journal.json || exit 1
+    # ROK-1693 merge-order guard on the hub journal (base: the merge base
+    # with origin/main). Only when the hub's migrations changed, as the api
+    # guard runs only on migrations_changed: elsewhere a missing origin/main
+    # would turn a non-migration diff's row red.
+    if $relay_hub_migrations_changed; then
+      node scripts/check-migration-merge-order.mjs \
+        --journal relay-hub/drizzle/migrations/meta/_journal.json || exit 1
+    fi
+    RL_DRIFT_SCHEMA=relay-hub/src/drizzle/schema.ts \
+      RL_DRIFT_MIGRATIONS_DIR=relay-hub/drizzle/migrations \
+      bash scripts/validate-migrations.sh --drift-only
+  )
+}
+
+# ROK-1670: the hub specs need a Postgres server in DATABASE_URL (each file
+# creates its own throwaway database). Without one this step SKIPS
+# and GitHub CI's relay-hub job, which has a Postgres service, is the gate.
+run_relay_hub_integration() {
+  _skip_unless_relay_hub_changed && return 0
+  if [ -z "${RELAY_HUB_DATABASE_URL:-${DATABASE_URL:-}}" ]; then
+    STEP_SKIP_REASON="no DATABASE_URL / RELAY_HUB_DATABASE_URL (GitHub CI runs it)"
+    echo -e "${YELLOW}Not run: ${STEP_SKIP_REASON}.${NC}"
+    skip_step
+    return 0
+  fi
+  (cd "$REPO_ROOT" && DATABASE_URL="${RELAY_HUB_DATABASE_URL:-$DATABASE_URL}" \
+    npm run test:integration -w @raid-ledger/relay-hub)
+}
 
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.
 #
@@ -1788,7 +1860,14 @@ run_container_validation() {
     return 0
   fi
 
-  local cname="rl-ci-test-$$"
+  # The container name is per slot; the image tag stays the shared `rl:ci-test`
+  # on purpose: docker-guard's build-reclaim (ROK-2171) removes the previous
+  # image only for that exact tag, so a per-slot tag would leave a ~2 GB
+  # dangling image behind on every gate. A per-slot tag needs the guard's
+  # RECLAIM_TAGS updated in the same rl-infra PR.
+  local slot_sfx cname
+  slot_sfx=$(_container_startup_slot_suffix)
+  cname="rl-ci-test${slot_sfx}-$$"
   # Ensure cleanup on any exit path. The double quotes expand $cname NOW, on
   # purpose: a RETURN trap stays set after this function returns and can fire
   # again on a later return, where this local no longer exists and `set -u`
@@ -1799,16 +1878,9 @@ run_container_validation() {
   # ROK-1331 M13: choose a non-conflicting host port for the allinone container.
   # The fleet VM's rl-dashboard service permanently occupies :8080, so the
   # legacy `docker run -p 8080:80` fails with "port is already allocated".
-  # Resolution order: explicit RL_CONTAINER_STARTUP_PORT > fleet default 8090
-  # (detected via /workspace mount) > laptop default 8080.
-  local host_port="${RL_CONTAINER_STARTUP_PORT:-}"
-  if [ -z "$host_port" ]; then
-    if [ -d /workspace ]; then
-      host_port=8090
-    else
-      host_port=8080
-    fi
-  fi
+  # Resolution order: see _container_startup_port (fleet ports are per slot).
+  local host_port
+  host_port=$(_container_startup_port) || return 1
 
   docker build -f Dockerfile.allinone -t rl:ci-test .
   docker run --rm -d \
@@ -1819,6 +1891,42 @@ run_container_validation() {
     rl:ci-test
 
   _wait_for_container_health "$cname" "$host_port"
+}
+
+# TDB:3795/3861/4085 — every fleet slot used to build `rl:ci-test` and bind
+# host :8090, so two slots' gates in this step at once failed with "port is
+# already allocated". On the fleet (/workspace) with a numeric RL_SLOT the
+# container name and port are keyed to the slot (the image tag stays shared,
+# see run_container_validation); a laptop run (no /workspace) or an
+# unset/non-numeric RL_SLOT keeps the old name and port.
+_container_startup_slot_suffix() {
+  local slot="${RL_SLOT:-}"
+  if [ -d /workspace ] && [[ "$slot" =~ ^[0-9]+$ ]]; then
+    echo "-slot${slot}"
+  fi
+}
+
+# Host port: explicit RL_CONTAINER_STARTUP_PORT > fleet 8090+RL_SLOT (8090 when
+# RL_SLOT is unset or non-numeric) > laptop 8080. Fleet slots 1-4 map to
+# 8091-8094 (checked free of rl-infra bindings); a slot whose port would pass
+# 65535 is refused (exit 1) rather than handed to `docker run -p`.
+_container_startup_port() {
+  local slot="${RL_SLOT:-}" port
+  if [ -n "${RL_CONTAINER_STARTUP_PORT:-}" ]; then
+    echo "$RL_CONTAINER_STARTUP_PORT"
+  elif [ ! -d /workspace ]; then
+    echo 8080
+  elif [[ "$slot" =~ ^[0-9]+$ ]]; then
+    # Length check first: a 20-digit slot would overflow bash arithmetic.
+    if [ "${#slot}" -le 5 ]; then port=$((8090 + 10#$slot)); fi
+    if [ -z "${port:-}" ] || [ "$port" -gt 65535 ]; then
+      echo "validate-ci: RL_SLOT=$slot gives a container-startup host port above 65535; set RL_CONTAINER_STARTUP_PORT" >&2
+      return 1
+    fi
+    echo "$port"
+  else
+    echo 8090
+  fi
 }
 
 _wait_for_container_health() {
@@ -2683,9 +2791,11 @@ run_narrowed_gate() {
     "Lint (all)|" \
     "Bundle size budget|" \
     "Shell parse check (scripts/*.sh)|" \
+    "Relay hub (deps guard, lint, typecheck, build, unit)|" \
     "${unit_step_label}|unit" \
     "Tools unit tests (mcp servers)|" \
     "Integration tests (api)|integration" \
+    "Integration tests (relay-hub)|" \
     "Migration validation|" \
     "Container startup|" \
     "Playwright (desktop + mobile)|" \
@@ -2713,6 +2823,7 @@ run_default_gate() {
     # Static, deterministic check — runs in BOTH static and full gates.
     run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
     run_step "Script node:test specs (scripts/*.spec.mjs)" run_script_node_specs
+    run_step "Relay hub (deps guard, lint, typecheck, build, unit)" run_relay_hub_checks
 
     # Unit + integration are the slow, behavioral checks. In --static (lite
     # gate) mode they're deferred to GitHub CI, which runs them sharded +
@@ -2733,6 +2844,7 @@ run_default_gate() {
       else
         run_step "Integration tests (api)" run_integration_tests
       fi
+      run_step "Integration tests (relay-hub)" run_relay_hub_integration
     fi
 
     # Migration and container checks handle their own SKIPPED/PASS/FAIL
