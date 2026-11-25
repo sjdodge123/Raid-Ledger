@@ -4,6 +4,9 @@
  * after 0177 with an older `when`, so Drizzle skipped it everywhere.
  */
 import { test } from 'node:test';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import {
   BUMP_MS,
@@ -72,3 +75,31 @@ test('restampAfterBase refuses the mid-journal shape and returns the journal unt
   assert.deepEqual(changed, []);
   assert.deepEqual(unfixable.map((v) => v.tag), ['0176_lfg_invites']);
 });
+
+test('--journal points the CLI at another workspace journal (ROK-1670 relay hub)', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const run = (journal) =>
+    spawnSync('node', ['scripts/check-migration-merge-order.mjs', '--base', 'HEAD', '--journal', journal], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+  const hub = run('relay-hub/drizzle/migrations/meta/_journal.json');
+  assert.equal(hub.status, 0, hub.stderr);
+  assert.match(hub.stdout, /merge-order guard: new entries post-date HEAD/);
+  const missing = run('relay-hub/no-such/_journal.json');
+  assert.equal(missing.status, 3);
+  assert.match(missing.stderr, /no-such\/_journal\.json/);
+});
+
+test('ci.yml: the hub journal step runs the merge-order guard against the PR base', async () => {
+  const { readFileSync } = await import('node:fs');
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const ci = readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
+  const job = ci.slice(ci.indexOf('\n  relay-hub:\n'));
+  const step = job.slice(job.indexOf('- name: Migration journal order (hub)'));
+  const run = step.split('\n').find((l) => l.trim().startsWith('run:')) ?? '';
+  assert.match(run, /fix-migration-order\.sh --check --against HEAD\^1 --journal relay-hub\//);
+  const checkout = job.slice(job.indexOf('- name: Checkout code'), job.indexOf('- name: Setup Node.js'));
+  assert.match(checkout, /fetch-depth: 2/, 'HEAD^1 needs a depth-2 checkout');
+});
+

@@ -24,6 +24,10 @@
 #
 # Test hooks: RL_DRIFT_SCHEMA / RL_DRIFT_MIGRATIONS_DIR override the schema
 # entry point / migrations dir the drift check reads (scripts/*.spec.mjs).
+# RL_MIGRATIONS_DIR overrides the dir (and its meta/_journal.json) the psql
+# apply phase reads. ROK-1670: CI drift-checks the relay hub's schema with
+# RL_DRIFT_SCHEMA=relay-hub/src/drizzle/schema.ts
+# RL_DRIFT_MIGRATIONS_DIR=relay-hub/drizzle/migrations.
 # =============================================================================
 
 set -euo pipefail
@@ -76,6 +80,9 @@ preflight_check() {
 check_snapshot_drift() {
   local schema="${RL_DRIFT_SCHEMA:-$REPO_ROOT/api/src/drizzle/schema.ts}"
   local src="${RL_DRIFT_MIGRATIONS_DIR:-$REPO_ROOT/api/src/drizzle/migrations}"
+  # Repo-relative overrides resolve from the root: drizzle-kit runs in a temp dir.
+  case "$schema" in /*) ;; *) schema="$REPO_ROOT/$schema" ;; esac
+  case "$src" in /*) ;; *) src="$REPO_ROOT/$src" ;; esac
   local kit="$REPO_ROOT/node_modules/drizzle-kit/bin.cjs"
   echo -e "${YELLOW}Pre-flight: checking schema.ts against the latest snapshot...${NC}"
   if [ ! -f "$kit" ]; then
@@ -157,8 +164,8 @@ wait_for_postgres() {
 }
 
 run_migrations() {
-  local journal="$REPO_ROOT/api/src/drizzle/migrations/meta/_journal.json"
-  local migrations_dir="$REPO_ROOT/api/src/drizzle/migrations"
+  local migrations_dir="${RL_MIGRATIONS_DIR:-$REPO_ROOT/api/src/drizzle/migrations}"
+  local journal="$migrations_dir/meta/_journal.json"
   echo -e "${YELLOW}Applying migrations via psql in journal order...${NC}"
   if [ ! -f "$journal" ]; then
     echo -e "${RED}Journal not found at $journal${NC}"

@@ -265,11 +265,21 @@ assert_in "$HUB_INT_SKIP" "$INVOKE_OUT" "relay-hub integration row SKIPPED with 
 assert_not_in 'typecheck -w @raid-ledger/relay-hub' "$(cat "$npm_argv_file")" "hub checks must not run"
 
 CURRENT_TEST_NAME="H2: a relay-hub diff runs both relay-hub rows"
-invoke "relay-hub/src/main.ts" --full --no-e2e
+# ROK-1670: the hub integration specs need a Postgres server (stubbed here).
+RELAY_HUB_DATABASE_URL="postgres://stub@127.0.0.1:1/stub" \
+  invoke "relay-hub/src/main.ts" --full --no-e2e
 assert_rc 0 "--full relay-hub"
 assert_not_in 'relay-hub\) +SKIPPED|Relay hub .* +SKIPPED' "$INVOKE_OUT" "relay-hub rows must not be SKIPPED"
 assert_in 'typecheck -w @raid-ledger/relay-hub' "$(cat "$npm_argv_file")" "hub typecheck runs via the workspace script"
 assert_in 'test:integration -w @raid-ledger/relay-hub' "$(cat "$npm_argv_file")" "hub integration runs"
+
+CURRENT_TEST_NAME="H3: a relay-hub diff with no database skips only the hub integration row"
+DATABASE_URL="" RELAY_HUB_DATABASE_URL="" \
+  invoke "relay-hub/src/main.ts" --full --no-e2e
+assert_rc 0 "--full relay-hub, no DB"
+assert_in '^Integration tests \(relay-hub\) +SKIPPED — no DATABASE_URL' "$INVOKE_OUT" "hub integration row SKIPPED with reason"
+assert_not_in 'Relay hub .* +SKIPPED' "$INVOKE_OUT" "hub checks row still runs"
+assert_not_in 'test:integration -w @raid-ledger/relay-hub' "$(cat "$npm_argv_file")" "hub integration must not run"
 
 echo
 echo "--- $CURRENT_TEST_FILE: $TEST_PASS_COUNT pass, $TEST_FAIL_COUNT fail ---"
