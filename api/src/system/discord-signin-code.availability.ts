@@ -13,13 +13,16 @@ export async function isDiscordSigninCodeAvailable(
   moduleRef: ModuleRef,
   settings: SettingsService,
 ): Promise<boolean> {
-  let client: DiscordBotClientService | null = null;
-  try {
-    client = moduleRef.get(DiscordBotClientService, { strict: false });
-  } catch {
-    return false;
-  }
-  if (!client.isConnected() || client.getGuildId() === null) return false;
+  const client = lookupBotClient(moduleRef);
+  if (!client?.isConnected() || client.getGuildId() === null) return false;
   const clientUrl = await settings.getTrustedClientUrl();
   return Boolean(clientUrl);
+}
+
+function lookupBotClient(moduleRef: ModuleRef): DiscordBotClientService | null {
+  try {
+    return moduleRef.get(DiscordBotClientService, { strict: false });
+  } catch {
+    return null;
+  }
 }
