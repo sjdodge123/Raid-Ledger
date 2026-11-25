@@ -25,6 +25,12 @@ import {
 import type { LfgDb } from './lfg-query.helpers';
 import type { LfgIntentRow } from './lfg-write.helpers';
 
+/** The game columns a group summary reads — any full `games` row fits. */
+export type LfgGameRef = Pick<
+  typeof schema.games.$inferSelect,
+  'id' | 'name' | 'slug' | 'coverUrl' | 'cooptimusOnlineMax'
+>;
+
 /** A group key, or null for "every hand of the game". */
 export type LfgGroupScope = string | null;
 

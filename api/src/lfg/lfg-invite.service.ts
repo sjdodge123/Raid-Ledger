@@ -248,9 +248,7 @@ export class LfgInviteService {
     // it at PRESS time, so a DM opened later cannot raise a stale hand.
     const horizon = await readGroupHorizon(this.db, gameId, now);
     const body = await this.buildNotification(game, ids, horizon);
-    return this.db.transaction((tx) =>
-      this.sendUnderLocks(tx, ids, body, now),
-    );
+    return this.db.transaction((tx) => this.sendUnderLocks(tx, ids, body, now));
   }
 
   /** D4/D5: lock → group cap → recipient checks → insert → create, as ONE unit. */
@@ -276,7 +274,12 @@ export class LfgInviteService {
       return LFG_INVITE_SKIPPED;
     }
     const groupKey = ids.scope ?? LFG_ANY_GROUP_KEY;
-    await insertInvite(tx, { recipientUserId, inviterUserId, gameId, groupKey });
+    await insertInvite(tx, {
+      recipientUserId,
+      inviterUserId,
+      gameId,
+      groupKey,
+    });
     // Inside the transaction on purpose (A4): a throw here rolls the row
     // back, so a DM that never left never spends the budget.
     await this.notifications.create({ userId: recipientUserId, ...body });

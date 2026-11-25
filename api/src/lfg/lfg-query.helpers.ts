@@ -40,6 +40,7 @@ import {
   membersForScope,
   groupScopeFilter,
   type LfgGroupScope,
+  type LfgGameRef,
 } from './lfg-group-scope.helpers';
 
 export type LfgDb = PostgresJsDatabase<typeof schema>;
@@ -261,7 +262,7 @@ async function queryActiveGroups(
  */
 export async function getGroupSummary(
   db: LfgDb,
-  game: typeof schema.games.$inferSelect,
+  game: LfgGameRef,
   viewerId: number,
   scope: LfgGroupScope = null,
 ): Promise<LfgGroupSummaryDto> {

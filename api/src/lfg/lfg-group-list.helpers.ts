@@ -29,8 +29,9 @@ import {
   toGroupSummary,
   type LfgDb,
 } from './lfg-query.helpers';
+import type { LfgGameRef } from './lfg-group-scope.helpers';
 
-type GameRow = typeof schema.games.$inferSelect;
+type GameRow = LfgGameRef;
 
 /**
  * `GET /lfg/:gameId/groups` — the whole-game group first, then the live
