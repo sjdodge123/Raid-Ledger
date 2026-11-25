@@ -14,6 +14,7 @@ import {
   type WowLfgRole,
 } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
+import { wowCharacterFitsSlug } from './wow-lfg-character-variant';
 
 /** Any drizzle handle (the db or core's tx). */
 export type WowLfgDb = PostgresJsDatabase<typeof schema>;
@@ -47,7 +48,8 @@ export function parseWowHandDetail(detail: unknown): WowLfgHandDetailDto {
 }
 
 /**
- * 400 unless the character is the user's own, on this game.
+ * 400 unless the character is the user's own, on this game, and of the game's
+ * variant (Forever = `gameVariant` OR `ruleset`, see `wowCharacterFitsSlug`).
  *
  * @param db - Handle (core's tx on the write path).
  * @param characterId - The picked character.
@@ -59,9 +61,14 @@ export async function assertOwnCharacter(
   who: { userId: number; gameId: number },
 ): Promise<void> {
   const c = schema.characters;
-  const rows = await db
-    .select({ id: c.id })
+  const [row] = await db
+    .select({
+      gameVariant: c.gameVariant,
+      ruleset: c.ruleset,
+      slug: schema.games.slug,
+    })
     .from(c)
+    .innerJoin(schema.games, eq(schema.games.id, c.gameId))
     .where(
       and(
         eq(c.id, characterId),
@@ -70,7 +77,7 @@ export async function assertOwnCharacter(
       ),
     )
     .limit(1);
-  if (rows.length === 0) {
+  if (!row || !wowCharacterFitsSlug(row, row.slug)) {
     throw new BadRequestException(
       'The character must be one of your own characters for this game',
     );
