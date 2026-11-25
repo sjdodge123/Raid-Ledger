@@ -11,10 +11,13 @@ import { MutedGroupsList } from './muted-groups-list';
 import { NOTIFICATION_TYPE_GROUPS } from './notification-type-meta';
 import { NotificationGroup, type ChannelColumn } from './notification-matrix-rows';
 
-/** All possible channel metadata */
+/**
+ * The columns the matrix shows. No Push column (ROK-2316): nothing sends a push notification, no web
+ * push, no service worker, no mobile app, so a Push switch would change nothing. The stored `push`
+ * preference stays in the contract, untouched; add the column back here once a push sender exists.
+ */
 const ALL_CHANNEL_META: ChannelColumn[] = [
     { channel: 'inApp', label: 'In-App' },
-    { channel: 'push', label: 'Push' },
     { channel: 'discord', label: 'Discord' },
 ];
 
@@ -23,7 +26,7 @@ function PreferencesSkeleton() {
     return (
         <div className="space-y-4 animate-pulse">
             <div className="flex justify-end gap-6 pr-2">
-                {[1, 2, 3].map((i) => (
+                {[1, 2].map((i) => (
                     <div key={i} className="w-10 h-4 bg-panel rounded" />
                 ))}
             </div>
@@ -34,7 +37,7 @@ function PreferencesSkeleton() {
                         <div className="w-48 h-3 bg-panel rounded" />
                     </div>
                     <div className="flex gap-6">
-                        {[1, 2, 3].map((j) => (
+                        {[1, 2].map((j) => (
                             <div key={j} className="w-8 h-8 bg-panel rounded-full" />
                         ))}
                     </div>

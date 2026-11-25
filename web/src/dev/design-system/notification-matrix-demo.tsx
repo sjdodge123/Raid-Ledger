@@ -1,7 +1,7 @@
 /**
  * Notification-matrix sub-headings + the "—" not-offered cell for /dev/design-system
  * (docs/design-system.md, ROK-2311). Mounts the REAL `NotificationGroup` over one sample group:
- * a normal row, an in-app-only row (Push + Discord show "—") and a DM-only row (bell + Push "—").
+ * a normal row, an in-app-only row (Discord shows "—") and a DM-only row (bell shows "—"). No Push column (ROK-2316).
  * Switches toggle local state only; nothing here calls the API. Tokens only, so it flips with the family.
  */
 import { useState, type JSX } from 'react';
@@ -12,7 +12,6 @@ import { StateFrame } from './design-system-bits';
 
 const COLUMNS: readonly ChannelColumn[] = [
     { channel: 'inApp', label: 'In-App' },
-    { channel: 'push', label: 'Push' },
     { channel: 'discord', label: 'Discord' },
 ];
 
@@ -25,7 +24,7 @@ const SAMPLE_GROUP: NotificationTypeGroup = {
 };
 
 const INITIAL: Partial<Record<NotificationType, RowPrefs>> = {
-    scheduling_poll: { inApp: true, push: false, discord: true },
+    scheduling_poll: { inApp: true, discord: false },
     lineup_lfg_offer: { inApp: true },
     valheim_claim_suggestion: { discord: true },
 };

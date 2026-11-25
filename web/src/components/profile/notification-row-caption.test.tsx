@@ -110,7 +110,8 @@ describe('NotificationPreferencesSection captions (ROK-2290)', () => {
         const { container } = renderSection();
         expect(screen.queryByText('Discord DM only')).not.toBeInTheDocument();
         expect(captionOf(container, 'valheim_claim_suggestion')).toBe('Muted');
-        expect(captionOf(container, 'tentative_displaced')).toBeNull();
+        // ROK-2316: bell off, and its Push switch is no longer shown (nothing sends push), so the row is muted.
+        expect(captionOf(container, 'tentative_displaced')).toBe('Muted');
         expect(captionOf(container, 'slot_vacated')).toBeNull();
     });
 });

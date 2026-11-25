@@ -73,17 +73,14 @@ describe('rows that offer fewer channels (ROK-2311)', () => {
         const row = rowOf(container, 'lineup_lfg_offer');
         expect(within(row).getAllByRole('button')).toHaveLength(1);
         expect(within(row).getByRole('button')).toHaveAccessibleName(/In-App notifications$/);
-        expect(within(row).getByTestId('notif-not-offered-push')).toBeInTheDocument();
         expect(within(row).getByTestId('notif-not-offered-discord')).toBeInTheDocument();
     });
 
-    it('the DM-only claim-suggestion row hides the bell and Push switches', () => {
+    it('the DM-only claim-suggestion row hides the bell switch', () => {
         const { container } = renderSection();
         const row = rowOf(container, 'valheim_claim_suggestion');
         expect(within(row).queryByRole('button', { name: /In-App notifications$/ })).toBeNull();
-        expect(within(row).queryByRole('button', { name: /Push notifications$/ })).toBeNull();
         expect(within(row).getByTestId('notif-not-offered-inApp')).toBeInTheDocument();
-        expect(within(row).getByTestId('notif-not-offered-push')).toBeInTheDocument();
         expect(within(row).getAllByRole('button')).toHaveLength(1);
         expect(within(row).getByRole('button', { name: /Discord notifications$/ })).toBeInTheDocument();
     });
@@ -96,14 +93,13 @@ describe('rows that offer fewer channels (ROK-2311)', () => {
     it('a not-offered cell names its column for screen readers, not the raw channel key', () => {
         const { container } = renderSection();
         const row = rowOf(container, 'lineup_lfg_offer');
-        expect(within(row).getByTestId('notif-not-offered-push')).toHaveTextContent('Not sent by Push');
         expect(within(row).getByTestId('notif-not-offered-discord')).toHaveTextContent('Not sent by Discord');
         const dmRow = rowOf(container, 'valheim_claim_suggestion');
         expect(within(dmRow).getByTestId('notif-not-offered-inApp')).toHaveTextContent('Not sent by In-App');
     });
 
-    it('a normal row still shows all three switches', () => {
+    it('a normal row shows the In-App and Discord switches, and no Push switch (ROK-2316)', () => {
         const { container } = renderSection();
-        expect(within(rowOf(container, 'slot_vacated')).getAllByRole('button')).toHaveLength(3);
+        expect(within(rowOf(container, 'slot_vacated')).getAllByRole('button')).toHaveLength(2);
     });
 });

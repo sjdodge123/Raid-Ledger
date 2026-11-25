@@ -68,9 +68,10 @@ it('renders In-App channel column header', () => {
             expect(screen.getByText('In-App')).toBeInTheDocument();
         });
 
-it('renders Push channel column header', () => {
+it('shows no Push column, since nothing sends push (ROK-2316)', () => {
             renderSection();
-            expect(screen.getByText('Push')).toBeInTheDocument();
+            expect(screen.queryByText('Push')).toBeNull();
+            expect(screen.queryAllByRole('button', { name: /Push notifications$/ })).toHaveLength(0);
         });
 
 it('renders Discord channel column header when available', () => {
@@ -168,8 +169,8 @@ it('renders description for each notification type', () => {
 
         it('toggle button has correct aria-label for inactive toggle', () => {
             renderSection();
-            // slot_vacated push is false -> should say "Enable"
-            expect(screen.getByLabelText('Enable Slot Vacated Push notifications')).toBeInTheDocument();
+            // event_reminder discord is false -> should say "Enable"
+            expect(screen.getByLabelText('Enable Event Reminders Discord notifications')).toBeInTheDocument();
         });
 
         it('calls updatePreferences when toggle is clicked', () => {
@@ -182,9 +183,9 @@ it('renders description for each notification type', () => {
 
         it('calls updatePreferences to enable an inactive toggle', () => {
             renderSection();
-            fireEvent.click(screen.getByLabelText('Enable Slot Vacated Push notifications'));
+            fireEvent.click(screen.getByLabelText('Enable Event Reminders Discord notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
-                channelPrefs: { slot_vacated: { push: true } },
+                channelPrefs: { event_reminder: { discord: true } },
             });
         });
     });
