@@ -10,6 +10,7 @@
  *
  * - `/p/poll/:token` — a private poll's share token (signed-out visitors stay
  *   on that page);
+ * - `/h/:token` — a hub invite (ROK-1893), the same share token;
  * - `/i/:code` — a PUG invite code;
  * - `/auth/success?code=` — the OAuth one-time code.
  *
@@ -20,8 +21,11 @@
  */
 import { scrubReplayEventUrls } from './sentry-scrub-events';
 
-/** Path prefixes whose address carries a secret. */
-const SECRET_ROUTE = /^\/(?:p\/poll\/|i\/|auth\/success\/?$)/;
+/**
+ * Path prefixes whose address carries a secret. Case-insensitive because
+ * React Router matches routes case-insensitively, so `/P/POLL/<t>` renders.
+ */
+const SECRET_ROUTE = /^\/(?:p\/poll\/|h\/|i\/|auth\/success\/?$)/i;
 
 /** Any base works: only the pathname of a relative URL is read. */
 const PARSE_BASE = 'https://replay.invalid';

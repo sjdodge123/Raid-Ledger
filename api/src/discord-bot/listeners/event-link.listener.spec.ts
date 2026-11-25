@@ -9,6 +9,7 @@ let mockSettingsService: Record<string, jest.Mock>;
 let mockEventsService: Record<'buildEmbedEventData' | 'findOne', jest.Mock>;
 let mockPugsService: Record<string, jest.Mock>;
 let mockDb: { insert: jest.Mock; select: jest.Mock };
+let countWhere: jest.Mock;
 let mockReply: jest.Mock;
 
 const mockEmbed = new EmbedBuilder().setTitle('Test');
@@ -64,9 +65,12 @@ function setupEventLinkModule() {
   const insertChain: Record<string, jest.Mock> = {};
   insertChain.values = jest.fn().mockReturnValue(insertChain);
   insertChain.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
+  // One select chain serves the unfurl-cap count (awaited after `where`) and
+  // the hub-link lookup (`where(...).limit(1)`, no hub row).
   const countChain: Record<string, jest.Mock> = {};
+  countWhere = jest.fn().mockImplementation(() => trackedCount(0));
   countChain.from = jest.fn().mockReturnValue(countChain);
-  countChain.where = jest.fn().mockResolvedValue([{ n: 0 }]);
+  countChain.where = countWhere;
   mockDb = {
     insert: jest.fn().mockReturnValue(insertChain),
     select: jest.fn().mockReturnValue(countChain),
@@ -80,6 +84,13 @@ function setupEventLinkModule() {
     mockEventsService as never,
     mockPugsService as never,
   );
+}
+
+/** A `where` result: awaitable as the count row, with a `limit` for lookups. */
+function trackedCount(n: number) {
+  return Object.assign(Promise.resolve([{ n }]), {
+    limit: jest.fn().mockResolvedValue([]),
+  });
 }
 
 function callHandleMessage(message: unknown): Promise<void> {
@@ -190,6 +201,25 @@ function botDisconnectedTests() {
 }
 
 function messageBasicTests() {
+  it('still replies but skips tracking once the event hit the unfurl cap (TDB L2847)', async () => {
+    countWhere.mockImplementation(() => trackedCount(10));
+    const msg = createMessage('Check out http://localhost:5173/events/42');
+
+    await callHandleMessage(msg);
+
+    expect(mockReply).toHaveBeenCalledTimes(1);
+    expect(mockDb.select).toHaveBeenCalled();
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
+  it('tracks the unfurl while the event is under the cap', async () => {
+    const msg = createMessage('Check out http://localhost:5173/events/42');
+
+    await callHandleMessage(msg);
+
+    expect(mockDb.insert).toHaveBeenCalledTimes(1);
+  });
+
   it('should unfurl a single event link', async () => {
     const msg = createMessage('Check out http://localhost:5173/events/42');
 

@@ -31,6 +31,12 @@ describe('isSecretRouteUrl', () => {
         'https://rl.test/i/ab23cd45',
         'https://rl.test/auth/success?code=one-time-code',
         '/auth/success',
+        'https://rl.test/h/AbCdEfGhIjKlMnOpQrSt',
+        '/h/AbCdEfGhIjKlMnOpQrSt?ref=discord',
+        // React Router matches paths case-insensitively, so these render too.
+        '/P/POLL/AbCdEfGhIjKlMnOpQrSt',
+        '/H/AbCdEfGhIjKlMnOpQrSt',
+        '/Auth/Success?code=x',
     ])('treats %s as a secret route', (url) => {
         expect(isSecretRouteUrl(url)).toBe(true);
     });
@@ -41,9 +47,14 @@ describe('isSecretRouteUrl', () => {
         '/invites',
         '/auth/successful-thing',
         '/polls/7',
+        '/hubs/3',
         '/',
     ])('treats %s as an ordinary route', (url) => {
         expect(isSecretRouteUrl(url)).toBe(false);
+    });
+
+    it('fails closed: an unparseable URL counts as secret', () => {
+        expect(isSecretRouteUrl('http://[')).toBe(true);
     });
 });
 
