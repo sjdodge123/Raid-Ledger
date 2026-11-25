@@ -259,6 +259,9 @@ playwright_relevant=false
 # paths as ci.yml's relay_hub filter, plus validate-ci.sh itself (a change
 # to the gate must exercise its own rows). Gates the two relay-hub rows.
 relay_hub_changed=false
+# The diff touches the hub's own migrations: gates its merge-order guard, as
+# migrations_changed gates the api one (both need origin/main to resolve).
+relay_hub_migrations_changed=false
 discord_smoke_relevant=false
 # ROK-1793 S2 — parallel fleet gate child modes (see _skip_for_parallel_child).
 # Read once and UNSET: the node:test specs and harnesses spawn validate-ci.sh
@@ -581,11 +584,14 @@ detect_scope() {
   fi
 
   if echo "$changed_files" \
-    | grep -qE '^relay-hub/|^packages/contract/|^package(-lock)?\.json$|^scripts/check-relay-hub-deps\.|^\.github/workflows/ci\.yml$|^scripts/validate-ci\.sh$'; then
+    | grep -qE '^relay-hub/|^packages/contract/|^package(-lock)?\.json$|^scripts/check-relay-hub-deps\.|^scripts/(fix-migration-order\.sh|check-migration-merge-order\.mjs|validate-migrations\.sh)$|^\.github/workflows/ci\.yml$|^scripts/validate-ci\.sh$'; then
     relay_hub_changed=true
     echo -e "  Relay-hub-relevant changes: ${YELLOW}yes${NC}"
   else
     echo -e "  Relay-hub-relevant changes: no"
+  fi
+  if echo "$changed_files" | grep -q '^relay-hub/drizzle/migrations/'; then
+    relay_hub_migrations_changed=true
   fi
 
   # Playwright-relevant: web UI, auth (smoke tests log in), demo-test endpoints,
@@ -1026,9 +1032,13 @@ run_relay_hub_checks() {
     bash scripts/fix-migration-order.sh --check \
       --journal relay-hub/drizzle/migrations/meta/_journal.json || exit 1
     # ROK-1693 merge-order guard on the hub journal (base: the merge base
-    # with origin/main, as the api journal's guard above uses).
-    node scripts/check-migration-merge-order.mjs \
-      --journal relay-hub/drizzle/migrations/meta/_journal.json || exit 1
+    # with origin/main). Only when the hub's migrations changed, as the api
+    # guard runs only on migrations_changed: elsewhere a missing origin/main
+    # would turn a non-migration diff's row red.
+    if $relay_hub_migrations_changed; then
+      node scripts/check-migration-merge-order.mjs \
+        --journal relay-hub/drizzle/migrations/meta/_journal.json || exit 1
+    fi
     RL_DRIFT_SCHEMA=relay-hub/src/drizzle/schema.ts \
       RL_DRIFT_MIGRATIONS_DIR=relay-hub/drizzle/migrations \
       bash scripts/validate-migrations.sh --drift-only
