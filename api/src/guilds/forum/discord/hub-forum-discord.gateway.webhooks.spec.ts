@@ -58,6 +58,7 @@ function setup(hooks: FakeHook[]) {
     isConnected: () => true,
     getGuild: () => guild,
     getBotUser: () => ({ id: BOT_ID, username: 'Raid Ledger' }),
+    getClient: () => null,
   };
   const gw = new HubForumDiscordGateway(
     client as unknown as DiscordBotClientService,
