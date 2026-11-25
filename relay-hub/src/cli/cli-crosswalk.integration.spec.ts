@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import postgres from 'postgres';
 import type { App } from 'supertest/types';
 import {
   DEFAULT_MIGRATIONS_FOLDER,
@@ -133,4 +134,25 @@ it('AC6: conflicts lists the RH-4a AC 4 conflict, labelled resolved-to/owner; --
   expect((await cli(db.url, 'conflicts', '--all', '--json')).out).toEqual(
     first.out,
   );
+});
+
+it('AC6: same-instant conflicts tie-break by numeric id, so 10 sorts before 9', async () => {
+  const sql = postgres(db.url, { max: 1, onnotice: () => undefined });
+  try {
+    for (const id of [9, 10]) {
+      await sql`
+        INSERT INTO hub_crosswalk_conflicts
+          (id, kind, value, existing_rl_game_id, instance_id, payload, created_at)
+        VALUES (${id}, 'steam_app_id', ${`tie-${id}`}, 'tie-game', ${INSTANCE},
+                '{}'::jsonb, '2099-01-01T00:00:00Z')`;
+    }
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+  const { code, out } = await cli(db.url, 'conflicts', '--json');
+  expect(code).toBe(0);
+  const parsed: unknown = JSON.parse(out.join('\n'));
+  if (!Array.isArray(parsed)) throw new Error('expected a JSON array');
+  const ids: unknown[] = parsed.map((v: { id?: unknown }) => v.id);
+  expect(ids.slice(0, 2)).toEqual(['10', '9']);
 });

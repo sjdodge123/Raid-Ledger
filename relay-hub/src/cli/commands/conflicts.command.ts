@@ -52,7 +52,10 @@ function toView(r: ConflictRow): ConflictView {
   };
 }
 
-/** Open conflicts (all with `--all`), newest first, ties by id. */
+/**
+ * Open conflicts (all with `--all`), newest first; ties by the numeric id,
+ * never the `id::text` alias (text order puts 9 before 10).
+ */
 export async function listConflicts(
   sql: Sql,
   all: boolean,
@@ -62,7 +65,7 @@ export async function listConflicts(
            instance_id, created_at, resolved_at
     FROM hub_crosswalk_conflicts
     ${all ? sql`` : sql`WHERE resolved_at IS NULL`}
-    ORDER BY created_at DESC, id DESC`;
+    ORDER BY created_at DESC, hub_crosswalk_conflicts.id DESC`;
   return rows.map(toView);
 }
 
