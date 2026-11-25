@@ -81,7 +81,6 @@
     "components/lineups/LineupShareCopy.tsx": 2,
     "components/lineups/NominateModal.tsx": 2,
     "components/lineups/NominationCard.tsx": 1,
-    "components/lineups/SteamNudgeBanner.tsx": 2,
     "components/lineups/VisibilityToggle.tsx": 2,
     "components/lineups/cycle-4/CommonGroundThemedRow.tsx": 1,
     "components/lineups/cycle-4/MyNominationsDrawer.tsx": 1,
