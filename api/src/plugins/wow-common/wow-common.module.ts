@@ -84,6 +84,8 @@ import { InstanceCatalogueService } from './instance-catalogue/instance-catalogu
 import { LedgerlinkRulesetNoticeService } from './companion/ledgerlink-ruleset-notice.service';
 import { NotificationModule } from '../../notifications/notification.module';
 import { WowGgCardRegistration } from './gg/wow-gg.registration';
+import { WowLfgGroupingAdapter } from './lfg/wow-lfg-grouping.adapter';
+import { WowLfgRegistration } from './lfg/wow-lfg.registration';
 
 @Module({
   imports: [
@@ -124,6 +126,9 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     InstanceCatalogueService,
     // ROK-2187: the WoW levels-dinged GG <year> card.
     WowGgCardRegistration,
+    // ROK-2352: one LFG group per WoW dungeon/raid.
+    WowLfgGroupingAdapter,
+    WowLfgRegistration,
     BlizzardService,
     BlizzardAuthService,
     ForeverConfigService,
@@ -212,6 +217,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly companionRegistry: CompanionHandlerRegistry,
     private readonly ledgerlink: WowLedgerlinkHandler,
     private readonly addonErrors: WowAddonErrorsHandler,
+    private readonly lfgRegistration: WowLfgRegistration,
     @Inject(WOW_BOOT_SEED_ENABLED) private readonly bootSeedEnabled: boolean,
   ) {}
 
@@ -325,6 +331,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
       { ownerPluginId: WOW_COMMON_MANIFEST.id },
     );
     this.registerHubKind();
+    this.lfgRegistration.register();
   }
 
   /** ROK-1830 hub kind (core resolves it; event tagging is core since ROK-1831). */

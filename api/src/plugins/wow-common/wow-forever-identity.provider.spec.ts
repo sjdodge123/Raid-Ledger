@@ -100,6 +100,7 @@ describe('WowCommonModule character-identity registration', () => {
       {} as never,
       {} as never,
       {} as never,
+      { register: jest.fn() } as never,
       true,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
@@ -131,6 +132,7 @@ describe('WowCommonModule character-identity registration', () => {
       {} as never,
       {} as never,
       {} as never,
+      { register: jest.fn() } as never,
       true,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
@@ -159,6 +161,7 @@ describe('WowCommonModule hub-kind registration (ROK-1830)', () => {
       {} as never,
       {} as never,
       {} as never,
+      { register: jest.fn() } as never,
       true,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
