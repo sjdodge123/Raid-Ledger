@@ -89,6 +89,9 @@ make_stub_bin() {
     cat >"$d/node" <<EOF
 #!/usr/bin/env bash
 [[ "\${1:-}" == *check-bundle-size.mjs ]] && exit 0
+# node --test is stubbed: a nested run of every scripts/*.spec.mjs inside each
+# case multiplies any intermittent spec (see validate-ci-fleet-scope-skip.test.sh).
+[[ "\${1:-}" == --test ]] && exit 0
 exec "$(command -v node)" "\$@"
 EOF
     chmod +x "$d"/*
