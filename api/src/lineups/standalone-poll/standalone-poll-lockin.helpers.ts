@@ -184,8 +184,8 @@ async function signUpWithPick(
   const benchUserIds = await benchPickForVoters(deps, lockIn, voters);
   // ROK-2320: a follow-up poll's voters keep their source-event character/roles.
   const carryover = await loadFollowupCarryover(
-    deps.db,
-    lockIn.matchId,
+    deps,
+    { matchId: lockIn.matchId, eventId: lockIn.eventId },
     voters.map((v) => v.userId),
   );
   return autoSignupSlotVoters({

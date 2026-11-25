@@ -7,11 +7,13 @@
  * The source event is found through `post_event_followup_sent.match_id`
  * (`findFollowupSourceEventId`). Every source signup counts, whatever its
  * status (operator ruling: the vote for the slot is the signal). A character
- * is carried only while it still exists AND is owned by the voter, so
- * `verifyCharacterOwnership` never refuses it; otherwise roles only.
+ * is carried only while it still exists, is owned by the voter (so
+ * `verifyCharacterOwnership` never refuses it) AND belongs to the new event's
+ * game; otherwise roles only. The read is an enrichment: a failure degrades
+ * to no carryover, never a dropped voter or a failed lock-in.
  */
 import type { Logger } from '@nestjs/common';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CreateSignupDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
@@ -60,14 +62,19 @@ export function buildCarryDto(row: SourceSignupRow): CreateSignupDto | null {
   };
 }
 
-/** The source event's signups for `userIds`, joined to owned character + slot. */
+/**
+ * The source event's signups for `userIds`, joined to the slot and to the
+ * character when it is owned by the voter and of `gameId` (null: none).
+ */
 function selectSourceSignups(
   db: Db,
   eventId: number,
+  gameId: number | null,
   userIds: number[],
 ): Promise<SourceSignupRow[]> {
   const s = schema.eventSignups;
   const c = schema.characters;
+  const sameGame = gameId === null ? sql`false` : eq(c.gameId, gameId);
   return db
     .select({
       userId: s.userId,
@@ -78,7 +85,7 @@ function selectSourceSignups(
       characterRoleOverride: c.roleOverride,
     })
     .from(s)
-    .leftJoin(c, and(eq(c.id, s.characterId), eq(c.userId, s.userId)))
+    .leftJoin(c, and(eq(c.id, s.characterId), eq(c.userId, s.userId), sameGame))
     .leftJoin(
       schema.rosterAssignments,
       eq(schema.rosterAssignments.signupId, s.id),
@@ -86,21 +93,42 @@ function selectSourceSignups(
     .where(and(eq(s.eventId, eventId), inArray(s.userId, userIds)));
 }
 
-/**
- * Per-user signup dto carried from the follow-up poll's source event. Empty
- * for an ordinary poll (no `post_event_followup_sent` row) and for a voter
- * with no usable source signup.
- */
-export async function loadFollowupCarryover(
+/** The (new) event's game, or null when it has none. */
+async function findEventGameId(
   db: Db,
-  matchId: number,
-  userIds: readonly number[],
+  eventId: number,
+): Promise<number | null> {
+  const [event] = await db
+    .select({ gameId: schema.events.gameId })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return event?.gameId ?? null;
+}
+
+/** What the carryover read needs. */
+export interface CarryoverDeps {
+  db: Db;
+  logger: Pick<Logger, 'warn'>;
+}
+
+/** The follow-up poll and the NEW event its lock-in created. */
+export interface CarryoverTarget {
+  matchId: number;
+  eventId: number;
+}
+
+/** The carryover map; throws on a failed read (the caller degrades). */
+async function readCarryover(
+  db: Db,
+  target: CarryoverTarget,
+  userIds: number[],
 ): Promise<Map<number, CreateSignupDto>> {
   const carryover = new Map<number, CreateSignupDto>();
-  if (userIds.length === 0) return carryover;
-  const sourceEventId = await findFollowupSourceEventId(db, matchId);
+  const sourceEventId = await findFollowupSourceEventId(db, target.matchId);
   if (sourceEventId === null) return carryover;
-  const rows = await selectSourceSignups(db, sourceEventId, [...userIds]);
+  const gameId = await findEventGameId(db, target.eventId);
+  const rows = await selectSourceSignups(db, sourceEventId, gameId, userIds);
   for (const row of rows) {
     const dto = buildCarryDto(row);
     if (row.userId !== null && dto) carryover.set(row.userId, dto);
@@ -108,11 +136,31 @@ export async function loadFollowupCarryover(
   return carryover;
 }
 
+/**
+ * Per-user signup dto carried from the follow-up poll's source event. Empty
+ * for an ordinary poll (no `post_event_followup_sent` row), for a voter with
+ * no usable source signup, and when the read fails (logged): the carryover
+ * is an enrichment and must never block a signup.
+ */
+export async function loadFollowupCarryover(
+  deps: CarryoverDeps,
+  target: CarryoverTarget,
+  userIds: readonly number[],
+): Promise<Map<number, CreateSignupDto>> {
+  if (userIds.length === 0) return new Map();
+  try {
+    return await readCarryover(deps.db, target, [...userIds]);
+  } catch (err: unknown) {
+    deps.logger.warn(
+      `Follow-up carryover read failed for match ${target.matchId}; signing up without it: ${String(err)}`,
+    );
+    return new Map();
+  }
+}
+
 /** What the creator signup needs. */
-export interface CreatorSignupDeps {
-  db: Db;
+export interface CreatorSignupDeps extends CarryoverDeps {
   signupsService: Pick<SignupsService, 'signup'>;
-  logger: Pick<Logger, 'warn'>;
 }
 
 /**
@@ -127,9 +175,13 @@ export async function signUpCreatorWithCarryover(
   eventIds: readonly number[],
   userId: number,
 ): Promise<void> {
-  const carried = (await loadFollowupCarryover(deps.db, matchId, [userId])).get(
-    userId,
-  );
+  const [eventId] = eventIds;
+  const carried =
+    eventId === undefined
+      ? undefined
+      : (await loadFollowupCarryover(deps, { matchId, eventId }, [userId])).get(
+          userId,
+        );
   const opts = { skipEndedCheck: true };
   for (const id of eventIds) {
     if (!carried) {

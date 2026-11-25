@@ -434,7 +434,7 @@ describe('autoSignupSlotVoters — follow-up carryover (ROK-2320)', () => {
     expect(svc.signup).toHaveBeenNthCalledWith(2, EVENT_ID, 11);
   });
 
-  it('a bench-picked voter keeps the carried character, not the roles', async () => {
+  it('a bench-picked voter keeps the carried character and roles (promotion reads them)', async () => {
     const carryover = new Map([
       [10, { characterId: CHAR_ID, preferredRoles: ['dps' as const] }],
     ]);
@@ -452,6 +452,7 @@ describe('autoSignupSlotVoters — follow-up carryover (ROK-2320)', () => {
     expect(svc.signup).toHaveBeenCalledWith(EVENT_ID, 10, {
       slotRole: 'bench',
       characterId: CHAR_ID,
+      preferredRoles: ['dps'],
     });
     expect(result).toEqual({ benchedUserIds: [10], failedUserIds: [] });
   });

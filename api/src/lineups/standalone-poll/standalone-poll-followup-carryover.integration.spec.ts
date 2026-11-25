@@ -13,6 +13,9 @@
  *   C        declined   dps    → dps    (any status carries)
  *   D        none              → blank signup (today's behaviour)
  *   E        signed_up  tank   → bench  (tank already full, normal allocator)
+ *
+ * A character of another game than the new event's is not carried; its
+ * voter keeps the roles only.
  */
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -205,7 +208,8 @@ async function lockIn(matchId: number): Promise<number> {
       },
       startTime: SLOT.toISOString(),
     });
-  expect([200, 201]).toContain(res.status);
+  // The controller pins `@HttpCode(HttpStatus.OK)` on POST :matchId/lock-in.
+  expect(res.status).toBe(200);
   const [event] = nonEmpty(
     await testApp.db
       .select({ id: schema.events.id })
@@ -284,7 +288,8 @@ describe('follow-up poll lock-in carries source-event character + roles (ROK-232
     const d = must(signups.get(must(voters.d, 'd').userId), 'd signup');
     expect(d.characterId).toBeNull();
     expect(d.preferredRoles).toBeNull();
-    expect(['tank', 'healer', 'dps']).not.toContain(d.role);
+    // 5th signup with 4 of 5 slotted: not at capacity, so no roster row.
+    expect(d.role).toBeNull();
   });
 
   it('leaves an ordinary (non-follow-up) poll’s signups blank', async () => {
@@ -300,5 +305,32 @@ describe('follow-up poll lock-in carries source-event character + roles (ROK-232
       });
       expect(signup.preferredRoles).toBeNull();
     }
+  });
+});
+
+describe('follow-up carryover is limited to the new event’s game (ROK-2320)', () => {
+  it('carries roles but not a character of another game', async () => {
+    const { matchId, voters } = await seedPoll(true);
+    const a = must(voters.a, 'a');
+    const [other] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Other game', slug: `other-game-${Date.now()}` })
+        .returning(),
+      'other game',
+    );
+    await testApp.db
+      .update(schema.characters)
+      .set({ gameId: other.id })
+      .where(
+        eq(schema.characters.id, must(a.characterId ?? undefined, 'a char')),
+      );
+    const signups = await newSignups(await lockIn(matchId));
+
+    expect(signups.get(a.userId)).toEqual({
+      characterId: null,
+      preferredRoles: ['tank'],
+      role: 'tank',
+    });
   });
 });

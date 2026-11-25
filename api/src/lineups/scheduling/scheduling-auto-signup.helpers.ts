@@ -126,9 +126,9 @@ function signUpPlain(signupsService: SignupFn, target: SignupTarget) {
 }
 
 /**
- * ROK-2320: sign up with the carried character/roles (a bench pick keeps the
- * character only). A throw is logged and retried once as a plain signup, so a
- * stale carryover never drops a voter.
+ * ROK-2320: sign up with the carried character/roles. A bench pick keeps both,
+ * because bench promotion places by `preferredRoles`. A throw is logged and
+ * retried once as a plain signup, so a stale carryover never drops a voter.
  */
 async function signUpCarried(
   signupsService: SignupFn,
@@ -137,10 +137,7 @@ async function signUpCarried(
 ) {
   const { eventId, userId, toBench } = target;
   const dto: CreateSignupDto = toBench
-    ? {
-        slotRole: 'bench',
-        ...(carried.characterId ? { characterId: carried.characterId } : {}),
-      }
+    ? { ...carried, slotRole: 'bench' }
     : carried;
   try {
     return await signupsService.signup(eventId, userId, dto);
