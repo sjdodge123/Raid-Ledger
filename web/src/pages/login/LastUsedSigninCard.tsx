@@ -19,7 +19,7 @@ export const LAST_USED_LABEL = 'Last used';
 export const NOT_YOU_LABEL = 'Not you?';
 
 /** The method's name as the card shows it. */
-export const METHOD_LABEL: Record<LastSigninMethod, string> = {
+const METHOD_LABEL: Record<LastSigninMethod, string> = {
     discord: 'Discord',
     'discord-app-code': 'Discord app code',
     password: 'Username and password',

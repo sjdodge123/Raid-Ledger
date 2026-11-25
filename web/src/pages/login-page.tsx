@@ -102,6 +102,15 @@ function useLocalLogin(isFirstRun: boolean): {
     return { isLoading, error, handleLocalLogin };
 }
 
+/** ROK-2370: a Discord-app code sign-in finished — remember the method, then route. */
+function useCodeSignedIn(isFirstRun: boolean): (user: User) => void {
+    const navigate = useNavigate();
+    return useCallback((user: User): void => {
+        recordLastSignin('discord-app-code', user);
+        handlePostLoginRedirect(user, isFirstRun, navigate);
+    }, [isFirstRun, navigate]);
+}
+
 /**
  * Login page with pluggable auth providers and local username/password options.
  * When auth providers are configured (e.g. Discord), OAuth is shown prominently
@@ -115,10 +124,7 @@ export function LoginPage(): JSX.Element {
     useOAuthErrorHandler();
     const { isFirstRun, authProviders, communityName, communityLogoUrl, discordSigninCode } = useCommunityInfo();
     const { isLoading, error, handleLocalLogin } = useLocalLogin(isFirstRun);
-    const handleCodeSignedIn = useCallback((user: User): void => {
-        recordLastSignin('discord-app-code', user);
-        handlePostLoginRedirect(user, isFirstRun, navigate);
-    }, [isFirstRun, navigate]);
+    const handleCodeSignedIn = useCodeSignedIn(isFirstRun);
 
     const handleProviderLogin = (provider: LoginMethodDto): void => {
         setIsRedirecting(true);
