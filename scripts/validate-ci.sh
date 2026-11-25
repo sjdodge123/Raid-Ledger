@@ -1025,6 +1025,10 @@ run_relay_hub_checks() {
     # ROK-1670: the hub's own migration journal + snapshot drift (ci.yml).
     bash scripts/fix-migration-order.sh --check \
       --journal relay-hub/drizzle/migrations/meta/_journal.json || exit 1
+    # ROK-1693 merge-order guard on the hub journal (base: the merge base
+    # with origin/main, as the api journal's guard above uses).
+    node scripts/check-migration-merge-order.mjs \
+      --journal relay-hub/drizzle/migrations/meta/_journal.json || exit 1
     RL_DRIFT_SCHEMA=relay-hub/src/drizzle/schema.ts \
       RL_DRIFT_MIGRATIONS_DIR=relay-hub/drizzle/migrations \
       bash scripts/validate-migrations.sh --drift-only

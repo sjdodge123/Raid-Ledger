@@ -644,6 +644,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # HEAD^1 (the PR base) for the hub merge-order guard below.
+          fetch-depth: 2
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -681,8 +684,11 @@ jobs:
       - name: Unit tests
         run: npm test -w @raid-ledger/relay-hub
 
+      # --against HEAD^1 adds the ROK-1693 merge-order guard (as the api
+      # journal's step does): a new hub entry stamped at or before the base's
+      # newest is silently skipped by Drizzle on every deployed hub DB.
       - name: Migration journal order (hub)
-        run: ./scripts/fix-migration-order.sh --check --journal relay-hub/drizzle/migrations/meta/_journal.json
+        run: ./scripts/fix-migration-order.sh --check --against HEAD^1 --journal relay-hub/drizzle/migrations/meta/_journal.json
 
       - name: Schema snapshot drift (hub)
         env:
