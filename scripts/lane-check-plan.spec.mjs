@@ -2,6 +2,7 @@
 // Run: node --test scripts/lane-check-plan.spec.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { collapseFolders, literalsOf, planLaneCheck, removedStrings, toLines } from './lane-check-plan.mjs';
 
 test('a change in api/src/discord-bot/listeners/<file>.ts selects the whole listeners folder', () => {
@@ -106,6 +107,25 @@ test('scripts: a .mjs runs its sibling spec, a spec runs itself, a .sh gets bash
   assert.deepEqual(plan.nodeTests, ['scripts/a.spec.mjs']);
   assert.deepEqual(plan.shellParse, ['scripts/b.sh']);
   assert.deepEqual(plan.skipped, ['scripts/c.mjs: no spec or parse check']);
+});
+
+// PR 2309: a scripts-only change passed lane-check (bash -n + node --test) and
+// failed CI's scripts-tests job, which runs scripts/test/run-all.sh.
+test('a scripts change runs the scripts/test harnesses once, as CI does; other diffs do not', () => {
+  const rows = (files) => toLines(planLaneCheck(files)).split('\n');
+  const harness = 'shell-tests\tscripts/test/run-all.sh';
+  for (const files of [['scripts/lane-check.spec.mjs'], ['scripts/validate-ci.sh', 'scripts/test/a.test.sh'], ['.github/workflows/ci.yml']]) {
+    const got = rows(files).filter((r) => r.startsWith('shell-tests'));
+    assert.deepEqual(got, [harness], `${files.join(' ')}: expected exactly one harness row, got ${JSON.stringify(got)}`);
+  }
+  for (const files of [['api/src/a/b.ts'], ['scripts/smoke/a.smoke.spec.ts'], ['docs/a.md']]) {
+    assert.ok(!rows(files).includes(harness), `${files.join(' ')}: no harness row expected`);
+  }
+});
+
+test('lane-check.sh runs the shell-tests row (an unknown kind would be dropped silently)', () => {
+  const src = readFileSync(new URL('./lane-check.sh', import.meta.url), 'utf8');
+  assert.match(src, /tests:shell-tests\) run_step shell-tests "\$t" bash "\$t" ;;/);
 });
 
 test('removedStrings counts the text of a deleted source file', () => {

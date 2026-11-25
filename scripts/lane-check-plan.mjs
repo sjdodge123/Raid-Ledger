@@ -22,7 +22,9 @@
 //     api AND web typechecks.
 //   - scripts/smoke/**, playwright.config.*, scripts/*.ts: the smoke typecheck.
 //   - scripts/*.mjs: `node --test` its .spec.mjs (itself or sibling);
-//     scripts/**/*.sh: `bash -n`.
+//     scripts/**/*.sh: `bash -n`. Any path of the `scripts` target (the same
+//     set --scoped runs them for) also runs the scripts/test/*.test.sh
+//     harnesses once, through scripts/test/run-all.sh as CI does.
 //   - docs, markdown, .claude/**, planning-artifacts/**: nothing.
 //
 // smokeStrings: string literals (>= 8 chars) on REMOVED lines of non-test
@@ -63,6 +65,8 @@ const MIN_LEN = 8;
 // lane-check.sh runs one `git grep` per candidate; past this many, the rest are
 // reported as one skipped row instead.
 export const MAX_SMOKE_STRINGS = 200;
+/** CI's scripts-tests entry point for the scripts/test/*.test.sh harnesses. */
+export const SHELL_TESTS = 'scripts/test/run-all.sh';
 
 /** Workspace of a path: contract | api | web | smoke | scripts | tool:<x> | null. */
 export function workspaceOf(path) {
@@ -80,7 +84,7 @@ export function collapseFolders(folders) {
 function emptyPlan() {
   return {
     jest: [], vitest: [], jestRelated: [], vitestRelated: [],
-    toolTests: [], contractTests: false, nodeTests: [], shellParse: [], typecheck: [], eslint: {},
+    toolTests: [], contractTests: false, shellTests: false, nodeTests: [], shellParse: [], typecheck: [], eslint: {},
     smokeStrings: [], skipped: [],
   };
 }
@@ -117,7 +121,10 @@ function addWorkspace(plan, typecheck, ws, path, exists) {
     ['contract', 'api', 'web'].forEach((t) => typecheck.add(t));
     return;
   }
-  if (ws === 'scripts') return void addScript(plan, path, exists);
+  if (ws === 'scripts') {
+    plan.shellTests = true;
+    return void addScript(plan, path, exists);
+  }
   typecheck.add(ws);
   // scripts/check-bundle-size.mjs etc. map to web for the typecheck, but are
   // scripts: their sibling spec runs, and they are never web eslint targets.
@@ -223,6 +230,7 @@ export function toLines(plan) {
   if (plan.contractTests) rows.push(['contract-tests', 'packages/contract']);
   plan.toolTests.forEach((t) => rows.push(['tool-tests', t]));
   plan.nodeTests.forEach((t) => rows.push(['node-test', t]));
+  if (plan.shellTests) rows.push(['shell-tests', SHELL_TESTS]);
   plan.shellParse.forEach((t) => rows.push(['bash-n', t]));
   Object.entries(plan.eslint).forEach(([ws, fs]) => rows.push([`eslint:${ws}`, fs.join(' ')]));
   plan.smokeStrings.forEach((s) => rows.push(['smoke-string', s.replace(/[\t\n]/g, ' ')]));
