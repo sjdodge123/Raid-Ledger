@@ -1,7 +1,7 @@
 /**
  * Voice-activity smoke fixtures.
  *
- * Lives outside `tests/voice-activity.test.ts` because that file is pinned
+ * Lives outside `tests/voice-activity.test.ts` because that file was pinned
  * over its line cap (TECH-DEBT-BACKLOG 2026-09-07) and must not grow.
  *
  * Pure apart from the API client it is handed — the unit spec drives it with

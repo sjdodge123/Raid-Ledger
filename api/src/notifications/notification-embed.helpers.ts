@@ -17,6 +17,11 @@ import { applyLfgInviteEmbed } from './lfg-affinity-dm.helpers';
 import { applyLfgPlayerInviteEmbed } from './notification-embed.lfg-player-invite';
 import { addPollHubField } from './notification-embed.poll-hub';
 import { dmVoiceFieldValue } from './notification-voice.helpers';
+import {
+  DISCORD_LIMITS,
+  fitDiscordText,
+  neutraliseMaskedLinks,
+} from './notification-embed.discord-text';
 
 /** Safely convert an unknown payload value to a string. */
 export function toStr(value: unknown): string {
@@ -196,7 +201,11 @@ export function getTypeLabel(type: NotificationType): string {
   return TYPE_LABEL[type] ?? 'Notification';
 }
 
-/** Add a field to an embed if the payload value is truthy. */
+/**
+ * Add a field to an embed if the payload value is truthy. Every payload-driven
+ * field value goes through here, and they carry user text (event titles, slot
+ * and game names), so a `[label](url)` is neutralised like the description.
+ */
 function addFieldIf(
   embed: EmbedBuilder,
   payload: Record<string, unknown>,
@@ -204,8 +213,12 @@ function addFieldIf(
   name: string,
   inline = true,
 ): void {
-  if (payload[key])
-    embed.addFields({ name, value: toStr(payload[key]), inline });
+  if (!payload[key]) return;
+  const value = fitDiscordText(
+    neutraliseMaskedLinks(toStr(payload[key])),
+    DISCORD_LIMITS.fieldValue,
+  );
+  embed.addFields({ name, value, inline });
 }
 
 /** Add a voice channel field: the live link, or a planned temporary channel. */

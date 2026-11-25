@@ -42,6 +42,11 @@ jest.mock('./standalone-poll-complete.helpers', () => ({
 jest.mock('./standalone-poll-auth.helpers', () => ({
   assertCanLockInPoll: jest.fn(),
 }));
+// ROK-2320: an ordinary poll — no follow-up source event, no carryover.
+jest.mock('../scheduling/scheduling-query.helpers', () => ({
+  ...jest.requireActual<object>('../scheduling/scheduling-query.helpers'),
+  findFollowupSourceEventId: jest.fn().mockResolvedValue(null),
+}));
 
 const claim = jest.mocked(claimMatchForLockIn);
 const link = jest.mocked(linkClaimedMatch);
