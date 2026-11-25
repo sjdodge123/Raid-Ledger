@@ -11,6 +11,7 @@ import {
   type DmEmbed,
 } from '../discord-bot/embeds/embed-chrome.helpers';
 import { NOTIFICATION_EMBED_AUTHORS } from './notification-embed.helpers';
+import { neutraliseMaskedLinks } from './notification-embed.discord-text';
 import type { FollowupCandidateEvent } from './post-event-followup.helpers';
 
 /** Organizer gate row: Discord link + moderation state + opt-out flag. */
@@ -90,7 +91,7 @@ export class PostEventFollowupPromptService {
     })
       .setTitle('Schedule a follow-up?')
       .setDescription(
-        `**${event.title}** just wrapped. Want to line up the next one?`,
+        `**${neutraliseMaskedLinks(event.title)}** just wrapped. Want to line up the next one?`,
       );
   }
 

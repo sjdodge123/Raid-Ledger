@@ -21,7 +21,11 @@ import {
   buildAdjustNotificationsUrl,
   buildNotificationSettingsUrl,
 } from './adjust-notifications-url.helpers';
-import { notificationDiscordText } from './notification-embed.discord-text';
+import {
+  DISCORD_LIMITS,
+  fitDiscordText,
+  notificationDiscordText,
+} from './notification-embed.discord-text';
 
 interface NotificationEmbedInput {
   notificationId: string;
@@ -58,8 +62,9 @@ export class DiscordNotificationEmbedService {
       footerLabel: categoryLabel,
       timestamp: false,
     })
-      .setTitle(`${emoji} ${text.title}`)
-      .setDescription(text.message)
+      // Escaping can lengthen text past Discord's limits, so fit it after.
+      .setTitle(fitDiscordText(`${emoji} ${text.title}`, DISCORD_LIMITS.title))
+      .setDescription(fitDiscordText(text.message, DISCORD_LIMITS.description))
       .setTimestamp(this.resolveTimestamp(input));
     addTypeSpecificFields(embed, input.type, input.payload);
     const clientUrl = await this.resolveClientUrl();

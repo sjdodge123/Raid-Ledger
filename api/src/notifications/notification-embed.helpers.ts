@@ -17,7 +17,11 @@ import { applyLfgInviteEmbed } from './lfg-affinity-dm.helpers';
 import { applyLfgPlayerInviteEmbed } from './notification-embed.lfg-player-invite';
 import { addPollHubField } from './notification-embed.poll-hub';
 import { dmVoiceFieldValue } from './notification-voice.helpers';
-import { neutraliseMaskedLinks } from './notification-embed.discord-text';
+import {
+  DISCORD_LIMITS,
+  fitDiscordText,
+  neutraliseMaskedLinks,
+} from './notification-embed.discord-text';
 
 /** Safely convert an unknown payload value to a string. */
 export function toStr(value: unknown): string {
@@ -210,7 +214,10 @@ function addFieldIf(
   inline = true,
 ): void {
   if (!payload[key]) return;
-  const value = neutraliseMaskedLinks(toStr(payload[key]));
+  const value = fitDiscordText(
+    neutraliseMaskedLinks(toStr(payload[key])),
+    DISCORD_LIMITS.fieldValue,
+  );
   embed.addFields({ name, value, inline });
 }
 

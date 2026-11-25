@@ -31,6 +31,7 @@ import {
 } from './lineup-tiebreaker-reminder.helpers';
 import { escalateOverdueTiebreakers } from './tiebreaker/tie-escalation.helpers';
 import { resolveLineupReminderTargets } from './lineup-reminder-target.helpers';
+import { BOT_LINKS_KEY } from '../notifications/notification-embed.discord-text';
 import {
   sendVoteReminder,
   sendSchedulingReminder,
@@ -278,6 +279,7 @@ export class LineupReminderService {
       message,
       payload: {
         subtype: 'lineup_tiebreaker_reminder',
+        [BOT_LINKS_KEY]: true,
         lineupId: tb.lineupId,
         tiebreakerId: tb.tiebreakerId,
         mode: tb.mode,

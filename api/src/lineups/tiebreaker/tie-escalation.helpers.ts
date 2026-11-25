@@ -14,6 +14,7 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { DEDUP_TTL } from '../lineup-notification.constants';
+import { BOT_LINKS_KEY } from '../../notifications/notification-embed.discord-text';
 import {
   loadOverdueActiveTiebreakers,
   type ActiveTiebreakerRow,
@@ -127,6 +128,7 @@ async function escalateOne(
       message,
       payload: {
         subtype: 'lineup_tiebreaker_escalation',
+        [BOT_LINKS_KEY]: true,
         lineupId: tb.lineupId,
         tiebreakerId: tb.tiebreakerId,
         mode: tb.mode,

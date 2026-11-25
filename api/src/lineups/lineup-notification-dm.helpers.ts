@@ -6,6 +6,11 @@
 import type { NotificationService } from '../notifications/notification.service';
 import type { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { DEDUP_TTL } from './lineup-notification.constants';
+import {
+  BOT_LINKS_KEY,
+  escapeLinkLabel,
+  escapeLinkOpeners,
+} from '../notifications/notification-embed.discord-text';
 
 /** Shape of a Discord-linked member returned from queries. */
 export interface DiscordMember {
@@ -79,7 +84,10 @@ function composeVotingMessage(
   games: ReadonlyArray<{ id: number; name: string }>,
   baseUrl?: string,
 ): string {
-  const desc = lineup.description ? `${lineup.description}\n\n` : '';
+  // User text is escaped here, at the source: the ballot's links are the bot's.
+  const desc = lineup.description
+    ? `${escapeLinkOpeners(lineup.description)}\n\n`
+    : '';
   const deadline = lineup.votingDeadline
     ? `\n\n\u23F0 **Voting closes:** ${discordTs(lineup.votingDeadline)}`
     : '';
@@ -101,8 +109,8 @@ function buildBallot(
   if (games.length === 0) return '';
   const lines = games.slice(0, 15).map((g) => {
     const label = baseUrl
-      ? `[**${g.name}**](${baseUrl}/games/${g.id})`
-      : `**${g.name}**`;
+      ? `[**${escapeLinkLabel(g.name)}**](${baseUrl}/games/${g.id})`
+      : `**${escapeLinkOpeners(g.name)}**`;
     return `\u{1F3AE} ${label}`;
   });
   const overflow =
@@ -164,6 +172,7 @@ export async function sendVotingDM(
     payload: {
       subtype: 'lineup_voting_open',
       lineupId: lineup.id,
+      [BOT_LINKS_KEY]: true,
     },
   });
 }

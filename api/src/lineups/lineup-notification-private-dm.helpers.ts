@@ -14,6 +14,11 @@ import type {
   MatchDmInfo,
 } from './lineup-notification-dm.helpers';
 import { DEDUP_TTL } from './lineup-notification.constants';
+import {
+  BOT_LINKS_KEY,
+  escapeLinkLabel,
+  escapeLinkOpeners,
+} from '../notifications/notification-embed.discord-text';
 import { votingOpensClause } from './lineup-notification-embed-copy.helpers';
 
 /** Tiebreaker shape needed by the open-notification DM (ROK-1117). */
@@ -38,9 +43,10 @@ export function buildTiedGamesList(
 ): string {
   if (games.length === 0) return '';
   const lines = games.slice(0, 15).map((g) => {
+    // Game names are escaped at the source: the links are the bot's own.
     const label = clientUrl
-      ? `[**${g.name}**](${clientUrl}/games/${g.id})`
-      : `**${g.name}**`;
+      ? `[**${escapeLinkLabel(g.name)}**](${clientUrl}/games/${g.id})`
+      : `**${escapeLinkOpeners(g.name)}**`;
     return `\u{1F3AE} ${label}`;
   });
   const overflow =
@@ -238,6 +244,7 @@ export async function sendTiebreakerOpenDM(
     payload: {
       subtype: 'lineup_tiebreaker_open',
       lineupId: lineup.id,
+      [BOT_LINKS_KEY]: true,
       tiebreakerId: tiebreaker.id,
       mode: tiebreaker.mode,
     },
