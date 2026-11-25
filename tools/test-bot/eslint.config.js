@@ -49,14 +49,4 @@ export default tseslint.config(
       'max-lines-per-function': ['warn', { max: 60, skipBlankLines: true, skipComments: true }],
     },
   },
-  {
-    // The two files already over their cap when the gate was introduced
-    // (fixtures.ts 397/300, voice-activity.test.ts 996/750). Pinned to 'warn'
-    // by name so the cap stays an error for every other file; remove each
-    // entry when the file is split (TECH-DEBT-BACKLOG 2026-09-07 fix/rok-1516).
-    files: ['src/smoke/fixtures.ts', 'src/smoke/tests/voice-activity.test.ts'],
-    rules: {
-      'max-lines': 'warn',
-    },
-  },
 );
