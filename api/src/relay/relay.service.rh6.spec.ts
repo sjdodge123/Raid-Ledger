@@ -265,6 +265,7 @@ describeRegisterResultRh6();
 describeHeartbeatRh6();
 describeRegisterRaceRh6();
 describeRegisterRetryRh6();
+describeHeartbeatRaceRh6();
 
 /** Hold the next fetch open until the returned release() is called. */
 function holdFetch(): (res: Partial<Response>) => void {
@@ -346,6 +347,28 @@ function describeRegisterRetryRh6() {
       await service.register();
       await service.register();
       expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+}
+
+function describeHeartbeatRaceRh6() {
+  describe('heartbeat vs reconnect (Codex RH-6)', () => {
+    it('a late 401 for an old token keeps a newly stored token', async () => {
+      store.set(SETTING_KEYS.RELAY_ENABLED, 'true');
+      store.set(SETTING_KEYS.RELAY_TOKEN, 'rlh_old');
+      store.set(SETTING_KEYS.RELAY_INSTANCE_ID, INSTANCE_ID);
+      const release = holdFetch();
+      const beat = service.handleHeartbeat();
+      await settle();
+      mockFetch.mockResolvedValueOnce(
+        reply(201, { ...REGISTERED, token: 'rlh_new' }),
+      );
+      await service.register();
+      release(reply(401));
+      await beat;
+      expect(store.get(SETTING_KEYS.RELAY_TOKEN)).toBe('rlh_new');
+      expect(service.isRevoked()).toBe(false);
+      expect((await service.getStatus()).error).toBeUndefined();
     });
   });
 }

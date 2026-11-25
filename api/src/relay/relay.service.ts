@@ -321,12 +321,21 @@ export class RelayService {
       this.heartbeatFailures = 0;
       return;
     }
-    if (result.status === 401) return this.handleRevoked();
+    if (result.status === 401) return this.handleRevoked(token);
     this.recordHeartbeatFailure(result.reason);
   }
 
-  /** L8: drop the token, keep `relay_enabled`, report `revoked`. */
-  private async handleRevoked(): Promise<void> {
+  /**
+   * L8: drop the token, keep `relay_enabled`, report `revoked` — only if
+   * the rejected token is still the stored one. A late 401 for a token a
+   * reconnect already replaced says nothing about the new one.
+   */
+  private async handleRevoked(sentToken: string): Promise<void> {
+    const current = await this.settingsService.get(SETTING_KEYS.RELAY_TOKEN);
+    if (current !== sentToken) {
+      this.logger.debug('Ignoring a 401 for a superseded relay token');
+      return;
+    }
     await this.settingsService.delete(SETTING_KEYS.RELAY_TOKEN);
     this.revoked = true;
     this.trustTier = null;
