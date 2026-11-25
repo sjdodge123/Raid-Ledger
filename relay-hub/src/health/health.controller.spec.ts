@@ -78,26 +78,41 @@ describe('HealthController', () => {
   });
 });
 
-/** A client whose queries hang until cancelled (cancel rejects, as postgres.js does). */
+/**
+ * A client whose queries hang until cancelled. As in postgres.js, cancel()
+ * rejects the query AND returns a promise of its own, which rejects when the
+ * cancel connection cannot be opened (the DB host is unreachable).
+ */
 function hungSql() {
   const real = postgres('postgres://x:y@127.0.0.1:1/none', { max: 1 });
   const issued: { cancel: jest.Mock }[] = [];
+  /** `then` spies on each promise cancel() returned, in call order. */
+  const cancelThens: jest.SpyInstance[] = [];
   const sql = new Proxy(real, {
     apply() {
       let fail: (err: Error) => void = () => undefined;
+      const cancel = jest.fn(() => {
+        fail(new Error('57014 canceled'));
+        const result = Promise.reject(new Error('connect ECONNREFUSED (cancel)'));
+        // Pre-handled, so the assertion below (not jest's own unhandled-
+        // rejection hook) judges whether the controller consumed it.
+        result.catch(() => undefined);
+        cancelThens.push(jest.spyOn(result, 'then'));
+        return result;
+      });
       const query = Object.assign(
         new Promise<never>((_resolve, reject) => (fail = reject)),
-        { cancel: jest.fn(() => fail(new Error('57014 canceled'))) },
+        { cancel },
       );
       issued.push(query);
       return query;
     },
   });
-  return { sql, issued, real };
+  return { sql, issued, cancelThens, real };
 }
 
 describe('HealthController ready single-flight', () => {
-  const { sql, issued, real } = hungSql();
+  const { sql, issued, cancelThens, real } = hungSql();
   const epoch = new EpochService(drizzle(sql, { schema }));
   const controller = new HealthController(sql, epoch);
 
@@ -119,6 +134,18 @@ describe('HealthController ready single-flight', () => {
     );
     expect(statuses).toEqual([503, 503, 503]);
     expect(issued[0]?.cancel).toHaveBeenCalled();
+  });
+
+  it('attaches a rejection handler to the promise cancel() returns', async () => {
+    const probe = controller.ready().catch((e: unknown) => e);
+    await jest.advanceTimersByTimeAsync(READY_TIMEOUT_MS);
+    expect(await probe).toBeInstanceOf(HttpException);
+    // Unconsumed, a cancel connection that fails is an unhandled rejection,
+    // which kills the hub when no Sentry DSN installs a listener.
+    expect(cancelThens.at(-1)).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Function),
+    );
   });
 
   it('starts a fresh query once the cancelled one has settled', async () => {

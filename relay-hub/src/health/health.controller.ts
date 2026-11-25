@@ -53,8 +53,12 @@ export class HealthController {
       await withTimeout(query, READY_TIMEOUT_MS);
     } catch {
       // Cancel a query that outlived the deadline so it stops holding a
-      // pool connection (a no-op once it has already failed).
-      query.cancel();
+      // pool connection. Best-effort: cancel() is typed void but returns a
+      // promise that rejects when the cancel connection itself fails
+      // (postgres.js 3.4.9 index.js:350), so it must never escape.
+      void Promise.resolve()
+        .then(() => query.cancel())
+        .catch(() => undefined);
       throw new HttpException(
         { status: 'unavailable' },
         HttpStatus.SERVICE_UNAVAILABLE,
