@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RelayService } from './relay.service';
 import { SettingsService } from '../settings/settings.service';
-import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 
@@ -12,25 +11,27 @@ global.fetch = mockFetch;
 function describeRelayService() {
   let service: RelayService;
   let mockSettingsService: Partial<SettingsService>;
-  let mockDb: Record<string, jest.Mock>;
+  /** In-memory app_settings: get/set/delete read and write it. */
+  let store: Map<string, string>;
 
   beforeEach(async () => {
+    store = new Map();
     mockSettingsService = {
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn().mockResolvedValue(undefined),
-      delete: jest.fn().mockResolvedValue(undefined),
-    };
-
-    mockDb = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockResolvedValue([{ count: 0 }]),
+      get: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
+      set: jest.fn((key: string, value: string) => {
+        store.set(key, value);
+        return Promise.resolve();
+      }),
+      delete: jest.fn((key: string) => {
+        store.delete(key);
+        return Promise.resolve();
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RelayService,
         { provide: SettingsService, useValue: mockSettingsService },
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
         {
           provide: CronJobService,
           useValue: {
@@ -117,7 +118,9 @@ function describeRelayService() {
 
       const result = await service.register();
 
-      expect(result.enabled).toBe(true);
+      // ROK-1676 AC 4: a failed register no longer flips relay_enabled, so
+      // the status reports the real (unset) flag instead of `true`.
+      expect(result.enabled).toBe(false);
       expect(result.connected).toBe(false);
       expect(result.error).toContain('Could not reach relay');
     });
@@ -125,8 +128,15 @@ function describeRelayService() {
     it('should store token on successful registration', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
+        status: 201,
         json: () =>
-          Promise.resolve({ token: 'relay-token-123', instanceId: 'test-id' }),
+          Promise.resolve({
+            token: 'rlh_token-123',
+            instanceId: '7f8c2d1e-4b5a-4c3d-9e8f-1a2b3c4d5e6f',
+            trustTier: 'contributor',
+            schemaVersion: 1,
+            epoch: 'e1',
+          }),
       });
 
       const result = await service.register();
@@ -134,7 +144,7 @@ function describeRelayService() {
       expect(result.connected).toBe(true);
       expect(mockSettingsService.set).toHaveBeenCalledWith(
         SETTING_KEYS.RELAY_TOKEN,
-        'relay-token-123',
+        'rlh_token-123',
       );
     });
   });
