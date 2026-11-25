@@ -36,6 +36,7 @@ export const HUB_POINT_KINDS: Readonly<Record<string, HubBehaviourKind>> = {
   GAME_LOG_PARSER: 'log-parser',
   CRON_REGISTRAR: 'scheduled-job',
   HUB_CLAIM_PROVIDER: 'claim-provider',
+  LFG_GROUPING: 'lfg-grouping',
 };
 
 /** Kinds this scan has a live-registration scanner for. */
@@ -180,6 +181,22 @@ export interface ScanContext {
 
 type Found = { key?: string; problem?: string };
 
+/**
+ * ROK-2352 — `this.<field>` → the adapter class's literal
+ * `readonly behaviourId = '<id>'`. One adapter registered once per game slug
+ * (lfg-grouping) names its declared id there, since the key is a loop slug.
+ */
+function adapterBehaviourId(
+  expr: string,
+  src: ScanSource,
+  all: readonly ScanSource[],
+): string | undefined {
+  const field = /^this\.(\w+)$/.exec(expr)?.[1];
+  return field === undefined
+    ? undefined
+    : resolveFieldProp(field, 'behaviourId', src, all);
+}
+
 /** One `registerAdapter(...)` call → its `owner/kind/id`, or a problem. */
 function adapterCall(
   args: string[],
@@ -195,7 +212,9 @@ function adapterCall(
   }
   const kind = new Map(Object.entries(HUB_POINT_KINDS)).get(point);
   if (kind === undefined) return undefined;
-  const key = resolveExpr(args[1] ?? '', src, all, ctx.constants);
+  const key =
+    adapterBehaviourId(args[2] ?? '', src, all) ??
+    resolveExpr(args[1] ?? '', src, all, ctx.constants);
   const ownerSrc = ownerExpr(args[3], src);
   const owner =
     ownerSrc === undefined

@@ -54,6 +54,7 @@ const HUB_POINT_NAMES = [
   'GAME_LOG_PARSER',
   'CRON_REGISTRAR',
   'HUB_CLAIM_PROVIDER',
+  'LFG_GROUPING',
 ] as const;
 
 function registry(): PluginRegistryService {
@@ -452,6 +453,37 @@ describe('ROK-2208 — listener behaviours of other kinds are scanned (each must
       `plugins/valheim/a.ts: event listener behaviour "'a'" — needs a resolvable ownerPluginId and an @OnEvent(APP_EVENT_EVENTS.*) handler`,
       `plugins/valheim/b.ts: listener behaviour "'b'" of kind "'bogus'" — needs a resolvable ownerPluginId, a scanned hubBehaviourKind and an @OnEvent handler`,
       `plugins/valheim/c.ts: listener behaviour "'c'" of kind "'ingest-source'" — needs a resolvable ownerPluginId, a scanned hubBehaviourKind and an @OnEvent handler`,
+    ]);
+  });
+});
+
+describe('ROK-2352 — lfg-grouping registrations are scanned (each must go red)', () => {
+  const adapterClass: ScanSource = {
+    file: 'plugins/wow-common/lfg/wow-lfg-grouping.adapter.ts',
+    text: "export class WowLfgGroupingAdapter { readonly behaviourId = 'wow-instance-lfg'; }",
+  };
+  const loop = (owner: string): ScanSource => ({
+    file: 'plugins/wow-common/lfg/wow-lfg.module.ts',
+    text: `class M { constructor(private readonly lfgGrouping: WowLfgGroupingAdapter) {} r() { for (const slug of ALL_WOW_GAME_SLUGS) { this.registry.registerAdapter(EXTENSION_POINTS.LFG_GROUPING, slug, this.lfgGrouping, { ownerPluginId: ${owner} }); } } }`,
+  });
+
+  it('keys a per-slug registration by the adapter behaviourId, not the slug', () => {
+    const scan = scanHubRegistrations(
+      [adapterClass, loop('WOW_COMMON_MANIFEST.id')],
+      CTX,
+    );
+    expect(scan.problems).toEqual([]);
+    expect(scan.keys).toEqual(['blizzard/lfg-grouping/wow-instance-lfg']);
+  });
+
+  it('fails on an lfg-grouping nobody declared, and reports one without a behaviourId', () => {
+    const stray = scanHubRegistrations([adapterClass, loop("'valheim'")], CTX);
+    expect(ownershipDrift(stray.keys, HUB_PLUGIN_MANIFESTS)).toContain(
+      'valheim/lfg-grouping/wow-instance-lfg is registered but not declared in HUB_PLUGIN_MANIFESTS',
+    );
+    const noId = scanHubRegistrations([loop("'blizzard'")], CTX);
+    expect(noId.problems).toEqual([
+      'plugins/wow-common/lfg/wow-lfg.module.ts: LFG_GROUPING registration — cannot resolve key "slug" / owner "\'blizzard\'"',
     ]);
   });
 });

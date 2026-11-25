@@ -447,6 +447,12 @@ export interface HubClaimProvider {
  * this one under the max-lines cap; re-exported so importers are unchanged.
  */
 export type { GameActivityAttributionAdapter } from './game-activity-attribution.adapter';
+/** ROK-2352 — the `lfg-grouping` adapter, in its own file for the same reason. */
+export type {
+  LfgGroupDescriptor,
+  LfgGroupingAdapter,
+  LfgLockInPatch,
+} from './lfg-grouping.adapter';
 
 /** Well-known extension point identifiers */
 export const EXTENSION_POINTS = {
@@ -464,6 +470,8 @@ export const EXTENSION_POINTS = {
   HUB_KIND: 'hub-kind',
   HUB_CLAIM_PROVIDER: 'hub-claim-provider',
   GAME_ACTIVITY_ATTRIBUTION: 'game-activity-attribution',
+  /** ROK-2352 — splits a game's LFG into groups; keyed by game slug. */
+  LFG_GROUPING: 'lfg-grouping',
 } as const;
 
 /**
@@ -476,6 +484,7 @@ export const HUB_EXTENSION_POINTS = [
   EXTENSION_POINTS.GAME_LOG_PARSER,
   EXTENSION_POINTS.CRON_REGISTRAR,
   EXTENSION_POINTS.HUB_CLAIM_PROVIDER,
+  EXTENSION_POINTS.LFG_GROUPING,
 ] as const;
 
 /** One of {@link HUB_EXTENSION_POINTS}. */
