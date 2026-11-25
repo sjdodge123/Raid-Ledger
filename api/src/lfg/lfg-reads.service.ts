@@ -23,6 +23,7 @@ import { SettingsService } from '../settings/settings.service';
 import { requireGame, requireVisibleGame } from './lfg-query.helpers';
 import { readGroupList } from './lfg-group-list.helpers';
 import { resolveLfgGrouping } from './lfg-grouping.helpers';
+import { resolveGameReadScope } from './lfg-group-scope.helpers';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { buildOverlapResponse } from './lfg-overlap-grid.helpers';
 import { listGameHistory } from './lfg-history.helpers';
@@ -45,15 +46,23 @@ export class LfgReadsService {
    * is projected in the community's zone, not the server's (C1).
    *
    * @param gameId - Game whose group to project.
+   * @param group - ROK-2352 `?group`; the fold reads the whole game.
    */
-  async getOverlap(gameId: number): Promise<LfgOverlapResponseDto> {
-    await requireGame(this.db, gameId);
+  async getOverlap(
+    gameId: number,
+    group?: string,
+  ): Promise<LfgOverlapResponseDto> {
+    const game = await requireGame(this.db, gameId);
+    const scope = resolveGameReadScope(this.pluginRegistry, game.slug, group);
     const defaultTimeZone = (await this.settings.getDefaultTimezone()) ?? 'UTC';
-    return buildOverlapResponse(this.db, gameId, defaultTimeZone);
+    return buildOverlapResponse(this.db, gameId, defaultTimeZone, scope);
   }
 
   /**
    * `GET /lfg/:gameId/history` — past sessions for the game (§B).
+   *
+   * ROK-2352: `?group` is accepted (and grammar-checked) by the route but not
+   * applied — events carry no group key, so a group's history is its game's.
    *
    * @param gameId - Game whose history to read.
    */
@@ -67,15 +76,18 @@ export class LfgReadsService {
    *
    * @param userId - Caller, never suggested to themselves.
    * @param gameId - Game the group is for.
+   * @param group - ROK-2352 `?group`: members of THIS group are not suggested.
    */
   async getSuggestions(
     userId: number,
     gameId: number,
+    group?: string,
   ): Promise<LfgSuggestionsResponseDto> {
-    await requireGame(this.db, gameId);
+    const game = await requireGame(this.db, gameId);
+    const scope = resolveGameReadScope(this.pluginRegistry, game.slug, group);
     return {
       gameId,
-      suggestions: await listSuggestions(this.db, gameId, userId),
+      suggestions: await listSuggestions(this.db, gameId, userId, scope),
     };
   }
 

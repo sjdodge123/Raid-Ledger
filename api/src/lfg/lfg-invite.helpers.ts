@@ -16,6 +16,7 @@ import { isDiscordSnowflake } from '../notifications/discord-notification.consta
 import { resolveChannelPrefs } from '../notifications/notification-mapping.helpers';
 import { eligibleUser, liveIntent, type LfgDb } from './lfg-query.helpers';
 import { LFG_INVITE_NOTIFICATION_TYPE } from './lfg-invite.constants';
+import type { LfgGroupScope } from './lfg-group-scope.helpers';
 
 export type LfgInviteRow = typeof schema.lfgInvites.$inferSelect;
 
@@ -37,11 +38,15 @@ export async function countRecipientInvitesSince(
   return Number(row?.n ?? 0);
 }
 
-/** Invites the group for `gameId` sent since `since` (AC3). */
+/**
+ * Invites the group sent since `since` (AC3). ROK-2352: the cap is per
+ * `(game, group_key)`; a null scope (the fold) counts the whole game.
+ */
 export async function countGroupInvitesSince(
   db: LfgDb,
   gameId: number,
   since: Date,
+  groupKey: LfgGroupScope = null,
 ): Promise<number> {
   const [row] = await db
     .select({ n: count() })
@@ -50,6 +55,9 @@ export async function countGroupInvitesSince(
       and(
         eq(schema.lfgInvites.gameId, gameId),
         gt(schema.lfgInvites.sentAt, since),
+        groupKey === null
+          ? undefined
+          : eq(schema.lfgInvites.groupKey, groupKey),
       ),
     );
   return Number(row?.n ?? 0);
@@ -138,12 +146,16 @@ export async function recipientOptedOut(
   return typePrefs.discord === false;
 }
 
-/** Already in the group — the same read the affinity DM uses (§10). */
+/**
+ * Already in the group — the same read the affinity DM uses (§10).
+ * ROK-2352: `scope` narrows to one group; null = any hand in the game.
+ */
 export async function holdsLiveIntent(
   db: LfgDb,
   userId: number,
   gameId: number,
   now: Date,
+  scope: LfgGroupScope = null,
 ): Promise<boolean> {
   const [row] = await db
     .select({ id: schema.lfgIntents.id })
@@ -153,7 +165,7 @@ export async function holdsLiveIntent(
       and(
         eq(schema.lfgIntents.userId, userId),
         eq(schema.lfgIntents.gameId, gameId),
-        liveIntent(now),
+        liveIntent(now, scope),
       ),
     )
     .limit(1);
@@ -163,7 +175,13 @@ export async function holdsLiveIntent(
 /** Write the durable record — the same transaction that counted (D4). */
 export async function insertInvite(
   db: LfgDb,
-  input: { recipientUserId: number; inviterUserId: number; gameId: number },
+  input: {
+    recipientUserId: number;
+    inviterUserId: number;
+    gameId: number;
+    /** ROK-2352: the group invited into; omitted = `''`. */
+    groupKey?: string;
+  },
 ): Promise<LfgInviteRow> {
   const [row] = await db.insert(schema.lfgInvites).values(input).returning();
   return defined(row, 'inserted invite row');

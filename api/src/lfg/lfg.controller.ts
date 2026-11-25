@@ -147,29 +147,35 @@ export class LfgController {
     );
   }
 
-  /** Group-page read: the windows the live roster could all play in. */
+  /** Group-page read (`?group=`): the windows the live roster could all play in. */
   @Get(':gameId/overlap')
   getOverlap(
     @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
   ): Promise<LfgOverlapResponseDto> {
-    return this.reads.getOverlap(gameId);
+    const { group } = parseQuery(LfgGroupQuerySchema, query);
+    return this.reads.getOverlap(gameId, group);
   }
 
-  /** Group-page read: past scheduled events and Quick Play sessions. */
+  /** Group-page read: past sessions. `?group` is validated; history is per game. */
   @Get(':gameId/history')
   getHistory(
     @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
   ): Promise<LfgHistoryResponseDto> {
+    parseQuery(LfgGroupQuerySchema, query);
     return this.reads.getHistory(gameId);
   }
 
-  /** Group-page read: players who might want in on this group. */
+  /** Group-page read (`?group=`): players who might want in on this group. */
   @Get(':gameId/suggestions')
   getSuggestions(
     @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
     @Req() req: AuthenticatedRequest,
   ): Promise<LfgSuggestionsResponseDto> {
-    return this.reads.getSuggestions(req.user.id, gameId);
+    const { group } = parseQuery(LfgGroupQuerySchema, query);
+    return this.reads.getSuggestions(req.user.id, gameId, group);
   }
 
   /** Withdraw the caller's own intent. */
@@ -196,13 +202,15 @@ export class LfgController {
   async invite(
     @Param('gameId', ParseIntPipe) gameId: number,
     @Body() body: unknown,
+    @Query() query: unknown,
     @Req() req: AuthenticatedRequest,
   ): Promise<LfgInviteResponseDto> {
     const parsed = LfgInviteRequestSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.invites.invite(req.user.id, gameId, parsed.data.userId);
+    const { group } = parseQuery(LfgGroupQuerySchema, query);
+    return this.invites.invite(req.user.id, gameId, parsed.data.userId, group);
   }
 
   /** Record that this group converted into a poll or an event. */

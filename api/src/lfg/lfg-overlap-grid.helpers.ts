@@ -12,6 +12,7 @@
  *
  * Read-only: no INSERT/UPDATE/DELETE anywhere in this file.
  */
+import type { LfgGroupScope } from './lfg-group-scope.helpers';
 import { and, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { LfgOverlapResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
@@ -207,14 +208,16 @@ export async function loadMemberSlots(
  * @param gameId - Game whose LFG group to project.
  * @param defaultTimeZone - `app_settings.default_timezone`, used for members
  *   who never set one of their own.
+ * @param scope - ROK-2352: one group's roster; null = the fold (whole game).
  * @returns The wire response, windows capped at {@link LFG_OVERLAP_WINDOWS}.
  */
 export async function buildOverlapResponse(
   db: LfgDb,
   gameId: number,
   defaultTimeZone: string,
+  scope: LfgGroupScope = null,
 ): Promise<LfgOverlapResponseDto> {
-  const members = await listGroupMembers(db, gameId);
+  const members = await listGroupMembers(db, gameId, scope);
   const slots = await loadMemberSlots(
     db,
     members.map((m) => m.userId),

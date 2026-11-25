@@ -18,6 +18,10 @@ import type {
   LfgGroupingAdapter,
   LfgGroupingGameContext,
 } from '../plugins/plugin-host/lfg-grouping.adapter';
+import {
+  resolveLfgGrouping,
+  type LfgGroupingRegistry,
+} from './lfg-grouping.helpers';
 import type { LfgDb } from './lfg-query.helpers';
 import type { LfgIntentRow } from './lfg-write.helpers';
 
@@ -47,6 +51,25 @@ export function resolveReadGroupScope(
 ): LfgGroupScope {
   if (adapter === null) return null;
   return requested ?? LFG_ANY_GROUP_KEY;
+}
+
+/**
+ * {@link resolveReadGroupScope} straight from the registry — the one call the
+ * group-page reads (overlap, suggestions) and invites make.
+ *
+ * @param registry - Plugin registry (suspended adapters fold).
+ * @param gameSlug - The game's slug.
+ * @param requested - `?group`, already grammar-checked.
+ */
+export function resolveGameReadScope(
+  registry: LfgGroupingRegistry,
+  gameSlug: string,
+  requested: string | undefined,
+): LfgGroupScope {
+  return resolveReadGroupScope(
+    resolveLfgGrouping(registry, gameSlug),
+    requested,
+  );
 }
 
 /**
