@@ -29,7 +29,11 @@ export class InstancesService {
 
   async register(body: HubRegisterRequest): Promise<HubRegisterResponse> {
     if (body.schemaVersion !== HUB_SCHEMA_VERSION) {
-      throw hubError(426, 'schema_unsupported', `serves schemaVersion 1`);
+      throw hubError(
+        426,
+        'schema_unsupported',
+        `serves schemaVersion ${HUB_SCHEMA_VERSION}`,
+      );
     }
     const existing = await this.repo.findById(body.instanceId);
     if (existing?.status === 'revoked') throw hubError(403, 'revoked');

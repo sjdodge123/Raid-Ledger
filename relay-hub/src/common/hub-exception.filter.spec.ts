@@ -71,4 +71,31 @@ describe('HubExceptionFilter (ROK-1671 L7)', () => {
     filter.catch(new BadRequestException('Unexpected token } in JSON'), host);
     expect(sent).toEqual({ status: 400, body: { error: 'validation_failed' } });
   });
+  it.each([
+    [413, 'request entity too large', 'unknown'],
+    [415, 'unsupported charset "UTF-7"', 'unknown'],
+    [400, 'request aborted', 'validation_failed'],
+  ])(
+    'keeps a body-parser http-error %i and normalises its body',
+    (status, message, code) => {
+      const { host, sent } = fakeHost();
+      const err = Object.assign(new Error(message), {
+        status,
+        statusCode: status,
+        expose: true,
+      });
+      filter.catch(err, host);
+      expect(sent).toEqual({ status, body: { error: code } });
+    },
+  );
+
+  it.each([
+    ['a 5xx statusCode', { statusCode: 503 }],
+    ['a non-numeric statusCode', { statusCode: '413' }],
+    ['an out-of-range statusCode', { statusCode: 99 }],
+  ])('still answers 500 for an error with %s', (_label, extra) => {
+    const { host, sent } = fakeHost();
+    filter.catch(Object.assign(new Error('boom'), extra), host);
+    expect(sent).toEqual({ status: 500, body: { error: 'unknown' } });
+  });
 });
