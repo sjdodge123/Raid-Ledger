@@ -21,12 +21,8 @@ import { CrosswalkMatcherService } from './crosswalk-matcher.service';
 
 const INSTANCE = '6f6f6f6f-6666-4666-8666-666666666666';
 const ITERATIONS = 20;
-/**
- * AC 8 asks for < 2 s on CI Postgres. The fleet runners and GitHub CI share
- * the host with other jobs, so the assertion allows 2x that and the measured
- * time is logged: a slide toward the bound shows in the log before it fails.
- */
-const PERF_BUDGET_MS = 4_000;
+/** AC 8: a 100-item batch of new games finishes in < 2 s on CI Postgres. */
+const PERF_BUDGET_MS = 2_000;
 
 // Top-level hooks + tests: one file-wide DB (ROK-1670 L10).
 let db: TestDatabase;
@@ -145,7 +141,7 @@ it('AC8: a 100-item batch of new games completes within the budget', async () =>
   const results = await left.matchBatch(INSTANCE, items);
   const elapsed = performance.now() - started;
   process.stdout.write(
-    `[ROK-1673 AC8] 100 new games matched in ${elapsed.toFixed(0)} ms (spec < 2000, assert < ${PERF_BUDGET_MS})\n`,
+    `[ROK-1673 AC8] 100 new games matched in ${elapsed.toFixed(0)} ms (assert < ${PERF_BUDGET_MS})\n`,
   );
   expect(results.map((r) => r.result)).toEqual(Array(100).fill('created'));
   expect(new Set(results.map((r) => r.rlGameId)).size).toBe(100);
