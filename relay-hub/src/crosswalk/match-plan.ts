@@ -3,10 +3,16 @@ import type { StoredId } from './crosswalk.repository';
 import type { ItemId } from './item-ids';
 import { shouldRaise } from './provenance';
 
-/** An id another game owns; recorded, never applied. */
+/**
+ * An id another game owns; recorded, never applied. Direction follows AC 4:
+ * `existingRlGameId` is the game the item resolved to, `proposedRlGameId` is
+ * the id's current owner (RH-4b's admin view labels the columns this way).
+ */
 export interface ConflictPlan {
   readonly id: ItemId;
+  /** The game the contributed item resolved to. */
   readonly existingRlGameId: string;
+  /** The game that currently owns `id`. */
   readonly proposedRlGameId: string;
 }
 
