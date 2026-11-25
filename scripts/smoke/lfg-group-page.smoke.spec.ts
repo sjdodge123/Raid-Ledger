@@ -679,19 +679,51 @@ test('on mobile the last panel is not hidden under the bottom tab bar', async ({
     const tabBar = page.getByTestId('bottom-tab-bar');
     await expect(tabBar).toBeVisible();
 
-    await page.evaluate(() =>
-        window.scrollTo(0, document.documentElement.scrollHeight),
-    );
+    await scrollToSettledEnd(page);
     const panelBox = await panel.boundingBox();
-    const barBox = await tabBar.boundingBox();
-    expect(panelBox, 'suggestions panel must have a box').not.toBeNull();
-    expect(barBox, 'tab bar must have a box').not.toBeNull();
+    // The bar hides on a downward scroll (`use-scroll-direction`, a 300ms
+    // transform), so its LIVE box is mid-slide or off-screen here — reading it
+    // was the flake (TDB:2384). Compare with where the bar RESTS when shown:
+    // it is `fixed bottom-0`, so its top is the viewport height minus its own
+    // height (a translate never changes its height). That is the strictest line.
+    const barTop = await tabBar.evaluate(
+        (el) => window.innerHeight - el.getBoundingClientRect().height,
+    );
+    if (!panelBox) throw new Error('suggestions panel must have a box');
+    const panelBottom = panelBox.y + panelBox.height;
     expect(
-        panelBox!.y + panelBox!.height,
-        `the last panel's bottom (${String(panelBox!.y + panelBox!.height)}) ` +
-            `sits under the tab bar (top ${String(barBox!.y)}) — ROK-1556`,
-    ).toBeLessThanOrEqual(barBox!.y);
+        panelBottom,
+        `the last panel's bottom (${String(panelBottom)}) ` +
+            `sits under the tab bar (top ${String(barTop)}) — ROK-1556`,
+    ).toBeLessThanOrEqual(barTop);
 });
+
+/**
+ * Scroll the document to its end and wait until it STAYS there: the scroll
+ * sits at the bottom and the page height did not change since the previous
+ * read (a late panel can grow the page after the first `scrollTo`, which left
+ * the panel measured below the fold — TDB:2384). Re-issues the scroll on
+ * every poll, so growth is followed rather than raced.
+ */
+async function scrollToSettledEnd(page: Page): Promise<void> {
+    let lastHeight = -1;
+    await expect
+        .poll(
+            async () => {
+                const { height, atEnd } = await page.evaluate(() => {
+                    const doc = document.documentElement;
+                    window.scrollTo(0, doc.scrollHeight);
+                    const gap = doc.scrollHeight - (window.scrollY + window.innerHeight);
+                    return { height: doc.scrollHeight, atEnd: gap <= 1 };
+                });
+                const settled = atEnd && height === lastHeight;
+                lastHeight = height;
+                return settled;
+            },
+            { message: 'the page never settled at its bottom edge' },
+        )
+        .toBe(true);
+}
 
 /** Every hour of the week — so the invitee's availability never limits overlap. */
 const ALL_WEEK_SLOTS = Array.from({ length: 7 * 24 }, (_, i) => ({
