@@ -27,6 +27,9 @@ export const LFG_LIST_LIMIT = 200;
  */
 export const LFG_EXPIRY_DAYS = 7;
 
+/** ROK-2352 Q2 — live hands one user may hold across one game's groups. */
+export const LFG_MAX_HANDS_PER_GAME = 5;
+
 /**
  * ROK-1691 — the most a board post can age, in days, measured from when it
  * OPENED (`lfg_group_messages.posted_at`), whatever the group's activity.

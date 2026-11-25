@@ -1,8 +1,9 @@
 /**
  * Write-side helpers for LFG intents (ROK-1451).
  *
- * The partial unique index `(user_id, game_id) WHERE status = 'active'` is the
- * concurrency guard. Creates go through `ON CONFLICT DO NOTHING` + re-select —
+ * The partial unique index `(user_id, game_id, group_key) WHERE status =
+ * 'active'` (ROK-2352: one live hand per user per GROUP) is the concurrency
+ * guard. Creates go through `ON CONFLICT DO NOTHING` + re-select —
  * NEVER catch a unique violation, because under postgres.js a failed statement
  * poisons the whole transaction, savepoints included (memory
  * `reference_postgres_savepoint_does_not_contain_violations`).
@@ -61,6 +62,12 @@ export interface LfgUrgencyRequest {
    * runtime default — see `tonightExpiresAt`.
    */
   timezone?: string | null;
+  /**
+   * ROK-2352 — the group the hand is for, ALREADY folded by
+   * `resolveWriteGroupKey` (`''` = whole game). Rides on the request for the
+   * same reason as `timezone`. Absent means `''`.
+   */
+  groupKey?: string;
 }
 
 /** The default every pre-ROK-1479 caller gets: an unchanged week intent (`LFG_EXPIRY_DAYS`). */
@@ -189,11 +196,17 @@ export async function insertIntent(
       userId,
       gameId,
       status: 'active',
+      groupKey: opts.groupKey ?? '',
       visibility: LFG_DEFAULT_VISIBILITY,
       ...resolveIntentHorizon(opts),
     })
     .onConflictDoNothing({
-      target: [schema.lfgIntents.userId, schema.lfgIntents.gameId],
+      // `uq_lfg_intents_user_game_group_active` (ROK-2352).
+      target: [
+        schema.lfgIntents.userId,
+        schema.lfgIntents.gameId,
+        schema.lfgIntents.groupKey,
+      ],
       where: sql`status = 'active'`,
     })
     .returning();
@@ -201,16 +214,19 @@ export async function insertIntent(
 }
 
 /**
- * Read the caller's `status = 'active'` row for a game, expired or not.
+ * Read the caller's `status = 'active'` row for one group of a game, expired
+ * or not.
  *
  * @param db - Drizzle handle.
  * @param userId - Intent holder.
  * @param gameId - Game to look up.
+ * @param groupKey - ROK-2352: the group (`''` = whole game, the default).
  */
 export async function findActiveIntent(
   db: LfgDb,
   userId: number,
   gameId: number,
+  groupKey = '',
 ): Promise<LfgIntentRow | null> {
   const [row] = await db
     .select()
@@ -219,6 +235,7 @@ export async function findActiveIntent(
       and(
         eq(schema.lfgIntents.userId, userId),
         eq(schema.lfgIntents.gameId, gameId),
+        eq(schema.lfgIntents.groupKey, groupKey),
         eq(schema.lfgIntents.status, 'active'),
       ),
     )
