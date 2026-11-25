@@ -9,6 +9,7 @@
         "api",
         "web",
         "packages/*",
+        "relay-hub",
         "tools/mcp-discord",
         "tools/mcp-env",
         "tools/mcp-rl-fleet"

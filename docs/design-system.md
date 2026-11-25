@@ -228,7 +228,7 @@ text `-300`/`-400` → a `-700`…`-800` shade (`:692-711`), tinted fills → a 
 `bg-emerald-600`, which steps to emerald-700 `#047857` with a darker emerald-800 `#065f46` hover on light
 (`:871-889`, ROK-1472 ruling 2026-10-04; a disabled button with its own `disabled:bg-*` keeps that paint), and
 `bg-cyan-600` / `bg-cyan-500` (white is 3.62 / 2.37:1 on them), whose `text-foreground` label is forced to `#0f172a` (4.93 / 7.55:1; dawn's own
-foreground was 4.42:1; `brand-fill-forced-white.guard.test.ts`) — and `.badge-overlay` (`:793-818`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
+foreground was 4.42:1; `brand-fill-forced-white.guard.test.ts`) — and `.badge-overlay` (`:793-818`) opts cover-art badges out (raw classes by a per-class restore, the `success` / `warning` / `danger` tokens by a `--color-*` pin on the overlay — TDB:2480) — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple, indigo and teal repaint one step past
 the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`, teal-800 `#115e59`);
