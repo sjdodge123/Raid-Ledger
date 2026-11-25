@@ -1,5 +1,5 @@
 import { CrosswalkKindSchema } from '@raid-ledger/contract';
-import type { Sql } from 'postgres';
+import type { Sql, TransactionSql } from 'postgres';
 
 /** L4 key lists: every key is always emitted, in this order. */
 export const STATS_SOURCES = [
@@ -51,14 +51,24 @@ export function fillCounts(
 
 type Column = 'kind' | 'source' | 'provenance';
 
-async function countBy(sql: Sql, column: Column): Promise<CountRow[]> {
+async function countBy(
+  sql: TransactionSql,
+  column: Column,
+): Promise<CountRow[]> {
   return sql<CountRow[]>`
     SELECT coalesce(${sql(column)}, 'none') AS k, count(*)::int AS n
     FROM hub_game_ids GROUP BY 1`;
 }
 
+/** Every aggregate reads one snapshot, so the totals agree with each other. */
+const SNAPSHOT = 'isolation level repeatable read read only';
+
 /** Read-only counts with a stable shape and no timestamps (AC 4). */
 export async function collectStats(sql: Sql): Promise<CrosswalkStats> {
+  return sql.begin(SNAPSHOT, (tx) => readStats(tx));
+}
+
+async function readStats(sql: TransactionSql): Promise<CrosswalkStats> {
   const [games] = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n FROM hub_games`;
   const [conflicts] = await sql<{ open: number; total: number }[]>`
