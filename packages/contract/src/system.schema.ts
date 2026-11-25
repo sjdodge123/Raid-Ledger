@@ -59,6 +59,9 @@ export const SystemStatusSchema = z.object({
     /** ROK-1701: ISO time the current setup code stops working; present only
      *  while claimRequired. Not secret. */
     claimExpiresAt: z.string().datetime().optional(),
+    /** ROK-2370: true when the login page may offer a Discord sign-in code
+     *  (bot online, guild set, trusted client URL). Absent = treat as off. */
+    discordSigninCode: z.boolean().optional(),
 });
 
 export type SystemStatusDto = z.infer<typeof SystemStatusSchema>;
