@@ -12,6 +12,10 @@ import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { SignupsService } from '../../events/signups.service';
+import {
+  EVENT_ENDED_SIGNUP_MESSAGE,
+  isEventOver,
+} from '../../events/event-ended.helpers';
 import { CharactersService } from '../../characters/characters.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
@@ -35,28 +39,11 @@ export interface EventRow {
   slotConfig: unknown;
 }
 
-/** The reschedule lookup's row, with what `hasRescheduleEventEnded` reads. */
+/** The reschedule lookup's row, with what `isEventOver` reads. */
 export interface RescheduleEventRow extends EventRow {
   duration: [Date, Date];
   extendedUntil: Date | null;
   adHocStatus: string | null;
-}
-
-/** The reply a Confirm/Tentative press gets once the event is over. */
-export const RESCHEDULE_EVENT_ENDED_REPLY =
-  'This event has ended and is no longer accepting signups.';
-
-/**
- * Over by the rule `assertEventAcceptingSignups` applies to every other
- * signup path: an ended ad-hoc session, or an effective end in the past.
- */
-export function hasRescheduleEventEnded(
-  event: Pick<RescheduleEventRow, 'duration' | 'extendedUntil' | 'adHocStatus'>,
-  now: Date = new Date(),
-): boolean {
-  if (event.adHocStatus === 'ended') return true;
-  const effectiveEnd = event.extendedUntil ?? event.duration?.[1];
-  return !!effectiveEnd && effectiveEnd < now;
 }
 
 /** Tell a Confirm/Tentative press the event is over; true when it was. */
@@ -64,8 +51,8 @@ export async function replyIfEventEnded(
   i: ButtonInteraction,
   event: RescheduleEventRow,
 ): Promise<boolean> {
-  if (!hasRescheduleEventEnded(event)) return false;
-  await i.editReply({ content: RESCHEDULE_EVENT_ENDED_REPLY });
+  if (!isEventOver(event)) return false;
+  await i.editReply({ content: EVENT_ENDED_SIGNUP_MESSAGE });
   return true;
 }
 
