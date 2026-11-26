@@ -35,7 +35,7 @@ import { ValheimClaimSuggestCron } from './armory/identity/valheim-claim-suggest
 import { ValheimClaimSuggestDemoController } from './armory/identity/valheim-claim-suggest-demo.controller';
 import { NotificationModule } from '../../notifications/notification.module';
 import { DiscordBotModule } from '../../discord-bot/discord-bot.module';
-import { ValheimClaimSuggestListener } from '../../discord-bot/listeners/valheim-claim-suggest.listener';
+import { ValheimClaimSuggestListener } from './armory/identity/valheim-claim-suggest.listener';
 import { ValheimIdentityRepository } from './armory/identity/valheim-identity.repository';
 import { ValheimIdentityService } from './armory/identity/valheim-identity.service';
 import { ValheimSteamLinkListener } from './armory/identity/valheim-steam-link.listener';

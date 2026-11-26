@@ -74,9 +74,6 @@ export const ALLOWLIST: Record<string, Record<string, string>> = {
         '../../plugins/wow/lib/class-icons': 'ROK-1830 debt: class icons need a host API.',
         '../../plugins/wow/components/ProfessionBadges': 'ROK-1830 debt: profession badges need a slot.',
     },
-    'pages/invite/invite-character-step.tsx': {
-        '../../plugins/wow/components/wow-armory-import-form': 'ROK-1830 debt: the armory form should arrive through a plugin slot.',
-    },
 };
 
 /** The host API modules: every loose, shipped `plugins/*.ts(x)` file (ROK-1776/ROK-1830 r2). */

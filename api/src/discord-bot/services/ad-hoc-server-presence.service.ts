@@ -5,6 +5,8 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import type { ServerPresenceReader } from '../../plugins/pelican/presence/server-presence.reader';
+import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
+import { PLUGIN_EVENTS } from '../../plugins/plugin-host/plugin-manifest.interface';
 import type {
   ServerPresencePlayer,
   ServerPresenceSink,
@@ -32,8 +34,9 @@ import {
   AD_HOC_EVENTS,
   type AdHocParticipantJoinedPayload,
 } from '../discord-bot.constants';
-import { emitServerSpawn } from './ad-hoc-spawn-events.helpers';
-import { PendingServerPlayers } from './ad-hoc-server-pending';
+import { afterServerSpawn } from './ad-hoc-server-after-spawn.helpers';
+import { PendingServerPlayers, suspendAndClear } from './ad-hoc-server-pending';
+import { PerGameSerial } from './ad-hoc-server-serial';
 import {
   enrolGame,
   enrolTrackerInto,
@@ -41,6 +44,7 @@ import {
   hasTrackedPlayers,
   isServerRowJoin,
   lazyReader,
+  pluginActive,
   attachUnenrolled,
   openServerRows,
   type EnrolDeps,
@@ -51,7 +55,6 @@ import {
 } from './ad-hoc-voice-leave-server.helpers';
 import {
   afterServerLeave,
-  announceServerSpawn,
   closeServerRows,
   refreshLive,
   type PresenceEffectsDeps,
@@ -85,9 +88,11 @@ import {
 export class AdHocServerPresenceService implements ServerPresenceSink {
   private readonly logger = new Logger(AdHocServerPresenceService.name);
   /** Players present before the threshold is met, per Pelican server. */
-  private readonly pending = new PendingServerPlayers();
+  private readonly pending = new PendingServerPlayers(() =>
+    pluginActive(this.moduleRef, PELICAN_PLUGIN_ID),
+  );
   /** Per-game serialisation: one spawn decision at a time. */
-  private readonly chains = new Map<number, Promise<unknown>>();
+  private readonly queue = new PerGameSerial();
   private readonly onWindowExtended: SuppressionWindowHook = (p) =>
     this.eventEmitter.emit(SUPPRESSION_WINDOW_EVENTS.EXTENDED, p);
 
@@ -115,7 +120,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     source: ServerPresenceSource,
     player: ServerPresencePlayer,
   ): Promise<void> {
-    return this.serial(source.gameId, async () => {
+    return this.queue.run(source.gameId, async () => {
       if (!(await this.adHocEventService.isEnabled())) return;
       const live = await findLiveGameAdHocEvent(this.db, source.gameId);
       if (live) return this.attachWithPending(live, source, [player]);
@@ -127,7 +132,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     source: ServerPresenceSource,
     player: ServerPresencePlayer,
   ): Promise<void> {
-    return this.serial(source.gameId, async () => {
+    return this.queue.run(source.gameId, async () => {
       this.pending.rename(source.pelicanServerId, player);
       const live = await this.enrolledEvent(source, player);
       if (!live) return;
@@ -137,7 +142,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   }
 
   playerLeft(source: ServerPresenceSource, player: PlayerRef): Promise<void> {
-    return this.serial(source.gameId, async () => {
+    return this.queue.run(source.gameId, async () => {
       this.pending.remove(source.pelicanServerId, player);
       const live = await this.enrolledEvent(source, player);
       if (!live) return;
@@ -148,7 +153,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   }
 
   serverEmptied(source: ServerPresenceSource): Promise<void> {
-    return this.serial(source.gameId, async () => {
+    return this.queue.run(source.gameId, async () => {
       this.pending.clear(source.pelicanServerId);
       const { gameId, pelicanServerId: id } = source;
       for (const live of await listServerEnrolledEvents(this.db, gameId, id))
@@ -188,7 +193,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   playerCount(source: ServerPresenceSource, count: number): Promise<void> {
     const id = source.pelicanServerId;
     if (!this.pending.hasUnconfirmed(id)) return Promise.resolve();
-    return this.serial(source.gameId, async () => {
+    return this.queue.run(source.gameId, async () => {
       const rows = await openServerRows(
         this.fx,
         source.gameId,
@@ -218,7 +223,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     try {
       const gameId = (await getEventById(this.db, p.eventId))?.gameId;
       if (!gameId || !hasAnyoneToEnrol(this.enrol, gameId)) return;
-      await this.serial(gameId, async () => {
+      await this.queue.run(gameId, async () => {
         const live = await findLiveGameAdHocEvent(this.db, gameId);
         if (live) await enrolGame(this.enrol, gameId, live);
       });
@@ -236,9 +241,28 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   onTrackerEnrol(p: ServerTrackerEnrolPayload): Promise<boolean> {
     if (!hasTrackedPlayers(this.reader, p.gameId))
       return Promise.resolve(false);
-    return this.serial<boolean>(p.gameId, () =>
+    return this.queue.run<boolean>(p.gameId, () =>
       enrolTrackerInto(this.enrol, p.eventId, p.gameId),
     );
+  }
+
+  /**
+   * ROK-2355: Pelican turned off — refuse new holds and drop every one held,
+   * so a voice join cannot enrol or spawn from presence no longer observed.
+   * Each game's clear runs in that game's queue turn (Codex P2): an in-flight
+   * evaluate finishes on its holds rather than spawning from an emptied set.
+   * Open Quick Play rows stay: deactivation is no evidence anyone left.
+   */
+  @OnEvent(PLUGIN_EVENTS.DEACTIVATED)
+  async onPluginDeactivated({ slug }: { slug: string }): Promise<void> {
+    if (slug !== PELICAN_PLUGIN_ID) return;
+    await suspendAndClear(this.pending, this.queue);
+  }
+
+  /** ROK-2355: Pelican back on — its sessions may hold players again. */
+  @OnEvent(PLUGIN_EVENTS.ACTIVATED)
+  onPluginActivated({ slug }: { slug: string }): void {
+    if (slug === PELICAN_PLUGIN_ID) this.pending.resume();
   }
 
   // ─── Private ──────────────────────────────────────────
@@ -268,17 +292,6 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   private enrolledEvent(source: ServerPresenceSource, player: PlayerRef) {
     const { gameId, pelicanServerId } = source;
     return findServerEnrolledEvent(this.db, gameId, player, pelicanServerId);
-  }
-
-  /** Run `fn` after every earlier call for the same game has settled. */
-  private serial<T = void>(gameId: number, fn: () => Promise<T>): Promise<T> {
-    const prev = this.chains.get(gameId) ?? Promise.resolve();
-    const next = prev.then(fn, fn);
-    this.chains.set(
-      gameId,
-      next.catch(() => undefined),
-    );
-    return next;
   }
 
   /**
@@ -311,7 +324,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     source: ServerPresenceSource,
     player: ServerPresencePlayer,
   ): Promise<void> {
-    this.pending.hold(source, player);
+    if (this.pending.hold(source, player) === 0) return; // Pelican off
     await this.evaluate(source);
   }
 
@@ -335,6 +348,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     // re-check that follows this batch arms the monitor's 15-minute timer.
     if ((voice?.unconfirmed ?? 0) > 0) return;
     const players = this.pending.players(source.pelicanServerId);
+    if (players.length === 0) return; // holds dropped meanwhile: no empty spawn
     const plan = { source, binding, players };
     // Only the enrolled leave the hold; uncovered ones wait for a heartbeat.
     if (await this.spawn(plan, clearance))
@@ -371,25 +385,18 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   }
 
   /** Post-commit side effects of a server-born spawn. */
-  private async afterSpawn(
+  private afterSpawn(
     eventId: number,
     plan: SpawnPlan,
     input: ServerSpawnInput,
     joined: (number | null)[],
   ): Promise<void> {
-    if (input.bindingId)
-      this.adHocEventService.adoptEvent(input.bindingId, input.gameId, eventId);
-    // Post-commit (Codex r9 P2): the Quick Play itself, then its joiners.
-    emitServerSpawn(this.eventEmitter, eventId, input.gameId, joined);
-    await announceServerSpawn(this.fx, eventId, plan, input.ids);
-    const live = {
-      id: eventId,
-      channelBindingId: input.bindingId,
-      adHocStatus: 'live',
+    const deps = {
+      enrol: this.enrol,
+      adHocEventService: this.adHocEventService,
+      eventEmitter: this.eventEmitter,
+      logger: this.logger,
     };
-    await enrolGame(this.enrol, input.gameId, live, input.pelicanServerId);
-    this.logger.log(
-      `Server ${serverSourceKey(input.pelicanServerId)} spawned Quick Play ${eventId}`,
-    );
+    return afterServerSpawn(deps, { eventId, plan, input, joined });
   }
 }
