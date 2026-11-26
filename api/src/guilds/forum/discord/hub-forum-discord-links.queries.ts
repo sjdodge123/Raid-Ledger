@@ -294,13 +294,18 @@ export async function linkedMessageIds(
   return rows.map((r) => r.id);
 }
 
-/** A post was finally sent: its waiting replies move to the real post id. */
+/**
+ * A post was finally sent: its waiting replies move to the real post id.
+ * Returns the moved rows, oldest first — the caller sends exactly these (a
+ * conditional move, so a reply racing it via `adoptHeldReply` is never
+ * returned twice).
+ */
 export async function rehomeReplies(
   db: ForumDiscordDb,
   threadId: number,
   discordThreadId: string,
-): Promise<void> {
-  await db
+): Promise<ForumLink[]> {
+  const moved = await db
     .update(links)
     .set({ discordThreadId })
     .where(
@@ -309,7 +314,38 @@ export async function rehomeReplies(
         eq(links.kind, 'reply'),
         eq(links.discordThreadId, unsentId('thread', threadId)),
       ),
-    );
+    )
+    .returning();
+  return moved.sort((a, b) => a.id - b.id);
+}
+
+/**
+ * Where a just-claimed reply goes. A sent parent: its post. An unsent parent
+ * read before the claim may have been sent (and its replies re-homed) since:
+ * re-read it and, if sent, move this reply onto it unless the post's own
+ * re-home already took it (that side sends it then). Null = held: the post's
+ * send, or the S6 sweep, sends it.
+ */
+export async function heldReplyTarget(
+  db: ForumDiscordDb,
+  reply: ForumLink | null,
+  parent: ForumLink,
+): Promise<string | null> {
+  if (!reply) return null;
+  if (!isUnsent(parent)) return parent.discordThreadId;
+  const fresh = await findThreadLink(db, parent.threadId);
+  if (!fresh || isUnsent(fresh)) return null;
+  const moved = await db
+    .update(links)
+    .set({ discordThreadId: fresh.discordThreadId })
+    .where(
+      and(
+        eq(links.id, reply.id),
+        eq(links.discordThreadId, unsentId('thread', parent.threadId)),
+      ),
+    )
+    .returning({ id: links.id });
+  return moved.length > 0 ? fresh.discordThreadId : null;
 }
 
 /**

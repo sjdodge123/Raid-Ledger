@@ -79,6 +79,7 @@ export class HubForumDiscordOutboundService {
       now: () => this.now(),
       attempt: (link, run) => this.attempt(link, run),
       redrive: (link) => this.retry(link, 'thread.updated'),
+      resendReply: (link) => this.retry(link, 'reply.created'),
       clientUrl: () => getClientUrl(settings),
       timeZone: () => settings.getDefaultTimezone(),
     });
@@ -181,7 +182,7 @@ export class HubForumDiscordOutboundService {
       };
       const sent = await this.gateway.createPost(job.target, post, author);
       await links.markSent(this.db, link.id, sent, this.now());
-      await links.rehomeReplies(this.db, threadId, sent.threadId);
+      await this.events.rehome(threadId, sent.threadId);
     });
   }
 
@@ -205,11 +206,12 @@ export class HubForumDiscordOutboundService {
         replyId,
         discordThreadId: parent.discordThreadId,
       }));
-    if (!link || links.isUnsent(parent)) return; // S6 sends it after the post
+    const to = await links.heldReplyTarget(this.db, link, parent);
+    if (!link || to === null) return; // held: the post's send delivers it
     const ref = { guildId, threadId, replyId };
     const voice = [this.settings, record.author, ref, record.reply] as const;
     const [author, url] = await outboundVoice(...voice);
-    await this.sendReply(job.target, link, parent.discordThreadId, {
+    await this.sendReply(job.target, link, to, {
       body: record.reply.body,
       url,
       author,

@@ -66,6 +66,8 @@ export interface EventPostDeps {
    * job path (unbound / stale ⇒ nothing; locked ⇒ skipped until reopened).
    */
   redrive: (link: links.ForumLink) => Promise<unknown>;
+  /** Send one held reply link as `reply.created` (binding-checked). */
+  resendReply: (link: links.ForumLink) => Promise<unknown>;
   /** ROK-2292 D2: an event post opens with its tracked signup card. */
   starters: Pick<EventForumStarterCards, 'build' | 'track'>;
   /** ROK-2295: a poll post opens with the live poll embed. */
@@ -206,6 +208,27 @@ export class EventPostOutbound {
     for (const link of posts) await this.deps.redrive(link);
   }
 
+  /**
+   * A post just went out: the replies that waited on it (a first reply that
+   * raced the post) move onto it and are sent now, not at the next S6 sweep
+   * minutes later. Never throws — the post is already sent, and a failure
+   * here must not mark it failed (a retry would post twice); S6 is the
+   * backstop for any reply left unsent.
+   */
+  async rehome(threadId: number, discordThreadId: string): Promise<void> {
+    try {
+      const held = await links.rehomeReplies(
+        this.deps.db,
+        threadId,
+        discordThreadId,
+      );
+      for (const link of held) await this.deps.resendReply(link);
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      starterLogger.warn(`held replies of thread ${threadId}: ${why}`);
+    }
+  }
+
   private async send(
     to: EventPostTarget,
     link: links.ForumLink,
@@ -231,7 +254,7 @@ export class EventPostOutbound {
     await this.deps.attempt(link, async () => {
       const sent = await gateway.createPost(to.target, post, ROOT_AUTHOR);
       await links.markSent(db, link.id, sent, this.deps.now());
-      await links.rehomeReplies(db, link.threadId, sent.threadId);
+      await this.rehome(link.threadId, sent.threadId);
       if (eventCard && eventId !== null) {
         await trackSentStarter(
           this.deps.starters,
