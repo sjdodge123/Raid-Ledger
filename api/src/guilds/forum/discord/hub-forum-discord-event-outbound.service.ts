@@ -66,7 +66,10 @@ export interface EventPostDeps {
    * job path (unbound / stale ⇒ nothing; locked ⇒ skipped until reopened).
    */
   redrive: (link: links.ForumLink) => Promise<unknown>;
-  /** Send one held reply link as `reply.created` (binding-checked). */
+  /**
+   * Send one re-homed held reply with the op the S6 sweep would choose
+   * (binding-checked): a reply deleted meanwhile is never published.
+   */
   resendReply: (link: links.ForumLink) => Promise<unknown>;
   /** ROK-2292 D2: an event post opens with its tracked signup card. */
   starters: Pick<EventForumStarterCards, 'build' | 'track'>;
@@ -119,6 +122,12 @@ async function trackSentStarter(
     const why = err instanceof Error ? err.message : String(err);
     starterLogger.warn(`starter tracking of event ${eventId} failed: ${why}`);
   }
+}
+
+/** A held reply could not be re-homed or sent now; S6 will retry it. */
+function warnHeld(threadId: number, err: unknown): void {
+  const why = err instanceof Error ? err.message : String(err);
+  starterLogger.warn(`held replies of thread ${threadId}: ${why}`);
 }
 
 export class EventPostOutbound {
@@ -212,20 +221,25 @@ export class EventPostOutbound {
    * A post just went out: the replies that waited on it (a first reply that
    * raced the post) move onto it and are sent now, not at the next S6 sweep
    * minutes later. Never throws — the post is already sent, and a failure
-   * here must not mark it failed (a retry would post twice); S6 is the
-   * backstop for any reply left unsent.
+   * here must not mark it failed (a retry would post twice), and one
+   * reply's failure never holds back the next; S6 is the backstop for any
+   * reply left unsent. Known gap (review m3): a post whose send outlasts the
+   * S6 grace can have a held reply sent by a concurrent sweep too — closing
+   * it needs a claim-to-send state on the link.
    */
   async rehome(threadId: number, discordThreadId: string): Promise<void> {
+    let held: links.ForumLink[] = [];
     try {
-      const held = await links.rehomeReplies(
-        this.deps.db,
-        threadId,
-        discordThreadId,
-      );
-      for (const link of held) await this.deps.resendReply(link);
+      held = await links.rehomeReplies(this.deps.db, threadId, discordThreadId);
     } catch (err) {
-      const why = err instanceof Error ? err.message : String(err);
-      starterLogger.warn(`held replies of thread ${threadId}: ${why}`);
+      warnHeld(threadId, err);
+    }
+    for (const link of held) {
+      try {
+        await this.deps.resendReply(link);
+      } catch (err) {
+        warnHeld(threadId, err);
+      }
     }
   }
 
@@ -254,7 +268,7 @@ export class EventPostOutbound {
     await this.deps.attempt(link, async () => {
       const sent = await gateway.createPost(to.target, post, ROOT_AUTHOR);
       await links.markSent(db, link.id, sent, this.deps.now());
-      await this.rehome(link.threadId, sent.threadId);
+      // D8: the starter row first — the held replies' sends come after it.
       if (eventCard && eventId !== null) {
         await trackSentStarter(
           this.deps.starters,
@@ -263,6 +277,7 @@ export class EventPostOutbound {
           eventCard.state,
         );
       }
+      await this.rehome(link.threadId, sent.threadId);
     });
   }
 

@@ -316,6 +316,7 @@ export async function rehomeReplies(
       ),
     )
     .returning();
+  // UPDATE … RETURNING has no guaranteed order: sort here, not in SQL.
   return moved.sort((a, b) => a.id - b.id);
 }
 
@@ -328,10 +329,9 @@ export async function rehomeReplies(
  */
 export async function heldReplyTarget(
   db: ForumDiscordDb,
-  reply: ForumLink | null,
+  reply: ForumLink,
   parent: ForumLink,
 ): Promise<string | null> {
-  if (!reply) return null;
   if (!isUnsent(parent)) return parent.discordThreadId;
   const fresh = await findThreadLink(db, parent.threadId);
   if (!fresh || isUnsent(fresh)) return null;

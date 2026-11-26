@@ -25,6 +25,7 @@ import {
   type OutboundAuthor,
   type OutboundTarget,
 } from './hub-forum-discord-outbound.discord';
+import { retryOp } from './hub-forum-discord-sync-rules';
 import { outboundUrl, outboundVoice } from './hub-forum-discord-outbound.voice';
 import {
   findBinding,
@@ -79,7 +80,7 @@ export class HubForumDiscordOutboundService {
       now: () => this.now(),
       attempt: (link, run) => this.attempt(link, run),
       redrive: (link) => this.retry(link, 'thread.updated'),
-      resendReply: (link) => this.retry(link, 'reply.created'),
+      resendReply: (link) => this.retryHeld(link),
       clientUrl: () => getClientUrl(settings),
       timeZone: () => settings.getDefaultTimezone(),
     });
@@ -122,6 +123,16 @@ export class HubForumDiscordOutboundService {
     if (typeof job !== 'object') return job;
     await this.dispatch({ ...job, link });
     return 'dispatched';
+  }
+
+  /**
+   * A held reply its post's send just re-homed: the same choice as the S6
+   * sweep (ROK-2292 Codex P2), so one deleted meanwhile is closed out
+   * (`reply.deleted`) or skipped, never published.
+   */
+  private async retryHeld(link: links.ForumLink): Promise<void> {
+    const op = retryOp(link, await links.rlRowDeleted(this.db, link));
+    if (op !== null) await this.retry(link, op);
   }
 
   /**
@@ -188,15 +199,11 @@ export class HubForumDiscordOutboundService {
 
   private async createReply(job: Job): Promise<void> {
     const { guildId, threadId, replyId } = job.change;
-    if (replyId === undefined) return;
+    if (replyId === undefined || job.link?.discordDeletedAt) return;
     const record = await findReply(this.db, { guildId, threadId, replyId });
-    if (!record || notMirrored(record.reply)) return;
-    const parent =
-      (await links.findThreadLink(this.db, threadId)) ??
-      (await this.events.ensurePost(
-        { target: job.target, tagId: job.bound.binding.tagId },
-        { guildId, threadId },
-      ));
+    // A reply deleted on RL is soft-deleted: never publish its body.
+    if (!record || record.reply.deletedAt || notMirrored(record.reply)) return;
+    const parent = await this.replyParent(job);
     if (!parent || parent.discordDeletedAt) return; // OQ-5: unlinked thread
     const link =
       job.link ??
@@ -206,8 +213,9 @@ export class HubForumDiscordOutboundService {
         replyId,
         discordThreadId: parent.discordThreadId,
       }));
+    if (!link) return;
     const to = await links.heldReplyTarget(this.db, link, parent);
-    if (!link || to === null) return; // held: the post's send delivers it
+    if (to === null) return; // held: the post's send delivers it
     const ref = { guildId, threadId, replyId };
     const voice = [this.settings, record.author, ref, record.reply] as const;
     const [author, url] = await outboundVoice(...voice);
@@ -216,6 +224,15 @@ export class HubForumDiscordOutboundService {
       url,
       author,
     });
+  }
+
+  /** A reply's post: its link, else (event/subject thread) the lazy post. */
+  private async replyParent(job: Job): Promise<links.ForumLink | null> {
+    const { guildId, threadId } = job.change;
+    const found = await links.findThreadLink(this.db, threadId);
+    if (found) return found;
+    const to = { target: job.target, tagId: job.bound.binding.tagId };
+    return this.events.ensurePost(to, { guildId, threadId });
   }
 
   /** Post a claimed reply link into its Discord thread; failures mark it. */
