@@ -1,6 +1,6 @@
 /**
- * ROK-2297 — "copy earlier chat", end to end on this run's own
- * `rl-smoke-forum-<runId>` (ROK-2208 `setup`):
+ * ROK-2297 — "copy earlier chat", end to end on the run's shared forum
+ * (`hub-forum-shared.ts`; posts are matched by this test's run-unique text):
  *  1. a hub event's RL thread gets a member reply (`pre-reschedule <runId>`),
  *     which reaches the event's Discord post;
  *  2. opening a reschedule poll for the event copies that chat into the poll
@@ -104,13 +104,13 @@ async function expectPostClosed(postId: string, closed: boolean, why: string): P
 
 async function chatCopy(ctx: TestContext): Promise<void> {
   const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
+  const made: Made = {};
   let poll: Poll | null = null;
   let pollPostId: string | null = null;
   const before = `pre-reschedule ${runId}`;
   const during = `in-poll ${runId}`;
   try {
-    const { forum, hub, gameId } = await setup(ctx, runId, made);
+    const { forum, hub, gameId } = await setup(ctx);
     const event = await createEvent(ctx.api, "chat-copy", { guildId: hub, gameId, ...farOffTimes() });
     made.event = event.id;
     await replyWhenReady(ctx, `/events/${String(event.id)}/discussion/replies`, before);

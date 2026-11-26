@@ -5,9 +5,9 @@
  * ROK-2292 (D8, ruling 1): the post is created on announce — before any
  * signup — and opens with the event's signup card (empty content, embed +
  * buttons, bot-authored); the first signup line reuses that post.
- * The forum is this run's own `rl-smoke-forum-<runId>` (ROK-2208 setup), the
- * only bound forum in the guild, so the event-planning resolver picks it.
- * `finally` deletes this test's Discord post, event, binding and forum by id.
+ * The forum is the run's shared forum (`hub-forum-shared.ts`), the only
+ * bound forum in the guild, so the event-planning resolver picks it.
+ * `finally` deletes this test's Discord post and event by id.
  */
 import { ChannelType, type ThreadChannel } from "discord.js";
 import { getGuild } from "../../client.js";
@@ -94,12 +94,11 @@ async function deletePost(postId: string | null): Promise<void> {
 }
 
 async function nonHubEventPost(ctx: TestContext): Promise<void> {
-  const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
+  const made: Made = {};
   const me = ctx.testBotDiscordId;
   let postId: string | null = null;
   try {
-    const { forum, users } = await setup(ctx, runId, made);
+    const { forum, users } = await setup(ctx);
     await expectResolvedForum(ctx, forum.id);
     const member = seededMember(users);
     await linkDiscord(ctx.api, member.userId, me, BOT_NAME);

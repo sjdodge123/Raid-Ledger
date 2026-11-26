@@ -76,11 +76,10 @@ function characterName(res: unknown): string {
 }
 
 async function firstLineRoleCharacter(ctx: TestContext): Promise<void> {
-  const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
+  const made: Made = {};
   const me = ctx.testBotDiscordId;
   try {
-    const { hub, gameId, users } = await setup(ctx, runId, made);
+    const { hub, gameId, users } = await setup(ctx);
     const member = seededMember(users);
     await linkDiscord(ctx.api, member.userId, me, BOT_NAME);
     const event = await createEvent(ctx.api, "signup-lines", { guildId: hub, gameId, slotConfig: MMO_SLOTS, ...farOffTimes() });
@@ -100,11 +99,10 @@ async function firstLineRoleCharacter(ctx: TestContext): Promise<void> {
 }
 
 async function tentativeThenConfirmed(ctx: TestContext): Promise<void> {
-  const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
+  const made: Made = {};
   const me = ctx.testBotDiscordId;
   try {
-    const { hub, gameId, users } = await setup(ctx, runId, made);
+    const { hub, gameId, users } = await setup(ctx);
     const member = seededMember(users);
     await linkDiscord(ctx.api, member.userId, me, BOT_NAME);
     const event = await createEvent(ctx.api, "signup-confirm", { guildId: hub, gameId, ...farOffTimes() });
@@ -134,11 +132,10 @@ async function moveInside24h(ctx: TestContext, eventId: number): Promise<void> {
 }
 
 async function lateAndRoachOutAtOnce(ctx: TestContext): Promise<void> {
-  const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
+  const made: Made = {};
   const me = ctx.testBotDiscordId;
   try {
-    const { hub, gameId, users } = await setup(ctx, runId, made);
+    const { hub, gameId, users } = await setup(ctx);
     const member = seededMember(users);
     await linkDiscord(ctx.api, member.userId, me, BOT_NAME);
     const event = await createEvent(ctx.api, "signup-urgent", { guildId: hub, gameId, ...farOffTimes() });
