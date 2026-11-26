@@ -50,6 +50,16 @@ function describeAiSuggestions() {
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   });
 
+  // ROK-2353 review r1: leave `ai` inactive for later files. truncateAllTables
+  // deletes the plugins row but never refreshes the registry's in-memory
+  // cache, so re-install, deactivate (refreshes the cache), then truncate.
+  afterAll(async () => {
+    const plugins = testApp.app.get(PluginRegistryService);
+    await plugins.ensureInstalled('ai');
+    await plugins.deactivate('ai');
+    testApp.seed = await truncateAllTables(testApp.db);
+  });
+
   async function createLineup(): Promise<number> {
     const res = await testApp.request
       .post('/lineups')

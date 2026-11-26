@@ -111,6 +111,16 @@ function describePreGen() {
     adminUserId = await resolveAdminUserId();
   });
 
+  // ROK-2353 review r1: leave `ai` inactive for later files. truncateAllTables
+  // deletes the plugins row but never refreshes the registry's in-memory
+  // cache, so re-install, deactivate (refreshes the cache), then truncate.
+  afterAll(async () => {
+    const plugins = testApp.app.get(PluginRegistryService);
+    await plugins.ensureInstalled('ai');
+    await plugins.deactivate('ai');
+    testApp.seed = await truncateAllTables(testApp.db);
+  });
+
   // `truncateAllTables` wipes `app_settings`, so (re)configure a provider +
   // feature flag before EACH test. A configured provider is what
   // distinguishes the cold→`pending` happy path from cold→unavailable
