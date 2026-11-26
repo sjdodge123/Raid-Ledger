@@ -31,6 +31,8 @@ export type PluginSlotName =
     | 'character-create:header-actions'
     | 'character-create:import-form'
     | 'character-create:inline-import'
+    /** WoW armory import on the invite page's character step (ROK-2357); context `{ gameVariant, defaultRealm, onSuccess }`. */
+    | 'invite:character-import'
     | 'event-create:content-browser'
     /** Core "Hub" picker on the event form (ROK-2071, was the WoW Guild field of ROK-1787); context `{ gameId, guildId, onGuildChange, dropUnlisted }`. */
     | 'event-create:hub-field'

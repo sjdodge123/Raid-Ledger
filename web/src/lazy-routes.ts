@@ -44,6 +44,10 @@ export const GgPublicPage = lazyWithRetry(() =>
 export const PublicGuildCardPage = lazyWithRetry(() =>
     import('./plugins/wow/public-card/public-guild-card-page').then((m) => ({ default: m.PublicGuildCardPage })),
 );
+/** ROK-2358: the same card page's not-found, shown by `PluginRoute` while `blizzard` is off (D2: off reads as unknown). */
+export const PublicGuildCardNotFoundPage = lazyWithRetry(() =>
+    import('./plugins/wow/public-card/public-guild-card-page').then((m) => ({ default: m.PublicGuildCardNotFoundPage })),
+);
 /** ROK-1893: community-hub invite link landing (`/h/:token`). */
 export const HubInvitePage = lazyWithRetry(() =>
     import('./pages/hub-invite-page').then((m) => ({ default: m.HubInvitePage })),
@@ -107,7 +111,7 @@ export const SchedulingPollPage = lazyWithRetry(() =>
 export const CharacterDetailPage = lazyWithRetry(() =>
     import('./pages/character-detail-page').then((m) => ({ default: m.CharacterDetailPage })),
 );
-/** ROK-1836: Valheim character page — a plugin page on a core lazy route (no plugin route seam exists). */
+/** ROK-1836: Valheim character page — a plugin page on a core lazy route, behind `PluginRoute` (ROK-2358). */
 export const ValheimCharacterPage = lazyWithRetry(() =>
     import('./plugins/valheim/pages/valheim-character-page').then((m) => ({ default: m.ValheimCharacterPage })),
 );

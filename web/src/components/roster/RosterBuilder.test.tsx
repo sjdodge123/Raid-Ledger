@@ -70,6 +70,18 @@ describe('RosterBuilder', () => {
         expect(screen.getByText('All players assigned ✓')).toBeInTheDocument();
     });
 
+    it('ROK-2348: counts assignments the generic grid cannot show as unassigned', () => {
+        const dpsRow = { ...makePlayer(7, 'dps', 'OrphanDps'), slot: 'dps' as RosterRole, position: 1 };
+        const noRole = { ...makePlayer(8, null, 'NoRole'), slot: null, position: 0 };
+        renderWithRouter(
+            <RosterBuilder pool={[]} assignments={[dpsRow, noRole]} slots={{ player: 40, bench: 0 }}
+                onRosterChange={mockOnRosterChange} canEdit={true} />
+        );
+
+        expect(screen.queryByText('All players assigned ✓')).not.toBeInTheDocument();
+        expect(document.querySelector('.unassigned-bar__count')).toHaveTextContent('2');
+    });
+
     it('shows "+ Join" for regular users on empty slots', () => {
         const mockSlotClick = vi.fn();
         renderWithRouter(
