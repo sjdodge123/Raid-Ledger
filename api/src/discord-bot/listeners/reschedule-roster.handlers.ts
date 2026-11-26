@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type {
   ButtonInteraction,
   StringSelectMenuInteraction,
@@ -14,10 +14,16 @@ import {
   findLinkedUserByDiscordId,
   logDiscordAck,
 } from './reschedule-response.helpers';
+import {
+  assertReschedulable,
+  findRescheduleRow,
+  needsResignup,
+  resignupCancelledRow,
+  type RescheduleSignupRow,
+} from './reschedule-reactivation.helpers';
 import { showRescheduleRoleForCharacter } from './reschedule-role-step.helpers';
 import { ensureRosterAssignment } from './reschedule-slot.handlers';
 import { defined } from '../../common/defined.helpers';
-import { unclaimedOrOwnedBy } from '../../events/signups-ownership.helpers';
 import { activatedAtOnReactivation } from '../../events/signup-activated-at.helpers';
 import {
   announceIfLineChanged,
@@ -49,13 +55,16 @@ export async function reconfirmSignup(
   userId?: number,
   options?: ReconfirmOptions,
 ): Promise<void> {
+  const row = await findRescheduleRow(deps, interaction, event, userId);
+  if (!row) return;
+  assertReschedulable(row); // ROK-2329: a departed row is refused.
   const updateSet = buildUpdateSet(options);
-  const signupId = userId
-    ? await updateLinkedSignup(deps, event, userId, updateSet, options)
-    : await updateUnlinkedSignup(deps, interaction, event, updateSet);
-  if (signupId) {
-    await ensureRosterAssignment(deps, event, signupId, options);
-  }
+  const signupId = needsResignup(row)
+    ? await resignupCancelledRow(deps, event, row, userId, options)
+    : userId
+      ? await updateLinkedSignup(deps, event, userId, row, updateSet, options)
+      : await updateUnlinkedSignup(deps, interaction, event, row, updateSet);
+  await ensureRosterAssignment(deps, event, signupId, options);
 }
 
 /** Handle character selection from reschedule flow. */
@@ -161,19 +170,10 @@ async function updateLinkedSignup(
   deps: RescheduleDeps,
   event: EventRow,
   userId: number,
+  signup: RescheduleSignupRow,
   updateSet: Record<string, unknown>,
   options?: ReconfirmOptions,
-): Promise<number | undefined> {
-  const where = and(
-    eq(schema.eventSignups.eventId, event.id),
-    eq(schema.eventSignups.userId, userId),
-  );
-  const [signup] = await deps.db
-    .select()
-    .from(schema.eventSignups)
-    .where(where)
-    .limit(1);
-  if (!signup) return undefined;
+): Promise<number> {
   const wasPending = signup.confirmationStatus === 'pending';
   await deps.db
     .update(schema.eventSignups)
@@ -188,21 +188,9 @@ async function updateUnlinkedSignup(
   deps: RescheduleDeps,
   interaction: ButtonInteraction | StringSelectMenuInteraction,
   event: EventRow,
+  signup: RescheduleSignupRow,
   updateSet: Record<string, unknown>,
-): Promise<number | undefined> {
-  // ROK-2097: an unlinked id reaches guest rows only — a stale role menu
-  // clicked after an unlink must not touch the previous owner's signup.
-  const where = and(
-    eq(schema.eventSignups.eventId, event.id),
-    eq(schema.eventSignups.discordUserId, interaction.user.id),
-    unclaimedOrOwnedBy(),
-  );
-  const [signup] = await deps.db
-    .select()
-    .from(schema.eventSignups)
-    .where(where)
-    .limit(1);
-  if (!signup) return undefined;
+): Promise<number> {
   const wasPending = signup.confirmationStatus === 'pending';
   await deps.db
     .update(schema.eventSignups)
