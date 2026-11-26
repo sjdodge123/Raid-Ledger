@@ -9,6 +9,7 @@ import { ConflictException } from '@nestjs/common';
 import type { CreateEventDto } from '@raid-ledger/contract';
 import {
   createEventWithSignups,
+  withLfgLockInPatch,
   withLfgRosterSlots,
   type EventCreateDeps,
 } from './event-create-lfg.helpers';
@@ -75,6 +76,7 @@ describe('createEventWithSignups', () => {
       CREATOR,
       5,
       expect.any(Function),
+      undefined,
     );
     expect(deps.eventsService.create).toHaveBeenCalledWith(CREATOR, {
       ...LFG_DTO,
@@ -155,5 +157,95 @@ describe('withLfgRosterSlots', () => {
 
   it('leaves a plain (non-LFG) create alone', () => {
     expect(withLfgRosterSlots(BASE_DTO)).toBe(BASE_DTO);
+  });
+});
+
+describe('ROK-2352 grouped Lock-in', () => {
+  const SHAPE = { type: 'mmo' as const, tank: 1, healer: 1, dps: 3 };
+  const INSTANCE = { id: 36, name: 'Deadmines' };
+  const CARRY_CREATOR = { characterId: 'c-7', preferredRoles: ['tank' as const] };
+  const CARRY_MEMBER = { preferredRoles: ['healer' as const] };
+
+  function convertsWithPatch(deps: ReturnType<typeof buildDeps>['deps']) {
+    deps.lfgEventConvert.createForGroup.mockImplementation(
+      async (
+        _u: number,
+        _g: number,
+        create: (p?: object) => Promise<{ id: number }>,
+      ) => ({
+        event: await create({
+          title: 'Deadmines',
+          slotConfig: SHAPE,
+          contentInstances: [INSTANCE],
+        }),
+        memberIds: [CREATOR, 8],
+        carryover: new Map<number, object>([
+          [CREATOR, CARRY_CREATOR],
+          [8, CARRY_MEMBER],
+        ]),
+      }),
+    );
+  }
+
+  it('passes lfgGroupKey to the convert and creates the event with the adapter roster, instance and title', async () => {
+    const { deps, typed } = buildDeps();
+    convertsWithPatch(deps);
+    const dto = { ...LFG_DTO, lfgGroupKey: 'dungeon:36' };
+
+    await createEventWithSignups(typed, CREATOR, dto);
+
+    expect(deps.lfgEventConvert.createForGroup).toHaveBeenCalledWith(
+      CREATOR,
+      5,
+      expect.any(Function),
+      'dungeon:36',
+    );
+    expect(deps.eventsService.create).toHaveBeenCalledWith(CREATOR, {
+      ...dto,
+      title: 'Deadmines',
+      slotConfig: SHAPE,
+      contentInstances: [INSTANCE],
+    });
+  });
+
+  it('signs the creator and the members up with their carried character/roles', async () => {
+    const { deps, typed } = buildDeps();
+    convertsWithPatch(deps);
+
+    await createEventWithSignups(typed, CREATOR, LFG_DTO);
+
+    expect(deps.signupsService.signup).toHaveBeenCalledWith(
+      100,
+      CREATOR,
+      CARRY_CREATOR,
+      { skipEndedCheck: true },
+    );
+    expect(deps.signupsService.signup).toHaveBeenCalledWith(
+      100,
+      8,
+      CARRY_MEMBER,
+    );
+  });
+
+  it('a carried creator signup that throws retries plain', async () => {
+    const { deps, typed } = buildDeps();
+    convertsWithPatch(deps);
+    deps.signupsService.signup.mockRejectedValueOnce(new Error('stale char'));
+
+    await createEventWithSignups(typed, CREATOR, LFG_DTO);
+
+    expect(deps.signupsService.signup).toHaveBeenCalledWith(
+      100,
+      CREATOR,
+      undefined,
+      { skipEndedCheck: true },
+    );
+  });
+
+  it('withLfgLockInPatch: no patch keeps the body and gives the generic roster', () => {
+    expect(withLfgLockInPatch(LFG_DTO, undefined)).toEqual({
+      ...LFG_DTO,
+      slotConfig: DEFAULT_ROSTER_SLOT_CONFIG,
+    });
   });
 });

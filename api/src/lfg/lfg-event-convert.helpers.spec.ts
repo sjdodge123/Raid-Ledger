@@ -16,6 +16,9 @@ import {
   LFG_GROUP_GONE_MESSAGE,
 } from './lfg-event-convert.helpers';
 import { LfgEventConvertService } from './lfg-event-convert.service';
+import * as lockInGroup from './lfg-lock-in-group.helpers';
+import type { LfgGroupingAdapter } from '../plugins/plugin-host/lfg-grouping.adapter';
+import type { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import type { LfgDb } from './lfg-query.helpers';
 import { LFG_EVENTS } from './lfg.constants';
 
@@ -106,9 +109,13 @@ describe('LfgEventConvertService.createForGroup', () => {
     db = createDrizzleMock();
     emit = jest.fn();
     createEvent = jest.fn().mockResolvedValue(EVENT);
-    service = new LfgEventConvertService(asDb(db), {
-      emit,
-    } as unknown as EventEmitter2);
+    service = new LfgEventConvertService(
+      asDb(db),
+      { emit } as unknown as EventEmitter2,
+      { getAdapter: jest.fn() } as unknown as PluginRegistryService,
+    );
+    // ROK-2352: the game's slug is read first (no adapter → the fold).
+    db.limit.mockResolvedValueOnce([{ slug: 'some-game' }]);
   });
 
   afterEach(() => jest.restoreAllMocks());
@@ -160,5 +167,66 @@ describe('LfgEventConvertService.createForGroup', () => {
       service.createForGroup(USER, GAME, createEvent),
     ).rejects.toThrow('insert failed');
     expect(emit).not.toHaveBeenCalled();
+  });
+});
+
+describe('createAndConvertGroup — ROK-2352 grouped game', () => {
+  const GROUP = {
+    scope: 'dungeon:36',
+    adapter: {} as unknown as LfgGroupingAdapter,
+  };
+  const carryover = new Map([[USER, { preferredRoles: ['tank' as const] }]]);
+  let db: MockDb;
+  let createEvent: jest.Mock;
+
+  beforeEach(() => {
+    db = createDrizzleMock();
+    createEvent = jest.fn().mockResolvedValue(EVENT);
+    jest.spyOn(lockInGroup, 'buildGroupLockInPatch').mockResolvedValue({
+      title: 'Deadmines',
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3 },
+      carryover,
+    });
+    jest.spyOn(lockInGroup, 'clearNowSiblings').mockResolvedValue([44]);
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('hands the adapter patch (minus carryover) to the create and returns the carryover + cleared siblings', async () => {
+    db.limit.mockResolvedValueOnce([{ id: 1 }]);
+    db.returning.mockResolvedValueOnce([{ userId: USER }, { userId: 44 }]);
+
+    const result = await createAndConvertGroup(
+      asDb(db),
+      USER,
+      GAME,
+      createEvent,
+      GROUP,
+    );
+
+    expect(createEvent).toHaveBeenCalledWith({
+      title: 'Deadmines',
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3 },
+    });
+    expect(result).toEqual({
+      event: EVENT,
+      memberIds: [USER, 44],
+      carryover,
+      clearedSiblingUserIds: [44],
+    });
+    expect(lockInGroup.clearNowSiblings).toHaveBeenCalledWith(db, GAME, [
+      USER,
+      44,
+    ]);
+  });
+
+  it('never clears siblings or builds a patch when the caller is not in the group (409)', async () => {
+    db.limit.mockResolvedValueOnce([]);
+
+    await expect(
+      createAndConvertGroup(asDb(db), USER, GAME, createEvent, GROUP),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(lockInGroup.buildGroupLockInPatch).not.toHaveBeenCalled();
+    expect(lockInGroup.clearNowSiblings).not.toHaveBeenCalled();
   });
 });
