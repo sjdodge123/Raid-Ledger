@@ -6,11 +6,14 @@
  *
  * - pending / signed up → re-confirms in place (unchanged behaviour);
  * - declined / roached out → re-signs through `signup()` (every signup check
- *   applies, `signup_reactivated` is announced) instead of a direct flip;
- * - departed → refused with an ephemeral message, the row untouched;
+ *   applies, `signup_reactivated` is announced) instead of a direct flip, and
+ *   the presser's ack confirms the row (`signup_reconfirmed` is audited);
+ * - a guest's declined / roached-out row stores what the member path stores;
+ * - departed → refused with an ephemeral message, the row untouched (buttons
+ *   and the role select menu alike);
  * - an ended event → refused before any of the above.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as schema from '../../drizzle/schema';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -146,6 +149,44 @@ async function press(
   return editReply;
 }
 
+/** Pick `values` in the reschedule role menu as `discordId`; returns the reply mock. */
+async function selectRoles(
+  eventId: number,
+  discordId: string,
+  values: string[],
+): Promise<jest.Mock> {
+  const editReply = jest.fn().mockResolvedValue(undefined);
+  const interaction = {
+    customId: `${RESCHEDULE_BUTTON_IDS.ROLE_SELECT}:${eventId}`,
+    user: { id: discordId, username: 'presser' },
+    values,
+    deferUpdate: jest.fn().mockResolvedValue(undefined),
+    editReply,
+    message: { embeds: [], components: [], edit: jest.fn() },
+  } as never;
+  await listener['handleSelectMenuInteraction'](interaction);
+  return editReply;
+}
+
+/** The actions audited against an event. */
+async function auditActions(eventId: number): Promise<string[]> {
+  const rows = await testApp.db
+    .select({ action: schema.activityLog.action })
+    .from(schema.activityLog)
+    .where(
+      and(
+        eq(schema.activityLog.entityType, 'event'),
+        eq(schema.activityLog.entityId, eventId),
+      ),
+    );
+  return rows.map((r) => r.action);
+}
+
+function newGuest(): { discordId: string } {
+  seq += 1;
+  return { discordId: `${400_000_000_000_000_000n + BigInt(seq)}` };
+}
+
 const confirmedReply = { content: `You're confirmed for **${TITLE}**.` };
 const tentativeReply = {
   content: `You're marked as **tentative** for **${TITLE}**.`,
@@ -185,15 +226,49 @@ describe('reschedule Confirm / Tentative on a cancelled row (ROK-2329)', () => {
 
       const after = await readRow(row.id);
       expect(editReply).toHaveBeenCalledWith(confirmedReply);
+      // No character and no slot config: signup() leaves the row pending,
+      // so the ack itself must confirm it (review r1 MAJOR).
       expect({
         status: after.status,
         roachedOutAt: after.roachedOutAt,
-      }).toEqual({ status: 'signed_up', roachedOutAt: null });
+        confirmationStatus: after.confirmationStatus,
+      }).toEqual({
+        status: 'signed_up',
+        roachedOutAt: null,
+        confirmationStatus: 'confirmed',
+      });
       expect(after.activatedAt?.getTime()).toBeGreaterThan(LONG_AGO.getTime());
       expect(updates.map((u) => u.action)).toEqual(['signup_reactivated']);
       expect(updates[0]).toMatchObject({ eventId, userId: m.userId });
+      expect(await auditActions(eventId)).toContain('signup_reconfirmed');
     },
   );
+
+  it('a guest roached-out row re-signs from the role menu with its roles, confirmed', async () => {
+    const guest = newGuest();
+    const eventId = await newEvent();
+    const row = await seedRow(eventId, guest, 'roached_out', 'pending');
+
+    const editReply = await selectRoles(eventId, guest.discordId, ['healer']);
+
+    const after = await readRow(row.id);
+    expect(editReply).toHaveBeenCalledWith({
+      content: `You're confirmed for **${TITLE}** (Healer).`,
+      components: [],
+    });
+    expect({
+      status: after.status,
+      roachedOutAt: after.roachedOutAt,
+      preferredRoles: after.preferredRoles,
+      confirmationStatus: after.confirmationStatus,
+    }).toEqual({
+      status: 'signed_up',
+      roachedOutAt: null,
+      preferredRoles: ['healer'],
+      confirmationStatus: 'confirmed',
+    });
+    expect(await auditActions(eventId)).toContain('signup_reconfirmed');
+  });
 
   it('Tentative on a declined row re-signs, then lands on tentative', async () => {
     const m = await linkedMember();
@@ -226,9 +301,23 @@ describe('reschedule Confirm / Tentative on a departed row (ROK-2329)', () => {
     },
   );
 
+  it('the role select menu on a departed member row is refused, menu cleared', async () => {
+    const m = await linkedMember();
+    const eventId = await newEvent();
+    const row = await seedRow(eventId, m, 'departed');
+
+    const editReply = await selectRoles(eventId, m.discordId, ['dps']);
+
+    expect(editReply).toHaveBeenCalledWith({
+      content: RESCHEDULE_DEPARTED_REPLY,
+      components: [],
+    });
+    expect((await readRow(row.id)).status).toBe('departed');
+    expect(updates).toEqual([]);
+  });
+
   it('Confirm on a departed guest row is refused and the row stays departed', async () => {
-    seq += 1;
-    const guest = { discordId: `${400_000_000_000_000_000n + BigInt(seq)}` };
+    const guest = newGuest();
     const eventId = await newEvent();
     const row = await seedRow(eventId, guest, 'departed');
 

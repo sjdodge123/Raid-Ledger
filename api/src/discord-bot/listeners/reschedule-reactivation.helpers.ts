@@ -6,7 +6,8 @@
  * as before.
  */
 import { ConflictException, ForbiddenException, Logger } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, notInArray } from 'drizzle-orm';
+import { CHARACTER_ROLES } from '@raid-ledger/contract';
 import type {
   ButtonInteraction,
   StringSelectMenuInteraction,
@@ -16,6 +17,7 @@ import { isCancelledStatus } from '../../events/signups-signup.helpers';
 import { unclaimedOrOwnedBy } from '../../events/signups-ownership.helpers';
 import { errorStack } from '../../common/error-format.helpers';
 import {
+  logDiscordAck,
   lookupRescheduleEvent,
   safeEditReply,
   type RescheduleEventRow,
@@ -76,9 +78,17 @@ export function needsResignup(row: RescheduleSignupRow): boolean {
   return isCancelledStatus(row.status);
 }
 
+/** What a declined / roached-out re-signup produced. */
+export interface ResignupResult {
+  signupId: number;
+  /** The slot `signup()` placed the member in ('bench' when full). */
+  assignedSlot: string | null | undefined;
+}
+
 /**
  * Re-sign a declined / roached-out row the way the event post's Sign Up does
  * (ROK-1769): a linked member through `signup()`, a guest by a status change.
+ * Tentative matches the event post's Tentative (signup, then a status flip).
  */
 export async function resignupCancelledRow(
   deps: RescheduleDeps,
@@ -86,26 +96,141 @@ export async function resignupCancelledRow(
   row: RescheduleSignupRow,
   userId: number | undefined,
   options?: ReconfirmOptions,
-): Promise<number> {
-  const status = options?.signupStatus ?? 'signed_up';
-  if (userId) {
-    const res = await deps.signupsService.signup(event.id, userId, {
+): Promise<ResignupResult> {
+  if (!userId) {
+    const signupId = await resignGuestRow(deps, event, row, options);
+    return { signupId, assignedSlot: undefined };
+  }
+  const res = await signupWithContext(deps, event, userId, options);
+  // The presser acked the new time: confirm even a characterless / benched row.
+  await confirmResignedRow(deps, event.id, res.id, userId);
+  if (options?.signupStatus === 'tentative')
+    await deps.signupsService.updateStatus(
+      event.id,
+      { userId },
+      { status: 'tentative' },
+    );
+  return { signupId: res.id, assignedSlot: res.assignedSlot };
+}
+
+/** `signup()`, logging an unexpected failure with the event and user. */
+async function signupWithContext(
+  deps: RescheduleDeps,
+  event: EventRow,
+  userId: number,
+  options?: ReconfirmOptions,
+) {
+  try {
+    return await deps.signupsService.signup(event.id, userId, {
       ...(options?.characterId ? { characterId: options.characterId } : {}),
       ...(options?.preferredRoles?.length
         ? { preferredRoles: options.preferredRoles }
         : {}),
     });
-    if (status === 'tentative')
-      await deps.signupsService.updateStatus(event.id, { userId }, { status });
-    return res.id;
+  } catch (error) {
+    if (refusalMessage(error) === null)
+      deps.logger.error(
+        `Reschedule re-signup failed (event ${event.id}, user ${userId})`,
+        errorStack(error),
+      );
+    throw error;
   }
-  const discordUserId = row.discordUserId ?? '';
+}
+
+/** Confirm a re-signed row `signup()` left pending; audit the ack. */
+async function confirmResignedRow(
+  deps: RescheduleDeps,
+  eventId: number,
+  signupId: number,
+  userId: number,
+): Promise<void> {
+  const set = { confirmationStatus: 'confirmed' as const };
+  const flipped = await deps.db
+    .update(schema.eventSignups)
+    .set(set)
+    .where(
+      and(
+        eq(schema.eventSignups.id, signupId),
+        eq(schema.eventSignups.confirmationStatus, 'pending'),
+      ),
+    )
+    .returning({ id: schema.eventSignups.id });
+  await logDiscordAck(deps, eventId, flipped.length > 0, set, { userId });
+}
+
+/** Re-sign a guest row, storing what the member path stores. */
+async function resignGuestRow(
+  deps: RescheduleDeps,
+  event: EventRow,
+  row: RescheduleSignupRow,
+  options?: ReconfirmOptions,
+): Promise<number> {
+  const discordUserId = row.discordUserId;
+  if (!discordUserId)
+    throw new Error(`Guest signup ${row.id} has no Discord id`);
+  const roles = rescheduleRoles(options);
+  const set = {
+    roachedOutAt: null,
+    confirmationStatus: 'confirmed' as const,
+    ...(roles ? { preferredRoles: roles } : {}),
+  };
+  await deps.db
+    .update(schema.eventSignups)
+    .set(set)
+    .where(eq(schema.eventSignups.id, row.id));
+  const status = options?.signupStatus ?? 'signed_up';
   await deps.signupsService.updateStatus(
     event.id,
     { discordUserId },
     { status },
   );
+  const wasPending = row.confirmationStatus === 'pending';
+  await logDiscordAck(deps, event.id, wasPending, set, { discordUserId });
   return row.id;
+}
+
+/** The roles a reschedule selection stores (sanitised), when it picked any. */
+export function rescheduleRoles(
+  options?: ReconfirmOptions,
+): string[] | undefined {
+  if (options?.preferredRoles)
+    return options.preferredRoles.filter((r: string) =>
+      CHARACTER_ROLES.includes(r as never),
+    );
+  if (options?.slotRole && CHARACTER_ROLES.includes(options.slotRole as never))
+    return [options.slotRole];
+  return undefined;
+}
+
+/** Reply to a row that left the active statuses mid-press. */
+export const RESCHEDULE_ROW_CHANGED_REPLY =
+  'Your signup changed while this was being saved. Please press the button again.';
+
+/**
+ * Write an active row only while it is still active, so a row that was
+ * declined or departed after it was read is not reset.
+ */
+export async function updateActiveRow(
+  deps: Pick<RescheduleDeps, 'db'>,
+  signupId: number,
+  set: Record<string, unknown>,
+): Promise<void> {
+  const written = await deps.db
+    .update(schema.eventSignups)
+    .set(set)
+    .where(
+      and(
+        eq(schema.eventSignups.id, signupId),
+        notInArray(schema.eventSignups.status, [
+          'declined',
+          'roached_out',
+          'departed',
+        ]),
+      ),
+    )
+    .returning({ id: schema.eventSignups.id });
+  if (written.length === 0)
+    throw new RescheduleRefusedError(RESCHEDULE_ROW_CHANGED_REPLY);
 }
 
 /** The message a refused or rejected reschedule action replies with. */

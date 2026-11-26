@@ -1,10 +1,7 @@
-import { eq } from 'drizzle-orm';
 import type {
   ButtonInteraction,
   StringSelectMenuInteraction,
 } from 'discord.js';
-import * as schema from '../../drizzle/schema';
-import { CHARACTER_ROLES } from '@raid-ledger/contract';
 import type {
   EventRow,
   RescheduleDeps,
@@ -18,12 +15,15 @@ import {
   assertReschedulable,
   findRescheduleRow,
   needsResignup,
+  rescheduleRoles,
   resignupCancelledRow,
+  updateActiveRow,
   type RescheduleSignupRow,
 } from './reschedule-reactivation.helpers';
 import { showRescheduleRoleForCharacter } from './reschedule-role-step.helpers';
 import { ensureRosterAssignment } from './reschedule-slot.handlers';
 import { defined } from '../../common/defined.helpers';
+import { benchSuffix } from './signup-bench-feedback.helpers';
 import { activatedAtOnReactivation } from '../../events/signup-activated-at.helpers';
 import {
   announceIfLineChanged,
@@ -46,7 +46,8 @@ export interface SelectCtx {
 
 /**
  * Re-confirm an existing signup: set status, optionally update
- * character/role, and ensure a roster assignment exists.
+ * character/role, and ensure a roster assignment exists. Returns the slot a
+ * re-signup placed the member in ('bench' when the roster was full).
  */
 export async function reconfirmSignup(
   deps: RescheduleDeps,
@@ -54,17 +55,21 @@ export async function reconfirmSignup(
   event: EventRow,
   userId?: number,
   options?: ReconfirmOptions,
-): Promise<void> {
+): Promise<string | null | undefined> {
   const row = await findRescheduleRow(deps, interaction, event, userId);
   if (!row) return;
   assertReschedulable(row); // ROK-2329: a departed row is refused.
+  if (needsResignup(row)) {
+    const res = await resignupCancelledRow(deps, event, row, userId, options);
+    await ensureRosterAssignment(deps, event, res.signupId, options);
+    return res.assignedSlot;
+  }
   const updateSet = buildUpdateSet(options);
-  const signupId = needsResignup(row)
-    ? await resignupCancelledRow(deps, event, row, userId, options)
-    : userId
-      ? await updateLinkedSignup(deps, event, userId, row, updateSet, options)
-      : await updateUnlinkedSignup(deps, interaction, event, row, updateSet);
+  const signupId = userId
+    ? await updateLinkedSignup(deps, event, userId, row, updateSet, options)
+    : await updateUnlinkedSignup(deps, interaction, event, row, updateSet);
   await ensureRosterAssignment(deps, event, signupId, options);
+  return undefined;
 }
 
 /** Handle character selection from reschedule flow. */
@@ -153,16 +158,8 @@ export function buildUpdateSet(
     // ROK-2293: re-stamped only when the row was declined/roached out/departed.
     activatedAt: activatedAtOnReactivation(),
   };
-  if (options?.preferredRoles) {
-    set.preferredRoles = options.preferredRoles.filter((r: string) =>
-      CHARACTER_ROLES.includes(r as never),
-    );
-  } else if (
-    options?.slotRole &&
-    CHARACTER_ROLES.includes(options.slotRole as never)
-  ) {
-    set.preferredRoles = [options.slotRole];
-  }
+  const roles = rescheduleRoles(options);
+  if (roles) set.preferredRoles = roles;
   return set;
 }
 
@@ -175,10 +172,7 @@ async function updateLinkedSignup(
   options?: ReconfirmOptions,
 ): Promise<number> {
   const wasPending = signup.confirmationStatus === 'pending';
-  await deps.db
-    .update(schema.eventSignups)
-    .set(updateSet)
-    .where(eq(schema.eventSignups.id, signup.id));
+  await updateActiveRow(deps, signup.id, updateSet);
   await afterLinkedWrite(deps, event.id, userId, signup, updateSet, options);
   await logDiscordAck(deps, event.id, wasPending, updateSet, { userId });
   return signup.id;
@@ -192,10 +186,7 @@ async function updateUnlinkedSignup(
   updateSet: Record<string, unknown>,
 ): Promise<number> {
   const wasPending = signup.confirmationStatus === 'pending';
-  await deps.db
-    .update(schema.eventSignups)
-    .set(updateSet)
-    .where(eq(schema.eventSignups.id, signup.id));
+  await updateActiveRow(deps, signup.id, updateSet);
   announceIfLineChanged(deps, event.id, signup, updateSet);
   await logDiscordAck(deps, event.id, wasPending, updateSet, {
     discordUserId: interaction.user.id,
@@ -241,10 +232,11 @@ async function finalizeCharSelect(
   characterId: string,
   signupStatus: 'tentative' | undefined,
 ): Promise<void> {
-  await reconfirmSignup(ctx.deps, ctx.interaction, event, linkedUser.id, {
+  const opts: ReconfirmOptions = {
     characterId,
     ...(signupStatus !== undefined ? { signupStatus } : {}),
-  });
+  };
+  const slot = await reconfirmFromSelect(ctx, event, linkedUser.id, opts);
   const character = await ctx.deps.charactersService.findOne(
     linkedUser.id,
     characterId,
@@ -252,12 +244,22 @@ async function finalizeCharSelect(
   const isTentative = signupStatus === 'tentative';
   const label = isTentative ? 'marked as **tentative**' : 'confirmed';
   await ctx.interaction.editReply({
-    content: `You're ${label} for **${event.title}** with **${character.name}**.`,
+    content: `You're ${label} for **${event.title}** with **${character.name}**.${benchSuffix(slot)}`,
     components: [],
   });
   await ctx.editDm(ctx.interaction, isTentative ? 'tentative' : 'confirmed');
   const trigger = isTentative ? 'reschedule-tentative' : 'reschedule-confirm';
   await ctx.deps.embedSyncQueue.enqueue(event.id, trigger);
+}
+
+/** `reconfirmSignup` for a select-menu context. */
+function reconfirmFromSelect(
+  ctx: SelectCtx,
+  event: EventRow,
+  userId: number | undefined,
+  opts: ReconfirmOptions,
+): Promise<string | null | undefined> {
+  return reconfirmSignup(ctx.deps, ctx.interaction, event, userId, opts);
 }
 
 async function reconfirmAndReply(
@@ -268,25 +270,25 @@ async function reconfirmAndReply(
   isTentative: boolean,
   opts: ReconfirmOptions,
 ): Promise<void> {
-  const rolesLabel = roles
-    .map((r) => r.charAt(0).toUpperCase() + r.slice(1))
-    .join(', ');
   const linkedUser = await findLinkedUserByDiscordId(
     ctx.deps.db,
     ctx.interaction.user.id,
   );
   const label = isTentative ? 'marked as **tentative**' : 'confirmed';
   const userId = linkedUser?.id;
-  await reconfirmSignup(ctx.deps, ctx.interaction, event, userId, opts);
+  const slot = await reconfirmFromSelect(ctx, event, userId, opts);
   const content = await buildRoleReplyContent(
     ctx.deps,
     event,
     userId,
     characterId,
-    rolesLabel,
+    roles,
     label,
   );
-  await ctx.interaction.editReply({ content, components: [] });
+  await ctx.interaction.editReply({
+    content: `${content}${benchSuffix(slot)}`,
+    components: [],
+  });
 }
 
 /** Build the reply content for a role-select reconfirmation. */
@@ -295,9 +297,12 @@ async function buildRoleReplyContent(
   event: EventRow,
   userId: number | undefined,
   characterId: string | undefined,
-  rolesLabel: string,
+  roles: ('tank' | 'healer' | 'dps')[],
   label: string,
 ): Promise<string> {
+  const rolesLabel = roles
+    .map((r) => r.charAt(0).toUpperCase() + r.slice(1))
+    .join(', ');
   if (userId && characterId) {
     const charName = (await deps.charactersService.findOne(userId, characterId))
       .name;
