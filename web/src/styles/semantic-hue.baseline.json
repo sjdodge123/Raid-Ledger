@@ -1,5 +1,5 @@
 {
-  "__total": 614,
+  "__total": 605,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingRow.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -19,7 +19,6 @@
   "components/calendar/WeekEventCard.tsx": 1,
   "components/characters/character-card-compact.tsx": 7,
   "components/common/ActivityTimeline.tsx": 2,
-  "components/common/HeroNextStep.tsx": 9,
   "components/common/TournamentBracket.tsx": 3,
   "components/common/activity-timeline-helpers.ts": 48,
   "components/dashboard/dashboard-event-card.tsx": 4,
