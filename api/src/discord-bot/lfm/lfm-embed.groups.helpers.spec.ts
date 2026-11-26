@@ -303,3 +303,74 @@ describe('syncKeyedGroups — new-post ration (Q11: 3 per game per 10 min)', () 
     expect(t.posts.map((v) => v.groupKey)).toEqual(['a:1']);
   });
 });
+
+describe('syncKeyedGroups — keyed endings (ROK-2352 P1-5 / P2-1)', () => {
+  const view = (state: LfmGroupView['state'], tag: string): LfmGroupView =>
+    ({ state, gameId: 7, gameName: tag, memberCount: 2 }) as LfmGroupView;
+
+  function run(
+    reads: LfmKeyedReads,
+    change?: LfmKeyedSyncDeps['change'],
+  ): Promise<Array<[LfmMessageRow, LfmGroupView]>> {
+    const edits: Array<[LfmMessageRow, LfmGroupView]> = [];
+    const deps: LfmKeyedSyncDeps = {
+      db: {} as never,
+      registry: registry(true) as never,
+      reads,
+      edit: (r, v) => {
+        edits.push([r, v]);
+        return Promise.resolve();
+      },
+      post: () => Promise.resolve(),
+      ...(change ? { change } : {}),
+    };
+    return syncKeyedGroups(deps, game, true).then(() => edits);
+  }
+
+  it("renders a keyed lock-in's SCHEDULED view on that group's post only", async () => {
+    const reads: LfmKeyedReads = {
+      ...fakeReads(
+        [row('dungeon:36'), row('dungeon:389')],
+        [['dungeon:389', 2]],
+      ),
+      changeView: jest.fn(() => Promise.resolve(view('scheduled', 'event'))),
+    };
+
+    const edits = await run(reads, {
+      gameId: 7,
+      reason: 'converted',
+      eventId: 99,
+      groupKey: 'dungeon:36',
+    });
+
+    const states = edits.map(([r, v]) => [r.groupKey, v.state, v.gameName]);
+    expect(states).toEqual([
+      ['dungeon:36', 'scheduled', 'WoW — Deadmines'],
+      ['dungeon:389', 'open', 'WoW — Ragefire'],
+    ]);
+  });
+
+  it('ends a below-floor keyed post through provenance (SCHEDULED), not EXPIRED', async () => {
+    const reads: LfmKeyedReads = {
+      ...fakeReads([row('dungeon:36')], []),
+      ended: jest.fn(() => Promise.resolve(view('scheduled', 'event'))),
+    };
+
+    const edits = await run(reads);
+
+    expect(edits.map(([, v]) => v.state)).toEqual(['scheduled']);
+    expect(reads.ended).toHaveBeenCalledWith({}, game, row('dungeon:36'));
+  });
+
+  it("keeps a keyed post PLAYING while its group's own session is open", async () => {
+    const reads: LfmKeyedReads = {
+      ...fakeReads([row('dungeon:36')], [['dungeon:36', 1]]),
+      groupSession: jest.fn(() => Promise.resolve(view('playing', 'session'))),
+    };
+
+    const edits = await run(reads);
+
+    expect(edits.map(([, v]) => v.state)).toEqual(['playing']);
+    expect(reads.groupSession).toHaveBeenCalledWith({}, game, 'dungeon:36');
+  });
+});

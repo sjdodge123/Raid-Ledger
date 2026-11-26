@@ -24,6 +24,7 @@
  */
 import * as store from './lfm-embed.db-helpers';
 import type { LfmEmbedService } from './lfm-embed.service';
+import * as keyedPass from './lfm-embed.keyed-pass.helpers';
 import {
   allRows,
   CLIENT_URL,
@@ -604,5 +605,47 @@ describe('GROUP_CHANGED playing — the live session (ROK-1494 AC4)', () => {
     expect(edited(1).author?.name).toBe('▸ PLAYING NOW · 4 in voice');
     expect(client.sendEmbed).not.toHaveBeenCalled();
     expect(rowById('row-1')).toMatchObject({ state: 'open' });
+  });
+});
+
+describe("ROK-2352 — a keyed group's change never ends the Any post", () => {
+  it.each([
+    ['converted', { eventId: EVENT_ID }],
+    ['playing', { eventId: EVENT_ID }],
+  ] as const)(
+    'a keyed %s re-reads the Any post live and leaves it open',
+    async (reason, extra) => {
+      seedOpenRow({ lastMemberCount: 3 });
+      const s = jest.mocked(store);
+      s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl', 'Doretta']));
+      s.readOpenLfgNowEventId.mockResolvedValue(null);
+
+      await service.onGroupChanged({
+        gameId: GAME_ID,
+        reason,
+        ...extra,
+        groupKey: 'dungeon:36',
+      });
+
+      expect(rowById('row-1')).toMatchObject({
+        state: 'open',
+        lastMemberCount: 3,
+      });
+      expect(s.closeLfmMessage).not.toHaveBeenCalled();
+      expect(s.readConvertedGroup).not.toHaveBeenCalled();
+      expect(s.readPlayingSession).not.toHaveBeenCalled();
+    },
+  );
+
+  it('the board coming back on re-posts the keyed groups too (P2-6)', async () => {
+    const spy = jest
+      .spyOn(keyedPass, 'reconcileKeyedGroups')
+      .mockResolvedValue(undefined);
+    try {
+      await service.onBoardEnabled();
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
