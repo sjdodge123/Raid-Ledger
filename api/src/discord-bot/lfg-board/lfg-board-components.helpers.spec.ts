@@ -83,6 +83,19 @@ describe('buildLfgPostComponents — the open-state row (AC5 iii)', () => {
     });
   });
 
+  it('links a keyed post at its group page, the key URL-encoded (ROK-2352)', () => {
+    const [, , link] = buttons({ groupKey: 'dungeon:36' });
+    expect(link).toMatchObject({
+      style: ButtonStyle.Link,
+      url: `${CLIENT_URL}/lfg/${GAME_SLUG}/dungeon%3A36`,
+    });
+  });
+
+  it("keeps the bare game URL for the '' group (ROK-2352)", () => {
+    const [, , link] = buttons({ groupKey: '' });
+    expect(link).toMatchObject({ url: `${CLIENT_URL}/lfg/${GAME_SLUG}` });
+  });
+
   it("drops the link button — but keeps +1 and I'm out — with no client URL", () => {
     const rows = render({ clientUrl: '' });
     expect(rows).toHaveLength(1);

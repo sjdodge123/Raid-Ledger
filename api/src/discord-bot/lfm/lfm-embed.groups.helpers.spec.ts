@@ -6,7 +6,10 @@
  * intercept a module-internal call).
  */
 import {
+  createKeyedPostBudget,
   LFG_BOARD_MAX_GROUP_POSTS_PER_GAME,
+  LFG_BOARD_NEW_GROUP_POSTS_PER_WINDOW,
+  LFG_BOARD_NEW_GROUP_POSTS_WINDOW_MS,
   syncKeyedGroups,
   type LfmKeyedReads,
   type LfmKeyedSyncDeps,
@@ -172,5 +175,98 @@ describe('syncKeyedGroups — cap and no-op', () => {
     expect(t.edits).toEqual([]);
     expect(t.posts).toEqual([]);
     expect(reads.listOpen).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('syncKeyedGroups — new-post ration (Q11: 3 per game per 10 min)', () => {
+  const NOW = new Date('2026-11-25T12:00:00Z');
+  const keys = ['a:1', 'a:2', 'a:3', 'a:4'];
+
+  it('posts at most three new keyed groups per window, keyed by game id', async () => {
+    expect(LFG_BOARD_NEW_GROUP_POSTS_PER_WINDOW).toBe(3);
+    expect(LFG_BOARD_NEW_GROUP_POSTS_WINDOW_MS).toBe(600_000);
+    const budget = createKeyedPostBudget();
+    const spend = jest.spyOn(budget, 'trySpend');
+    const t = harness(
+      true,
+      fakeReads(
+        [],
+        keys.map((k) => [k, 2]),
+      ),
+    );
+    t.deps.postBudget = budget;
+    await syncKeyedGroups(t.deps, game, true, NOW);
+    expect(t.posts.map((v) => v.groupKey)).toEqual(['a:1', 'a:2', 'a:3']);
+    expect(spend).toHaveBeenLastCalledWith('7', NOW.getTime());
+  });
+
+  it('posts the waiting group on a later pass once the window has rolled', async () => {
+    const budget = createKeyedPostBudget();
+    const first = harness(
+      true,
+      fakeReads(
+        [],
+        keys.map((k) => [k, 2]),
+      ),
+    );
+    first.deps.postBudget = budget;
+    await syncKeyedGroups(first.deps, game, true, NOW);
+    const open = ['a:1', 'a:2', 'a:3'].map((k) => row(k));
+    const soon = harness(
+      true,
+      fakeReads(
+        open,
+        keys.map((k) => [k, 2]),
+      ),
+    );
+    soon.deps.postBudget = budget;
+    await syncKeyedGroups(
+      soon.deps,
+      game,
+      true,
+      new Date(NOW.getTime() + 60_000),
+    );
+    expect(soon.posts).toEqual([]);
+    const later = harness(
+      true,
+      fakeReads(
+        open,
+        keys.map((k) => [k, 2]),
+      ),
+    );
+    later.deps.postBudget = budget;
+    const rolled = new Date(
+      NOW.getTime() + LFG_BOARD_NEW_GROUP_POSTS_WINDOW_MS,
+    );
+    await syncKeyedGroups(later.deps, game, true, rolled);
+    expect(later.posts.map((v) => v.groupKey)).toEqual(['a:4']);
+  });
+
+  it('a spent budget still edits the open keyed rows', async () => {
+    const t = harness(
+      true,
+      fakeReads(
+        [row('a:1')],
+        [
+          ['a:1', 2],
+          ['a:2', 2],
+        ],
+      ),
+    );
+    t.deps.postBudget = { trySpend: () => false };
+    await syncKeyedGroups(t.deps, game, true, NOW);
+    expect(t.posts).toEqual([]);
+    expect(t.edits.map(([r, v]) => [r.id, v.state])).toEqual([
+      ['r-a:1', 'open'],
+    ]);
+  });
+
+  it("another game's posts do not spend this game's budget", async () => {
+    const budget = createKeyedPostBudget();
+    for (let i = 0; i < 3; i += 1) budget.trySpend('8', NOW.getTime());
+    const t = harness(true, fakeReads([], [['a:1', 2]]));
+    t.deps.postBudget = budget;
+    await syncKeyedGroups(t.deps, game, true, NOW);
+    expect(t.posts.map((v) => v.groupKey)).toEqual(['a:1']);
   });
 });
