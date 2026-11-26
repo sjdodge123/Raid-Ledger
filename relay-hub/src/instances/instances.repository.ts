@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { HUB_DB, type HubDb } from '../drizzle/drizzle.module';
 import { hubInstances, type HubInstanceRow } from '../drizzle/schema';
 
@@ -13,6 +13,9 @@ export interface PendingRegistration {
 /** What `approve` did: the CLI maps each to its line and exit code. */
 export type ApproveOutcome =
   'approved' | 'already_approved' | 'not_found' | 'revoked' | 'disconnected';
+
+/** What `revoke` did (ROK-1672): the CLI maps each to its line and exit code. */
+export type RevokeOutcome = 'revoked' | 'already_revoked' | 'not_found';
 
 /** `hub_instances` access (ROK-1671). Shared by the API and `hub-admin`. */
 @Injectable()
@@ -76,6 +79,25 @@ export class InstancesRepository {
     if (!current) return 'not_found';
     if (current.status === 'approved') return 'already_approved';
     return current.status === 'revoked' ? 'revoked' : 'disconnected';
+  }
+
+  /**
+   * L5 (ROK-1672): marks the instance revoked and KEEPS its token hash, so
+   * the guard can answer `revoked` to that token. The reason is stored only.
+   */
+  async revoke(instanceId: string, reason: string): Promise<RevokeOutcome> {
+    const updated = await this.db
+      .update(hubInstances)
+      .set({ status: 'revoked', revokedAt: sql`now()`, revokeReason: reason })
+      .where(
+        and(
+          eq(hubInstances.instanceId, instanceId),
+          ne(hubInstances.status, 'revoked'),
+        ),
+      )
+      .returning({ id: hubInstances.instanceId });
+    if (updated.length > 0) return 'revoked';
+    return (await this.findById(instanceId)) ? 'already_revoked' : 'not_found';
   }
 
   /** Every instance, oldest registration first (ties by id): deterministic. */
