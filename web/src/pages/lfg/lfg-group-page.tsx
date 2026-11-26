@@ -37,6 +37,13 @@ import { LfgGroupOverlays, type LfgOverlayActions } from './lfg-group-overlays';
 import { useLfgOverlay } from './use-lfg-overlay';
 import { LfgGroupTop } from './lfg-group-top';
 import { LfgLoading, LfgNotFound, PendingPollCard } from './lfg-group-states';
+import { useLfgGrouping, type LfgGroupingContext } from '../../plugins/lfg-grouping';
+import { LfgGroupingHeader, LfgGroupingList, useLfgHubParam } from './lfg-grouping-slots';
+
+/** ROK-2352: the join vars for the page's group — none for the whole-game group. */
+function groupKeysFor(groupKey: string): { groupKeys?: string[] } {
+    return groupKey === '' ? {} : { groupKeys: [groupKey] };
+}
 
 /**
  * The poll roster: the live members PLUS the viewer — a viewer who has not
@@ -55,11 +62,11 @@ function usePollMemberIds(group: LfgGroupDetailDto | undefined): number[] {
  * Join / withdraw / start-a-poll / lock-in, each taking the close to run once
  * the write settles so the confirming dialog stays up while it is pending.
  */
-function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined) {
+function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined, groupKey: string) {
     const join = useJoinGroup();
     const withdraw = useWithdraw();
     const find = useFindATime();
-    const lock = useLockInEvent(gameId, group?.gameName ?? '');
+    const lock = useLockInEvent(gameId, group?.gameName ?? '', groupKey);
     const start = useStartNow(gameId);
     const memberUserIds = usePollMemberIds(group);
     const startPoll = useCallback(
@@ -72,8 +79,8 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined) {
         startNow: (done) => start.startNow({ onSettled: done }),
         lockIn: (window, done) => lock.lockIn(window, { onSuccess: done }),
         // ROK-1479: spread so a weekly pick contributes NO `ttlMinutes` key.
-        pickUrgency: (pick, done) => join.mutate({ gameId, ...pick }, { onSuccess: done }),
-        withdraw: (done) => withdraw.mutate(gameId, { onSuccess: done }),
+        pickUrgency: (pick, done) => join.mutate({ gameId, ...pick, ...groupKeysFor(groupKey) }, { onSuccess: done }),
+        withdraw: (done) => withdraw.mutate(groupKey === '' ? gameId : { gameId, groupKey }, { onSuccess: done }),
         isPollPending: find.isPending,
         isStartNowPending: start.isPending,
         isLockInPending: lock.isPending,
@@ -81,7 +88,7 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined) {
     };
     return {
         dialogs,
-        join: (pick: LfgUrgencyPick) => join.mutate({ gameId, ...pick }),
+        join: (pick: LfgUrgencyPick) => join.mutate({ gameId, ...pick, ...groupKeysFor(groupKey) }),
         isBusy: join.isPending || withdraw.isPending || find.isPending || lock.isPending || start.isPending,
         pendingConvert: find.pendingConvert,
         retryConvert: () => void find.retryConvert(),
@@ -90,6 +97,7 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined) {
 
 interface PanelProps {
     gameId: number;
+    groupKey: string;
     threadId: string | null;
     onLockIn: (window: LfgOverlapWindowDto) => void;
     isBusy: boolean;
@@ -97,9 +105,9 @@ interface PanelProps {
 }
 
 /** The side-by-side pair: when the group is free, and when it last played. */
-function OverlapAndHistory({ gameId, onLockIn, isBusy, lockInHint }: Omit<PanelProps, 'threadId'>): JSX.Element {
-    const overlap = useLfgOverlap(gameId);
-    const history = useLfgHistory(gameId);
+function OverlapAndHistory({ gameId, groupKey, onLockIn, isBusy, lockInHint }: Omit<PanelProps, 'threadId'>): JSX.Element {
+    const overlap = useLfgOverlap(gameId, groupKey);
+    const history = useLfgHistory(gameId, groupKey);
     return (
         <div className="grid gap-4 md:grid-cols-2">
             <LfgOverlapPanel
@@ -119,7 +127,7 @@ function OverlapAndHistory({ gameId, onLockIn, isBusy, lockInHint }: Omit<PanelP
  * fetch — the conversation panel renders nothing when it is null (ROK-1483).
  */
 function LfgPanels({ threadId, ...overlap }: PanelProps): JSX.Element {
-    const suggestions = useLfgSuggestions(overlap.gameId);
+    const suggestions = useLfgSuggestions(overlap.gameId, overlap.groupKey);
     return (
         <>
             <OverlapAndHistory {...overlap} />
@@ -135,13 +143,16 @@ function LfgPanels({ threadId, ...overlap }: PanelProps): JSX.Element {
 }
 
 /** The loaded page: top bar → banner → hero → recovery card → panels → dialogs. */
-function LfgGroupLoaded({ gameId, fallbackName, group }: { gameId: number; fallbackName: string; group: LfgGroupDetailDto }): JSX.Element {
+function LfgGroupLoaded({ context, fallbackName, group }: { context: LfgGroupingContext; fallbackName: string; group: LfgGroupDetailDto }): JSX.Element {
+    const { gameId, groupKey } = context;
+    const grouping = useLfgGrouping(context.gameSlug);
     const detail = useGameDetail(gameId);
-    const actions = useGroupActions(gameId, group);
+    const actions = useGroupActions(gameId, group, groupKey);
     const overlays = useLfgOverlay();
     return (
         <div className="mx-auto max-w-4xl space-y-4 px-4 pt-6 md:pb-6">
             <LfgTopBar onManage={() => overlays.open('manage')} canManage={group.playingNow == null} />
+            <LfgGroupingHeader grouping={grouping} context={context} />
             <LfgHeader gameId={gameId} game={detail.data} fallbackName={fallbackName} />
             <LfgGroupTop
                 group={group}
@@ -151,9 +162,11 @@ function LfgGroupLoaded({ gameId, fallbackName, group }: { gameId: number; fallb
                 onParticipants={() => overlays.open('participants')}
                 isBusy={actions.isBusy}
             />
+            <LfgGroupingList grouping={grouping} context={context} />
             <PendingPollCard pending={actions.pendingConvert} onRetry={actions.retryConvert} />
             <LfgPanels
                 gameId={gameId}
+                groupKey={groupKey}
                 threadId={group.threadId}
                 onLockIn={overlays.openLockIn}
                 isBusy={actions.isBusy}
@@ -165,19 +178,20 @@ function LfgGroupLoaded({ gameId, fallbackName, group }: { gameId: number; fallb
 }
 
 /** Everything below the slug resolution, keyed by the numeric game id. */
-function LfgGroupContent({ gameId, fallbackName }: { gameId: number; fallbackName: string }): JSX.Element {
-    const group = useLfgGroupDetail(gameId);
+function LfgGroupContent({ context, fallbackName }: { context: LfgGroupingContext; fallbackName: string }): JSX.Element {
+    const group = useLfgGroupDetail(context.gameId, context.groupKey);
     // A failed group read has no recoverable UI: without the roster there is
     // no count, no join button and no poll membership. Render the error state
     // rather than a skeleton that never resolves.
     if (group.isError) return <LfgNotFound />;
     if (!group.data) return <LfgLoading />;
-    return <LfgGroupLoaded gameId={gameId} fallbackName={fallbackName} group={group.data} />;
+    return <LfgGroupLoaded context={context} fallbackName={fallbackName} group={group.data} />;
 }
 
-/** `/lfg/:gameSlug` — resolve the slug, then hand off to the id-keyed content. */
+/** `/lfg/:gameSlug[/:groupKey]` (+ `?hub`) — resolve the slug, then hand off to the id-keyed content. */
 export function LfgGroupPage(): JSX.Element {
-    const { gameSlug } = useParams<{ gameSlug: string }>();
+    const { gameSlug, groupKey = '' } = useParams<{ gameSlug: string; groupKey: string }>();
+    const hubId = useLfgHubParam();
     const lookup = useGameBySlug(gameSlug);
 
     if (lookup.isError || (!gameSlug && !lookup.isLoading)) {
@@ -186,7 +200,7 @@ export function LfgGroupPage(): JSX.Element {
     if (!lookup.data) return <LfgLoading />;
     return (
         <LfgGroupContent
-            gameId={lookup.data.id}
+            context={{ gameId: lookup.data.id, gameSlug: gameSlug ?? '', groupKey, hubId }}
             fallbackName={lookup.data.name}
         />
     );
