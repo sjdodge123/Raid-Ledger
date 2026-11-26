@@ -10,6 +10,9 @@ import { CharacterSchema, type CharacterDto, type RosterMemberNoArmoryReason, ty
 import { useCharacterDetail } from '../hooks/use-character-detail';
 import { useRosterMemberCharacter } from '../hooks/use-roster-member-character';
 import { httpStatusOf } from '../lib/api/api-error';
+import { ROSTER_MEMBER_PLUGIN } from '../lib/roster-member-plugin';
+import { usePluginsHydrated } from '../hooks/use-plugins';
+import { isSlugActive, usePluginStore } from '../stores/plugin-store';
 
 /** What read-only mode needs beyond the `CharacterDto`. */
 export interface ReadOnlyCharacterMeta {
@@ -66,12 +69,23 @@ function fromMember(data: WowRosterMemberResponseDto, fromClaim: boolean): Chara
     return { kind: 'ready', ...toReadOnlyCharacter(data, fromClaim) };
 }
 
+/** ROK-2360: a roster member while the WoW plugin is off reads as gone (404), never as an error. */
+function useMemberPluginGate(hubId: string | undefined): CharacterPageSource | null {
+    const hydrated = usePluginsHydrated();
+    const active = usePluginStore((s) => isSlugActive(s.activeSlugs, ROSTER_MEMBER_PLUGIN));
+    if (active) return null;
+    if (!hydrated) return { kind: 'loading' };
+    return { kind: 'error', message: 'Roster member not found', status: 404, hubId };
+}
+
 /** Picks the query by route: `:memberId` present = roster member (`:id` is then the hub id). */
 export function useCharacterPageSource(): CharacterPageSource {
     const { id, memberId } = useParams<{ id: string; memberId: string }>();
     const [search] = useSearchParams();
     const character = useCharacterDetail(memberId ? undefined : id);
     const member = useRosterMemberCharacter(memberId ? id : undefined, memberId);
+    const memberGate = useMemberPluginGate(id);
+    if (memberId && memberGate) return memberGate;
     const q = memberId ? member : character;
     if (q.isLoading) return { kind: 'loading' };
     if (q.error || !q.data) {
