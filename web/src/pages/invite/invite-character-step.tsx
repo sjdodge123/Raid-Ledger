@@ -1,7 +1,8 @@
 import type { JSX } from 'react';
 import type { CharacterDto, PugRole } from '@raid-ledger/contract';
 import { formatRole } from '../../lib/role-colors';
-import { WowArmoryImportForm } from '../../plugins/wow/components/wow-armory-import-form';
+import { PluginSlot } from '../../plugins/plugin-slot';
+import { usePluginSlotFilled } from '../../plugins/use-plugin-slot-filled';
 import { StepIndicator, CharacterCard } from './invite-components';
 
 export interface CharacterStepProps {
@@ -45,7 +46,7 @@ function ImportFormSection({ gameInfo, onImportSuccess, onShowManualRoleSelector
     return (
         <div className="mt-4 text-left">
             <p className="text-sm text-muted mb-3 text-center">Import your character to auto-detect your role</p>
-            <WowArmoryImportForm gameVariant={gameInfo?.gameVariant} defaultRealm={gameInfo?.inviterRealm} onSuccess={onImportSuccess} isMain />
+            <PluginSlot name="invite:character-import" context={{ gameVariant: gameInfo?.gameVariant, defaultRealm: gameInfo?.inviterRealm, onSuccess: onImportSuccess }} />
             <button type="button" onClick={onShowManualRoleSelector} className="mt-3 w-full text-xs text-muted hover:text-foreground transition-colors">
                 Skip, choose role manually
             </button>
@@ -77,7 +78,10 @@ export function CharacterStep(props: CharacterStepProps): JSX.Element {
 }
 
 function CharacterStepCard(props: CharacterStepProps): JSX.Element {
-    const requiresRole = props.hasRoles && !props.shouldShowImportForm && !props.shouldShowCharacterSelector;
+    // ROK-2357: the import is a plugin slot; with no active plugin filling it, the step never offers it.
+    const canImport = usePluginSlotFilled('invite:character-import');
+    const showImportForm = canImport && props.shouldShowImportForm;
+    const requiresRole = props.hasRoles && !showImportForm && !props.shouldShowCharacterSelector;
     return (
         <div className="rounded-xl border border-edge bg-surface p-6 shadow-lg">
             {props.eventHeader}
@@ -85,12 +89,12 @@ function CharacterStepCard(props: CharacterStepProps): JSX.Element {
                 <CharacterSelector characters={props.characters} selectedCharacterId={props.selectedCharacterId}
                     selectedRole={props.selectedRole} characterRole={props.characterRole} isClaiming={props.isClaiming}
                     onSelectCharacter={props.onSelectCharacter} onSelectRole={props.onSelectRole}
-                    onClaim={props.onClaim} onShowImportForm={props.onShowImportForm} />
+                    onClaim={props.onClaim} onShowImportForm={canImport ? props.onShowImportForm : undefined} />
             )}
-            {props.shouldShowImportForm && (
+            {showImportForm && (
                 <ImportFormSection gameInfo={props.gameInfo} onImportSuccess={props.onImportSuccess} onShowManualRoleSelector={props.onShowManualRoleSelector} />
             )}
-            {!props.shouldShowImportForm && !props.shouldShowCharacterSelector && (
+            {!showImportForm && !props.shouldShowCharacterSelector && (
                 <ManualRoleSelector selectedRole={props.selectedRole} isClaiming={props.isClaiming}
                     requiresRole={requiresRole} onSelectRole={props.onSelectRole} onClaim={props.onClaim} />
             )}
@@ -125,7 +129,8 @@ function CharacterSelector({
     onSelectCharacter: (charId: string, role: PugRole | null) => void;
     onSelectRole: (role: PugRole) => void;
     onClaim: (role?: PugRole, charId?: string) => void;
-    onShowImportForm: () => void;
+    /** Absent while no active plugin offers an import (ROK-2357). */
+    onShowImportForm: (() => void) | undefined;
 }): JSX.Element {
     return (
         <div className="mt-4">
@@ -135,7 +140,7 @@ function CharacterSelector({
             <button onClick={() => onClaim(selectedRole ?? characterRole ?? undefined)} disabled={isClaiming || !selectedCharacterId || !selectedRole} className="btn btn-primary w-full mb-2">
                 {isClaiming ? 'Joining...' : 'Join Event'}
             </button>
-            <button type="button" onClick={onShowImportForm} className="w-full text-xs text-muted hover:text-foreground transition-colors">Import another character</button>
+            {onShowImportForm && <button type="button" onClick={onShowImportForm} className="w-full text-xs text-muted hover:text-foreground transition-colors">Import another character</button>}
         </div>
     );
 }
