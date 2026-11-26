@@ -76,7 +76,12 @@ describe('SigninCodeStore', () => {
 
   it('reads a corrupt pending record as expired', async () => {
     const { code } = await store.create(SECRET);
-    handle.store.set(codeKey(code), '{"secretHash":1}');
+    // Unexpired by its own expiresAt, so only the schema check (a numeric
+    // secretHash) can reject it — a bare `JSON.parse as CodeRecord` reads it as live.
+    handle.store.set(
+      codeKey(code),
+      JSON.stringify({ secretHash: 1, createdAt: 0, expiresAt: 9e15 }),
+    );
     expect(await store.findPending(code)).toBeNull();
     expect(await store.approve(code, approval('a'))).toBe(false);
     expect(await store.takeBySecret(SECRET)).toEqual({ status: 'expired' });
