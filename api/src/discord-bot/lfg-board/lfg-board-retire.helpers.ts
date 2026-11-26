@@ -227,7 +227,12 @@ async function rowFarewell(
   game: LfmGameRow,
   row: LfmMessageRow,
 ): Promise<LfmGroupView> {
-  const view = await farewellView(deps.db, game, row, rowScope(deps, game, row));
+  const view = await farewellView(
+    deps.db,
+    game,
+    row,
+    rowScope(deps, game, row),
+  );
   if (row.groupKey === '') return view;
   const adapter = deps.registry
     ? resolveLfgGrouping(deps.registry, game.slug)
