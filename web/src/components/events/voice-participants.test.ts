@@ -110,3 +110,22 @@ describe('splitVoiceGroups (ROK-1822)', () => {
     expect([...active, ...left]).toEqual([]);
   });
 });
+
+/** A row as a non-owner viewer receives it: no Discord id key (ROK-2323). */
+function viewerRow(overrides: Partial<AdHocParticipantDto> = {}): AdHocParticipantDto {
+  return {
+    id: 'uuid-9', eventId: 42, userId: 7, discordUsername: 'Player', discordAvatarHash: null,
+    joinedAt: '2026-10-16T18:00:00Z', leftAt: null, totalDurationSeconds: null, sessionCount: 1, ...overrides,
+  };
+}
+
+describe('isVoiceParticipant — non-owner payload (ROK-2323)', () => {
+  it('a merged steam row with hasDiscord stays a voice row without the Discord id', () => {
+    const merged = viewerRow({ hasDiscord: true, source: 'steam', inVoice: false, leftAt: '2026-10-16T18:30:00Z' });
+    expect(isVoiceParticipant(merged)).toBe(true);
+  });
+
+  it('a steam server row with hasDiscord false is not a voice row', () => {
+    expect(isVoiceParticipant(viewerRow({ userId: null, hasDiscord: false, source: 'steam', inVoice: false, onServer: true }))).toBe(false);
+  });
+});

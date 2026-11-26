@@ -55,8 +55,18 @@ function bindSocketEvents(
 ) {
   socket.on('connect', () => { setState((prev) => ({ ...prev, connected: true })); socket.emit('subscribe', { eventId }); });
   socket.on('disconnect', () => setState((prev) => ({ ...prev, connected: false })));
+  // ROK-2323: the broadcast is the viewer projection (no Discord / Steam ids),
+  // so the per-viewer REST roster is refetched — the owner keeps avatars and
+  // ids. The broadcast is the fallback when the refetch fails; a newer update
+  // supersedes an older refetch still in flight.
+  let latest = 0;
   socket.on('roster:update', (data: { participants: AdHocParticipantDto[]; activeCount: number }) => {
-    setState((prev) => ({ ...prev, participants: data.participants, activeCount: data.activeCount }));
+    const seq = ++latest;
+    void fetchInitialRoster(eventId).then((fresh) => {
+      if (seq !== latest) return;
+      const next = fresh ?? data;
+      setState((prev) => ({ ...prev, participants: next.participants, activeCount: next.activeCount }));
+    });
     invalidateSignupRoster(queryClient, eventId);
   });
   socket.on('event:status', (data: { status: 'live' | 'grace_period' | 'ended' }) => {
