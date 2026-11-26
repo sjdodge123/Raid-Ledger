@@ -15,20 +15,9 @@
  * the same condition that renders the NominationGrid read-only.
  */
 import type { JSX } from 'react';
-import type {
-  LineupDetailResponseDto,
-  LineupInviteeResponseDto,
-} from '@raid-ledger/contract';
+import type { LineupInviteeResponseDto } from '@raid-ledger/contract';
 import { InviteeList } from './InviteeList';
 import { AddInviteesButton } from './AddInviteesButton';
-
-/** ROK-2349: archived and aborted lineups accept no further edits. */
-export function isLineupReadOnly(
-  status: LineupDetailResponseDto['status'],
-  isAborted: boolean,
-): boolean {
-  return isAborted || status === 'archived';
-}
 
 export interface LineupInviteesSectionProps {
   lineupId: number;

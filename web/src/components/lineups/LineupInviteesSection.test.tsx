@@ -8,7 +8,8 @@ import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
-import { LineupInviteesSection, isLineupReadOnly } from './LineupInviteesSection';
+import { LineupInviteesSection } from './LineupInviteesSection';
+import { isLineupReadOnly } from '../../lib/lineup-read-only';
 
 vi.mock('../../hooks/use-lineups', () => ({
     useRemoveLineupInvitee: () => ({ mutate: vi.fn(), isPending: false }),
