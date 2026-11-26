@@ -266,6 +266,24 @@ describe('LineupDetailHeader — archived state (ROK-2349)', () => {
         expect(screen.queryByTestId('lineup-archived-badge')).toBeNull();
     });
 
+    it('renders the title alongside the badge, with the title row wrapping the actions below on a phone', () => {
+        const lineup = buildDetail({
+            title: 'Demo: Archived Lineup',
+            status: 'archived',
+            visibility: 'private',
+        } as DetailOverrides);
+        renderWithProviders(<LineupDetailHeader lineup={lineup} />);
+        expect(screen.getByTestId('lineup-archived-badge')).toHaveTextContent('Archived');
+        expect(screen.getByTestId('lineup-fallback-title')).toHaveTextContent('Demo: Archived Lineup');
+        // Header wraps; the title row takes the full width below sm, so the
+        // actions cluster drops to its own row instead of squeezing the title.
+        expect(screen.getByTestId('lineup-detail-header')).toHaveClass('flex-wrap');
+        expect(screen.getByTestId('lineup-header-lead')).toHaveClass('min-w-0', 'basis-full', 'sm:basis-0');
+        expect(screen.getByTestId('lineup-header-actions')).toHaveClass('ml-auto', 'flex-shrink-0');
+        expect(screen.getByTestId('lineup-archived-badge')).toHaveClass('flex-shrink-0');
+        expect(screen.getByTestId('lineup-private-badge')).toHaveClass('flex-shrink-0');
+    });
+
     it('leaves an aborted archived lineup to its own banner', () => {
         const lineup = buildDetail({ title: 'Aborted Picks', status: 'archived' } as DetailOverrides);
         renderWithProviders(<LineupDetailHeader lineup={lineup} isAborted />);
