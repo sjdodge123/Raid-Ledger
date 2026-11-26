@@ -21,14 +21,25 @@ export const AdHocParticipantSchema = z.object({
     id: z.string().uuid(),
     eventId: z.number(),
     userId: z.number().nullable(),
-    /** Null for a Steam-only (game-server) participant (ROK-1800). */
-    discordUserId: z.string().nullable(),
-    /** SteamID64 of a game-server participant (ROK-1800). */
+    /**
+     * Null for a Steam-only (game-server) participant (ROK-1800). Sent only
+     * to the event owner or an admin/operator (ROK-2323); omitted for any
+     * other viewer and on the `roster:update` socket broadcast.
+     */
+    discordUserId: z.string().nullable().optional(),
+    /**
+     * True when the row carries a Discord identity (ROK-2323). Sent to every
+     * viewer so the web can tell a voice row from a server row without the
+     * Discord id itself. Absent on legacy payloads.
+     */
+    hasDiscord: z.boolean().optional(),
+    /** SteamID64 of a game-server participant (ROK-1800). Owner/admin only (ROK-2323). */
     steamId: z.string().nullable().optional(),
     /**
      * Platform id of a game-server participant, namespaced by `idKind`
      * (ROK-2232). Set together with `idKind`; a Steam player's equals
      * `steamId`. Absent for a Discord-only row and on legacy payloads.
+     * Owner/admin only (ROK-2323), like `idKind`.
      */
     playerId: z.string().optional(),
     /** Namespace of `playerId` (ROK-2232). Set together with `playerId`. */
@@ -39,7 +50,11 @@ export const AdHocParticipantSchema = z.object({
     inVoice: z.boolean().optional(),
     /** Currently on the linked game server (ROK-1821). Absent on legacy payloads. */
     onServer: z.boolean().optional(),
-    /** Display name: Discord username, or character name / SteamID64. */
+    /**
+     * Display name: Discord username, or character name / SteamID64. A
+     * non-owner viewer never receives a raw platform id here — an anonymous
+     * server player is sent as `Server player` (ROK-2323).
+     */
     discordUsername: z.string(),
     discordAvatarHash: z.string().nullable(),
     joinedAt: z.string().datetime(),
