@@ -153,6 +153,27 @@ describe('ROK-2292 D8: replies held while the post was in flight', () => {
     expect(gateway.createPost).toHaveBeenCalledTimes(1);
     expect(mocked.markSent).toHaveBeenCalledTimes(1);
   });
+
+  it('one held reply failing never holds back the next (review m1)', async () => {
+    const { svc, resendReply } = setup();
+    mocked.source.mockResolvedValue(source());
+    mocked.rehome.mockResolvedValue([held(21), held(22)]);
+    resendReply.mockRejectedValueOnce(new Error('db down'));
+    await svc.ensurePost(TO, REF);
+    expect(resendReply.mock.calls.map(([l]) => l.id)).toEqual([21, 22]);
+  });
+
+  it('the starter row is tracked before any held reply is sent (review m2)', async () => {
+    const { svc, resendReply, starters } = setup();
+    mocked.source.mockResolvedValue(source());
+    const card = { embeds: [], components: [], state: 'posted' };
+    starters.build.mockResolvedValue(card);
+    mocked.rehome.mockResolvedValue([held(21)]);
+    await svc.ensurePost(TO, REF);
+    const tracked = starters.track.mock.invocationCallOrder[0] ?? Infinity;
+    const sent = resendReply.mock.invocationCallOrder[0] ?? -Infinity;
+    expect(tracked).toBeLessThan(sent);
+  });
 });
 
 describe('EventPostOutbound.ensurePost (item 1, lazy post)', () => {

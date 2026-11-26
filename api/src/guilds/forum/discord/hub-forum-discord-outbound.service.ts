@@ -200,30 +200,21 @@ export class HubForumDiscordOutboundService {
   private async createReply(job: Job): Promise<void> {
     const { guildId, threadId, replyId } = job.change;
     if (replyId === undefined || job.link?.discordDeletedAt) return;
-    const record = await findReply(this.db, { guildId, threadId, replyId });
+    const ref = { guildId, threadId, replyId };
+    const record = await findReply(this.db, ref);
     // A reply deleted on RL is soft-deleted: never publish its body.
     if (!record || record.reply.deletedAt || notMirrored(record.reply)) return;
     const parent = await this.replyParent(job);
     if (!parent || parent.discordDeletedAt) return; // OQ-5: unlinked thread
-    const link =
-      job.link ??
-      (await links.claimReplyLink(this.db, {
-        guildId,
-        threadId,
-        replyId,
-        discordThreadId: parent.discordThreadId,
-      }));
+    const claim = { ...ref, discordThreadId: parent.discordThreadId };
+    const link = job.link ?? (await links.claimReplyLink(this.db, claim));
     if (!link) return;
     const to = await links.heldReplyTarget(this.db, link, parent);
     if (to === null) return; // held: the post's send delivers it
-    const ref = { guildId, threadId, replyId };
     const voice = [this.settings, record.author, ref, record.reply] as const;
     const [author, url] = await outboundVoice(...voice);
-    await this.sendReply(job.target, link, to, {
-      body: record.reply.body,
-      url,
-      author,
-    });
+    const msg = { body: record.reply.body, url, author };
+    await this.sendReply(job.target, link, to, msg);
   }
 
   /** A reply's post: its link, else (event/subject thread) the lazy post. */

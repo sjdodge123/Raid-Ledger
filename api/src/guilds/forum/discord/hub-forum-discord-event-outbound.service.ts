@@ -104,6 +104,8 @@ interface PostView {
 
 const starterLogger = new Logger('HubForumDiscordEventOutbound');
 
+type StarterState = Parameters<EventForumStarterCards['track']>[2];
+
 /**
  * ROK-2292 delta-3 MINOR: the post is already sent and its link marked sent,
  * so a starter-tracking failure must not fail `attempt` (that would mark the
@@ -114,7 +116,7 @@ async function trackSentStarter(
   starters: Pick<EventForumStarterCards, 'track'>,
   eventId: number,
   threadId: string,
-  state: Parameters<EventForumStarterCards['track']>[2],
+  state: StarterState,
 ): Promise<void> {
   try {
     await starters.track(eventId, threadId, state);
@@ -268,17 +270,20 @@ export class EventPostOutbound {
     await this.deps.attempt(link, async () => {
       const sent = await gateway.createPost(to.target, post, ROOT_AUTHOR);
       await links.markSent(db, link.id, sent, this.deps.now());
-      // D8: the starter row first — the held replies' sends come after it.
-      if (eventCard && eventId !== null) {
-        await trackSentStarter(
-          this.deps.starters,
-          eventId,
-          sent.threadId,
-          eventCard.state,
-        );
-      }
-      await this.rehome(link.threadId, sent.threadId);
+      await this.landed(link.threadId, sent.threadId, eventId, eventCard);
     });
+  }
+
+  /** D8: a post landed — its starter row first, then its held replies. */
+  private async landed(
+    threadId: number,
+    postId: string,
+    eventId: number | null,
+    card: { state: StarterState } | null,
+  ): Promise<void> {
+    if (card && eventId !== null)
+      await trackSentStarter(this.deps.starters, eventId, postId, card.state);
+    await this.rehome(threadId, postId);
   }
 
   /**

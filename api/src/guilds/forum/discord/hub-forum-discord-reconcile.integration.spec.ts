@@ -17,7 +17,12 @@ import {
 } from '../../posts/hub-posts.test-fixtures';
 import { requeueHeldReplies } from './hub-forum-discord-event-lock.reopen';
 import { HubForumDiscordInboundIngest } from './hub-forum-discord-inbound.ingest';
-import { unsentId } from './hub-forum-discord-links.queries';
+import {
+  heldReplyTarget,
+  markSent,
+  rehomeReplies,
+  unsentId,
+} from './hub-forum-discord-links.queries';
 import {
   stubOutbound,
   type FakeOutbound,
@@ -261,6 +266,49 @@ describe('ROK-2208 §5.6 retry sweep — Discord-origin moderation deletes (Code
   });
 });
 
+/** An RL reply held on its post's placeholder id (pending, long due). */
+async function heldReply(
+  g: number,
+  threadId: number,
+  body: string,
+  opts: { replyDeleted?: boolean; linkDeleted?: boolean } = {},
+) {
+  const db = ctx.testApp.db;
+  const gone = new Date(Date.now() - HOUR);
+  const [r] = nonEmpty(
+    await db
+      .insert(schema.hubForumReplies)
+      .values({
+        guildId: g,
+        threadId,
+        body,
+        authorId: adminId,
+        deletedAt: opts.replyDeleted ? gone : null,
+      })
+      .returning(),
+    'reply',
+  );
+  const [link] = nonEmpty(
+    await db
+      .insert(schema.hubForumDiscordLinks)
+      .values({
+        guildId: g,
+        kind: 'reply',
+        threadId,
+        replyId: r.id,
+        discordThreadId: unsentId('thread', threadId),
+        discordMessageId: unsentId('reply', r.id),
+        origin: 'raidledger',
+        syncState: opts.linkDeleted ? 'synced' : 'pending',
+        discordDeletedAt: opts.linkDeleted ? gone : null,
+        createdAt: new Date(Date.now() - 10 * HOUR),
+      })
+      .returning(),
+    'reply link',
+  );
+  return { reply: r, link };
+}
+
 describe('ROK-2208 §5.6 outbound retry sweep', () => {
   it('re-sends pending and failed links under 5 attempts, never one at 5', async () => {
     const { g } = await boundHub();
@@ -294,39 +342,20 @@ describe('ROK-2208 §5.6 outbound retry sweep', () => {
     });
   });
 
-  it('a placeholder reply is sent into its post once the post is re-sent', async () => {
+  it('a placeholder reply is sent into its post once, when the post is re-sent', async () => {
     const { g } = await boundHub();
     const { thread, link } = await queuedThread(g, 'rc-parent', {
       syncState: 'failed',
       attempts: 1,
     });
-    const [r] = nonEmpty(
-      await ctx.testApp.db
-        .insert(schema.hubForumReplies)
-        .values({
-          guildId: g,
-          threadId: thread.id,
-          body: 'queued reply',
-          authorId: adminId,
-        })
-        .returning(),
-      'reply',
-    );
-    await ctx.testApp.db.insert(schema.hubForumDiscordLinks).values({
-      guildId: g,
-      kind: 'reply',
-      threadId: thread.id,
-      replyId: r.id,
-      discordThreadId: link.discordThreadId,
-      discordMessageId: unsentId('reply', r.id),
-      origin: 'raidledger',
-      syncState: 'pending',
-      createdAt: new Date(Date.now() - 10 * HOUR),
-    });
+    const { reply: r } = await heldReply(g, thread.id, 'queued reply');
     await sync.retrySweep();
     const parent = await linkById(link.id);
     const realPost = parent?.discordThreadId ?? 'missing parent link';
     expect(realPost.startsWith('rl:')).toBe(false);
+    // ROK-2292 Codex P2: the post's re-send sends it; the sweep's stale copy
+    // of the reply row must not send it a second time.
+    expect(out.spies.createReply).toHaveBeenCalledTimes(1);
     expect(out.spies.createReply).toHaveBeenCalledWith(
       expect.anything(),
       realPost,
@@ -339,6 +368,29 @@ describe('ROK-2208 §5.6 outbound retry sweep', () => {
       expect.anything(),
     );
     expect(await linkOf(unsentId('reply', r.id))).toBeNull();
+  });
+
+  it('a held reply deleted before its post lands is never published (Codex P2)', async () => {
+    const { g } = await boundHub();
+    const { thread } = await queuedThread(g, 'rc-gone-replies', {
+      syncState: 'failed',
+      attempts: 1,
+    });
+    const deleted = { replyDeleted: true };
+    const pending = await heldReply(g, thread.id, 'deleted body', deleted);
+    const closed = await heldReply(g, thread.id, 'closed body', {
+      ...deleted,
+      linkDeleted: true,
+    });
+    await sync.retrySweep();
+    expect(sentTitles()).toContain('rc-gone-replies');
+    expect(out.spies.createReply).not.toHaveBeenCalled();
+    const after = await linkById(pending.link.id);
+    expect(after?.discordDeletedAt).not.toBeNull(); // closed out, not sent
+    expect(after?.syncState).toBe('synced');
+    expect((await linkById(closed.link.id))?.discordMessageId).toBe(
+      unsentId('reply', closed.reply.id),
+    );
   });
 
   it('a sent link whose edit failed is re-edited, not re-created', async () => {
@@ -571,5 +623,54 @@ describe('ROK-2314 MAJOR-2 requeueHeldReplies', () => {
         lastError: 'archived',
       });
     }
+  });
+});
+
+describe('ROK-2292 review M1: heldReplyTarget (a reply claimed while its post was in flight)', () => {
+  /** A post claimed but unsent, with one reply held on its placeholder. */
+  async function inFlight(title: string) {
+    const { g } = await boundHub();
+    const pending = { syncState: 'pending', attempts: 0 };
+    const { thread, link: post } = await queuedThread(g, title, pending);
+    const { link: reply } = await heldReply(g, thread.id, `${title} reply`);
+    return { thread, post, reply };
+  }
+  const db = () => ctx.testApp.db;
+  const sendPost = async (post: { id: number }) => {
+    const id = freshId();
+    await markSent(db(), post.id, { threadId: id, messageId: id }, new Date());
+    return id;
+  };
+
+  it('the post was sent after the reply read it: the reply moves onto it itself', async () => {
+    const { post, reply } = await inFlight('hrt-adopt');
+    const real = await sendPost(post); // and its re-home ran before the claim
+    expect(await heldReplyTarget(db(), reply, post)).toBe(real);
+    expect((await linkById(reply.id))?.discordThreadId).toBe(real);
+  });
+
+  it("the post's own re-home took the reply first: held (null), never sent twice", async () => {
+    const { thread, post, reply } = await inFlight('hrt-lose');
+    const real = await sendPost(post);
+    const moved = await rehomeReplies(db(), thread.id, real);
+    expect(moved.map((l) => l.id)).toEqual([reply.id]);
+    expect(await heldReplyTarget(db(), reply, post)).toBeNull();
+    expect((await linkById(reply.id))?.discordThreadId).toBe(real);
+  });
+
+  it('the post is still in flight: held (null), the reply stays on the placeholder', async () => {
+    const { thread, post, reply } = await inFlight('hrt-held');
+    expect(await heldReplyTarget(db(), reply, post)).toBeNull();
+    expect((await linkById(reply.id))?.discordThreadId).toBe(
+      unsentId('thread', thread.id),
+    );
+  });
+
+  it('a parent already sent when read: its post id, no re-read', async () => {
+    const { post, reply } = await inFlight('hrt-sent');
+    await sendPost(post);
+    const sent = await linkById(post.id);
+    if (!sent) throw new Error('post link vanished');
+    expect(await heldReplyTarget(db(), reply, sent)).toBe(sent.discordThreadId);
   });
 });

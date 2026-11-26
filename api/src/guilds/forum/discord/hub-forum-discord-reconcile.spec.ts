@@ -87,17 +87,43 @@ describe('ROK-2314 MAJOR-2: retryLinks re-drives a reopened post', () => {
     ...sentLink,
     id,
     kind: 'reply',
+    syncState: 'failed',
+    attempts: 0,
   });
+
+  /** The DB re-read (`findLinkById`) answers from `rows`. */
+  const rereadFrom = (rows: links.ForumLink[]) =>
+    jest
+      .spyOn(links, 'findLinkById')
+      .mockImplementation((_db, id) =>
+        Promise.resolve(rows.find((r) => r.id === id) ?? null),
+      );
 
   it('re-drives each link once, in the given order', async () => {
     jest.spyOn(links, 'rlRowDeleted').mockResolvedValue(false);
     const retry = jest.fn().mockResolvedValue('unbound');
     const rows = [reply(5), reply(8), reply(12)];
+    rereadFrom(rows);
     expect(await service(true, { retry }).retryLinks(rows)).toBe(3);
     expect(retry).toHaveBeenCalledTimes(3);
     expect(retry).toHaveBeenNthCalledWith(1, rows[0], 'reply.updated');
     expect(retry).toHaveBeenNthCalledWith(2, rows[1], 'reply.updated');
     expect(retry).toHaveBeenNthCalledWith(3, rows[2], 'reply.updated');
+  });
+
+  it('skips a row sent, gone or re-attempted since the queue was read (ROK-2292 Codex P2)', async () => {
+    jest.spyOn(links, 'rlRowDeleted').mockResolvedValue(false);
+    const retry = jest.fn().mockResolvedValue('unbound');
+    const queued = [reply(5), reply(8), reply(12), reply(14)];
+    rereadFrom([
+      { ...reply(5), syncState: 'synced' }, // its post's re-send sent it
+      { ...reply(8), attempts: 1 }, // that send failed: its backoff applies
+      reply(14), // untouched: still re-driven
+    ]); // 12 is gone
+    await service(true, { retry }).retryLinks(queued);
+    expect(retry.mock.calls.map(([l]: [links.ForumLink]) => l.id)).toEqual([
+      14,
+    ]);
   });
 
   it('does nothing while the bot is offline', async () => {
