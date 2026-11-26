@@ -59,13 +59,13 @@ import {
 } from './lfm-embed.helpers';
 import { currentView, liveFloorFor, viewForChange } from './lfm-embed.views';
 import {
-  syncKeyedGroups,
-  type LfmKeyedSyncDeps,
-} from './lfm-embed.groups.helpers';
+  reconcileKeyedGroups,
+  runKeyedPass,
+  type LfmKeyedPassDeps,
+} from './lfm-embed.keyed-pass.helpers';
 import {
   closeLfmMessage,
   findOpenLfmMessage,
-  listOpenLfmMessages,
   listUntrackedLfmGames,
   loadLfmGame,
   recordLfmRender,
@@ -177,6 +177,8 @@ export class LfmEmbedService {
     try {
       const game = await loadLfmGame(this.db, payload.gameId);
       if (!game) return;
+      // Plug-in point (later lane): while the WoW adapter is active the `''`
+      // post below is still game-wide — scope this read and `currentView`.
       const existing = await findOpenLfmMessage(this.db, game.id);
       // A hidden or banned game never gets a NEW public post (the rule
       // `requireVisibleGame` applies to every LFG write); an open one is still
@@ -194,27 +196,18 @@ export class LfmEmbedService {
     await this.syncKeyed(payload.gameId);
   }
 
-  /**
-   * ROK-2352 — the game's keyed (per-instance) posts, after the `''` post.
-   * Skipped when no registry is wired (unit specs), so the `''` path stays
-   * byte for byte; a non-WoW game reads one empty query and returns.
-   */
-  private async syncKeyed(gameId: number): Promise<void> {
-    const registry = this.pluginRegistry;
-    if (!registry) return;
-    try {
-      const game = await loadLfmGame(this.db, gameId);
-      if (!game) return;
-      const deps: LfmKeyedSyncDeps = {
-        db: this.db,
-        registry,
-        edit: (row, view) => this.editRow(row, view),
-        post: (view) => this.postNew(game.id, view),
-      };
-      await syncKeyedGroups(deps, game, isVisibleGame(game));
-    } catch (err) {
-      this.warn(`sync the keyed LFM posts for game ${gameId}`, err);
-    }
+  /** ROK-2352 — the keyed pass (`lfm-embed.keyed-pass.helpers.ts`). */
+  private syncKeyed(gameId: number): Promise<void> {
+    return runKeyedPass(this.keyedDeps(), gameId);
+  }
+
+  /** {@link reconcileDeps} plus the registry and the post seam. */
+  private keyedDeps(): LfmKeyedPassDeps {
+    return {
+      ...this.reconcileDeps(),
+      registry: this.pluginRegistry,
+      postNew: (gameId, view) => this.postNew(gameId, view),
+    };
   }
 
   /**
@@ -272,7 +265,7 @@ export class LfmEmbedService {
     try {
       await this.reconcileOpenRows();
       await this.reconcileUntrackedGroups();
-      await this.reconcileKeyedGroups();
+      await reconcileKeyedGroups(this.keyedDeps());
     } catch (err) {
       this.warn('reconcile open LFM messages', err);
     }
@@ -322,19 +315,6 @@ export class LfmEmbedService {
           err,
         );
       }
-    }
-  }
-
-  /** ROK-2352 — the keyed pass for every game holding an open keyed row. */
-  private async reconcileKeyedGroups(): Promise<void> {
-    if (!this.pluginRegistry) return;
-    const gameIds = new Set(
-      (await listOpenLfmMessages(this.db))
-        .filter((row) => row.groupKey)
-        .map((row) => row.gameId),
-    );
-    for (const gameId of gameIds) {
-      await this.serialized(gameId, () => this.syncKeyed(gameId));
     }
   }
 

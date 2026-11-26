@@ -39,6 +39,17 @@ import { expiredView, liveFloorFor, liveView } from './lfm-embed.views';
 /** Spec Q11: at most this many open keyed posts per game. */
 export const LFG_BOARD_MAX_GROUP_POSTS_PER_GAME = 4;
 
+/** The reads one keyed pass makes — a seam so the pass is unit-testable. */
+export interface LfmKeyedReads {
+  listOpen(db: LfgDb, gameId: number): Promise<LfmMessageRow[]>;
+  countHands(
+    db: LfgDb,
+    gameId: number,
+    now: Date,
+  ): Promise<Map<string, number>>;
+  liveView(db: LfgDb, game: LfmGameRow, scope: string): Promise<LfmGroupView>;
+}
+
 /** What one keyed sync pass needs from the service. */
 export interface LfmKeyedSyncDeps {
   db: LfgDb;
@@ -47,6 +58,8 @@ export interface LfmKeyedSyncDeps {
   edit(row: LfmMessageRow, view: LfmGroupView): Promise<void>;
   /** The service's `postNew` for this game. */
   post(view: LfmGroupView): Promise<void>;
+  /** Defaults to {@link LFM_KEYED_READS}; specs inject fakes. */
+  reads?: LfmKeyedReads;
 }
 
 /** Open rows of the game's keyed groups (never the `''` row). */
@@ -91,6 +104,13 @@ export async function countLiveKeyedHands(
   return new Map(rows.map((r) => [r.groupKey, Number(r.n)]));
 }
 
+/** The production reads. */
+export const LFM_KEYED_READS: LfmKeyedReads = {
+  listOpen: listOpenKeyedLfmMessages,
+  countHands: countLiveKeyedHands,
+  liveView,
+};
+
 /** `"<game> — <instance>"`, or the bare game name for an unknown key. */
 export async function keyedGroupTitle(
   adapter: LfgGroupingAdapter,
@@ -106,12 +126,13 @@ export async function keyedGroupTitle(
 
 /** The open view of one keyed group, titled with its instance. */
 export async function keyedLiveView(
-  db: LfgDb,
+  deps: Pick<LfmKeyedSyncDeps, 'db' | 'reads'>,
   game: LfmGameRow,
   groupKey: string,
   title: string,
 ): Promise<LfmGroupView> {
-  const view = await liveView(db, game, groupKey);
+  const reads = deps.reads ?? LFM_KEYED_READS;
+  const view = await reads.liveView(deps.db, game, groupKey);
   return { ...view, gameName: title, groupKey };
 }
 
@@ -143,21 +164,22 @@ export async function syncKeyedGroups(
   allowPost: boolean,
   now: Date = new Date(),
 ): Promise<void> {
-  const open = await listOpenKeyedLfmMessages(deps.db, game.id);
+  const reads = deps.reads ?? LFM_KEYED_READS;
+  const open = await reads.listOpen(deps.db, game.id);
   const adapter = resolveLfgGrouping(deps.registry, game.slug);
   if (adapter === null) {
     for (const row of open)
       await deps.edit(row, keyedEndView(game, row, game.name));
     return;
   }
-  const counts = await countLiveKeyedHands(deps.db, game.id, now);
+  const counts = await reads.countHands(deps.db, game.id, now);
   for (const row of open) {
     const title = await keyedGroupTitle(adapter, game, row.groupKey);
     const live = (counts.get(row.groupKey) ?? 0) >= liveFloorFor(row.postKind);
     await deps.edit(
       row,
       live
-        ? await keyedLiveView(deps.db, game, row.groupKey, title)
+        ? await keyedLiveView(deps, game, row.groupKey, title)
         : keyedEndView(game, row, title),
     );
   }
@@ -165,7 +187,12 @@ export async function syncKeyedGroups(
   await postNewKeyedGroups(deps, adapter, game, open, counts);
 }
 
-/** Post every keyed group at LFM that has no row yet, inside the cap. */
+/**
+ * Post every keyed group at LFM that has no row yet, inside the cap.
+ *
+ * Plug-in point (later lane): the ≤3-new-posts-per-10-min token bucket
+ * gates each `deps.post` here.
+ */
 async function postNewKeyedGroups(
   deps: LfmKeyedSyncDeps,
   adapter: LfgGroupingAdapter,
@@ -179,7 +206,7 @@ async function postNewKeyedGroups(
     if (slots <= 0) return;
     if (tracked.has(groupKey) || n < LFM_FLOOR) continue;
     const title = await keyedGroupTitle(adapter, game, groupKey);
-    await deps.post(await keyedLiveView(deps.db, game, groupKey, title));
+    await deps.post(await keyedLiveView(deps, game, groupKey, title));
     slots -= 1;
   }
 }
