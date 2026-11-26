@@ -45,7 +45,12 @@ describe('computeStatus', () => {
 describe('readJournal', () => {
   it('reads the hub journal: 0000 creates hub_meta, 0001 seeds the epoch', () => {
     const tags = readJournal(DEFAULT_MIGRATIONS_FOLDER).map((e) => e.tag);
-    expect(tags).toEqual(['0000_create_hub_meta', '0001_seed_catalog_epoch']);
+    expect(tags).toEqual([
+      '0000_create_hub_meta',
+      '0001_seed_catalog_epoch',
+      '0002_create_hub_instances',
+      '0003_create_hub_crosswalk',
+    ]);
     expect(path.basename(DEFAULT_MIGRATIONS_FOLDER)).toBe('migrations');
   });
 });
