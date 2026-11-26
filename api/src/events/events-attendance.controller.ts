@@ -85,10 +85,11 @@ export class EventsAttendanceController {
   /**
    * ROK-2323: Discord / Steam / platform ids (and a SteamID64 used as a
    * name) go only to the event owner or an admin/operator; any other active
-   * member gets the viewer projection. Deactivated accounts are refused.
+   * member gets the viewer projection. A deactivated account never gets
+   * here: JwtStrategy refuses its token with 401 USER_DEACTIVATED (ROK-1753).
    */
   @Get(':id/ad-hoc-roster')
-  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
+  @UseGuards(AuthGuard('jwt'))
   async getAdHocRoster(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,

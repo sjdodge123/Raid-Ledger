@@ -5,7 +5,8 @@
  * receive NO `discordUserId` / `steamId` / `playerId` / `idKind` key and no
  * SteamID64 anywhere (an anonymous server player's name falls back to
  * `Server player`). The event creator and an admin keep the full detail. A
- * deactivated account is refused.
+ * deactivated account is refused by JwtStrategy (401 USER_DEACTIVATED,
+ * ROK-1753) before the route runs.
  */
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
@@ -175,9 +176,13 @@ describe('GET /events/:id/ad-hoc-roster — viewer projection (ROK-2323)', () =>
     expect(JSON.stringify(res.body)).toContain(STEAM_ID);
   });
 
+  // ROK-1753: JwtStrategy rejects a deactivated user's token (401
+  // USER_DEACTIVATED) before any route guard runs.
   it('a deactivated account is refused', async () => {
     const f = await seedFixture();
     const res = await getRoster(f.eventId, f.deactivatedToken);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: 'USER_DEACTIVATED' });
+    expect(JSON.stringify(res.body)).not.toContain(SNOWFLAKE);
   });
 });
