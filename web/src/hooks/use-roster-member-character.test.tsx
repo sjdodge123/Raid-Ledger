@@ -18,6 +18,8 @@ import { useRosterMemberCharacter } from './use-roster-member-character';
 
 const MEMBER_URL = 'http://localhost:3000/plugins/wow/guilds/:hubId/members/:memberId';
 const CLAIMED_ID = '11111111-1111-4111-8111-111111111111';
+/** The api's claimed-member shape (`WowRosterMemberClaimedSchema` is `.strict()` and needs all three keys). */
+const CLAIMED = { claimedCharacterId: CLAIMED_ID, rosterMemberId: 34, hubId: 12 };
 
 let memberRequests = 0;
 
@@ -39,7 +41,7 @@ beforeEach(() => {
     memberRequests = 0;
     server.use(http.get(MEMBER_URL, () => {
         memberRequests += 1;
-        return HttpResponse.json({ claimedCharacterId: CLAIMED_ID });
+        return HttpResponse.json(CLAIMED);
     }));
 });
 
@@ -47,7 +49,7 @@ describe('useRosterMemberCharacter (ROK-2360)', () => {
     it('requests the WoW roster member while WoW is active', async () => {
         setPlugins(['blizzard']);
         const { result } = renderHook(() => useRosterMemberCharacter('12', '34'), { wrapper });
-        await waitFor(() => expect(result.current.data).toEqual({ claimedCharacterId: CLAIMED_ID }));
+        await waitFor(() => expect(result.current.data).toEqual(CLAIMED));
         expect(memberRequests).toBe(1);
     });
 
