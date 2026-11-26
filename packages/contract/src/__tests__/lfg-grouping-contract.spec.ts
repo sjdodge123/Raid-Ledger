@@ -25,6 +25,14 @@ describe('CreateEventSchema.lfgGroupKey (ROK-2352)', () => {
     const r = CreateEventSchema.safeParse({ ...create, gameId: 9, lfgGameId: 9, lfgGroupKey: 'Dungeon' });
     expect(r.error?.issues[0]?.path).toEqual(['lfgGroupKey']);
   });
+  it('accepts the instance picked for an Any-dungeon lock-in', () => {
+    const r = CreateEventSchema.parse({ ...create, gameId: 9, lfgGameId: 9, lfgGroupKey: '', lfgChosenGroupKey: 'raid:409' });
+    expect(r.lfgChosenGroupKey).toBe('raid:409');
+  });
+  it('rejects lfgChosenGroupKey without lfgGameId with the refine message', () => {
+    const r = CreateEventSchema.safeParse({ ...create, gameId: 9, lfgChosenGroupKey: 'raid:409' });
+    expect(r.error?.issues[0]?.message).toBe('lfgChosenGroupKey requires lfgGameId');
+  });
   it('keeps events without the field valid', () => {
     expect(CreateEventSchema.safeParse({ ...create, gameId: 9, lfgGameId: 9 }).success).toBe(true);
   });

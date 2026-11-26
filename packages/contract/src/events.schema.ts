@@ -72,6 +72,11 @@ export const CreateEventSchema = z
     /** ROK-2352: which of the game's LFG groups converts (absent = `''`).
      *  Requires `lfgGameId`. Never persisted. */
     lfgGroupKey: LfgGroupKeySchema.optional(),
+    /** ROK-2352: locking in the "Any dungeon" group (`lfgGroupKey` `''`),
+     *  the instance the creator picked in the dialog (a dungeon or raid key).
+     *  Absent = no instance (today's generic roster). Requires `lfgGameId`.
+     *  Never persisted. */
+    lfgChosenGroupKey: LfgGroupKeySchema.optional(),
     /** ROK-1787: tag the event (and every recurring instance) to a guild.
      *  Only an editor of that guild (or an admin) may set it; the guild must
      *  belong to the event's game, so a gameId is required.
@@ -95,6 +100,10 @@ export const CreateEventSchema = z
   .refine((d) => d.lfgGroupKey === undefined || d.lfgGameId !== undefined, {
     message: "lfgGroupKey requires lfgGameId",
     path: ["lfgGroupKey"],
+  })
+  .refine((d) => d.lfgChosenGroupKey === undefined || d.lfgGameId !== undefined, {
+    message: "lfgChosenGroupKey requires lfgGameId",
+    path: ["lfgChosenGroupKey"],
   })
   .refine((d) => d.guildId == null || d.gameId !== undefined, {
     message: "guildId requires gameId",
