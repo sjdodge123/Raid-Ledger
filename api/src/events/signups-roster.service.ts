@@ -51,6 +51,7 @@ export class SignupsRosterService {
     const cancelInfo = await cancelH.resolveCancelStatus(this.db, eventId);
     const assignment = await cancelH.findAssignmentForSignup(
       this.db,
+      eventId,
       signup.id,
     );
     const notifyData = assignment

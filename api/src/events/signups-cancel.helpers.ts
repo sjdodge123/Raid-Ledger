@@ -12,6 +12,7 @@ import {
 import { eq, and, ne } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { Tx } from './signups.service.types';
+import { assignmentOfSignupInEvent } from './roster-assignment-scope.helpers';
 import { determineCancelStatus } from './signups-roster.helpers';
 import {
   discordManagedSignupCondition,
@@ -63,11 +64,15 @@ export async function resolveCancelStatus(db: Tx, eventId: number) {
   return determineCancelStatus(event?.duration ?? null);
 }
 
-export async function findAssignmentForSignup(db: Tx, signupId: number) {
+export async function findAssignmentForSignup(
+  db: Tx,
+  eventId: number,
+  signupId: number,
+) {
   const [assignment] = await db
     .select()
     .from(schema.rosterAssignments)
-    .where(eq(schema.rosterAssignments.signupId, signupId))
+    .where(assignmentOfSignupInEvent(eventId, signupId))
     .limit(1);
   return assignment ?? null;
 }
@@ -139,7 +144,7 @@ export async function executeCancelSignup(
   if (assignment) {
     await db
       .delete(schema.rosterAssignments)
-      .where(eq(schema.rosterAssignments.signupId, signupId));
+      .where(assignmentOfSignupInEvent(assignment.eventId, signupId));
   }
   await db
     .update(schema.eventSignups)

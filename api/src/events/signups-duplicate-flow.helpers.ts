@@ -2,7 +2,6 @@
  * Duplicate-signup row maintenance for the signup flow (ROK-1769).
  * Extracted from signups-flow.helpers.ts for file-size compliance.
  */
-import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CreateSignupDto, SignupResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
@@ -10,6 +9,7 @@ import * as signupH from './signups-signup.helpers';
 import { getCharacterById } from './signups-cancel.helpers';
 import { buildSignupResponseDto } from './signups-roster.helpers';
 import { getAssignedSlotRole } from './signups-roster-query.helpers';
+import { assignmentOfSignupInEvent } from './roster-assignment-scope.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
 type SignupRow = typeof schema.eventSignups.$inferSelect;
@@ -45,8 +45,8 @@ export async function applyDuplicateRowUpdates(
     existing,
     dto,
   );
-  if (rolesChanged || (reactivated && (await isBenched(tx, existing.id))))
-    await clearAssignment(tx, existing.id);
+  if (rolesChanged || (reactivated && (await isBenched(tx, existing))))
+    await clearAssignment(tx, existing);
   return reactivated;
 }
 
@@ -56,14 +56,14 @@ export async function applyDuplicateRowUpdates(
  * like a fresh signup — back onto the roster if a slot is free, otherwise
  * onto the bench again.
  */
-async function isBenched(tx: Tx, signupId: number): Promise<boolean> {
-  return (await getAssignedSlotRole(tx, signupId)) === 'bench';
+async function isBenched(tx: Tx, signup: SignupRow): Promise<boolean> {
+  return (await getAssignedSlotRole(tx, signup.eventId, signup.id)) === 'bench';
 }
 
-async function clearAssignment(tx: Tx, signupId: number): Promise<void> {
+async function clearAssignment(tx: Tx, signup: SignupRow): Promise<void> {
   await tx
     .delete(schema.rosterAssignments)
-    .where(eq(schema.rosterAssignments.signupId, signupId));
+    .where(assignmentOfSignupInEvent(signup.eventId, signup.id));
 }
 
 /**
@@ -78,6 +78,6 @@ export async function buildDuplicateResponse(
   const character = existing.characterId
     ? await getCharacterById(tx, existing.characterId)
     : null;
-  const slot = await getAssignedSlotRole(tx, existing.id);
+  const slot = await getAssignedSlotRole(tx, existing.eventId, existing.id);
   return buildSignupResponseDto(existing, user, character, slot ?? undefined);
 }

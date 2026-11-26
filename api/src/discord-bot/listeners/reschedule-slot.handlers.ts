@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { findFirstAvailableSlot } from '../../events/roster-slot.utils';
+import { assignmentOfSignupInEvent } from '../../events/roster-assignment-scope.helpers';
 import type {
   EventRow,
   RescheduleDeps,
@@ -20,7 +21,7 @@ export async function ensureRosterAssignment(
   const [existing] = await deps.db
     .select()
     .from(schema.rosterAssignments)
-    .where(eq(schema.rosterAssignments.signupId, signupId))
+    .where(assignmentOfSignupInEvent(event.id, signupId))
     .limit(1);
   if (existing) return;
 

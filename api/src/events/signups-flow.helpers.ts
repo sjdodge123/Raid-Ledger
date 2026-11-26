@@ -20,9 +20,11 @@ import * as signupH from './signups-signup.helpers';
 import * as discordH from './signups-discord.helpers';
 import * as dupH from './signups-duplicate-flow.helpers';
 import * as rosterQH from './signups-roster-query.helpers';
+import { getAssignedSlotRole } from './signups-roster-query.helpers';
 import { insertRosterSlotWithRetry } from './signups-roster-slot.helpers';
 import { reconfirmPendingWithSlot } from './signups-reconfirm.helpers';
 import { defined } from '../common/defined.helpers';
+import { hasAssignmentInEvent } from './roster-assignment-scope.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
 
@@ -116,9 +118,10 @@ async function ensureAssignment(
   // Duplicate signup already holding a non-bench slot: reconfirm the 'pending'
   // status left by the ROK-1269 reschedule reset (mutate `existing` for the
   // response); returns true so the service emits the post-commit audit entry.
-  if (await checkHasAssignment(tx, existing.id)) {
+  if (await hasAssignmentInEvent(tx, eventId, existing.id)) {
     const healed = await reconfirmPendingWithSlot(
       tx,
+      eventId,
       existing.id,
       existing.confirmationStatus,
     );
@@ -134,7 +137,7 @@ async function ensureAssignment(
         .where(eq(schema.eventSignups.id, existing.id));
     }
     await deps.autoAllocateSignup(tx, eventId, existing.id, slotConfig);
-    if (await checkHasAssignment(tx, existing.id))
+    if (await hasAssignmentInEvent(tx, eventId, existing.id))
       await signupH.syncConfirmationStatus(tx, existing);
     else await assignBenchFallback(deps, tx, eventId, existing.id);
   } else {
@@ -207,7 +210,7 @@ async function handleNewSignup(deps: FlowDeps, p: NewSignupParams) {
     if (confirmed) inserted.confirmationStatus = 'confirmed';
   }
   await signupH.autoConfirmCreator(tx, eventRow, userId, inserted);
-  const assignedSlot = await rosterQH.getAssignedSlotRole(tx, inserted.id);
+  const assignedSlot = await getAssignedSlotRole(tx, eventId, inserted.id);
   return { isDuplicate: false as const, signup: inserted, assignedSlot };
 }
 
@@ -229,22 +232,12 @@ async function runAutoAllocWithBenchFallback(
       .where(eq(schema.eventSignups.id, inserted.id));
   }
   await deps.autoAllocateSignup(tx, eventId, inserted.id, slotConfig);
-  const hasAssignment = await checkHasAssignment(tx, inserted.id);
+  const hasAssignment = await hasAssignmentInEvent(tx, eventId, inserted.id);
   if (hasAssignment) {
     await signupH.syncConfirmationStatus(tx, inserted);
   } else {
     await assignBenchFallback(deps, tx, eventId, inserted.id);
   }
-}
-
-/** Check whether a signup has any roster assignment. */
-async function checkHasAssignment(tx: Tx, signupId: number): Promise<boolean> {
-  const [row] = await tx
-    .select({ id: schema.rosterAssignments.id })
-    .from(schema.rosterAssignments)
-    .where(eq(schema.rosterAssignments.signupId, signupId))
-    .limit(1);
-  return !!row;
 }
 
 /** Assign a signup to the bench as a fallback (ROK-626). */
@@ -281,7 +274,7 @@ export async function discordSignupTxBody(
     );
     return {
       signup: existing,
-      assignedSlot: await rosterQH.getAssignedSlotRole(tx, existing.id),
+      assignedSlot: await getAssignedSlotRole(tx, eventId, existing.id),
     };
   }
   const inserted = defined(rows[0], 'inserted Discord signup row');
@@ -289,7 +282,7 @@ export async function discordSignupTxBody(
   deps.logger.log(
     `Anonymous Discord user ${dto.discordUsername} (${dto.discordUserId}) signed up for event ${eventId}`,
   );
-  const assignedSlot = await rosterQH.getAssignedSlotRole(tx, inserted.id);
+  const assignedSlot = await getAssignedSlotRole(tx, eventId, inserted.id);
   return { signup: inserted, assignedSlot };
 }
 
@@ -321,7 +314,8 @@ async function placeDiscordSignup(
       dto,
       (t, eId, sId, sc) => deps.autoAllocateSignup(t, eId, sId, sc),
     );
-    if (!ranMmo || (await checkHasAssignment(tx, inserted.id))) return;
+    if (!ranMmo || (await hasAssignmentInEvent(tx, eventId, inserted.id)))
+      return;
   }
   await assignBenchFallback(deps, tx, eventId, inserted.id, 'anonymous signup');
 }

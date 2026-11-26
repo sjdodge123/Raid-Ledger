@@ -65,7 +65,11 @@ export async function adminRemoveCore(
     isAdmin,
   );
   const signup = await cancelH.findSignupForEvent(db, eventId, signupId);
-  const assignment = await cancelH.findAssignmentForSignup(db, signup.id);
+  const assignment = await cancelH.findAssignmentForSignup(
+    db,
+    eventId,
+    signup.id,
+  );
   if (signup.userId) {
     await db
       .delete(schema.pugSlots)
