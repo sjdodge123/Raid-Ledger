@@ -1,4 +1,5 @@
 import type { JSX, ReactNode } from 'react';
+import { QueryErrorState } from '../components/common/query-error-state';
 import { useState, useMemo } from "react";
 import { useGamesDiscover } from "../hooks/use-games-discover";
 import { useGameSearch } from "../hooks/use-game-search";
@@ -67,8 +68,8 @@ function useCoopDataAvailable(rows: GameDiscoverRowDto[] | undefined, searchRows
 }
 
 function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilters: CoopFilterState) {
-  const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
-  const { data: searchData, isLoading: searchLoading } = useGameSearch(searchQuery, searchQuery.length >= 2);
+  const { data: discoverData, isLoading: discoverLoading, error: discoverError, refetch: refetchDiscover } = useGamesDiscover();
+  const { data: searchData, isLoading: searchLoading, error: searchError, refetch: refetchSearch } = useGameSearch(searchQuery, searchQuery.length >= 2);
   const isSearching = searchQuery.length >= 2;
   const activeFilters = GENRE_FILTERS.filter(f => selectedGenres.has(f.key));
   // ROK-1525: the player-count / ownership predicates are URL-state and read
@@ -93,7 +94,7 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilt
   // Pre-filter row count: the empty state has to tell "the library is empty"
   // apart from "the predicates emptied a stocked library" (ROK-1525 B2).
   const hasLibraryRows = (discoverData?.rows?.length ?? 0) > 0;
-  return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable, effectiveCoopFilters, hasLibraryRows, isLibraryFiltered, clearLibraryFilters };
+  return { discoverError, refetchDiscover, searchError, refetchSearch, discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable, effectiveCoopFilters, hasLibraryRows, isLibraryFiltered, clearLibraryFilters };
 }
 
 function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS, coopFilters: CoopFilterState, libraryFilters: LibraryFilterState) {
@@ -156,8 +157,12 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
         <DiscoverFilters state={state} data={data} isLfgOnly={isLfgOnly} />
         {isLfgOnly ? (
           <LfgLookingGrid />
+        ) : data.isSearching && data.searchError ? (
+          <QueryErrorState title="Couldn't search games" error={data.searchError} onRetry={data.refetchSearch} testId="games-search-error" />
         ) : data.isSearching ? (
           <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} searchQuery={state.searchQuery} pricingMap={pricingMap} />
+        ) : data.discoverError ? (
+          <QueryErrorState title="Couldn't load games" error={data.discoverError} onRetry={data.refetchDiscover} testId="games-error" />
         ) : (
           <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} pricingMap={pricingMap}
             emptyState={{ isLibraryFiltered: data.isLibraryFiltered, hasLibraryRows: data.hasLibraryRows, onClearFilters: data.clearLibraryFilters }} />

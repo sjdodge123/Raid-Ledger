@@ -13,6 +13,7 @@ import { InfiniteScrollSentinel } from '../components/ui/infinite-scroll-sentine
 import { PullToRefresh } from '../components/ui/pull-to-refresh';
 import { SearchInput } from '../components/ui/search-input';
 import type { UserPreviewDto } from '@raid-ledger/contract';
+import { QueryErrorState } from '../components/common/query-error-state';
 
 /** Debounced search state for text input. */
 function useDebounceSearch() {
@@ -69,10 +70,19 @@ function PlayerGrid({ players, debouncedSearch }: { players: UserPreviewDto[]; d
     );
 }
 
+/** Skeleton, a failed load (never "No players found", ROK-2342) or the grid. */
+function PlayersBody({ isLoading, error, onRetry, players, debouncedSearch }: {
+    isLoading: boolean; error: Error | null; onRetry: () => unknown; players: UserPreviewDto[]; debouncedSearch: string;
+}) {
+    if (isLoading) return <PlayersLoadingSkeleton />;
+    if (error) return <QueryErrorState title="Couldn't load players" error={error} onRetry={onRetry} testId="players-error" />;
+    return <PlayerGrid players={players} debouncedSearch={debouncedSearch} />;
+}
+
 export function PlayersPage() {
     const { search, setSearch, debouncedSearch } = useDebounceSearch();
     const { filters, setFilter, clearAll, activeFilterCount, apiParams, isOpen, toggleOpen } = usePlayerFilters();
-    const { items: players, total, isLoading, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfinitePlayers(debouncedSearch, apiParams);
+    const { items: players, total, isLoading, error, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfinitePlayers(debouncedSearch, apiParams);
 
     return (
         <PullToRefresh onRefresh={refetch}>
@@ -92,8 +102,8 @@ export function PlayersPage() {
                     <PluginSlot name="players:header-cards" />
                     {activeFilterCount === 0 && !debouncedSearch && <NewMembersSection />}
                     <DesktopSearchInput search={search} setSearch={setSearch} />
-                    {isLoading ? <PlayersLoadingSkeleton /> : <PlayerGrid players={players} debouncedSearch={debouncedSearch} />}
-                    {!isLoading && players.length > 0 && <InfiniteScrollSentinel sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} />}
+                    <PlayersBody isLoading={isLoading} error={error} onRetry={refetch} players={players} debouncedSearch={debouncedSearch} />
+                    {!isLoading && !error && players.length > 0 && <InfiniteScrollSentinel sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} />}
                 </div>
             </>
         </PullToRefresh>

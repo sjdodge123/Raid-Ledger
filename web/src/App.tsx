@@ -14,6 +14,7 @@ import { startBootSession, awaitBootSession } from './lib/api/boot-session';
 import { installCrossTabAuth } from './lib/api/cross-tab-auth';
 import { installResumeRefresh } from './lib/api/resume-refresh';
 import { Layout } from './components/layout';
+import { RouteErrorBoundary } from './components/common/route-error-boundary';
 import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';
@@ -121,14 +122,14 @@ function App() {
           duration={5000}
         />
         <ConnectivityBanner />
-        <Layout>
-          <Suspense fallback={<LoadingSpinner />}>
-            <ClaimGate>
-              <AppRoutes />
-            </ClaimGate>
-            <PrefetchAfterFirstRoute />
-          </Suspense>
-        </Layout>
+        <Layout><RouteErrorBoundary>
+            <Suspense fallback={<LoadingSpinner />}>
+              <ClaimGate>
+                <AppRoutes />
+              </ClaimGate>
+              <PrefetchAfterFirstRoute />
+            </Suspense>
+        </RouteErrorBoundary></Layout>
       </BrowserRouter>
     </StartupGate>
   );

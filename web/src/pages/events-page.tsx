@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+import { QueryErrorState } from '../components/common/query-error-state';
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useInfiniteEvents } from "../hooks/use-events";
@@ -105,7 +106,7 @@ export function EventsPage() {
   const { slotSet, overlapSet } = useGameTimeOverlaps(genreFiltered, gameTime?.slots as GameTimeSlot[] | undefined);
   const displayEvents = useMemo(() => filterAndSortEvents(genreFiltered, state.searchQuery, overlapSet, state.filterGameTime, state.activeTab), [genreFiltered, overlapSet, state.filterGameTime, state.searchQuery, state.activeTab]);
 
-  if (error) return <EventsErrorState message={error.message} />;
+  if (error) return <QueryErrorState title="Couldn't load events" error={error} onRetry={refetch} testId="events-error" className="min-h-[50vh] flex flex-col items-center justify-center" />;
 
   return (
     <PullToRefresh onRefresh={refetch}>
@@ -123,17 +124,6 @@ export function EventsPage() {
         {isAuthenticated && <FAB onClick={() => navigate('/events/new')} label="Create Event" />}
       </>
     </PullToRefresh>
-  );
-}
-
-function EventsErrorState({ message }: { message: string }) {
-  return (
-    <div className="min-h-[50vh] flex items-center justify-center">
-      <div className="text-center">
-        <h2 className="text-xl font-semibold text-danger mb-2">Failed to load events</h2>
-        <p className="text-muted">{message}</p>
-      </div>
-    </div>
   );
 }
 

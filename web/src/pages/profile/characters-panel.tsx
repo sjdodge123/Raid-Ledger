@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { QueryErrorState } from '../../components/common/query-error-state';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { readCharacterPrefill, type CharacterPrefill } from '../../plugins/character-identity';
@@ -97,7 +98,7 @@ function CharactersPanelHeader({ onAdd, disabled }: { onAdd: () => void; disable
 
 export function CharactersPanel() {
     const { isAuthenticated } = useAuth();
-    const { data: charactersData, isLoading: charactersLoading } = useMyCharacters(undefined, isAuthenticated);
+    const { data: charactersData, isLoading: charactersLoading, error: charactersError, refetch } = useMyCharacters(undefined, isAuthenticated);
     const { games } = useGameRegistry();
     const modal = useCharacterModal(games);
     useRoutedCharacterPrefill(games.length > 0, modal.openWithPrefill);
@@ -113,7 +114,9 @@ export function CharactersPanel() {
                 <CharactersPanelHeader onAdd={modal.handleAdd} disabled={games.length === 0} />
                 {charactersLoading
                     ? <div className="flex items-center justify-center py-12"><div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin" /></div>
-                    : <CharacterList characters={characters} onEdit={modal.handleEdit} />}
+                    : charactersError
+                        ? <QueryErrorState title="Couldn't load your characters" error={charactersError} onRetry={refetch} testId="characters-error" />
+                        : <CharacterList characters={characters} onEdit={modal.handleEdit} />}
             </div>
             <AddCharacterModal isOpen={modal.showAddModal} onClose={modal.handleClose} gameId={activeGameId} gameName={activeGameName} editingCharacter={modal.editingCharacter} prefill={modal.prefill} />
         </div>

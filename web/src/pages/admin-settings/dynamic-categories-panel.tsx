@@ -9,6 +9,7 @@
  * Mounted inside the Admin Settings > General panel so the route
  * `/admin/settings/general` surfaces it alongside Site Settings.
  */
+import { QueryErrorState } from '../../components/common/query-error-state';
 import { useState, type JSX } from 'react';
 import type {
     AdminCategoryListSuggestionDto,
@@ -112,6 +113,9 @@ function panelPlaceholder(
 ): JSX.Element | null {
     const isRegenerating = actions.regenerate.isPending;
     if (list.isLoading) return <LoadingSkeleton />;
+    if (list.isError) {
+        return <QueryErrorState title="Couldn't load category suggestions" error={list.error} onRetry={list.refetch} testId="dynamic-categories-error" />;
+    }
     // Regenerate pass replaces the pending view with skeleton cards so
     // operators get immediate feedback that the LLM is working.
     if (isRegenerating && status === 'pending') {
