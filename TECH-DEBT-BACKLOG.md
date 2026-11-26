@@ -4689,3 +4689,6 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 
 ### 2026-11-26 — rok-2337-forum-webhook-bound (surfaced during the #2351 discord-smoke RCA)
 - **low** `api/src/guilds/forum/discord/hub-forum-discord-webhook.create.ts:105-122` — the rate-limit logger meant to explain a slow `createWebhook` logged nothing in all 9 CI cases where the create took 60s+ (RCA: `Raid-Ledger--rok-2337/RCA-2351-discord-smoke.md`). The slowness is not a discord.js rate-limit event, so the hook never fires. Suggested: log the elapsed time on the late-create path instead, or drop the listener.
+
+### 2026-11-26 — fix/starter-card-race-flake (surfaced during review r1 of the ROK-2292 starter-card race fix)
+- **low** `api/src/guilds/forum/discord/hub-forum-discord-outbound.service.ts` (`rehomeReplies` / held-reply live send) — a live re-home send can overlap the S6 sweep: if a post's `createPost` takes longer than `RETRY_GRACE_MS` (2 min), a held reply becomes due and a concurrent S6 tick can send it while the re-home path is also sending it (the send happens before `markSent`; the sweep's re-read narrows but does not close it). Rare; documented in the `rehome` JSDoc. Suggested: add a claim-to-send state (conditional `sending_at` claim before the Discord call) shared by the sweep and the live path.
