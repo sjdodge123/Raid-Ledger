@@ -24,6 +24,8 @@ import { escapeLikePattern } from '../../common/search.util';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { LfgService } from '../../lfg/lfg.service';
+import { resolveLfgGrouping } from '../../lfg/lfg-grouping.helpers';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { SettingsService } from '../../settings/settings.service';
 import {
   loadLfgPostLinks,
@@ -51,8 +53,24 @@ import {
   leaveOneGroup,
   withdrawIfPresent,
 } from '../listeners/lfg-leave.helpers';
+import {
+  LFG_DUNGEON_OPTION,
+  buildDungeonChoices,
+  buildUnknownDungeonReply,
+  listOwnHandKeys,
+  resolveDungeonGroup,
+  type LfgDungeonChoice,
+  type LfgDungeonGroup,
+} from './lfg-dungeon.helpers';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
+
+/** The game a leave is about. */
+interface LfgLeaveGame {
+  id: number;
+  name: string;
+  slug: string;
+}
 
 /** `games.id` is an int4; anything larger is not a pick, it is noise. */
 const PG_INT4_MAX = 2147483647;
@@ -69,21 +87,34 @@ export class LfgLeaveCommand
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly lfgService: LfgService,
     private readonly settingsService: SettingsService,
+    private readonly pluginRegistry: PluginRegistryService,
   ) {}
 
   getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
-    return new SlashCommandBuilder()
-      .setName('lfg-leave')
-      .setDescription("Leave an LFG you're in")
-      .setDMPermission(false)
-      .addStringOption((opt) =>
-        opt
-          .setName('game')
-          .setDescription('Which LFG to leave — leave empty to see your list')
-          .setAutocomplete(true)
-          .setMaxLength(100),
-      )
-      .toJSON();
+    return (
+      new SlashCommandBuilder()
+        .setName('lfg-leave')
+        .setDescription("Leave an LFG you're in")
+        .setDMPermission(false)
+        .addStringOption((opt) =>
+          opt
+            .setName('game')
+            .setDescription('Which LFG to leave — leave empty to see your list')
+            .setAutocomplete(true)
+            .setMaxLength(100),
+        )
+        // ROK-2352 — omitted = every hand in the game (`withdraw` with no group).
+        .addStringOption((opt) =>
+          opt
+            .setName(LFG_DUNGEON_OPTION)
+            .setDescription(
+              'Dungeon or raid (WoW) — leave empty to leave them all',
+            )
+            .setAutocomplete(true)
+            .setMaxLength(100),
+        )
+        .toJSON()
+    );
   }
 
   /** Own hands only; an unlinked caller has none. */
@@ -91,6 +122,12 @@ export class LfgLeaveCommand
     interaction: AutocompleteInteraction,
   ): Promise<void> {
     const focused = interaction.options.getFocused(true);
+    if (focused.name === LFG_DUNGEON_OPTION) {
+      await interaction.respond(
+        await this.ownDungeonChoices(interaction, focused.value),
+      );
+      return;
+    }
     if (focused.name !== 'game') return;
     const caller = await resolveLfgCaller(this.db, interaction.user.id);
     const groups = caller ? await this.lfgService.listOwnGroups(caller.id) : [];
@@ -119,7 +156,8 @@ export class LfgLeaveCommand
     if (!typed || typed === LFG_LEAVE_NONE_SENTINEL) {
       await this.replyWithList(interaction, groups);
     } else {
-      await this.leaveOne(interaction, caller.id, groups, typed);
+      const dungeon = interaction.options.getString(LFG_DUNGEON_OPTION);
+      await this.leaveOne(interaction, caller.id, groups, typed, dungeon);
     }
   }
 
@@ -129,10 +167,11 @@ export class LfgLeaveCommand
     userId: number,
     groups: LfgGroupSummaryDto[],
     typed: string,
+    dungeon: string | null = null,
   ): Promise<void> {
     const own = matchOwnGroup(groups, typed);
     const game = own
-      ? { id: own.gameId, name: own.gameName }
+      ? { id: own.gameId, name: own.gameName, slug: own.gameSlug }
       : await this.findGame(typed);
     if (!game) {
       const ctx = await loadLfgReplyContext(this.settingsService);
@@ -141,12 +180,60 @@ export class LfgLeaveCommand
       });
       return;
     }
-    const outcome = await leaveOneGroup(this.lfgService, userId, game.id);
+    const group = await this.leaveGroup(game, dungeon);
+    if (group === null) {
+      await interaction.editReply(buildUnknownDungeonReply(dungeon ?? ''));
+      return;
+    }
+    const outcome = await leaveOneGroup(
+      this.lfgService,
+      userId,
+      game.id,
+      group?.groupKey,
+    );
+    const name = group?.label ? `${game.name} — ${group.label}` : game.name;
     await interaction.editReply(
       outcome.left
-        ? buildLeftReply(game.name, outcome.stillLooking)
-        : buildNotInGroupReply(game.name),
+        ? buildLeftReply(name, outcome.stillLooking)
+        : buildNotInGroupReply(name),
     );
+  }
+
+  /**
+   * ROK-2352 — the `dungeon` option: undefined = every hand (omitted, or the
+   * game folds and the option is ignored); null = an unknown dungeon.
+   */
+  private async leaveGroup(
+    game: LfgLeaveGame,
+    dungeon: string | null,
+  ): Promise<LfgDungeonGroup | undefined | null> {
+    const adapter = resolveLfgGrouping(this.pluginRegistry, game.slug);
+    if (dungeon === null || adapter === null) return undefined;
+    const ctx = { gameId: game.id, gameSlug: game.slug };
+    return resolveDungeonGroup(adapter, ctx, dungeon);
+  }
+
+  /** ROK-2352 — autocomplete over the caller's own hands in the game. */
+  private async ownDungeonChoices(
+    interaction: AutocompleteInteraction,
+    typed: string,
+  ): Promise<LfgDungeonChoice[]> {
+    const caller = await resolveLfgCaller(this.db, interaction.user.id);
+    const gameTyped = interaction.options.getString('game');
+    if (!caller || !gameTyped) return [];
+    const groups = await this.lfgService.listOwnGroups(caller.id);
+    const own = matchOwnGroup(groups, gameTyped);
+    const adapter = own
+      ? resolveLfgGrouping(this.pluginRegistry, own.gameSlug)
+      : null;
+    if (!own || adapter === null) return [];
+    const ctx = { gameId: own.gameId, gameSlug: own.gameSlug };
+    const [keys, catalogue] = await Promise.all([
+      listOwnHandKeys(this.db, caller.id, own.gameId),
+      adapter.listGroups(ctx),
+    ]);
+    const held = catalogue.filter((g) => keys.includes(g.key));
+    return buildDungeonChoices(held, typed, keys.includes(''));
   }
 
   /**
@@ -228,9 +315,7 @@ export class LfgLeaveCommand
    * A game the caller has no hand for: exact (case-insensitive, LIKE-escaped)
    * title first, then an all-digit value read as an id — as `/lfg` does.
    */
-  private async findGame(
-    typed: string,
-  ): Promise<{ id: number; name: string } | null> {
+  private async findGame(typed: string): Promise<LfgLeaveGame | null> {
     const byName = await this.selectGame(
       ilike(schema.games.name, escapeLikePattern(typed)),
     );
@@ -244,11 +329,13 @@ export class LfgLeaveCommand
     return isPick ? this.selectGame(eq(schema.games.id, id)) : null;
   }
 
-  private async selectGame(
-    where: SQL,
-  ): Promise<{ id: number; name: string } | null> {
+  private async selectGame(where: SQL): Promise<LfgLeaveGame | null> {
     const [match] = await this.db
-      .select({ id: schema.games.id, name: schema.games.name })
+      .select({
+        id: schema.games.id,
+        name: schema.games.name,
+        slug: schema.games.slug,
+      })
       .from(schema.games)
       .where(where)
       .limit(1);
