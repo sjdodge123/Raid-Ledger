@@ -91,11 +91,9 @@ export async function loadLfgPollCarryover(
   const { lfgGrouping } = deps;
   if (userIds.length === 0 || lfgGrouping === undefined) return new Map();
   try {
-    return await readPollCarryover(
-      { ...deps, lfgGrouping },
-      matchId,
-      [...userIds],
-    );
+    return await readPollCarryover({ ...deps, lfgGrouping }, matchId, [
+      ...userIds,
+    ]);
   } catch (err: unknown) {
     deps.logger.warn(
       `LFG poll carryover read failed for match ${matchId}; signing up without it: ${String(err)}`,

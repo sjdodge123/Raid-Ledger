@@ -13,7 +13,10 @@ import type {
   LfgGroupingAdapter,
   LfgLockInPatch,
 } from '../plugins/plugin-host/lfg-grouping.adapter';
-import { groupScopeFilter, type LfgGroupScope } from './lfg-group-scope.helpers';
+import {
+  groupScopeFilter,
+  type LfgGroupScope,
+} from './lfg-group-scope.helpers';
 import {
   resolveLfgGrouping,
   resolveWriteGroupKey,

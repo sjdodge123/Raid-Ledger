@@ -22,7 +22,11 @@ function deps(rows: unknown[], adapter: Partial<LfgGroupingAdapter> | null) {
   const warn = jest.fn();
   const getAdapter = jest.fn().mockReturnValue(adapter ?? undefined);
   return {
-    d: { db: db as unknown as LfgDb, lfgGrouping: { getAdapter }, logger: { warn } },
+    d: {
+      db: db as unknown as LfgDb,
+      lfgGrouping: { getAdapter },
+      logger: { warn },
+    },
     warn,
     getAdapter,
   };
