@@ -322,6 +322,57 @@ describe('GET /lfg/:gameId?group= — members carry pluginDetail (ROK-2352)', ()
     });
   });
 
+  // MUTATION: drop `scope` from `readPlayingNow(db, game.id, scope)` in
+  // `getGroupSummary` (`lfg-query.helpers.ts`) and the B / Any lines fail on
+  // `expect(received).toEqual(expected)`, received the A session's event id.
+  it("shows only its own group's live session as playing (apifix3)", async () => {
+    const erin = await member('erin');
+    const frank = await member('frank');
+    const game = await createGame(testApp, 'WoW Classic Era', { slug: ERA });
+    const [instA, instB] = (catalogueInstancesFor('classic_era') ?? []).filter(
+      (i) => i.category === 'dungeon',
+    );
+    if (!instA || !instB) throw new Error('need two classic_era dungeons');
+    const [keyA, keyB] = [wowGroupKey(instA), wowGroupKey(instB)];
+    await postKeyed(erin.token, game.id, keyA);
+    await postKeyed(frank.token, game.id, keyB);
+    const [live] = await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'A started now',
+        creatorId: erin.userId,
+        gameId: game.id,
+        duration: [
+          new Date(Date.now() - 60_000),
+          new Date(Date.now() + 3_600_000),
+        ],
+        isAdHoc: true,
+        adHocStatus: 'live',
+      })
+      .returning({ id: schema.events.id });
+    if (!live) throw new Error('live event insert returned no row');
+    await testApp.db
+      .update(schema.lfgIntents)
+      .set({ status: 'converted', convertedToEventId: live.id })
+      .where(
+        and(
+          eq(schema.lfgIntents.userId, erin.userId),
+          eq(schema.lfgIntents.groupKey, keyA),
+        ),
+      );
+
+    const playingOn = async (group: string) =>
+      (await readKeyed(frank.token, game.id, group)).playingNow?.eventId ??
+      null;
+
+    expect(await playingOn(keyA)).toEqual(live.id);
+    expect(await playingOn(keyB)).toEqual(null);
+    expect(await playingOn('')).toEqual(null);
+    // Plugin off → the fold reads the whole game, as before groups existed.
+    await registry.deactivate(OWNER);
+    expect(await playingOn(keyB)).toEqual(live.id);
+  });
+
   it('never carries detail on the list endpoints', async () => {
     const { alice, game } = await keyedGame();
 

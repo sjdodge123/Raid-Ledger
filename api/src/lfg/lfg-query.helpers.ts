@@ -276,8 +276,9 @@ export async function getGroupSummary(
     .groupBy(schema.games.id);
   // Read the session on BOTH branches: once the spawn converts every intent
   // the aggregate row disappears entirely, and that zero-count branch is
-  // exactly AC3's state (D9).
-  const playingNow = await readPlayingNow(db, game.id);
+  // exactly AC3's state (D9). Scoped to the group (ROK-2352): another group's
+  // live session is not this group's.
+  const playingNow = await readPlayingNow(db, game.id, scope);
   if (!row) {
     return toGroupSummary({
       gameId: game.id,
