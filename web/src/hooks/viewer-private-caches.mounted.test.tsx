@@ -10,7 +10,7 @@ import { render, screen, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { clearAccessToken, getAccessToken, setAccessToken } from '../lib/api/access-token-store';
 import { readClaims } from '../lib/api/token-expiry';
-import { dropViewerPrivateCaches, installViewerPrivateCacheGuard } from './viewer-private-caches';
+import { VIEWER_INDEPENDENT_META, dropViewerPrivateCaches, installViewerPrivateCacheGuard } from './viewer-private-caches';
 
 function jwt(claims: Record<string, unknown>): string {
     const b64 = (o: object) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -67,7 +67,9 @@ describe('ROK-1811: a mounted private query across an identity change', () => {
 const fetchPublicLineup = vi.fn(async (): Promise<string> => 'public lineup abc');
 
 function PublicLineup() {
-    const { data, isPending } = useQuery({ queryKey: ['lineups', 'public', 'abc'], queryFn: fetchPublicLineup, retry: false });
+    const { data, isPending } = useQuery({
+        queryKey: ['lineups', 'public', 'abc'], queryFn: fetchPublicLineup, retry: false, meta: VIEWER_INDEPENDENT_META,
+    });
     return <p>{isPending ? 'lineup pending' : data}</p>;
 }
 
@@ -156,7 +158,9 @@ describe('ROK-1811 Codex r4 P2a: a mounted token-gated query across a cross-tab 
 const fetchSystemStatus = vi.fn(async (): Promise<string> => 'community Raiders, contact privacy@example.test');
 
 function PrivacyStatus() {
-    const { data, isPending } = useQuery({ queryKey: ['system', 'status'], queryFn: fetchSystemStatus, retry: false });
+    const { data, isPending } = useQuery({
+        queryKey: ['system', 'status'], queryFn: fetchSystemStatus, retry: false, meta: VIEWER_INDEPENDENT_META,
+    });
     return <p>{isPending ? 'status pending' : data}</p>;
 }
 
