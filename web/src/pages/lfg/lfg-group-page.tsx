@@ -12,7 +12,6 @@ import type {
     LfgGroupDetailDto,
     LfgOverlapWindowDto,
 } from '@raid-ledger/contract';
-import type { LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
 import { useAuth } from '../../hooks/use-auth';
 import { useGameDetail } from '../../hooks/use-games-discover';
 import {
@@ -72,8 +71,8 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined, g
     const start = useStartNow(gameId);
     const memberUserIds = usePollMemberIds(group);
     const startPoll = useCallback(
-        (done: () => void) => find.findATime({ gameId, memberUserIds }, { onSettled: done }),
-        [find, gameId, memberUserIds],
+        (done: () => void) => find.findATime({ gameId, memberUserIds, groupKey }, { onSettled: done }),
+        [find, gameId, memberUserIds, groupKey],
     );
     const dialogs: LfgOverlayActions = {
         startPoll,

@@ -175,14 +175,16 @@ export async function withdrawIntent(gameId: number, groupKey = ''): Promise<voi
 /**
  * `POST /lfg/:gameId/convert` — record that the group converted into a poll or
  * an event (ROK-1464). Provenance only: the caller creates the poll/event
- * first and reports it here.
+ * first and reports it here. ROK-2352: `groupKey` (`?group`) converts only
+ * that group's hands; `''` (the default) is the whole-game / Any group.
  */
 export async function convertIntents(
     gameId: number,
     body: ConvertLfgIntentsDto,
+    groupKey = '',
 ): Promise<LfgConvertResponseDto> {
     return fetchApi(
-        `/lfg/${gameId}/convert`,
+        `/lfg/${gameId}/convert${groupQuery(groupKey)}`,
         { method: 'POST', body: JSON.stringify(body) },
         LfgConvertResponseSchema,
     );
