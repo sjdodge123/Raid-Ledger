@@ -39,6 +39,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { LlmService } from '../../ai/llm.service';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { LlmQuotaExhaustedError } from '../../ai/llm-errors';
 import { GameTasteService } from '../../game-taste/game-taste.service';
 import { computeVoterSetHash } from './voter-scope.helpers';
@@ -116,6 +117,11 @@ function describePreGen() {
   // (ROK-1316 rework finding #2). Setting `ai_provider` resolves a real
   // registered provider WITHOUT dispatching `chat`.
   beforeEach(async () => {
+    // ROK-2353: LlmService refuses while the `ai` plugin is inactive, and
+    // truncateAllTables may wipe `plugins`; re-install, then activate.
+    const plugins = testApp.app.get(PluginRegistryService);
+    await plugins.ensureInstalled('ai');
+    await plugins.activate('ai');
     await settings.set(SETTING_KEYS_AI_ENABLED, 'true');
     await settings.set(SETTING_KEYS_AI_PROVIDER, 'google');
     // Resolve the seeded admin id BEFORE every test so the `sanity` test is
