@@ -18,6 +18,7 @@ import { getHubGameWidgetRegistrations, type HubGameWidget } from './hub-game-wi
 import { collectCompanionPrompts, companionPromptDrift, type CompanionPromptRegistration } from '../test/hub-companion-prompt-ownership';
 import { collectGgCards, ggCardDrift } from '../test/gg-card-ownership';
 import { claimProviderDrift, collectClaimProviders, type ClaimProviderRegistration } from '../test/hub-claim-provider-ownership';
+import { collectLfgGroupings, lfgGroupingDrift } from '../test/lfg-grouping-ownership';
 
 /** Every plugin folder's `register.ts`, discovered — a new plugin is checked automatically (review M2). */
 const PLUGIN_REGISTERS = import.meta.glob('./*/register.ts', { eager: true });
@@ -261,6 +262,24 @@ describe('W9 — every GG card renderer is a declared gg-card of its owner, and 
         expect(ggCardDrift([...rest, { owner: 'valheim', id: 'stray' }], HUB_PLUGIN_MANIFESTS)).toEqual([
             'GG card valheim:stray is not declared as a gg-card behaviour of HUB_PLUGIN_MANIFESTS.valheim',
             'HUB_PLUGIN_MANIFESTS.valheim declares gg-card "valheim-year" but no web renderer registers it',
+        ]);
+    });
+});
+
+describe('ROK-2352 — every LFG grouping is declared under its owner, in its games', () => {
+    it('finds no drift in the live registrations', () => {
+        expect(lfgGroupingDrift(collectLfgGroupings(), HUB_PLUGIN_MANIFESTS)).toEqual([]);
+    });
+
+    it('accepts the declared WoW grouping, names an undeclared one and an empty game list', () => {
+        const regs = [
+            { owner: 'blizzard', id: 'wow-instance-lfg', gameSlugs: ['world-of-warcraft', 'world-of-warcraft-classic'] },
+            { owner: 'valheim', id: 'stray', gameSlugs: ['valheim'] },
+            { owner: 'blizzard', id: 'wow-instance-lfg', gameSlugs: [] },
+        ];
+        expect(lfgGroupingDrift(regs, HUB_PLUGIN_MANIFESTS)).toEqual([
+            'LFG grouping valheim:stray is not declared as an lfg-grouping behaviour of HUB_PLUGIN_MANIFESTS.valheim',
+            'LFG grouping blizzard:wow-instance-lfg lists no games',
         ]);
     });
 });
