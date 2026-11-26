@@ -49,6 +49,10 @@ export const LFG_DIALOG_COPY = {
 export const lockInBody = (count: number): string =>
     ` · all ${count} in the group get signed up and a Discord card.`;
 
+/** ROK-2352 §3.2: `2 members left for Deadmines since you opened this` — the roster shrank under an open lock-in. */
+export const lockInMembersLeft = (count: number, groupName: string): string =>
+    `${count} ${count === 1 ? 'member' : 'members'} left for ${groupName} since you opened this`;
+
 /** `These 3 people get a Discord card and a vote on times. You land on the poll next.` */
 export const pollBody = (count: number): string =>
     `These ${count} people get a Discord card and a vote on times. You land on the poll next.`;

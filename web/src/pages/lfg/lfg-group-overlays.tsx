@@ -7,6 +7,7 @@ import { useState, type ComponentType, type JSX } from 'react';
 import type { LfgGroupDetailDto, LfgMemberDto, LfgOverlapWindowDto } from '@raid-ledger/contract';
 import type { LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
 import { LfgLockInConfirm } from './LfgLockInConfirm';
+import { lockInMembersLeft } from './lfg-dialog-recipes';
 import { LfgManageDialog } from './LfgManageDialog';
 import { LfgParticipantsList, type LfgMemberBadgesSlot } from './LfgParticipantsList';
 import { LfgPollConfirm } from './LfgPollConfirm';
@@ -45,10 +46,26 @@ export interface LfgLockInSlot {
 }
 
 /** The lock-in confirm — mounted only while a row's window is being confirmed. */
-function LockInDialog({ group, overlay, actions, onClose, lockInFields }: LfgGroupOverlaysProps): JSX.Element | null {
-    const [extra, setExtra] = useState<LfgLockInExtra>({});
+function LockInDialog(props: LfgGroupOverlaysProps): JSX.Element | null {
+    const { overlay } = props;
     if (overlay.kind !== 'lockin') return null;
-    const { window } = overlay;
+    // Keyed so the plugin's pick (`extra`) and the opening roster live only as
+    // long as THIS open dialog: a cancelled pick must never reach a later Confirm.
+    return <OpenLockInDialog key={overlay.window.start} {...props} window={overlay.window} />;
+}
+
+/** How many of the members on the roster when the dialog opened have since left it. */
+function membersLeft(openedIds: readonly number[], members: readonly LfgMemberDto[]): number {
+    const now = new Set(members.map((m) => m.userId));
+    return openedIds.filter((id) => !now.has(id)).length;
+}
+
+function OpenLockInDialog({ group, window, actions, onClose, lockInFields }: LfgGroupOverlaysProps & {
+    window: LfgOverlapWindowDto;
+}): JSX.Element {
+    const [extra, setExtra] = useState<LfgLockInExtra>({});
+    const [openedIds] = useState(() => group.members.map((m) => m.userId));
+    const left = membersLeft(openedIds, group.members);
     const Fields = lockInFields?.Fields;
     return (
         <LfgLockInConfirm
@@ -58,7 +75,16 @@ function LockInDialog({ group, overlay, actions, onClose, lockInFields }: LfgGro
             isPending={actions.isLockInPending}
             onCancel={onClose}
             onConfirm={() => actions.lockIn(window, onClose, extra)}
-            extra={Fields && lockInFields ? <Fields context={lockInFields.context} group={group} onChange={setExtra} /> : undefined}
+            extra={(
+                <>
+                    {left > 0 && (
+                        <p data-testid="lfg-lockin-members-left" role="status" className="text-sm text-warning">
+                            {lockInMembersLeft(left, group.groupLabel ?? group.gameName)}
+                        </p>
+                    )}
+                    {Fields && lockInFields && <Fields context={lockInFields.context} group={group} onChange={setExtra} />}
+                </>
+            )}
         />
     );
 }
