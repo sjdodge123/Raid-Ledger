@@ -21,7 +21,8 @@ import { stripComments } from './strip-comments';
 
 export const CLEANUP_MARKER = '// plugin-scope: cleanup';
 const ACTIVE_CHECK = /\b(getActiveSlugsSync|isActive)\s*\(/;
-const MEMBER = /^\s*(?:(?:public|private|protected|static|async)\s+)*(\w+)\s*[(<]/;
+const MEMBER =
+  /^\s*(?:(?:public|private|protected|static|async)\s+)*(\w+)\s*[(<]/;
 const DISCORD =
   /(?:gatewayBinding\(\s*|\.on\(\s*)(?:'(interactionCreate|messageCreate)'|Events\.(InteractionCreate|MessageCreate))/g;
 
@@ -33,7 +34,12 @@ export interface HandlerSite {
 }
 
 /** Index of the bracket closing the `open` char at `from` (or text end). */
-function closeOf(text: string, from: number, open: string, close: string): number {
+function closeOf(
+  text: string,
+  from: number,
+  open: string,
+  close: string,
+): number {
   let depth = 0;
   for (let i = from; i < text.length; i += 1) {
     if (text[i] === open) depth += 1;
@@ -61,15 +67,20 @@ function methodBody(text: string, name: string): string {
 }
 
 /** The member a decorator at `at` sits on: its name and its body. */
-function decoratedMember(text: string, at: number): { name: string; body: string } {
+function decoratedMember(
+  text: string,
+  at: number,
+): { name: string; body: string } {
   let depth = 0;
   let pos = at;
   for (const line of text.slice(at).split('\n')) {
-    const member = depth === 0 && !/^\s*@/.test(line) ? MEMBER.exec(line) : null;
+    const member =
+      depth === 0 && !/^\s*@/.test(line) ? MEMBER.exec(line) : null;
     if (member !== null) {
       return { name: member[1] ?? '', body: bodyAfter(text, pos) };
     }
-    depth += (line.match(/\(/g) ?? []).length - (line.match(/\)/g) ?? []).length;
+    depth +=
+      (line.match(/\(/g) ?? []).length - (line.match(/\)/g) ?? []).length;
     pos += line.length + 1;
   }
   return { name: '', body: '' };
@@ -95,12 +106,18 @@ function discordHandlers(src: ScanSource): HandlerSite[] {
     const at = m.index ?? 0;
     const call = src.text.slice(at, closeOf(src.text, at, '(', ')') + 1);
     const event = m[1] ?? m[2] ?? 'discord';
-    return { key: `${src.file}#${event}[${i}]`, body: call, classText: src.text };
+    return {
+      key: `${src.file}#${event}[${i}]`,
+      body: call,
+      classText: src.text,
+    };
   });
 }
 
 /** Every handler in the scoped plugin folders of `rawSources`. */
-export function scopedHandlers(rawSources: readonly ScanSource[]): HandlerSite[] {
+export function scopedHandlers(
+  rawSources: readonly ScanSource[],
+): HandlerSite[] {
   return rawSources
     .filter((s) => scopedFolder(s.file) !== undefined)
     .flatMap((s) => [...decoratedHandlers(s), ...discordHandlers(s)]);
@@ -130,8 +147,10 @@ export function handlerScopeViolations(
     );
   const stale = Object.entries(allow).flatMap(([key, reason]) => {
     const site = sites.find((s) => s.key === key);
-    if (site === undefined) return [`${key}: allowlisted but no such scoped handler`];
-    if (isScopeChecked(site)) return [`${key}: allowlisted but already checked — drop it`];
+    if (site === undefined)
+      return [`${key}: allowlisted but no such scoped handler`];
+    if (isScopeChecked(site))
+      return [`${key}: allowlisted but already checked — drop it`];
     return reasonProblems(key, reason, site.classText);
   });
   return [...unchecked, ...stale];

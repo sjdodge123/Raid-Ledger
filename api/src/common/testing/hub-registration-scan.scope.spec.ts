@@ -29,11 +29,11 @@ describe('ROK-2365 — controller rule (each must go red)', () => {
   });
 
   it('fails an unguarded controller in a plugin folder', () => {
-    expect(
-      controllerScopeViolations(ctl(`@Controller('x')`, GET), {}),
-    ).toEqual([
-      `${KEY} is not behind @RequirePlugin + PluginActiveGuard (class or every route) and is not allowlisted`,
-    ]);
+    expect(controllerScopeViolations(ctl(`@Controller('x')`, GET), {})).toEqual(
+      [
+        `${KEY} is not behind @RequirePlugin + PluginActiveGuard (class or every route) and is not allowlisted`,
+      ],
+    );
   });
 
   it('fails @RequirePlugin without PluginActiveGuard (inert metadata)', () => {
@@ -62,12 +62,14 @@ describe('ROK-2365 — controller rule (each must go red)', () => {
 
   it('fails an off-list reason, an own-guard the class lacks, and a stale entry', () => {
     const bare = ctl(`@Controller('x')`, GET);
-    expect(
-      controllerScopeViolations(bare, { [KEY]: 'because' }),
-    ).toEqual([`${KEY}: allowlist reason "because" is not in the fixed set`]);
+    expect(controllerScopeViolations(bare, { [KEY]: 'because' })).toEqual([
+      `${KEY}: allowlist reason "because" is not in the fixed set`,
+    ]);
     expect(
       controllerScopeViolations(bare, { [KEY]: 'own-guard: FooGuard' }),
-    ).toEqual([`${KEY}: allowlisted as own-guard FooGuard, which it does not use`]);
+    ).toEqual([
+      `${KEY}: allowlisted as own-guard FooGuard, which it does not use`,
+    ]);
     expect(
       controllerScopeViolations(ctl(GUARDED, GET), { [KEY]: 'cleanup' }),
     ).toEqual([`${KEY}: allowlisted but already plugin-guarded — drop it`]);
