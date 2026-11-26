@@ -76,7 +76,36 @@ async function searchAndMapItad(
     undefined,
     ITAD_INTERACTIVE_FETCH,
   );
-  return Promise.all(results.map((g) => mapItadGameToSearch(itadService, g)));
+  return mapWithConcurrency(results, ITAD_INFO_CONCURRENCY, (g) =>
+    mapItadGameToSearch(itadService, g),
+  );
+}
+
+/**
+ * Max in-flight ITAD `getGameInfo` calls per search (ROK-2325). One search
+ * used to fire one call per ITAD hit at once.
+ */
+export const ITAD_INFO_CONCURRENCY = 4;
+
+/**
+ * Map `items` through `fn` with at most `limit` calls in flight, keeping the
+ * input order. Workers share one iterator so each item runs exactly once
+ * (same design as the pelican `runPool`). A rejection rejects the whole map,
+ * like the `Promise.all` it replaces.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  const queue = items.entries();
+  const worker = async (): Promise<void> => {
+    for (const [idx, item] of queue) out[idx] = await fn(item);
+  };
+  const width = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: width }, () => worker()));
+  return out;
 }
 
 /** Map an ItadGame to the ItadSearchGame format with info enrichment. */

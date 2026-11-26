@@ -94,6 +94,19 @@ export async function lookupGameBySteamAppId(
   };
 }
 
+/**
+ * Local-DB-only Steam App ID resolve (ROK-2325): the anonymous path. Same
+ * result shape as `resolveGameBySteamAppId`, but never discovers — no ITAD
+ * call, no games insert, so `newGameId` is always null.
+ */
+export async function resolveLocalGameBySteamAppId(
+  db: PostgresJsDatabase<typeof schema>,
+  steamAppId: number,
+): Promise<{ game: IgdbGameDto; newGameId: null } | null> {
+  const game = await lookupGameBySteamAppId(db, steamAppId);
+  return game ? { game, newGameId: null } : null;
+}
+
 /** Dependencies for ITAD-based Steam lookup + discovery (ROK-945). */
 export interface SteamLookupDeps {
   db: PostgresJsDatabase<typeof schema>;

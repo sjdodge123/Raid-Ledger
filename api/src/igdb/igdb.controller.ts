@@ -22,10 +22,8 @@ import { IgdbService } from './igdb.service';
 import { ItadPriceService } from '../itad/itad-price.service';
 import { ItadService } from '../itad/itad.service';
 import { ITAD_PRICE_SYNC_QUEUE } from '../itad/itad-price-sync.constants';
-import { ITAD_INTERACTIVE_FETCH } from '../itad/itad.constants';
 import { SettingsService } from '../settings/settings.service';
 import { handleBatchPricing } from './igdb-pricing-batch.handler';
-import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import {
   GameSearchQuerySchema,
   GameSearchResponseDto,
@@ -40,7 +38,10 @@ import {
 } from '@raid-ledger/contract';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { redisSwr } from '../common/swr-cache';
-import { handleSearchError } from './igdb-controller.helpers';
+import {
+  handleSearchError,
+  resolveSteamAppIdForViewer,
+} from './igdb-controller.helpers';
 import { fetchGameEventTypes } from './igdb-event-types.helpers';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
@@ -60,7 +61,7 @@ import {
   type OptionalViewer,
 } from './igdb-personalization.helpers';
 import { parseBatchIds } from './igdb-batch.util';
-import { resolveGameBySteamAppId } from './igdb-game-lookup.helpers';
+
 import { defined } from '../common/defined.helpers';
 import {
   gameActivityForViewer,
@@ -96,7 +97,12 @@ export class IgdbController {
   ): Promise<GameSearchResponseDto> {
     try {
       const validated = GameSearchQuerySchema.parse({ q: query });
-      const result = await this.igdbService.searchGames(validated.q);
+      // ROK-2325: anonymous callers search the local DB only — no ITAD/IGDB
+      // calls, no games inserts, no enrichment jobs.
+      const result =
+        viewerIdOf(req) === null
+          ? await this.igdbService.searchLocalGames(validated.q)
+          : await this.igdbService.searchGames(validated.q);
       return {
         // ROK-1314: viewer badge flags; no-op when anonymous.
         data: await personalizeGames(
@@ -171,22 +177,27 @@ export class IgdbController {
     });
   }
 
-  /** GET /games/by-steam-id/:steamAppId -- Lookup or discover game (ROK-945). */
+  /**
+   * GET /games/by-steam-id/:steamAppId -- Lookup or discover game (ROK-945).
+   * ROK-2325: anonymous callers get the local-DB lookup only; ITAD discovery
+   * (a games insert + IGDB re-enrich job) is for signed-in viewers.
+   */
   @RateLimit('search')
   @Get('by-steam-id/:steamAppId')
+  @UseGuards(OptionalJwtGuard)
   async getGameBySteamAppId(
     @Param('steamAppId', ParseIntPipe) steamAppId: number,
+    @Req() req: OptionalViewer,
   ) {
-    const db = this.igdbService.database;
-    const adultFilter =
-      (await this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT)) ===
-      'true';
-    const result = await resolveGameBySteamAppId(steamAppId, {
-      db,
-      lookupBySteamAppId: (id) =>
-        this.itadService.lookupBySteamAppId(id, ITAD_INTERACTIVE_FETCH),
-      adultFilterEnabled: adultFilter,
-    });
+    const result = await resolveSteamAppIdForViewer(
+      steamAppId,
+      viewerIdOf(req) === null,
+      {
+        db: this.igdbService.database,
+        settingsService: this.settingsService,
+        itadService: this.itadService,
+      },
+    );
     if (!result) throw new NotFoundException('Game not found');
     if (result.newGameId) {
       this.igdbService
