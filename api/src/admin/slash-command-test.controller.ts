@@ -17,6 +17,7 @@ import type Redis from 'ioredis';
 import { AdminGuard } from '../auth/admin.guard';
 import { isDiscordSnowflake } from '../auth/discord-signin-link.helpers';
 import { loginRateLimitKey } from '../discord-bot/commands/login.helpers';
+import { signinCodeAttemptKey } from '../discord-bot/commands/login-code.helpers';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { DemoModeGuard } from './demo-mode.guard';
 import { SlashCommandTestService } from './slash-command-test.service';
@@ -66,7 +67,11 @@ export class SlashCommandTestController {
     if (!isDiscordSnowflake(discordId)) {
       throw new BadRequestException('discordId must be a Discord snowflake');
     }
-    await this.redis.del(loginRateLimitKey(discordId));
+    // ROK-2370: and the `/login code:` attempt counter (5 per 10 minutes).
+    await this.redis.del(
+      loginRateLimitKey(discordId),
+      signinCodeAttemptKey(discordId),
+    );
   }
 
   /** Execute a slash command and return the captured response. */

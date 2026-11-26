@@ -28,6 +28,13 @@ export const LEGACY_MIGRATION_PENDING_KEY = 'raid_ledger_legacy_migration_pendin
 /** localStorage key recording how the user last authenticated. */
 export const AUTH_METHOD_KEY = 'raid_ledger_auth_method';
 
+/**
+ * ROK-2370: localStorage timestamp (ms) of this browser's last finished
+ * Discord OAuth sign-in. On a touch device the silent `prompt=none` bounce
+ * fires only while it is under 14 days old. Removed on logout.
+ */
+export const DISCORD_OAUTH_AT_KEY = 'rl_discord_oauth_at';
+
 /** sessionStorage one-shot guard preventing a silent-reauth redirect loop. */
 export const SILENT_GUARD_KEY = 'raid_ledger_silent_attempted';
 

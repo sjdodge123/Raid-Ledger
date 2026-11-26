@@ -15,6 +15,8 @@ import { AuthController } from './auth.controller';
 import { LocalAuthController } from './local-auth.controller';
 import { MagicLinkController } from './magic-link.controller';
 import { DiscordSigninLinkController } from './discord-signin-link.controller';
+import { SigninCodeController } from './signin-code.controller';
+import { SigninCodeStore } from './signin-code.store';
 import { LinkStartController } from './link-start.controller';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -66,6 +68,7 @@ import { PasswordChangeSessionService } from './password-change/password-change-
     RefreshTokenController,
     MagicLinkController,
     DiscordSigninLinkController,
+    SigninCodeController,
     LinkStartController,
   ],
   providers: [
@@ -82,6 +85,7 @@ import { PasswordChangeSessionService } from './password-change/password-change-
     RefreshTokenCleanupService,
     ImpersonationSessionService,
     PasswordChangeSessionService,
+    SigninCodeStore,
   ],
   exports: [
     AuthService,
@@ -92,6 +96,8 @@ import { PasswordChangeSessionService } from './password-change/password-change-
     LinkNonceService,
     RefreshTokenService,
     PasswordChangeSessionService,
+    // ROK-2370: the `/login code:` bot path approves codes through it.
+    SigninCodeStore,
   ],
 })
 export class AuthModule {}

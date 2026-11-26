@@ -48,6 +48,12 @@ export const RATE_LIMIT_TIERS = {
   // ROK-1965 D8: the coarse per-IP guard on hub Gallery uploads; the real
   // allowance is the per-user 20/hour window (hub-media-upload.limits.ts).
   upload: { ttl: 60_000, limit: isTestEnv ? 999_999 : 30 },
+  // ROK-2370: starting a Discord sign-in code — 5 per 10 minutes per IP.
+  signinStart: { ttl: 600_000, limit: isTestEnv ? 999_999 : 5 },
+  // ROK-2370: the sign-in code page polls every 3s (20/min); 40/min per IP
+  // leaves room for two devices behind one NAT. The device secret is 256-bit
+  // and hash-matched, so this is not the guessing defence.
+  signinPoll: { ttl: 60_000, limit: isTestEnv ? 999_999 : 40 },
   // TDB L2886: POST /scheduling-polls DMs every game-interested user (or every
   // invited member) and posts a channel card per poll, so the global 60/min
   // let one client fan out 60 polls' worth of DMs a minute. 10/min is far

@@ -79,17 +79,36 @@ export async function dismissGameTimeCheck(page: Page): Promise<void> {
 }
 
 /**
+ * ROK-2370 review m7: the disclosure opens on the Discord-app code, whose panel
+ * starts a code on mount. A real start spends the per-IP budget (5 per 10 min),
+ * so a password login would starve `signin-code.smoke.spec.ts` on reruns. Stub
+ * the start (and its poll) for pages that only want the password form.
+ */
+async function stubSigninCodeStart(page: Page): Promise<void> {
+    const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+    await page.route('**/auth/discord/signin-code', (route) => route.fulfill({
+        json: { code: 'STBK-2222', deviceSecret: 's'.repeat(43), expiresAt, pollIntervalMs: 60_000 },
+    }));
+    await page.route('**/auth/discord/signin-code/poll', (route) => route.fulfill({ json: { status: 'pending', expiresAt } }));
+}
+
+/**
  * Expand the local login form if OAuth providers (Discord) are shown.
- * Waits for the login page to load, then clicks the toggle to reveal
- * username/password fields if they're hidden behind an OAuth-first layout.
+ * ROK-2370: username/password sits inside the "Sign in not working? Try
+ * another way" disclosure, after the Discord-app code section — open the
+ * disclosure, then the "Sign in with username" section when it is collapsed.
  */
 export async function expandLocalLogin(page: Page) {
     await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-    const toggleBtn = page.getByText('Sign in with username instead');
-    if (await toggleBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-        await toggleBtn.click();
-        await expect(page.locator('#username')).toBeVisible({ timeout: 5_000 });
-    }
+    const trigger = page.getByRole('button', { name: 'Sign in not working? Try another way' });
+    if (!(await trigger.isVisible({ timeout: 5_000 }).catch(() => false))) return;
+    await stubSigninCodeStart(page);
+    if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
+    const username = page.locator('#username');
+    const passwordRow = page.getByRole('button', { name: 'Sign in with username' });
+    await expect(username.or(passwordRow)).toBeVisible({ timeout: 5_000 });
+    if (await passwordRow.isVisible()) await passwordRow.click();
+    await expect(username).toBeVisible({ timeout: 5_000 });
 }
 
 /**

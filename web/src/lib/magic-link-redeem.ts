@@ -42,6 +42,17 @@ async function checkStoredSession(): Promise<StoredSession> {
   return probeRefreshSession();
 }
 
+// ROK-2370: set when a redeem adopts a session, so the first /auth/me
+// after it records the last-used sign-in marker (this module holds no user).
+let magicLinkAdopted = false;
+
+/** True once after a magic-link redeem adopted a session; resets on read. */
+export function takeMagicLinkAdoption(): boolean {
+  const adopted = magicLinkAdopted;
+  magicLinkAdopted = false;
+  return adopted;
+}
+
 async function postRedeem(token: string): Promise<string | null> {
   const body: RedeemMagicLinkDto = { token };
   try {
@@ -61,6 +72,7 @@ async function postRedeem(token: string): Promise<string | null> {
 
 /** A redeem is a fresh sign-in (ROK-1754: the token is held in memory only). */
 function adoptSession(accessToken: string): void {
+  magicLinkAdopted = true;
   setAccessToken(accessToken);
   setAuthMethod('magic');
   clearSilentGuard();

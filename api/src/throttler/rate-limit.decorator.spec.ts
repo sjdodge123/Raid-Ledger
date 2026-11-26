@@ -1,3 +1,4 @@
+import { SigninCodeController } from '../auth/signin-code.controller';
 import { RATE_LIMIT_TIERS, RateLimit } from './rate-limit.decorator';
 
 describe('RATE_LIMIT_TIERS', () => {
@@ -15,6 +16,11 @@ describe('RATE_LIMIT_TIERS', () => {
 
   it('should define public tier as 60/min (ROK-1067)', () => {
     expect(RATE_LIMIT_TIERS.public).toEqual({ ttl: 60_000, limit: 60 });
+  });
+
+  it('should define the sign-in code tiers (ROK-2370 AC3)', () => {
+    expect(RATE_LIMIT_TIERS.signinStart).toEqual({ ttl: 600_000, limit: 5 });
+    expect(RATE_LIMIT_TIERS.signinPoll).toEqual({ ttl: 60_000, limit: 40 });
   });
 
   it('should define media tier as 600/min (ROK-1942)', () => {
@@ -61,6 +67,8 @@ describe('RATE_LIMIT_TIERS under DEMO_MODE (ROK-1633)', () => {
     ['admin', 120],
     ['export', 5],
     ['public', 60],
+    ['signinStart', 5],
+    ['signinPoll', 40],
   ] as const)('keeps the %s tier at %i/min', (tier, limit) => {
     expect(loadTiers(demo)[tier].limit).toBe(limit);
   });
@@ -117,3 +125,16 @@ function describeRateLimitDecorator() {
   });
 }
 describe('RateLimit decorator', () => describeRateLimitDecorator());
+
+describe('SigninCodeController throttles (ROK-2370 AC3)', () => {
+  it.each([
+    ['start', 5, 600_000],
+    ['poll', 40, 60_000],
+  ] as const)('%s carries its tier', (method, limit, ttl) => {
+    const target = SigninCodeController.prototype[method] as object;
+    expect([
+      Reflect.getMetadata('THROTTLER:LIMITdefault', target),
+      Reflect.getMetadata('THROTTLER:TTLdefault', target),
+    ]).toEqual([limit, ttl]);
+  });
+});
