@@ -340,4 +340,19 @@ describe('DynamicCategoriesPanel — regenerate toast counts (ROK-1530 A7)', () 
         );
         expect(mockToastSuccess).not.toHaveBeenCalled();
     });
+
+    it('shows a retryable error instead of the empty state when the list fails (ROK-2342)', async () => {
+        let fail = true;
+        server.use(
+            http.get(`${API_BASE}/admin/discovery-categories`, () =>
+                fail
+                    ? HttpResponse.json({ message: 'boom' }, { status: 500 })
+                    : HttpResponse.json({ suggestions: [] })),
+        );
+        renderWithProviders(<DynamicCategoriesPanel />);
+        expect(await screen.findByRole('heading', { name: "Couldn't load category suggestions" })).toBeInTheDocument();
+        fail = false;
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(screen.queryByTestId('dynamic-categories-error')).not.toBeInTheDocument());
+    });
 });
