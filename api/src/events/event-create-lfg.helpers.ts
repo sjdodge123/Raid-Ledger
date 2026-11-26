@@ -2,9 +2,17 @@
  * The `POST /events` create flow, extracted from `EventsController` for the
  * file-length limit when ROK-1573 added LFG convert-on-create.
  */
-import type { CreateEventDto, EventResponseDto } from '@raid-ledger/contract';
+import type {
+  CreateEventDto,
+  CreateSignupDto,
+  EventResponseDto,
+} from '@raid-ledger/contract';
+import type { LfgEventPatch } from '../lfg/lfg-event-convert.helpers';
 import type { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
-import { autoSignupSlotVoters } from '../lineups/scheduling/scheduling-auto-signup.helpers';
+import {
+  autoSignupSlotVoters,
+  type SignupCarryover,
+} from '../lineups/scheduling/scheduling-auto-signup.helpers';
 import { withDefaultRosterSlots } from './event-roster-slots.helpers';
 import type { EventsService } from './events.service';
 import type { SignupsService } from './signups.service';
@@ -28,19 +36,69 @@ export function withLfgRosterSlots(dto: CreateEventDto): CreateEventDto {
   return withDefaultRosterSlots(dto);
 }
 
-/** The creator joins every occurrence (unchanged pre-ROK-1573 behaviour). */
+/**
+ * ROK-2352 §3.8 — the grouping adapter's roster, instance and title win over
+ * the body's: the Lock-in IS that instance (AC5). No patch (folded or
+ * non-grouped game) → the body as sent, with the generic roster.
+ *
+ * @param dto - Parsed create body.
+ * @param patch - From the adapter, inside the group lock.
+ */
+export function withLfgLockInPatch(
+  dto: CreateEventDto,
+  patch: LfgEventPatch | undefined,
+): CreateEventDto {
+  const patched: CreateEventDto = {
+    ...dto,
+    ...(patch?.title ? { title: patch.title } : {}),
+    ...(patch?.slotConfig ? { slotConfig: patch.slotConfig } : {}),
+    ...(patch?.contentInstances
+      ? { contentInstances: patch.contentInstances }
+      : {}),
+  };
+  return withLfgRosterSlots(patched);
+}
+
+/**
+ * The creator joins every occurrence (unchanged pre-ROK-1573 behaviour) —
+ * ROK-2352: with their hand's character/roles when the adapter carried any.
+ * A carried signup that throws (stale character) retries plain, so a
+ * carryover can never fail the create.
+ */
 async function signupCreator(
   deps: EventCreateDeps,
   userId: number,
   eventIds: number[],
+  carried: CreateSignupDto | undefined,
 ): Promise<void> {
+  const opts = { skipEndedCheck: true };
   await Promise.all(
     eventIds.map((id) =>
-      deps.signupsService.signup(id, userId, undefined, {
-        skipEndedCheck: true,
-      }),
+      carried
+        ? deps.signupsService
+            .signup(id, userId, carried, opts)
+            .catch(() => deps.signupsService.signup(id, userId, undefined, opts))
+        : deps.signupsService.signup(id, userId, undefined, opts),
     ),
   );
+}
+
+/** Converted members (minus the creator) join occurrence 1 with carryover. */
+async function signupMembers(
+  deps: EventCreateDeps,
+  userId: number,
+  eventId: number,
+  memberIds: number[],
+  carryover: SignupCarryover | undefined,
+): Promise<void> {
+  if (memberIds.length === 0) return;
+  await autoSignupSlotVoters({
+    eventId,
+    creatorId: userId,
+    voters: memberIds.map((memberId) => ({ userId: memberId })),
+    signupsService: deps.signupsService,
+    carryover,
+  });
 }
 
 /**
@@ -54,7 +112,10 @@ async function signupCreator(
  * Converted members join occurrence 1 only (Q8); the creator joins every
  * occurrence, as before. Everyone signs up through `SignupsService.signup`, so
  * roster placement is the normal one — the event just needs player slots
- * (`withLfgRosterSlots`).
+ * (`withLfgRosterSlots`). ROK-2352: with `lfgGroupKey` only that group
+ * converts; a grouped game's adapter shapes the event (`withLfgLockInPatch`)
+ * and everyone signs up with their hand's character/roles (ROK-2320's
+ * `carryover` seam — no new signup path).
  *
  * @param deps - Events, signups and LFG conversion services.
  * @param userId - The creator.
@@ -68,20 +129,21 @@ export async function createEventWithSignups(
   userId: number,
   dto: CreateEventDto,
 ): Promise<EventResponseDto> {
-  const create = () =>
-    deps.eventsService.create(userId, withLfgRosterSlots(dto));
-  const { event: result, memberIds } = dto.lfgGameId
-    ? await deps.lfgEventConvert.createForGroup(userId, dto.lfgGameId, create)
+  const create = (patch?: LfgEventPatch) =>
+    deps.eventsService.create(userId, withLfgLockInPatch(dto, patch));
+  const converted = dto.lfgGameId
+    ? await deps.lfgEventConvert.createForGroup(
+        userId,
+        dto.lfgGameId,
+        create,
+        dto.lfgGroupKey,
+      )
     : { event: await create(), memberIds: [] as number[] };
-  await signupCreator(deps, userId, result.allEventIds ?? [result.id]);
-  if (memberIds.length > 0) {
-    await autoSignupSlotVoters({
-      eventId: result.id,
-      creatorId: userId,
-      voters: memberIds.map((memberId) => ({ userId: memberId })),
-      signupsService: deps.signupsService,
-    });
-  }
+  const { event: result, memberIds } = converted;
+  const carryover = 'carryover' in converted ? converted.carryover : undefined;
+  const ids = result.allEventIds ?? [result.id];
+  await signupCreator(deps, userId, ids, carryover?.get(userId));
+  await signupMembers(deps, userId, result.id, memberIds, carryover);
   const { allEventIds: _, ...event } = result;
   void _;
   return event;

@@ -9,8 +9,19 @@
 import { ConflictException } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import type {
+  LfgLockInPatch,
+  LfgSignupCarryover,
+} from '../plugins/plugin-host/lfg-grouping.adapter';
+import type { LfgGroupScope } from './lfg-group-scope.helpers';
+import {
+  buildGroupLockInPatch,
+  clearNowSiblings,
+  LFG_FOLD_LOCK_IN,
+  liveLockInRows,
+  type LfgLockInGroup,
+} from './lfg-lock-in-group.helpers';
 import type { LfgDb } from './lfg-query.helpers';
-import { liveGroupRow } from './lfg-write.helpers';
 import { lfgGroupLockKey } from './lfg.constants';
 
 /** 409 body when the caller's group is gone (review P2-2). */
@@ -22,13 +33,21 @@ export interface LfgGroupCreateResult<T> {
   event: T;
   /** Every converted member (includes the creator). */
   memberIds: number[];
+  /** ROK-2352: userId → character/roles from the adapter (grouped games). */
+  carryover?: LfgSignupCarryover;
+  /** ROK-2352 Q1: members whose `now` hand in another group was cleared. */
+  clearedSiblingUserIds?: number[];
 }
 
-/** True when the caller holds a LIVE (active, unexpired, eligible) intent. */
+/** What the event create receives from the grouping adapter, if any. */
+export type LfgEventPatch = Omit<LfgLockInPatch, 'carryover'>;
+
+/** True when the caller holds a LIVE hand in the group (`scope`). */
 async function holdsLiveIntent(
   tx: LfgDb,
   userId: number,
   gameId: number,
+  scope: LfgGroupScope,
 ): Promise<boolean> {
   const [row] = await tx
     .select({ id: schema.lfgIntents.id })
@@ -36,7 +55,7 @@ async function holdsLiveIntent(
     .where(
       and(
         eq(schema.lfgIntents.userId, userId),
-        liveGroupRow(tx, gameId, new Date()),
+        liveLockInRows(tx, gameId, scope, new Date()),
       ),
     )
     .limit(1);
@@ -44,13 +63,15 @@ async function holdsLiveIntent(
 }
 
 /**
- * Flip every live intent on the game to `converted` → this event. Signs up
- * EVERY live member regardless of their game time (operator ruling).
+ * Flip every live intent of the group (`scope`; null = the whole game) to
+ * `converted` → this event. Signs up EVERY live member regardless of their
+ * game time (operator ruling).
  */
 async function convertLiveRows(
   tx: LfgDb,
   gameId: number,
   eventId: number,
+  scope: LfgGroupScope,
 ): Promise<number[]> {
   const rows = await tx
     .update(schema.lfgIntents)
@@ -60,7 +81,7 @@ async function convertLiveRows(
       convertedToEventId: eventId,
       convertedAt: sql`statement_timestamp()`, // TDB:953 — DB clock at the UPDATE, not tx start
     })
-    .where(liveGroupRow(tx, gameId, new Date()))
+    .where(liveLockInRows(tx, gameId, scope, new Date()))
     .returning({ userId: schema.lfgIntents.userId });
   return [...new Set(rows.map((r) => r.userId))];
 }
@@ -83,7 +104,11 @@ async function convertLiveRows(
  * @param db - Drizzle handle.
  * @param userId - The event creator; must hold a live intent on `gameId`.
  * @param gameId - Game whose group is converting.
- * @param createEvent - Creates the event (only called after the check).
+ * @param createEvent - Creates the event (only called after the check),
+ *   given the grouping adapter's roster / instance / title when there is one.
+ * @param group - ROK-2352: the group converting (default: the whole game).
+ *   Only that group's hands convert; its members' other `now` hands in the
+ *   game are cleared in the same transaction (Q1).
  * @returns The created event and the converted members.
  * @throws ConflictException when the caller holds no live intent.
  */
@@ -91,17 +116,26 @@ export function createAndConvertGroup<T extends { id: number }>(
   db: LfgDb,
   userId: number,
   gameId: number,
-  createEvent: () => Promise<T>,
+  createEvent: (patch?: LfgEventPatch) => Promise<T>,
+  group: LfgLockInGroup = LFG_FOLD_LOCK_IN,
 ): Promise<LfgGroupCreateResult<T>> {
   return db.transaction(async (tx) => {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${lfgGroupLockKey(gameId)}))`,
     );
-    if (!(await holdsLiveIntent(tx, userId, gameId))) {
+    if (!(await holdsLiveIntent(tx, userId, gameId, group.scope))) {
       throw new ConflictException(LFG_GROUP_GONE_MESSAGE);
     }
-    const event = await createEvent();
-    const memberIds = await convertLiveRows(tx, gameId, event.id);
-    return { event, memberIds };
+    const patch = await buildGroupLockInPatch(tx, gameId, group);
+    if (patch === undefined) {
+      const event = await createEvent();
+      const memberIds = await convertLiveRows(tx, gameId, event.id, null);
+      return { event, memberIds };
+    }
+    const { carryover, ...eventPatch } = patch;
+    const event = await createEvent(eventPatch);
+    const memberIds = await convertLiveRows(tx, gameId, event.id, group.scope);
+    const clearedSiblingUserIds = await clearNowSiblings(tx, gameId, memberIds);
+    return { event, memberIds, carryover, clearedSiblingUserIds };
   });
 }
