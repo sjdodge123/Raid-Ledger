@@ -343,7 +343,13 @@ async function newReschedulePoll(): Promise<number> {
   return m.id;
 }
 
-/** A real (non-hub) event, optionally mid-reschedule. */
+/**
+ * A real (non-hub) event, optionally mid-reschedule. Its id comes from the
+ * `nextSubject` band, not `events_id_seq`: the per-file reset DELETEs rows
+ * but never resets sequences, so a sequence id could equal the match id an
+ * earlier test's live poll post holds (S10 `expiredPoll`) and the ROK-2314
+ * borrowed-id insert would trip `uq_event_planning_posts_subject_live`.
+ */
 async function newEvent(rescheduling: boolean): Promise<number> {
   const start = Date.now() + 24 * HOUR;
   const pollId = rescheduling ? await newReschedulePoll() : null;
@@ -351,6 +357,7 @@ async function newEvent(rescheduling: boolean): Promise<number> {
     await db()
       .insert(schema.events)
       .values({
+        id: (nextSubject += 1),
         title: 'Rescheduling event',
         creatorId: ctx.ids.creator,
         gameId: ctx.posts.testApp.seed.game.id,
