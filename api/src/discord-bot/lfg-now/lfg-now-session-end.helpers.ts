@@ -32,6 +32,7 @@ import {
   type LfgGroupChangedPayload,
 } from '../../lfg/lfg.constants';
 import { lfgSpawnedEventGameId } from './lfg-now.db-helpers';
+import { lfgSessionGroupKey } from '../../lfg/lfg-session-group.helpers';
 
 /** What the announce needs from its caller. */
 export interface LfgSessionEndDeps {
@@ -57,10 +58,13 @@ export async function announceLfgSessionEnd(
   try {
     const gameId = await lfgSpawnedEventGameId(deps.db, eventId);
     if (gameId === null) return; // Not LFG-born: nothing subscribes.
+    // ROK-2352: a keyed session ends on its own group's post only.
+    const groupKey = await lfgSessionGroupKey(deps.db, eventId);
     deps.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, {
       gameId,
       reason: 'converted',
       eventId,
+      ...(groupKey ? { groupKey } : {}),
     } satisfies LfgGroupChangedPayload);
   } catch (err) {
     logger.warn(

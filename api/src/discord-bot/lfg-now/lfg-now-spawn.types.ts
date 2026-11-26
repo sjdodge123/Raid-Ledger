@@ -5,6 +5,7 @@
  * without importing the spawn helper that imports IT — the cycle jest's module
  * registry would otherwise resolve to `undefined` at mock time.
  */
+import type { LfgSignupCarryover } from '../../plugins/plugin-host/lfg-grouping.adapter';
 
 /** A live LFG hand, with the Discord identity the roster needs. */
 export interface LfgNowHand {
@@ -36,4 +37,15 @@ export interface LfgNowSpawnResult {
    * (in-tx); the caller emits `withdrawn` for them post-COMMIT.
    */
   clearedSiblingUserIds?: number[];
+  /**
+   * ROK-2352 P1-2: a keyed group's members, signed up role-aware (adapter
+   * carryover) by the caller post-COMMIT instead of into generic slots.
+   */
+  keyedSignup?: LfgNowKeyedSignup;
+}
+
+/** Keyed members deferred to the post-COMMIT role-aware signup. */
+export interface LfgNowKeyedSignup {
+  hands: LfgNowHand[];
+  carryover: LfgSignupCarryover;
 }

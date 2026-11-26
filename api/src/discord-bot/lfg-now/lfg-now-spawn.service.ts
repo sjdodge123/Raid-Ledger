@@ -56,6 +56,13 @@ import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queu
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { dispatchLiveSessionInvites } from './lfg-now-invite.helpers';
+import { SignupsService } from '../../events/signups.service';
+import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
+import { lfgSessionGroupKey } from '../../lfg/lfg-session-group.helpers';
+import {
+  groupKeyField,
+  signupKeyedMembers,
+} from './lfg-now-keyed-signup.helpers';
 import {
   loadLfgNowEphemeralRow,
   lfgNowEventGameId,
@@ -96,6 +103,9 @@ export class LfgNowSpawnService {
     @Optional()
     @Inject(PluginRegistryService)
     private readonly pluginRegistry: PluginRegistryService | null = null,
+    @Optional()
+    @Inject(forwardRef(() => SignupsService))
+    private readonly signups: SignupsService | null = null,
   ) {}
 
   /**
@@ -136,6 +146,7 @@ export class LfgNowSpawnService {
       throw new InternalServerErrorException('Could not start the session');
     }
     await this.rearmGrace(result);
+    await this.signupKeyed(result);
     if (result.spawned) {
       await this.refreshEventCache(result.eventId);
       await this.createPublicVoice(result.eventId).catch((err) =>
@@ -144,9 +155,14 @@ export class LfgNowSpawnService {
         ),
       );
     }
-    this.emitPlaying(gameId, result.eventId);
+    this.emitPlaying(gameId, result.eventId, group.scope);
     this.emitClearedSiblings(gameId, result);
-    const invited = await this.inviteOthers(gameId, starterUserId, result);
+    const invited = await this.inviteOthers(
+      gameId,
+      starterUserId,
+      result,
+      group.scope,
+    );
     return { eventId: result.eventId, spawned: result.spawned, invited };
   }
 
@@ -158,6 +174,7 @@ export class LfgNowSpawnService {
     gameId: number,
     starterUserId: number,
     result: { invitedUserIds: number[] },
+    scope: LfgGroupScope,
   ): Promise<number> {
     if (!this.notifications || result.invitedUserIds.length === 0) return 0;
     try {
@@ -169,6 +186,8 @@ export class LfgNowSpawnService {
         starterUserId,
         userIds: result.invitedUserIds,
         clientUrl,
+        // ROK-2352 P1-3: link and Join button name the started group.
+        ...groupKeyField(scope),
       });
     } catch (err) {
       this.logger.warn(
@@ -188,7 +207,7 @@ export class LfgNowSpawnService {
   @OnEvent(LFG_EVENTS.LFM_REACHED)
   async onLfmReached(payload: LfgLfmReachedPayload): Promise<void> {
     if (payload?.urgency !== 'now') return;
-    await this.trySpawn(payload.gameId);
+    await this.trySpawn(payload.gameId, payload.groupKey);
   }
 
   /**
@@ -202,7 +221,7 @@ export class LfgNowSpawnService {
   @OnEvent(LFG_EVENTS.GROUP_CHANGED)
   async onGroupChanged(payload: LfgGroupChangedPayload): Promise<void> {
     if (!payload || !SPAWN_REASONS.has(payload.reason)) return;
-    await this.trySpawn(payload.gameId);
+    await this.trySpawn(payload.gameId, payload.groupKey);
   }
 
   /**
@@ -246,16 +265,19 @@ export class LfgNowSpawnService {
    * Spawn or attach for one game, then create voice and announce. ROK-2352:
    * the threshold spawn is game-level "playing now" — with a grouping adapter
    * it counts and converts only the `''` group's hands; a keyed group (a WoW
-   * instance) is started by a member's Start now, never by two `now` hands.
+   * instance) is started by a member's Start now, never by two `now` hands;
+   * a late keyed `now` hand only attaches to that group's open session
+   * (P1-4, ruled: same as the Any group).
    */
-  private async trySpawn(gameId: number): Promise<void> {
+  private async trySpawn(gameId: number, groupKey?: string): Promise<void> {
     try {
-      const group = await this.resolveGroup(gameId, '');
+      const group = await this.resolveGroup(gameId, groupKey ?? '');
       const result = await spawnUnderGroupLock(this.db, gameId, undefined, {
         group,
       });
       if (!result) return;
       await this.rearmGrace(result);
+      await this.signupKeyed(result);
       // A voice-creation failure must NOT suppress the announcement: the event
       // exists, `ephemeral_voice_channel_id` simply stays NULL and the surfaces
       // render the event link alone (error matrix / D9's nullable channel id).
@@ -267,7 +289,7 @@ export class LfgNowSpawnService {
           ),
         );
       }
-      this.emitPlaying(gameId, result.eventId);
+      this.emitPlaying(gameId, result.eventId, group.scope);
       this.emitClearedSiblings(gameId, result);
     } catch (err) {
       // Never rethrow: this handler's stack is POST /lfg.
@@ -346,7 +368,11 @@ export class LfgNowSpawnService {
     try {
       const gameId = await lfgNowEventGameId(this.db, eventId);
       if (gameId === null) return;
-      this.emitPlaying(gameId, eventId);
+      this.emitPlaying(
+        gameId,
+        eventId,
+        await lfgSessionGroupKey(this.db, eventId),
+      );
     } catch (err) {
       this.logger.warn(
         `${LFG_NOW_LOG_TAG} roster re-render failed for event ${eventId}: ${err}`,
@@ -372,11 +398,28 @@ export class LfgNowSpawnService {
    * D4: `playing`, never `converted`. `converted` renders a terminal view that
    * closes the LFM row, after which the head-count could never update again.
    */
-  private emitPlaying(gameId: number, eventId: number): void {
+  private emitPlaying(
+    gameId: number,
+    eventId: number,
+    scope: LfgGroupScope = null,
+  ): void {
     this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, {
       gameId,
       reason: 'playing',
       eventId,
+      ...groupKeyField(scope),
     } satisfies LfgGroupChangedPayload);
+  }
+
+  /** ROK-2352 P1-2: post-COMMIT role-aware signup of a keyed group's members. */
+  private async signupKeyed(result: LfgNowSpawnResult): Promise<void> {
+    if (!result.keyedSignup) return;
+    const deps = { db: this.db, signupsService: this.signups };
+    await signupKeyedMembers(deps, result.eventId, result.keyedSignup).catch(
+      (err) =>
+        this.logger.warn(
+          `${LFG_NOW_LOG_TAG} keyed signup failed for event ${result.eventId}: ${err}`,
+        ),
+    );
   }
 }

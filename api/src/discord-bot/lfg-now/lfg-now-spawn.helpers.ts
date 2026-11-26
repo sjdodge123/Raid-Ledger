@@ -41,6 +41,12 @@ import {
   withClearedNowSiblings,
 } from './lfg-now-manual-start.helpers';
 import { LFG_NOW_SPAWN_THRESHOLD } from './lfg-now.constants';
+import {
+  deferKeyedSignup,
+  isKeyedScope,
+  keyedCarryover,
+} from './lfg-now-keyed-signup.helpers';
+import type { LfgSignupCarryover } from '../../plugins/plugin-host/lfg-grouping.adapter';
 import type { LfgNowHand, LfgNowSpawnResult } from './lfg-now-spawn.types';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -222,8 +228,14 @@ export function spawnUnderGroupLock(
       return manualStart(tx, gameId, open, opts.manual, now, group);
     const hands = await listLiveNowHands(tx, gameId, now, group.scope);
     if (open !== null) {
-      return attachToOpenEvent(tx, gameId, open, hands, group.scope);
+      const carry = isKeyedScope(group.scope)
+        ? await keyedCarryover(tx, gameId, group)
+        : undefined;
+      return attachToOpenEvent(tx, gameId, open, hands, group.scope, carry);
     }
+    // ROK-2352 P1-4: a keyed group attaches a late `now` hand to its own
+    // session, but only Start now ever creates one (never the threshold).
+    if (isKeyedScope(group.scope)) return null;
     if (hands.length < LFG_NOW_SPAWN_THRESHOLD) return null;
     return spawnFromHands(tx, gameId, hands, now, group.scope);
   });
@@ -284,12 +296,16 @@ async function manualStart(
   // are never signed up to a session about to end (the expiring grace job's
   // `claimAndEndEvent` only ends a `grace_period` row, so it no-ops).
   const restored = open !== null && (await restoreFromGracePeriod(tx, open));
+  // Read before the conversion: the carryover covers the group's live hands.
+  const patch = await startNowPatch(tx, gameId, group);
   const eventId =
     open ??
     (await createLfgNowEventRow(tx, gameId, manual.starterUserId, now, {
-      patch: await startNowPatch(tx, gameId, group),
+      patch,
     }));
-  if (starter) await signupNowHands(tx, eventId, [starter]);
+  const deferred = starter
+    ? await rosterHands(tx, eventId, [starter], group.scope, patch?.carryover)
+    : {};
   const converted = await convertStarterIntent(
     tx,
     gameId,
@@ -306,6 +322,7 @@ async function manualStart(
       .filter((p) => p.userId !== manual.starterUserId)
       .map((p) => p.userId),
     ...(restored ? { restoredFromGrace: true as const } : {}),
+    ...deferred,
     ...(await withClearedNowSiblings(tx, gameId, startedIds, group.scope)),
   };
 }
@@ -315,8 +332,25 @@ async function manualStart(
  * (roster, instance, title). `''` and the fold keep the generic now-session.
  */
 function startNowPatch(tx: Db, gameId: number, group: LfgLockInGroup) {
-  if (group.scope === null || group.scope === '') return undefined;
+  if (!isKeyedScope(group.scope)) return Promise.resolve(undefined);
   return buildGroupLockInPatch(tx, gameId, group);
+}
+
+/**
+ * ROK-2352 P1-2: `''` / fold hands go on the generic roster now; a keyed
+ * group's are deferred to the role-aware post-COMMIT signup (the result's
+ * `keyedSignup`), so they land in the instance's tank/healer/dps slots.
+ */
+async function rosterHands(
+  tx: Db,
+  eventId: number,
+  hands: LfgNowHand[],
+  scope: LfgGroupScope,
+  carryover: LfgSignupCarryover | undefined,
+): Promise<ReturnType<typeof deferKeyedSignup>> {
+  if (isKeyedScope(scope)) return deferKeyedSignup(hands, carryover);
+  await signupNowHands(tx, eventId, hands);
+  return {};
 }
 
 /**
@@ -336,12 +370,13 @@ export async function attachToOpenEvent(
   eventId: number,
   hands: LfgNowHand[],
   scope: LfgGroupScope = null,
+  carryover?: LfgSignupCarryover,
 ): Promise<LfgNowSpawnResult> {
   if (hands.length === 0)
     return { eventId, spawned: false, invitedUserIds: [] };
   // ROK-1888 m4, see manualStart
   const restored = await restoreFromGracePeriod(tx, eventId);
-  await signupNowHands(tx, eventId, hands);
+  const deferred = await rosterHands(tx, eventId, hands, scope, carryover);
   await convertGroup(tx, gameId, { eventId }, scope);
   const userIds = hands.map((h) => h.userId);
   return {
@@ -349,6 +384,7 @@ export async function attachToOpenEvent(
     spawned: false,
     invitedUserIds: [],
     ...(restored ? { restoredFromGrace: true as const } : {}),
+    ...deferred,
     ...(await withClearedNowSiblings(tx, gameId, userIds, scope)),
   };
 }

@@ -21,21 +21,28 @@ import type * as schema from '../drizzle/schema';
 import { AD_HOC_EVENTS } from '../discord-bot/discord-bot.constants';
 import { LFG_EVENTS } from './lfg.constants';
 import { LfgQuickPlayListener } from './lfg-quickplay.listener';
-import { findOpenLfgNowEventId } from './lfg-playing.helpers';
-import { convertHolderIntent } from './lfg-write.helpers';
+import {
+  convertJoinerHand,
+  findOpenLfgBornSessionGroup,
+} from './lfg-session-group.helpers';
 import { stripComments } from '../common/testing/strip-comments';
 
-jest.mock('./lfg-playing.helpers', () => ({
-  findOpenLfgNowEventId: jest.fn(),
+jest.mock('./lfg-session-group.helpers', () => ({
+  findOpenLfgBornSessionGroup: jest.fn(),
+  convertJoinerHand: jest.fn(),
 }));
-jest.mock('./lfg-write.helpers', () => ({ convertHolderIntent: jest.fn() }));
 
-const findOpen = findOpenLfgNowEventId as jest.MockedFunction<
-  typeof findOpenLfgNowEventId
+/** The joined event's group when it is an open LFG-born session, else null. */
+const findOpen = findOpenLfgBornSessionGroup as jest.MockedFunction<
+  typeof findOpenLfgBornSessionGroup
 >;
-const convertHolder = convertHolderIntent as jest.MockedFunction<
-  typeof convertHolderIntent
+const convertHolder = convertJoinerHand as jest.MockedFunction<
+  typeof convertJoinerHand
 >;
+const moved = (converted: number, cleared: number[] = []) => ({
+  converted,
+  clearedSiblingUserIds: cleared,
+});
 
 interface Harness {
   db: MockDb;
@@ -49,7 +56,7 @@ function harness(): Harness {
   const emitter = new EventEmitter2();
   jest.spyOn(emitter, 'emit');
   findOpen.mockReset().mockResolvedValue(null);
-  convertHolder.mockReset().mockResolvedValue(1);
+  convertHolder.mockReset().mockResolvedValue(moved(1));
   const listener = new LfgQuickPlayListener(
     db as unknown as PostgresJsDatabase<typeof schema>,
     emitter,
@@ -129,16 +136,16 @@ describe('LfgQuickPlayListener — ROK-1625 join on the LFG-born session', () =>
   it("converts the joiner's own hand, then repaints as playing — no Quick Play signal", async () => {
     // MUTATION: drop the GROUP_CHANGED emit after a conversion and the
     // `toHaveBeenNthCalledWith` below fails with Number of calls: 0.
-    findOpen.mockResolvedValue(42);
+    findOpen.mockResolvedValue('');
     db.limit
       .mockResolvedValueOnce([{ gameId: 99 }]) // event lookup
       .mockResolvedValueOnce([{ id: 5 }]); // live intent
 
     await listener.onParticipantJoined({ eventId: 42, userId: 7 });
 
-    expect(findOpen).toHaveBeenCalledWith(db, 99);
+    expect(findOpen).toHaveBeenCalledWith(db, 99, 42);
     expect(convertHolder).toHaveBeenCalledTimes(1);
-    expect(convertHolder).toHaveBeenCalledWith(db, 99, 7, { eventId: 42 });
+    expect(convertHolder).toHaveBeenCalledWith(db, 99, 7, 42, '');
     expect(emitter.emit).toHaveBeenNthCalledWith(1, LFG_EVENTS.GROUP_CHANGED, {
       gameId: 99,
       reason: 'playing',
@@ -150,7 +157,7 @@ describe('LfgQuickPlayListener — ROK-1625 join on the LFG-born session', () =>
   it('never reaches the LFG-born read for a joiner holding no live hand', async () => {
     // MUTATION: run `convertIfLfgBorn` before `holdsLiveIntent` and the
     // events x lfg_intents join is paid for a joiner with nothing to convert.
-    findOpen.mockResolvedValue(42);
+    findOpen.mockResolvedValue('');
     db.limit
       .mockResolvedValueOnce([{ gameId: 99 }]) // event lookup
       .mockResolvedValueOnce([]); // no live intent
@@ -163,8 +170,8 @@ describe('LfgQuickPlayListener — ROK-1625 join on the LFG-born session', () =>
   });
 
   it('is a safe no-op when the joiner already converted (AC4)', async () => {
-    findOpen.mockResolvedValue(42);
-    convertHolder.mockResolvedValue(0);
+    findOpen.mockResolvedValue('');
+    convertHolder.mockResolvedValue(moved(0));
     db.limit
       .mockResolvedValueOnce([{ gameId: 99 }])
       .mockResolvedValueOnce([{ id: 5 }]);
@@ -172,8 +179,36 @@ describe('LfgQuickPlayListener — ROK-1625 join on the LFG-born session', () =>
     await expect(
       listener.onParticipantJoined({ eventId: 42, userId: 7 }),
     ).resolves.toBeUndefined();
-    expect(convertHolder).toHaveBeenCalledWith(db, 99, 7, { eventId: 42 });
+    expect(convertHolder).toHaveBeenCalledWith(db, 99, 7, 42, '');
     expect(emitter.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe('LfgQuickPlayListener — ROK-2352 P1-1 group-scoped voice join', () => {
+  it("converts only the session group's hand and names that group", async () => {
+    // MUTATION: convert every live hand of the game (the old
+    // convertHolderIntent call) and the 5th argument 'dungeon:36' is missing.
+    const { db, emitter, listener } = harness();
+    findOpen.mockResolvedValue('dungeon:36');
+    convertHolder.mockResolvedValue(moved(1, [7]));
+    db.limit
+      .mockResolvedValueOnce([{ gameId: 99 }])
+      .mockResolvedValueOnce([{ id: 5 }]);
+
+    await listener.onParticipantJoined({ eventId: 42, userId: 7 });
+
+    expect(convertHolder).toHaveBeenCalledWith(db, 99, 7, 42, 'dungeon:36');
+    expect(emitter.emit).toHaveBeenNthCalledWith(1, LFG_EVENTS.GROUP_CHANGED, {
+      gameId: 99,
+      reason: 'playing',
+      eventId: 42,
+      groupKey: 'dungeon:36',
+    });
+    expect(emitter.emit).toHaveBeenNthCalledWith(2, LFG_EVENTS.GROUP_CHANGED, {
+      gameId: 99,
+      reason: 'withdrawn',
+      userIds: [7],
+    });
   });
 });
 
@@ -191,7 +226,7 @@ describe('LfgQuickPlayListener — ROK-1625 scoping and failure', () => {
   });
 
   it('scopes to the exact event: a Quick Play join for the same game only signals (AC2)', async () => {
-    findOpen.mockResolvedValue(77); // LFG-born session 77 is open for game 99
+    findOpen.mockResolvedValue(null); // session 77 is open; 42 is not LFG-born
     db.limit
       .mockResolvedValueOnce([{ gameId: 99 }]) // QP event 42
       .mockResolvedValueOnce([{ id: 5 }]); // live intent
@@ -210,7 +245,7 @@ describe('LfgQuickPlayListener — ROK-1625 scoping and failure', () => {
     const warn = jest
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
-    findOpen.mockResolvedValue(42);
+    findOpen.mockResolvedValue('');
     convertHolder.mockRejectedValue(new Error('deadlock detected'));
     db.limit
       .mockResolvedValueOnce([{ gameId: 99 }])
@@ -228,7 +263,7 @@ describe('LfgQuickPlayListener — ROK-1625 scoping and failure', () => {
   });
 
   it('converts nothing for an unlinked Discord participant (null userId)', async () => {
-    findOpen.mockResolvedValue(42);
+    findOpen.mockResolvedValue('');
 
     await listener.onParticipantJoined({ eventId: 42, userId: null });
 

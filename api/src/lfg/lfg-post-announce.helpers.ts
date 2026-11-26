@@ -80,6 +80,10 @@ export function announceLfgPost(
       gameId,
       reason: 'joined',
       userIds: [outcome.inserted.userId],
+      // ROK-2352 P1-4 — a keyed joiner attaches to its own group's session.
+      ...(outcome.inserted.groupKey
+        ? { groupKey: outcome.inserted.groupKey }
+        : {}),
     });
   }
   // D8: gated on `>= 2` to match `emitGroupChanged`'s contract — a group

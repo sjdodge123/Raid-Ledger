@@ -35,6 +35,8 @@ export interface LiveSessionInviteArgs {
   userIds: number[];
   /** Configured client URL, or null when none is set; used for the link. */
   clientUrl: string | null;
+  /** ROK-2352 P1-3: the keyed group started; absent = Any / fold. */
+  groupKey?: string;
 }
 
 /**
@@ -53,8 +55,9 @@ export function buildLiveSessionInvite(
   starterUserId: number,
   starterName: string,
   clientUrl: string | null,
+  groupKey = '',
 ): Omit<CreateNotificationInput, 'userId'> {
-  const url = buildLfgInviteUrl(clientUrl, game.slug);
+  const url = buildLfgInviteUrl(clientUrl, game.slug, groupKey);
   const payload: LfgPlayerInvitePayload = {
     gameId: game.id,
     gameSlug: game.slug,
@@ -63,6 +66,7 @@ export function buildLiveSessionInvite(
     inviterName: starterName,
     reasons: [],
     urgency: 'now',
+    ...(groupKey !== '' ? { groupKey } : {}),
     ...(url ? { url } : {}),
   };
   return {
@@ -99,6 +103,7 @@ export async function dispatchLiveSessionInvites(
     args.starterUserId,
     await resolveStarterName(db, args.starterUserId),
     args.clientUrl,
+    args.groupKey ?? '',
   );
   const sent = await Promise.all(
     args.userIds.map((userId) =>
