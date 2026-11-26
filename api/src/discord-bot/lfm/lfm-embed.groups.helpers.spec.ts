@@ -168,6 +168,39 @@ describe('syncKeyedGroups — cap and no-op', () => {
     expect(t.edits).toHaveLength(3);
   });
 
+  it("returns the groups the cap refused, titled by instance, for the '' line", async () => {
+    const open = ['a:1', 'a:2', 'a:3'].map((k) => row(k));
+    const t = harness(
+      true,
+      fakeReads(open, [
+        ['a:1', 2],
+        ['a:2', 2],
+        ['a:3', 2],
+        ['b:1', 2],
+        ['dungeon:36', 3],
+        ['dungeon:389', 4],
+        ['c:1', 1],
+      ]),
+    );
+    const overflow = await syncKeyedGroups(t.deps, game, true);
+    expect(t.posts.map((v) => v.groupKey)).toEqual(['b:1']);
+    expect(overflow).toEqual([
+      { label: 'Deadmines', count: 3 },
+      { label: 'Ragefire', count: 4 },
+    ]);
+  });
+
+  it('returns no overflow under the cap, with no adapter, or for a hidden game', async () => {
+    const counts: Array<[string, number]> = [['dungeon:36', 2]];
+    const under = harness(true, fakeReads([], counts));
+    expect(await syncKeyedGroups(under.deps, game, true)).toEqual([]);
+    const off = harness(false, fakeReads([], counts));
+    expect(await syncKeyedGroups(off.deps, game, true)).toEqual([]);
+    const full = ['a:1', 'a:2', 'a:3', 'a:4'].map((k) => row(k));
+    const hidden = harness(true, fakeReads(full, counts));
+    expect(await syncKeyedGroups(hidden.deps, game, false)).toEqual([]);
+  });
+
   it('does nothing for a game with no keyed rows and no adapter', async () => {
     const reads = fakeReads([], []);
     const t = harness(false, reads);
