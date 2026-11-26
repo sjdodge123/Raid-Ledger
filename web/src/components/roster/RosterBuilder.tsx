@@ -9,6 +9,7 @@ import { Modal } from '../ui/modal';
 import { RoleIcon } from '../shared/RoleIcon';
 import { useAriaLive } from '../../hooks/use-aria-live';
 import { useRosterActions } from './use-roster-actions';
+import { findUnplacedAssignments } from './roster-unplaced';
 
 interface RosterBuilderProps {
     pool: RosterAssignmentResponse[];
@@ -134,7 +135,12 @@ function useRosterBuilderData(props: RosterBuilderProps) {
     const allSlotsFilled = useAllSlotsFilled(roleSlots, assignments, getSlotCount);
     const isCurrentUserInRoster = currentUserId != null && (pool.some(p => p.userId === currentUserId) || assignments.some(a => a.userId === currentUserId));
     const activePugs = pugs.filter(p => p.status === 'pending' || p.status === 'invited');
-    return { isGenericGame, roleSlots, getSlotCount, actions, availableSlots, allSlotsFilled, isCurrentUserInRoster, activePugs };
+    // ROK-2348: rows the grid cannot show count as unassigned in the bar.
+    const barPool = React.useMemo(() => {
+        const unplaced = findUnplacedAssignments(assignments, roleSlots.map(s => s.role), getSlotCount);
+        return unplaced.length > 0 ? [...pool, ...unplaced] : pool;
+    }, [pool, assignments, roleSlots, getSlotCount]);
+    return { isGenericGame, roleSlots, getSlotCount, actions, availableSlots, allSlotsFilled, isCurrentUserInRoster, activePugs, barPool };
 }
 
 export const RosterBuilder = memo(function RosterBuilder(props: RosterBuilderProps) {
@@ -143,7 +149,7 @@ export const RosterBuilder = memo(function RosterBuilder(props: RosterBuilderPro
 
     return (
         <div className="space-y-4">
-            <UnassignedBarSection pool={pool} canEdit={canEdit} stickyExtra={stickyExtra} onBrowseAll={() => d.actions.setBrowseAll(true)} />
+            <UnassignedBarSection pool={d.barPool} canEdit={canEdit} stickyExtra={stickyExtra} onBrowseAll={() => d.actions.setBrowseAll(true)} />
             {canEdit && <AdminButtons pool={pool} allSlotsFilled={d.allSlotsFilled} assignmentCount={assignments.length} actions={d.actions} />}
             <AutoFillModal preview={d.actions.autoFillPreview} onClose={() => d.actions.setAutoFillPreview(null)} onConfirm={d.actions.handleAutoFillConfirm} />
             {d.activePugs.length > 0 && <PugInvitesBar pugs={d.activePugs} onRemovePug={onRemovePug} onEditPug={onEditPug} onRegeneratePugLink={onRegeneratePugLink} />}
