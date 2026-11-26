@@ -284,6 +284,7 @@ async function heldReply(
         body,
         authorId: adminId,
         deletedAt: opts.replyDeleted ? gone : null,
+        deletedAs: opts.replyDeleted ? 'author' : null,
       })
       .returning(),
     'reply',
