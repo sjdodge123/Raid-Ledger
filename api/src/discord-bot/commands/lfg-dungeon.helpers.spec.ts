@@ -80,6 +80,7 @@ describe('buildDungeonChoices (ROK-2352)', () => {
     const [choice] = buildDungeonChoices(
       [descriptor('dungeon:9', 'D'.repeat(140))],
       'd',
+      false,
     );
     expect(choice?.name).toHaveLength(100);
   });
