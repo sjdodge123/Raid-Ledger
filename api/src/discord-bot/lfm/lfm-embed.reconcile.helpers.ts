@@ -8,6 +8,7 @@
  * {@link LfmReconcileDeps}.
  */
 import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
+import { scopeArgs } from './lfm-embed.provenance.helpers';
 import type { LfgGroupingRegistry } from '../../lfg/lfg-grouping.helpers';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import { isVisibleGame } from '../../igdb/igdb-visibility.helpers';
@@ -124,13 +125,13 @@ export async function reconcileView(
 ): Promise<LfmGroupView> {
   // ROK-1494 AC7 — `sessionView` is the SHARED answer; `viewForChange` asks
   // the same helper, so the hot path and the reconcile cannot disagree.
-  const session = await sessionView(db, game);
+  const session = await sessionView(db, game, scope);
   if (session) return session;
-  const converted = await conversionSincePosted(db, row);
+  const converted = await conversionSincePosted(db, row, ...scopeArgs(scope));
   if (converted) return convertedView(db, game, converted);
   const liveGroup = await liveView(db, game, scope);
   if (liveGroup.memberCount >= liveFloorFor(row.postKind)) return liveGroup;
-  return endedView(db, game, row);
+  return endedView(db, game, row, scope);
 }
 
 /** {@link reconcileUntrackedGroups}'s collaborators: the walk's plus a post. */

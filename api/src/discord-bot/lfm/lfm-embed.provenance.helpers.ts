@@ -9,6 +9,11 @@
  */
 import { and, desc, eq, gt, isNotNull, or, sql, type SQL } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
+import {
+  groupScopeFilter,
+  type LfgGroupScope,
+} from '../../lfg/lfg-group-scope.helpers';
+import { openLfgNowEventWhere } from '../../lfg/lfg-playing.helpers';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
 
@@ -104,6 +109,7 @@ export async function latestConversionTarget(
   db: LfgDb,
   gameId: number,
   postedAfter: Date,
+  scope: LfgGroupScope = null,
 ): Promise<LfgConversionTarget | null> {
   const afterPost = gt(schema.lfgIntents.convertedAt, postedAfter);
   const [row] = await db
@@ -113,6 +119,7 @@ export async function latestConversionTarget(
       and(
         eq(schema.lfgIntents.gameId, gameId),
         eq(schema.lfgIntents.status, 'converted'),
+        groupScopeFilter(scope),
         or(afterPost, gt(schema.lfgIntents.expiresAt, postedAfter)),
         hasProvenance(),
       ),
@@ -145,6 +152,7 @@ export async function latestConversionTarget(
 export async function conversionSincePosted(
   db: LfgDb,
   row: { id: string; gameId: number },
+  scope: LfgGroupScope = null,
 ): Promise<LfgConversionTarget | null> {
   const [hit] = await db
     .select(PROVENANCE)
@@ -154,6 +162,7 @@ export async function conversionSincePosted(
       and(
         eq(schema.lfgIntents.gameId, row.gameId),
         eq(schema.lfgIntents.status, 'converted'),
+        groupScopeFilter(scope),
         gt(
           schema.lfgIntents.convertedAt,
           sql`${schema.lfgGroupMessages.postedAt} - ${OWN_CONVERSION_GRACE}`,
@@ -168,4 +177,41 @@ export async function conversionSincePosted(
     )
     .limit(1);
   return hit ? toTarget(hit) : null;
+}
+
+/**
+ * ROK-2352 — the open LFG-born event ONE group started, or null: the same
+ * "open session" predicate as `findOpenLfgNowEventId`, narrowed to the group
+ * whose hands converted into it. A keyed Start now is that group's session,
+ * not the Any post's (and vice versa).
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - The game.
+ * @param groupKey - The group (`''` = Any).
+ */
+export async function readGroupSessionEventId(
+  db: LfgDb,
+  gameId: number,
+  groupKey: string,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ id: schema.events.id })
+    .from(schema.events)
+    .innerJoin(
+      schema.lfgIntents,
+      eq(schema.lfgIntents.convertedToEventId, schema.events.id),
+    )
+    .where(
+      and(
+        openLfgNowEventWhere(gameId),
+        eq(schema.lfgIntents.groupKey, groupKey),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/** The trailing scope argument, omitted for the whole-game scope. */
+export function scopeArgs(scope: LfgGroupScope): [] | [string] {
+  return scope === null ? [] : [scope];
 }

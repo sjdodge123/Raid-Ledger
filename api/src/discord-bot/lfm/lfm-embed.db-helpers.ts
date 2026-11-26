@@ -292,6 +292,7 @@ export async function readConvertedGroup(
 export {
   conversionSincePosted,
   latestConversionTarget,
+  readGroupSessionEventId,
 } from './lfm-embed.provenance.helpers';
 
 /**

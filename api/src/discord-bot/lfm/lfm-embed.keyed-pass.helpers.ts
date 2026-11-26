@@ -10,6 +10,7 @@ import { LFG_ANY_GROUP_KEY } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { isVisibleGame } from '../../igdb/igdb-visibility.helpers';
 import type { LfgGroupingRegistry } from '../../lfg/lfg-grouping.helpers';
+import type { LfgGroupChangedPayload } from '../../lfg/lfg.constants';
 import {
   eligibleUser,
   liveIntent,
@@ -85,10 +86,13 @@ export const LFM_KEYED_RECONNECT_READS: LfmKeyedReconnectReads = {
  *
  * @param deps - The service seams.
  * @param gameId - Game to sync; the caller is already on its chain.
+ * @param change - The `GROUP_CHANGED` that triggered the pass, if any; a
+ *   keyed `converted` / `playing` renders on its own group's post only.
  */
 export async function runKeyedPass(
   deps: LfmKeyedPassDeps,
   gameId: number,
+  change?: LfgGroupChangedPayload,
 ): Promise<void> {
   const registry = deps.registry;
   if (!registry) return;
@@ -102,6 +106,7 @@ export async function runKeyedPass(
         postBudget: deps.postBudget,
         edit: (row, view) => deps.editRow(row, view),
         post: (view) => deps.postNew(game.id, view),
+        ...(change ? { change } : {}),
       },
       game,
       isVisibleGame(game),

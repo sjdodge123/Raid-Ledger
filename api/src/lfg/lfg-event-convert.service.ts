@@ -70,7 +70,7 @@ export class LfgEventConvertService {
         create,
         group,
       );
-      this.emitAfterConvert(gameId, result);
+      this.emitAfterConvert(gameId, result, group.scope);
       return result;
     } catch (error) {
       if (error instanceof ConflictException || created === undefined) {
@@ -97,11 +97,15 @@ export class LfgEventConvertService {
   private emitAfterConvert<T extends { id: number }>(
     gameId: number,
     result: LfgGroupCreateResult<T>,
+    scope: string | null,
   ): void {
+    // ROK-2352 P1-5 — a keyed lock-in names its group, so only that group's
+    // post renders SCHEDULED; the Any post stays open for its own hands.
     this.emitConverted({
       gameId,
       reason: 'converted',
       eventId: result.event.id,
+      ...(scope ? { groupKey: scope } : {}),
     });
     const cleared = result.clearedSiblingUserIds ?? [];
     if (cleared.length > 0) {

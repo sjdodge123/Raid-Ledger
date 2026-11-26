@@ -57,7 +57,7 @@ import {
   TERMINAL_STATE,
   type LfmGroupView,
 } from './lfm-embed.helpers';
-import { liveFloorFor, viewForChange } from './lfm-embed.views';
+import { forAnyRow, liveFloorFor, viewForChange } from './lfm-embed.views';
 import * as lfmOverflow from './lfm-embed.overflow.helpers';
 import {
   anyGroupScope,
@@ -147,7 +147,9 @@ export class LfmEmbedService {
   async onBoardEnabled(): Promise<void> {
     if (!this.clientService.isConnected()) return; // E1
     try {
-      await this.reconcileUntrackedGroups();
+      await reconcileUntrackedGroups(this.keyedDeps());
+      // ROK-2352 P2-6 — the keyed groups at LFM come back too, as on reconnect.
+      await reconcileKeyedGroups(this.keyedDeps());
     } catch (err) {
       this.warn('re-post the LFM messages after the board was enabled', err);
     }
@@ -209,8 +211,11 @@ export class LfmEmbedService {
   }
 
   /** ROK-2352 — the keyed pass (`lfm-embed.keyed-pass.helpers.ts`). */
-  private syncKeyed(gameId: number): Promise<void> {
-    return runKeyedPass(this.keyedDeps(), gameId);
+  private syncKeyed(
+    gameId: number,
+    change?: LfgGroupChangedPayload,
+  ): Promise<void> {
+    return runKeyedPass(this.keyedDeps(), gameId, change);
   }
 
   /** {@link reconcileDeps} plus the registry and the post seam. */
@@ -244,11 +249,12 @@ export class LfmEmbedService {
   private async editForChange(payload: LfgGroupChangedPayload): Promise<void> {
     try {
       const row = await findOpenLfmMessage(this.db, payload.gameId);
-      if (row) await this.editOpenRow(row, payload); // else E4
+      // ROK-2352 P1-5 — a keyed change never ends the Any post.
+      if (row) await this.editOpenRow(row, forAnyRow(payload)); // else E4
     } catch (err) {
       this.warn(`edit the LFM message for game ${payload.gameId}`, err);
     }
-    await this.syncKeyed(payload.gameId);
+    await this.syncKeyed(payload.gameId, payload);
   }
 
   /** The `''` row's edit for one change (the pre-ROK-2352 body). */
@@ -281,8 +287,9 @@ export class LfmEmbedService {
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   async onConnected(): Promise<void> {
     try {
-      await this.reconcileOpenRows();
-      await this.reconcileUntrackedGroups();
+      // D9 worklist + E1 untracked groups (`lfm-embed.reconcile.helpers.ts`).
+      await reconcileOpenRows(this.reconcileDeps());
+      await reconcileUntrackedGroups(this.keyedDeps());
       await reconcileKeyedGroups(this.keyedDeps());
     } catch (err) {
       this.warn('reconcile open LFM messages', err);
@@ -295,14 +302,6 @@ export class LfmEmbedService {
     this.logger.debug('LFM message state is persisted; nothing to drop.');
   }
 
-  /**
-   * D9's worklist pass, in `lfm-embed.reconcile.helpers.ts`. Delegates to the
-   * module function of the same name with this service's collaborators.
-   */
-  private reconcileOpenRows(): Promise<void> {
-    return reconcileOpenRows(this.reconcileDeps());
-  }
-
   /** The collaborators the reconcile walk needs, bound to this service. */
   private reconcileDeps(): LfmReconcileDeps {
     return {
@@ -312,11 +311,6 @@ export class LfmEmbedService {
       editRow: (row, view) => this.editRow(row, view),
       warn: (action, err) => this.warn(action, err),
     };
-  }
-
-  /** E1's other half — `reconcileUntrackedGroups` in the reconcile module. */
-  private reconcileUntrackedGroups(): Promise<void> {
-    return reconcileUntrackedGroups(this.keyedDeps());
   }
 
   /**

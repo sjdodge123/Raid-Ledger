@@ -36,7 +36,15 @@ import {
   type LfmGameRow,
   type LfmMessageRow,
 } from './lfm-embed.db-helpers';
-import { expiredView, liveFloorFor, liveView } from './lfm-embed.views';
+import type { LfgGroupChangedPayload } from '../../lfg/lfg.constants';
+import {
+  endedView,
+  expiredView,
+  keyedChangeView,
+  liveFloorFor,
+  liveView,
+  sessionView,
+} from './lfm-embed.views';
 
 /** Spec Q11: at most this many open keyed posts per game. */
 export const LFG_BOARD_MAX_GROUP_POSTS_PER_GAME = 4;
@@ -73,6 +81,24 @@ export interface LfmKeyedReads {
     now: Date,
   ): Promise<Map<string, number>>;
   liveView(db: LfgDb, game: LfmGameRow, scope: string): Promise<LfmGroupView>;
+  /** The group's own open session, or null (a fake may omit it: none). */
+  groupSession?(
+    db: LfgDb,
+    game: LfmGameRow,
+    scope: string,
+  ): Promise<LfmGroupView | null>;
+  /** This group's `converted`/`playing` render, or null (omitted: none). */
+  changeView?(
+    db: LfgDb,
+    game: LfmGameRow,
+    change: LfgGroupChangedPayload,
+  ): Promise<LfmGroupView | null>;
+  /** A below-floor group's ending: provenance, else EXPIRED (omitted: EXPIRED). */
+  ended?(
+    db: LfgDb,
+    game: LfmGameRow,
+    row: LfmMessageRow,
+  ): Promise<LfmGroupView>;
 }
 
 /** What one keyed sync pass needs from the service. */
@@ -87,6 +113,8 @@ export interface LfmKeyedSyncDeps {
   reads?: LfmKeyedReads;
   /** The ≤3-new-posts-per-10-min ration; absent = unrationed (specs only). */
   postBudget?: LfmKeyedPostBudget;
+  /** The change that triggered this pass; renders only on its own group. */
+  change?: LfgGroupChangedPayload;
 }
 
 /** Open rows of the game's keyed groups (never the `''` row). */
@@ -136,6 +164,10 @@ export const LFM_KEYED_READS: LfmKeyedReads = {
   listOpen: listOpenKeyedLfmMessages,
   countHands: countLiveKeyedHands,
   liveView,
+  groupSession: (db, game, scope) => sessionView(db, game, scope),
+  changeView: keyedChangeView,
+  // P2-1: a lock-in / poll that ended the group renders SCHEDULED, not EXPIRED.
+  ended: (db, game, row) => endedView(db, game, row, row.groupKey),
 };
 
 /** `"<game> — <instance>"`, or the bare game name for an unknown key. */
@@ -177,6 +209,32 @@ function keyedEndView(
 }
 
 /**
+ * ROK-2352 P1-5 / P2-1 — what one open keyed row renders, in precedence order:
+ * this group's own `converted` / `playing` change; its open session (AC7, as
+ * the Any post); its live read at or above the floor; else how it ended
+ * (provenance — SCHEDULED — before EXPIRED).
+ */
+async function keyedRowView(
+  deps: Pick<LfmKeyedSyncDeps, 'db' | 'reads' | 'change'>,
+  game: LfmGameRow,
+  row: LfmMessageRow,
+  live: boolean,
+): Promise<LfmGroupView> {
+  const reads = deps.reads ?? LFM_KEYED_READS;
+  const change = deps.change;
+  const own =
+    change?.groupKey === row.groupKey
+      ? await reads.changeView?.(deps.db, game, change)
+      : null;
+  if (own) return own;
+  const session = await reads.groupSession?.(deps.db, game, row.groupKey);
+  if (session) return session;
+  if (live) return reads.liveView(deps.db, game, row.groupKey);
+  if (reads.ended) return reads.ended(deps.db, game, row);
+  return keyedEndView(game, row, game.name);
+}
+
+/**
  * One keyed pass for a game. Runs on the game's chain; never throws for one
  * row's sake beyond what `deps.edit` / `deps.post` already contain.
  *
@@ -205,12 +263,8 @@ export async function syncKeyedGroups(
   for (const row of open) {
     const title = await keyedGroupTitle(adapter, game, row.groupKey);
     const live = (counts.get(row.groupKey) ?? 0) >= liveFloorFor(row.postKind);
-    await deps.edit(
-      row,
-      live
-        ? await keyedLiveView(deps, game, row.groupKey, title)
-        : keyedEndView(game, row, title),
-    );
+    const view = await keyedRowView(deps, game, row, live);
+    await deps.edit(row, { ...view, gameName: title, groupKey: row.groupKey });
   }
   if (!allowPost) return [];
   return postNewKeyedGroups(deps, adapter, game, open, counts, now);
