@@ -10,6 +10,9 @@
  * too. So each "skipped" case is compared with the SAME skipped state repaired
  * by the frozen originals — 0176, or 0174 + 0186. Later drift lands on both
  * sides identically and cancels out; the `laterMigrations` baseline proves it.
+ * One exception: a later DROP of an object 0193 guards by name (0320 drops two
+ * lfg_invites indexes) is re-added by 0193 on HEAD, so the 0174 case compares
+ * only lfg_intents — lfg_invites is the 0176 case's job.
  *
  * Every case runs inside a transaction that is rolled back — Postgres DDL is
  * transactional, so the dropped objects never leak to other specs. Statements
@@ -164,6 +167,16 @@ async function readCatalog(tx: Tx): Promise<CatalogState> {
   return { lfgInvites: reg || null, columns, constraints, indexes };
 }
 
+/** The lfg_intents slice of a catalog — the only table 0174 / 0186 touch. */
+function intentsOnly(c: CatalogState): Omit<CatalogState, 'lfgInvites'> {
+  const own = (v: string) => v.startsWith('lfg_intents.');
+  return {
+    columns: c.columns.filter(own),
+    constraints: c.constraints.filter(own),
+    indexes: c.indexes.filter((v) => v.includes(' ON public.lfg_intents ')),
+  };
+}
+
 async function readState(tx: Tx): Promise<DbState> {
   const [prefs] = await list(
     tx,
@@ -259,8 +272,11 @@ describe.each<[string, Step]>([
         c.includes('lfg_intents_urgency_check'),
       ),
     ).toContain("'tonight'");
-    // 0193 also re-sets channel_prefs, which 0174/0186 never touch — the 0176 case pins that.
-    expect(repaired.catalog).toEqual(oracle.catalog);
+    // 0193 also re-sets channel_prefs and re-adds any lfg_invites index a later
+    // migration dropped (0320 swapped the *_sent_at ones for *_group_*), which
+    // 0174/0186 never touch — the 0176 case pins lfg_invites, so compare lfg_intents.
+    expect(repaired.catalog.lfgInvites).toBe(oracle.catalog.lfgInvites);
+    expect(intentsOnly(repaired.catalog)).toEqual(intentsOnly(oracle.catalog));
   });
 
   it('keeps every existing object verbatim on an up-to-date DB, and a second run changes nothing', async () => {
