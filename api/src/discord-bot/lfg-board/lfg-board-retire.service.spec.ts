@@ -258,7 +258,8 @@ describe('LfgBoardRetireService — the row is re-read inside the chain', () => 
     findOpen.mockResolvedValue(row({ gameId: 11, id: 'row-11' }));
 
     expect(await service().retireOpenPosts()).toBe(1);
-    expect(findOpen).toHaveBeenCalledWith({}, 11);
+    // ROK-2352 — the re-read is scoped to the row's own group (`''` here).
+    expect(findOpen).toHaveBeenCalledWith({}, 11, '');
   });
 });
 
@@ -365,8 +366,15 @@ describe('LfgBoardRetireService — an ended group keeps its terminal render', (
  * retired at all.
  */
 describe('LfgBoardRetireService — per-group farewell (ROK-2352)', () => {
-  /** WoW with its grouping plugin active: the `''` row is the Any group. */
-  const activeRegistry = { getAdapter: jest.fn(() => ({})) };
+  /**
+   * WoW with its grouping plugin active: the `''` row is the Any group. The
+   * adapter answers `describeGroup` (required by `LfgGroupingAdapter`) so a
+   * keyed farewell can keep its instance title.
+   */
+  const adapter = {
+    describeGroup: jest.fn(() => Promise.resolve({ label: 'Molten Core' })),
+  };
+  const activeRegistry = { getAdapter: jest.fn(() => adapter) };
 
   beforeEach(() => {
     findOpen.mockImplementation((_db, gameId, groupKey = '') =>
@@ -391,6 +399,11 @@ describe('LfgBoardRetireService — per-group farewell (ROK-2352)', () => {
     expect(currentView).toHaveBeenCalledWith({}, expect.anything(), 'raid:409');
     expect(close).toHaveBeenCalledWith({}, 'row-raid:409', 'closed', 4);
     expect(retired).toBe(1);
+    expect(board.editThread.mock.calls[0]?.[1]).toMatchObject({
+      gameName: 'DRG — Molten Core',
+      groupKey: 'raid:409',
+      boardRetired: true,
+    });
   });
 
   it('scopes the Any row to `` while the adapter is active', async () => {
