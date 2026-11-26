@@ -81,7 +81,8 @@ export function LineupDetailBody(props: Props): JSX.Element {
     }
 
     if (hasEntries) {
-        return <NominationGrid entries={lineup.entries} lineupId={lineup.id} />;
+        // ROK-2349: only an archived lineup reaches this grid — read-only.
+        return <NominationGrid entries={lineup.entries} lineupId={lineup.id} readOnly />;
     }
 
     return <LineupEmptyState />;

@@ -1145,9 +1145,11 @@ one set of action components, no phone-only modal.
 **New pattern: a core lazy route mounting a plugin page.** `/valheim/characters/:id` is declared in core
 `app-routes.tsx` and lazy-loads `plugins/valheim/pages/valheim-character-page.tsx` through `lazy-routes.ts`
 (`lazyWithRetry`), so the plugin page stays out of the main bundle and core imports nothing else from the
-plugin. No plugin route seam exists yet; until one does, a plugin page is added this way (one route line + one
-lazy entry), and links to it come from the plugin's own route helper (`lib/valheim-routes.ts`), never a
-hand-written path.
+plugin. A plugin page is added this way (one route line + one lazy entry), and links to it come from the plugin's
+own route helper (`lib/valheim-routes.ts`), never a hand-written path. **The route element is always wrapped in
+`<PluginRoute slug="…">` (`components/routing/plugin-route.tsx`, ROK-2358)**: it renders nothing until the
+plugin list settles, then the page while the plugin is active, else `fallback` (default `NotFoundPage`; Addon
+errors redirects to General, `/p/guild/:slug` shows its own card not-found so off reads like unknown).
 
 **Plugin rows in Admin → General (ROK-2099).** A plugin page under `/admin/settings/general/…` gets its
 sidebar row through `buildNavSections`'s 4th parameter, `pluginGeneralItems` (`admin-nav-data.tsx`), placed after
@@ -1155,7 +1157,7 @@ Logs. The plugin declares its rows in its `register.ts` through
 `PluginHandle.registerAdminGeneralNavItems` (WoW: `ADDON_ERRORS_NAV_ITEMS` from
 `plugins/wow/admin/addon-errors-route.ts`); core reads them from the host API `plugins/admin-nav-items.ts`
 (`useAdminGeneralNavItems()` — only ACTIVE plugins' rows) in `admin-sidebar.tsx` and `more-drawer-submenus.tsx`,
-never importing the plugin (boundary guard `pelican-core-boundary.guard.test.ts`); the page itself redirects to General while the plugin is off.
+never importing the plugin (boundary guard `pelican-core-boundary.guard.test.ts`); its `PluginRoute` redirects to General while the plugin is off.
 Operators never see these rows (General is filtered to `OPERATOR_SETTINGS_PATHS`).
 
 ### Pattern note — raised centre bottom-nav action (ROK-1875)

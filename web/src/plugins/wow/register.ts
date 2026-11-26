@@ -13,6 +13,7 @@ import {
 } from './slots/lazy-slots';
 import { CharacterCreateImportForm } from './slots/character-create-import-form';
 import { CharacterCreateInlineImport } from './slots/character-create-inline-import';
+import { InviteCharacterImport } from './slots/invite-character-import';
 import { CharacterDetailSections } from './slots/character-detail-sections';
 import { CharacterDetailHeaderBadges } from './slots/character-detail-header-badges';
 import { ProfileCharacterActions } from './slots/profile-character-actions';
@@ -64,6 +65,7 @@ blizzard.registerSlot('character-detail:read-only-actions', CharacterDetailReadO
 blizzard.registerSlot('character-create:header-actions', CharacterCreateHeaderActions);
 blizzard.registerSlot('character-create:import-form', CharacterCreateImportForm);
 blizzard.registerSlot('character-create:inline-import', CharacterCreateInlineImport);
+blizzard.registerSlot('invite:character-import', InviteCharacterImport);
 blizzard.registerSlot('event-create:content-browser', EventCreateContentBrowser);
 blizzard.registerSlot('event-detail:content-sections', EventDetailContentSections);
 blizzard.registerSlot('event-detail:content-sections', BossLootPanel, 5);

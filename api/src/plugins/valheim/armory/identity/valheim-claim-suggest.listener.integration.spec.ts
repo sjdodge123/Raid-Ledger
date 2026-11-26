@@ -9,19 +9,21 @@
  */
 import { and, eq } from 'drizzle-orm';
 import { ValheimCharacterMessageSchema } from '@raid-ledger/contract';
-import { getTestApp, type TestApp } from '../../common/testing/test-app';
-import { truncateAllTables } from '../../common/testing/integration-helpers';
-import { nonEmpty } from '../../common/testing/narrow';
-import * as schema from '../../drizzle/schema';
-import { NotificationDedupService } from '../../notifications/notification-dedup.service';
-import { fakeServer } from '../../plugins/pelican/testing/pelican-fixtures';
-import { loadValheimFixture } from '../../plugins/valheim/link/ingest/valheim-link-ingest.testing';
+import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
+import { truncateAllTables } from '../../../../common/testing/integration-helpers';
+import { nonEmpty } from '../../../../common/testing/narrow';
+import * as schema from '../../../../drizzle/schema';
+import { NotificationDedupService } from '../../../../notifications/notification-dedup.service';
+import { fakeServer } from '../../../pelican/testing/pelican-fixtures';
+import { loadValheimFixture } from '../../link/ingest/valheim-link-ingest.testing';
 import {
   CLAIM_REPLY_COPY,
   CLAIM_SUGGEST_THROTTLE_TTL_SECONDS,
   claimSuggestKeys,
-} from '../../plugins/valheim/armory/identity/valheim-claim-suggest.copy';
+} from './valheim-claim-suggest.copy';
 import { ValheimClaimSuggestListener } from './valheim-claim-suggest.listener';
+import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
+import { VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 
 const NAME = 'Quillavar';
 let testApp: TestApp;
@@ -31,15 +33,28 @@ let n = 0;
 /** Every key a test marked; released after it (the truncate keeps Redis). */
 const touched: string[] = [];
 
+const registry = () => testApp.app.get(PluginRegistryService);
+
 beforeAll(async () => {
   testApp = await getTestApp();
   listener = testApp.app.get(ValheimClaimSuggestListener);
   dedup = testApp.app.get(NotificationDedupService);
 });
 
+// ROK-2356: the buttons only act while Valheim is on. Boot does not install
+// it and every truncate drops the `plugins` row, so install + activate per
+// test (as `valheim-identity.integration.spec.ts` does), and deactivate
+// BEFORE the truncate removes the row `deactivate` looks up.
+beforeEach(async () => {
+  testApp.seed = await truncateAllTables(testApp.db);
+  await registry().ensureInstalled(VALHEIM_PLUGIN_ID);
+  await registry().activate(VALHEIM_PLUGIN_ID);
+});
+
 afterEach(async () => {
   await dedup.releaseKeys(touched.splice(0));
-  testApp.seed = await truncateAllTables(testApp.db);
+  if (registry().isActive(VALHEIM_PLUGIN_ID))
+    await registry().deactivate(VALHEIM_PLUGIN_ID);
 });
 
 async function insertServer(): Promise<number> {
