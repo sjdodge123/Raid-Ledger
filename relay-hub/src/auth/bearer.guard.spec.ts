@@ -79,6 +79,7 @@ describe('HubBearerGuard (ROK-1672)', () => {
       instanceId: A,
       tokenHash: hashToken(TOKEN_A),
       status: 'approved',
+      trustTier: 'contributor',
     });
   });
 
