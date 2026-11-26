@@ -110,6 +110,11 @@ export type LfmTarget =
 export interface LfmGroupView {
   state: LfmRenderState;
   gameId: number;
+  /**
+   * ROK-2352 — the group this post renders. Absent = `''`, the whole-game
+   * post, so every pre-groups fixture and call site renders byte for byte.
+   */
+  groupKey?: string;
   gameName: string;
   gameSlug: string;
   gameCoverUrl?: string | null;

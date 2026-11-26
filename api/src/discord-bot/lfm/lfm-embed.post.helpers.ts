@@ -180,6 +180,7 @@ async function postForum(
     threadId: posted.threadId,
     postKind: 'forum',
     lastMemberCount: view.memberCount,
+    ...(view.groupKey ? { groupKey: view.groupKey } : {}),
   });
   // ROK-1483 D4: the mirror binds on an EVENT, not on a service edge. A
   // lineup or poll surface emits the same one with a different kind
@@ -209,5 +210,6 @@ async function postText(
     messageId: message.id,
     postKind: 'text',
     lastMemberCount: view.memberCount,
+    ...(view.groupKey ? { groupKey: view.groupKey } : {}),
   });
 }

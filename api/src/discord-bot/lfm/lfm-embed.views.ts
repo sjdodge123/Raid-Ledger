@@ -13,6 +13,7 @@ import type {
   LfgGroupChangedPayload,
   LfgGroupChangedReason,
 } from '../../lfg/lfg.constants';
+import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
 import {
@@ -62,10 +63,13 @@ export function liveFloorFor(postKind: string): number {
 export async function liveView(
   db: LfgDb,
   game: LfmGameRow,
+  scope: LfgGroupScope = null,
 ): Promise<LfmGroupView> {
-  const group = await readLiveGroup(db, game);
+  const group = await readLiveGroup(db, game, scope);
   return {
     ...baseView(game),
+    // ROK-2352: only a keyed group carries its key; `''`/fold stays absent.
+    ...(scope ? { groupKey: scope } : {}),
     state: 'open',
     memberCount: group.members.length,
     memberNames: displayNames(group.members),
