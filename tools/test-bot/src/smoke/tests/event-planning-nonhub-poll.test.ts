@@ -1,8 +1,9 @@
 /**
  * ROK-2272 S10 — a NON-hub standalone scheduling poll gets its Discord-only
- * post in the event-planning forum (this run's own `rl-smoke-forum-<runId>`,
- * the only bound forum, so the resolver picks it — ROK-2208 `setup`):
- *  1. no post before any vote (a sync never creates one);
+ * post in the event-planning forum (the run's shared forum from
+ * `hub-forum-shared.ts`, the only bound forum, so the resolver picks it):
+ *  1. no post before any vote (a sync never creates one) — posts other tests
+ *     left in the shared forum are snapshotted first and ignored;
  *  2. the first vote — a slot suggested by a voter linked to the companion
  *     bot's Discord id (the suggest auto-votes) — creates
  *     `Poll · closes <date> — <game>` (ROK-2315)
@@ -12,12 +13,13 @@
  *  4. the organiser votes (an open poll is locked in only by a voter), then
  *     lock-in posts `is happening!` + the event link;
  *  5. `close-planning-post-now` + `lock-sweep` lock and archive the post.
- * `finally` deletes the post, the event, the binding and the forum, archives
+ * `finally` deletes the post and the event, archives
  * the poll's lineup and re-links the DM recipient (the fixture voter is left
  * unlinked: its own fixture id is not a linkable id).
  */
 import { ChannelType, type ForumChannel, type ThreadChannel } from "discord.js";
 import { getGuild } from "../../client.js";
+import { activePostIds } from "./hub-forum-shared.js";
 import { pollForCondition } from "../../helpers/polling.js";
 import { linkDiscord, seedFixtureUser, type FixtureUser } from "../fixtures.js";
 import type { SmokeTest, TestContext } from "../types.js";
@@ -63,18 +65,21 @@ async function createNonHubPoll(
 const schedulePath = (p: Poll) =>
   `/lineups/${String(p.lineupId)}/schedule/${String(p.matchId)}`;
 
-/** Sync (never creates) then prove the run's fresh forum holds no post. */
+/** Sync (never creates) then prove the forum holds no post beyond `before`. */
 async function expectNoPostYet(
   ctx: TestContext,
   poll: Poll,
   forum: ForumChannel,
+  before: Set<string>,
 ): Promise<void> {
   await ctx.api.post(
     `${FIXTURES}/polls/${String(poll.matchId)}/sync-planning-post`,
     {},
   );
   const active = await forum.threads.fetchActive();
-  const names = [...active.threads.values()].map((t) => t.name);
+  const names = [...active.threads.values()]
+    .filter((t) => !before.has(t.id))
+    .map((t) => t.name);
   if (names.length > 0)
     fail("ROK-2272 S10: no poll post may exist before the first vote", names);
 }
@@ -92,7 +97,10 @@ async function voterSuggests(voter: FixtureUser, poll: Poll): Promise<number> {
   return res.id;
 }
 
-async function expectPollPost(forum: ForumChannel): Promise<ThreadChannel> {
+async function expectPollPost(
+  forum: ForumChannel,
+  before: Set<string>,
+): Promise<ThreadChannel> {
   let names: string[] = [];
   try {
     return await pollForCondition(async () => {
@@ -100,7 +108,7 @@ async function expectPollPost(forum: ForumChannel): Promise<ThreadChannel> {
       names = [...active.threads.values()].map((t) => t.name);
       return (
         active.threads.find(
-          (t) => DATED_POLL_TITLE.test(t.name),
+          (t) => !before.has(t.id) && DATED_POLL_TITLE.test(t.name),
         ) ?? null
       );
     }, TIMEOUT_MS);
@@ -245,20 +253,20 @@ async function pingThenLockIn(
 }
 
 async function nonHubPollPost(ctx: TestContext): Promise<void> {
-  const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
+  const made: Made = {};
   let poll: Poll | null = null;
   let postId: string | null = null;
   let voter: FixtureUser | null = null;
   try {
-    const { forum, gameId } = await setup(ctx, runId, made);
+    const { forum, gameId } = await setup(ctx);
+    const before = await activePostIds(forum);
     await expectResolvedForum(ctx, forum.id);
     voter = await seedFixtureUser(ctx.api, 3, VOTER_SLOT);
     await linkDiscord(ctx.api, voter.userId, ctx.testBotDiscordId, BOT_NAME);
     poll = await createNonHubPoll(ctx, gameId);
-    await expectNoPostYet(ctx, poll, forum);
+    await expectNoPostYet(ctx, poll, forum, before);
     const slotId = await voterSuggests(voter, poll);
-    const post = await expectPollPost(forum);
+    const post = await expectPollPost(forum, before);
     postId = post.id;
     if (post.parentId !== forum.id)
       fail(

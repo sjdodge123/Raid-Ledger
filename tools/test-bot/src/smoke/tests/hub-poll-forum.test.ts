@@ -1,7 +1,7 @@
 /**
  * ROK-2272 S8 — a hub-tagged standalone scheduling poll's Discord post, end to
- * end against the real guild, on this run's own `rl-smoke-forum-<runId>`
- * (ROK-2208 `setup`; binding it dresses the forum with THIS build's decor, so
+ * end against the real guild, on the run's shared forum (`hub-forum-shared.ts`;
+ * binding it dresses the forum with THIS build's decor, so
  * the `Poll` kind tag exists):
  *  1. the poll gets its RL thread (`GET /scheduling-polls/:id/discussion`);
  *  2. the first vote (the suggest auto-vote) creates the post
@@ -15,7 +15,7 @@
  *     api copy `CLOSING_LINE_COPY.pollLockedIn` cannot be imported here and
  *     the event title is markdown-escaped, so only the stable parts match);
  *  5. `close-discussion-now` + `lock-sweep` lock and archive the post.
- * `finally` deletes the post, the event, the binding and the forum, and
+ * `finally` deletes the post and the event, and
  * archives the poll's lineup.
  */
 import { ChannelType, type ForumChannel, type ThreadChannel } from "discord.js";
@@ -299,11 +299,11 @@ export async function cleanup(
 
 async function hubPollForum(ctx: TestContext): Promise<void> {
   const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
+  const made: Made = {};
   let poll: Poll | null = null;
   let postId: string | null = null;
   try {
-    const { forum, hub, gameId } = await setup(ctx, runId, made);
+    const { forum, hub, gameId } = await setup(ctx);
     poll = await createPoll(ctx, hub, gameId);
     const thread = await waitDiscussion(
       ctx,
