@@ -33,7 +33,8 @@ export function SigninCodePanel({ onSignedIn }: { onSignedIn: (user: User) => vo
     }, [state.phase, start]);
 
     if (signIn.phase === 'held') {
-        return <SigninCodeSignedIn name={signIn.name} onSignOut={signOut} />;
+        // "Not you?": drop the held session AND the approved code, back to "Get a code".
+        return <SigninCodeSignedIn name={signIn.name} onSignOut={() => { signOut(); cancel(); }} />;
     }
     if (signIn.phase === 'failed') {
         return <SigninCodeMessage message={SIGNIN_FAILED_COPY} action="Get a new code" onAction={() => { signOut(); void start(); }} alert />;

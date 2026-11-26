@@ -63,11 +63,20 @@ describe('SigninCodePanel success hold (ROK-2370)', () => {
 
     it('"Not you? Sign out" signs out and never adopts the session', async () => {
         const { onSignedIn } = await renderApproved();
-        fireEvent.click(notYou() as HTMLElement);
+        fireEvent.click(screen.getByRole('button', { name: 'Not you? Sign out' }));
         await act(async () => { await vi.advanceTimersByTimeAsync(SIGNED_IN_HOLD_MS * 2); });
         expect(logout).toHaveBeenCalledTimes(1);
         expect(login, '"Not you?" must not publish the session').not.toHaveBeenCalled();
         expect(onSignedIn).not.toHaveBeenCalled();
+    });
+
+    it('after "Not you? Sign out" the panel offers a new code instead of "Signing you in…"', async () => {
+        await renderApproved();
+        fireEvent.click(screen.getByRole('button', { name: 'Not you? Sign out' }));
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        expect(screen.queryByText('Signing you in…'), 'a rejected account must not read as signing in').not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Get a code' }), 'the member must be able to start over').toBeInTheDocument();
+        expect(sessionStorage.getItem(SIGNIN_CODE_STORAGE_KEY)).toBeNull();
     });
 
     it('an unmount during the hold still adopts the session and hands the user over', async () => {
