@@ -72,8 +72,9 @@ export class AiSuggestionsService {
 
   /**
    * Public entry point called from the controller. Returns an empty payload
-   * (no enqueue) when admins have disabled the feature via
-   * `ai_suggestions_enabled = 'false'`.
+   * (no enqueue, no cached rows) when admins have disabled the feature via
+   * `ai_suggestions_enabled = 'false'`, or while the `ai` plugin is
+   * inactive (ROK-2353).
    */
   async getSuggestions(
     lineupId: number,
@@ -85,7 +86,7 @@ export class AiSuggestionsService {
         `AI suggestions personalize=me served-from-base | lineup=${lineupId}`,
       );
     }
-    if (await this.isFeatureDisabled()) {
+    if (!this.llmService.isPluginActive() || (await this.isFeatureDisabled())) {
       return this.emptyResponse();
     }
     const scope = await resolveVoterScope(this.db, lineup);
