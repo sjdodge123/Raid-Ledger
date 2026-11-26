@@ -245,12 +245,16 @@ function fetchInvited(
   db: LfgDb,
   gameId: number,
   profiles: Profile[],
+  scope: LfgGroupScope,
 ): Promise<Set<number>> {
+  // ROK-2352 P2-5: the no-repeat rule is per group (§4.2), so an invite to
+  // another group of the game never greys this group's Invite button.
   return findInvitedUserIds(
     db,
     gameId,
     profiles.map((p) => p.userId),
     noRepeatHorizonStart(new Date()),
+    scope,
   );
 }
 
@@ -335,7 +339,7 @@ export async function listSuggestions(
     if (userId === viewerId || holders.has(userId)) candidates.delete(userId);
   }
   const profiles = await fetchProfiles(db, [...candidates.keys()]);
-  const invited = await fetchInvited(db, gameId, profiles);
+  const invited = await fetchInvited(db, gameId, profiles, scope);
   const suggestions = profiles
     .map((p) =>
       toSuggestion(
