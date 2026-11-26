@@ -65,6 +65,7 @@ import {
 } from '../commands/lfg.command.helpers';
 import { resolveLfgCaller } from '../commands/lfg.command';
 import { findLfmMessageByIds } from '../lfg-board/lfg-board.db-helpers';
+import { parseLfgBoardCustomId } from '../lfg-board/lfg-board-custom-id.helpers';
 import {
   DiscordListenerBinding,
   gatewayBinding,
@@ -82,14 +83,8 @@ export interface LfgJoinPress {
   gameId: number;
   /** `board` keeps the ROK-1471 week default; `dm` matches the group. */
   source: 'board' | 'dm';
-}
-
-/** The game id trailing a `{prefix}:` custom id, or null. */
-function gameIdAfter(customId: string, prefix: string): number | null {
-  if (!customId.startsWith(`${prefix}:`)) return null;
-  const raw = customId.slice(prefix.length + 1);
-  if (!/^\d+$/.test(raw)) return null;
-  return Number(raw);
+  /** ROK-2352 — `''` for a v1 id (every pre-ROK-2352 button). */
+  groupKey: string;
 }
 
 /**
@@ -99,7 +94,7 @@ function gameIdAfter(customId: string, prefix: string): number | null {
  * @returns The game id, or null when this is not a board join button.
  */
 export function parseJoinCustomId(customId: string): number | null {
-  return gameIdAfter(customId, LFG_BUTTON_IDS.JOIN);
+  return parseLfgBoardCustomId(customId, LFG_BUTTON_IDS.JOIN)?.gameId ?? null;
 }
 
 /**
@@ -113,10 +108,10 @@ export function parseJoinCustomId(customId: string): number | null {
  * @returns What was pressed, or null when this is neither join button.
  */
 export function parseJoinPress(customId: string): LfgJoinPress | null {
-  const board = parseJoinCustomId(customId);
-  if (board !== null) return { gameId: board, source: 'board' };
-  const dm = gameIdAfter(customId, LFG_BUTTON_IDS.INVITE_JOIN);
-  return dm === null ? null : { gameId: dm, source: 'dm' };
+  const board = parseLfgBoardCustomId(customId, LFG_BUTTON_IDS.JOIN);
+  if (board !== null) return { ...board, source: 'board' };
+  const dm = parseLfgBoardCustomId(customId, LFG_BUTTON_IDS.INVITE_JOIN);
+  return dm === null ? null : { ...dm, source: 'dm' };
 }
 
 @Injectable()
@@ -181,7 +176,7 @@ export class LfgJoinListener {
     interaction: ButtonInteraction,
     press: LfgJoinPress,
   ): Promise<LfgJoinReply> {
-    const { gameId } = press;
+    const { gameId, groupKey } = press;
     const caller = await resolveLfgCaller(this.db, interaction.user.id);
     if (!caller) return LFG_UNLINKED_REPLY; // E8
     // E9: `NotDeactivatedGuard` guards the HTTP routes only, so a gateway click
@@ -198,9 +193,12 @@ export class LfgJoinListener {
       readGroupHorizon(this.db, gameId),
       this.settingsService.getDiscordBotTimezone(),
     ]);
+    // ROK-2352 — a v2 id raises the hand in its group; v1 omits the key
+    // (`''`), so a pre-ROK-2352 press writes exactly what it always did.
     return this.write(caller.id, gameId, {
       ...horizonJoinRequest(horizon),
       timezone,
+      ...(groupKey ? { groupKey } : {}),
     });
   }
 

@@ -148,6 +148,31 @@ function build(
 }
 
 describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
+  it('ROK-2352 — a v2 board id raises the hand in the group it names', async () => {
+    const service = makeService();
+    const { listener } = build([LINKED, OPEN_ROW, [], []], service);
+    const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42:raid:745`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+      timezone: 'UTC',
+      groupKey: 'raid:745',
+    });
+  });
+
+  it('ROK-2352 — parseJoinPress reads v1 as the whole-game group', () => {
+    expect(parseJoinPress(`${LFG_BUTTON_IDS.JOIN}:42`)).toEqual({
+      gameId: 42,
+      groupKey: '',
+      source: 'board',
+    });
+    expect(
+      parseJoinPress(`${LFG_BUTTON_IDS.INVITE_JOIN}:42:dungeon:9`),
+    ).toEqual({ gameId: 42, groupKey: 'dungeon:9', source: 'dm' });
+  });
+
   it('writes through LfgService.createIntent for the user who CLICKED, and edits no Discord message itself (T11)', async () => {
     const service = makeService();
     // caller -> board row -> now-hand lookup (empty) -> tonight lookup (empty)
@@ -342,9 +367,14 @@ describe('LfgJoinListener DM branch (ROK-1455 walk feedback 3)', () => {
   it('parses both join buttons and keeps their namespaces disjoint', () => {
     expect(parseJoinPress(`${LFG_BUTTON_IDS.JOIN}:42`)).toEqual({
       gameId: 42,
+      groupKey: '',
       source: 'board',
     });
-    expect(parseJoinPress(DM_42)).toEqual({ gameId: 42, source: 'dm' });
+    expect(parseJoinPress(DM_42)).toEqual({
+      gameId: 42,
+      groupKey: '',
+      source: 'dm',
+    });
     expect(parseJoinPress(`${LFG_BUTTON_IDS.INVITE_DECLINE}:42`)).toBeNull();
     expect(parseJoinPress(`${LFG_BUTTON_IDS.INVITE_JOIN}:abc`)).toBeNull();
     expect(

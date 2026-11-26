@@ -21,6 +21,7 @@ import {
 } from '../lfg-now/lfg-now-indicator.helpers';
 import type { LfmRenderState } from '../lfm/lfm-embed.helpers';
 import { leaveCustomId } from '../listeners/lfg-leave.helpers';
+import { buildLfgBoardCustomId } from './lfg-board-custom-id.helpers';
 import {
   LFG_JOIN_BUTTON_LABEL,
   LFG_LEAVE_BUTTON_LABEL,
@@ -29,8 +30,13 @@ import {
 
 /** Everything the row needs, already resolved by the caller. */
 export interface LfgPostComponentInputs {
-  /** Game the group is for — the only thing the button carries. */
+  /** Game the group is for — carried by the button with the group key. */
   gameId: number;
+  /**
+   * ROK-2352 — the group's key. Absent or `''` keeps the v1 custom id byte
+   * for byte; a key emits v2 (`lfg-board-custom-id.helpers.ts`).
+   */
+  groupKey?: string;
   /** `games.slug`, for the web group page the Link button opens. */
   gameSlug: string;
   /** Deployment client URL. Empty or undefined drops the Link button. */
@@ -70,7 +76,9 @@ export function buildLfgPostComponents(
 ): ActionRowBuilder<ButtonBuilder>[] {
   if (inputs.state !== 'open') return [];
   const join = new ButtonBuilder()
-    .setCustomId(`${LFG_BUTTON_IDS.JOIN}:${String(inputs.gameId)}`)
+    .setCustomId(
+      buildLfgBoardCustomId(LFG_BUTTON_IDS.JOIN, inputs.gameId, inputs.groupKey),
+    )
     .setStyle(ButtonStyle.Primary)
     .setLabel(
       inputs.spawnsNow ? LFG_NOW_SPAWN_BUTTON_LABEL : LFG_JOIN_BUTTON_LABEL,
@@ -83,7 +91,7 @@ export function buildLfgPostComponents(
   // ROK-1660: the way out sits beside the way in, the same for every viewer
   // (the post is shared). Never swapped by the now-spawn variant.
   const leave = new ButtonBuilder()
-    .setCustomId(leaveCustomId(inputs.gameId))
+    .setCustomId(leaveCustomId(inputs.gameId, inputs.groupKey))
     .setStyle(ButtonStyle.Secondary)
     .setLabel(LFG_LEAVE_BUTTON_LABEL);
   const buttons = [join, leave];

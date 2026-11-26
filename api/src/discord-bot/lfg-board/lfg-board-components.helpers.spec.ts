@@ -98,6 +98,27 @@ describe('buildLfgPostComponents — the open-state row (AC5 iii)', () => {
   });
 });
 
+describe('buildLfgPostComponents — ROK-2352, keyed group ids', () => {
+  it('carries the group key on +1 and I’m out, read back by the parsers', () => {
+    const [join, leave] = buttons({ groupKey: 'dungeon:1234' });
+    const joinId = (join as { custom_id: string }).custom_id;
+    const leaveId = (leave as { custom_id: string }).custom_id;
+    expect(joinId).toBe(`${LFG_BUTTON_IDS.JOIN}:${String(GAME_ID)}:dungeon:1234`);
+    expect(leaveId).toBe(`${LFG_BUTTON_IDS.LEAVE}:${String(GAME_ID)}:dungeon:1234`);
+    expect(parseJoinCustomId(joinId)).toBe(GAME_ID);
+  });
+
+  it("keeps the v1 ids byte for byte for the '' group", () => {
+    const [join, leave] = buttons({ groupKey: '' });
+    expect((join as { custom_id: string }).custom_id).toBe(
+      `${LFG_BUTTON_IDS.JOIN}:${String(GAME_ID)}`,
+    );
+    expect((leave as { custom_id: string }).custom_id).toBe(
+      `${LFG_BUTTON_IDS.LEAVE}:${String(GAME_ID)}`,
+    );
+  });
+});
+
 describe("buildLfgPostComponents — ROK-1660, the I'm out button", () => {
   it("puts a Secondary I'm out beside +1, carrying lfg:leave:<gameId> (ROK-1660)", () => {
     const [, leave] = buttons();

@@ -11,10 +11,16 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { LFG_BUTTON_IDS } from '../discord-bot.constants';
+import {
+  buildLfgBoardCustomId,
+  parseLfgBoardCustomId,
+  type LfgBoardButtonRef,
+} from '../lfg-board/lfg-board-custom-id.helpers';
 
 /** The slice of `LfgService` a leave needs. */
 export interface LfgLeaveWriter {
-  withdraw(userId: number, gameId: number): Promise<void>;
+  /** `group` absent = every hand of the game (ROK-2352). */
+  withdraw(userId: number, gameId: number, group?: string): Promise<void>;
   /** Game-scoped, so a group past the `GET /lfg` cap still counts. */
   countStillLooking(gameId: number): Promise<number>;
 }
@@ -28,9 +34,12 @@ export interface LfgLeaveOutcome {
 /** Copy for any thrown failure on a leave surface. */
 export const LFG_LEAVE_ERROR_REPLY = 'Something went wrong. Please try again.';
 
-/** The custom id the board post's `I'm out` button carries. */
-export function leaveCustomId(gameId: number): string {
-  return `${LFG_BUTTON_IDS.LEAVE}:${String(gameId)}`;
+/**
+ * The custom id the board post's `I'm out` button carries. ROK-2352: a keyed
+ * group's post appends its key (v2); `''` stays the v1 id.
+ */
+export function leaveCustomId(gameId: number, groupKey = ''): string {
+  return buildLfgBoardCustomId(LFG_BUTTON_IDS.LEAVE, gameId, groupKey);
 }
 
 /**
@@ -43,11 +52,17 @@ export function leaveCustomId(gameId: number): string {
  * @returns The game id, or null when this is not a leave button.
  */
 export function parseLeaveCustomId(customId: string): number | null {
-  const prefix = `${LFG_BUTTON_IDS.LEAVE}:`;
-  if (!customId.startsWith(prefix)) return null;
-  const raw = customId.slice(prefix.length);
-  if (!/^\d+$/.test(raw)) return null;
-  return Number(raw);
+  return parseLeavePress(customId)?.gameId ?? null;
+}
+
+/**
+ * ROK-2352 — parse an `I'm out` id, v1 (`''` group) or v2 (keyed group).
+ *
+ * @param customId - The interaction's custom id.
+ * @returns Game + group, or null when this is not a leave button.
+ */
+export function parseLeavePress(customId: string): LfgBoardButtonRef | null {
+  return parseLfgBoardCustomId(customId, LFG_BUTTON_IDS.LEAVE);
 }
 
 /**
@@ -75,9 +90,13 @@ export async function withdrawIfPresent(
   lfg: Pick<LfgLeaveWriter, 'withdraw'>,
   userId: number,
   gameId: number,
+  group?: string,
 ): Promise<boolean> {
   try {
-    await lfg.withdraw(userId, gameId);
+    // ROK-2352: no `group` = every hand (the pre-ROK-2352 call, unchanged).
+    await (group === undefined
+      ? lfg.withdraw(userId, gameId)
+      : lfg.withdraw(userId, gameId, group));
     return true;
   } catch (error) {
     if (error instanceof NotFoundException) return false;
@@ -90,8 +109,9 @@ export async function leaveOneGroup(
   lfg: LfgLeaveWriter,
   userId: number,
   gameId: number,
+  group?: string,
 ): Promise<LfgLeaveOutcome> {
-  if (!(await withdrawIfPresent(lfg, userId, gameId))) {
+  if (!(await withdrawIfPresent(lfg, userId, gameId, group))) {
     return { left: false, stillLooking: 0 };
   }
   return { left: true, stillLooking: await lfg.countStillLooking(gameId) };
