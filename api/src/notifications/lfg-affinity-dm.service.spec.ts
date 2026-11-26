@@ -316,6 +316,22 @@ describe('LfgAffinityDmService (ROK-1471 D11)', () => {
       );
     });
 
+    it('ROK-2352 P2-9 — links the keyed group that reached LFM', async () => {
+      const h = makeService({ recipientIds: [11] });
+
+      await h.service.handleLfmReached({
+        ...nowPayload,
+        groupKey: 'dungeon:36',
+      });
+
+      expect(h.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message:
+            'Playing in the next 60 minutes \u2014 join: true/lfg/drg/dungeon%3A36',
+        }),
+      );
+    });
+
     it('falls back to 30 minutes when the payload carries no TTL', async () => {
       const h = makeService({ recipientIds: [11] });
 

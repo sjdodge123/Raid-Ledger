@@ -10,6 +10,8 @@ import type { LfgGroupingAdapter } from '../plugins/plugin-host/lfg-grouping.ada
 import {
   assertHandDetailIfNew,
   resolvePostGroup,
+  saveHandDetailIfAny,
+  type ResolvedLfgPost,
 } from './lfg-group-post.helpers';
 import type { LfgGroupingRegistry } from './lfg-grouping.helpers';
 import type { LfgDb } from './lfg-query.helpers';
@@ -129,5 +131,54 @@ describe('assertHandDetailIfNew — only a new keyed hand needs a detail (r2 MAJ
     const post = await resolvePostGroup(registry(true), GAME, WEEK, STRICT);
     await assertHandDetailIfNew(TX, 7, GAME.id, post);
     expect(findActive).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ROK-2352 P2-3 / AC10 — a Discord-raised keyed hand (no `handDetail`) copies
+ * the user's last web pick through the adapter; the Any group never does, and
+ * a sent detail is saved as-is.
+ */
+describe('saveHandDetailIfAny — the last web pick (P2-3)', () => {
+  const HAND = { intentId: 9, userId: 7, gameId: 3 };
+
+  function adapter() {
+    return {
+      saveHandDetail: jest.fn(() => Promise.resolve()),
+      copyLastDetail: jest.fn(() => Promise.resolve()),
+    };
+  }
+
+  function post(
+    grouping: ReturnType<typeof adapter>,
+    groupKey: string,
+    handDetail?: { roles: string[] },
+  ): ResolvedLfgPost {
+    return {
+      grouping: grouping as unknown as LfgGroupingAdapter,
+      opts: { ...WEEK, groupKey, ...(handDetail ? { handDetail } : {}) },
+      detailRequired: false,
+    };
+  }
+
+  it('copies the last detail for a keyed hand sent without one', async () => {
+    const grouping = adapter();
+    await saveHandDetailIfAny(TX, post(grouping, 'dungeon:1'), HAND);
+    expect(grouping.copyLastDetail).toHaveBeenCalledWith(TX, HAND);
+    expect(grouping.saveHandDetail).not.toHaveBeenCalled();
+  });
+
+  it('never copies into the Any group', async () => {
+    const grouping = adapter();
+    await saveHandDetailIfAny(TX, post(grouping, ''), HAND);
+    expect(grouping.copyLastDetail).not.toHaveBeenCalled();
+  });
+
+  it('saves a sent detail instead of copying', async () => {
+    const grouping = adapter();
+    const detail = { roles: ['healer'] };
+    await saveHandDetailIfAny(TX, post(grouping, 'dungeon:1', detail), HAND);
+    expect(grouping.saveHandDetail).toHaveBeenCalledWith(TX, HAND, detail);
+    expect(grouping.copyLastDetail).not.toHaveBeenCalled();
   });
 });

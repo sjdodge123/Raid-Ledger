@@ -20,6 +20,7 @@ import {
   parseJoinPress,
 } from './lfg-join.listener';
 import { LFG_GAME_GONE_REPLY } from './lfg-join-confirmation.helpers';
+import * as horizonHelpers from '../../lfg/lfg-group-horizon.helpers';
 
 type Row = Record<string, unknown>;
 
@@ -160,6 +161,28 @@ describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
       timezone: 'UTC',
       groupKey: 'raid:745',
     });
+  });
+
+  it.each([
+    ['a v2 keyed press reads its own group', ':raid:745', 'raid:745'],
+    ['a v1 press reads the whole game', '', null],
+  ])('ROK-2352 P2-4 — %s’s horizon', async (_label, suffix, scope) => {
+    const spy = jest.spyOn(horizonHelpers, 'readGroupHorizon');
+    try {
+      const { listener } = build([LINKED, OPEN_ROW, [], []], makeService());
+      const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42${suffix}`);
+
+      await listener.handleButtonInteraction(interaction);
+
+      expect(spy).toHaveBeenCalledWith(
+        expect.anything(),
+        42,
+        expect.any(Date),
+        scope,
+      );
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('ROK-2352 — parseJoinPress reads v1 as the whole-game group', () => {
