@@ -9,7 +9,7 @@ import { Modal } from '../ui/modal';
 import { RoleIcon } from '../shared/RoleIcon';
 import { useAriaLive } from '../../hooks/use-aria-live';
 import { useRosterActions } from './use-roster-actions';
-import { benchSlotCount, splitUnplaced } from './roster-unplaced';
+import { splitUnplaced } from './roster-unplaced';
 
 interface RosterBuilderProps {
     pool: RosterAssignmentResponse[];
@@ -43,6 +43,8 @@ const GENERIC_ROLE_SLOTS: { role: RosterRole; count: number; label: string; colo
     { role: 'player', count: 4, label: 'Player', color: 'bg-indigo-600' },
 ];
 
+// ROK-2348: flex rows are real (Auto-Fill, Discord signups) — render them when the event has flex slots.
+const FLEX_SLOT = { role: 'flex' as RosterRole, count: 0, label: 'Flex', color: 'bg-purple-600' };
 const BENCH_SLOT = { role: 'bench' as RosterRole, count: 0, label: 'Bench', color: 'bg-faint' };
 
 function useRosterSlots(slots: RosterBuilderProps['slots']) {
@@ -53,6 +55,7 @@ function useRosterSlots(slots: RosterBuilderProps['slots']) {
 
     const roleSlots = React.useMemo(() => {
         const result = isGenericGame ? [...GENERIC_ROLE_SLOTS] : [...MMO_ROLE_SLOTS];
+        if (!isGenericGame && (slots?.flex ?? 0) > 0) result.push(FLEX_SLOT);
         result.push({ ...BENCH_SLOT, count: slots?.bench ?? 0 });
         return result;
     }, [isGenericGame, slots]);
@@ -131,15 +134,15 @@ function useRosterBuilderData(props: RosterBuilderProps) {
     const { announce } = useAriaLive();
     const { isGenericGame, roleSlots, getSlotCount } = useRosterSlots(slots);
     // ROK-2348: rows the grid cannot show are worked with as unassigned pool rows.
-    const { pool, assignments } = React.useMemo(
-        () => splitUnplaced(props.pool, props.assignments, roleSlots.map(s => s.role), getSlotCount),
-        [props.pool, props.assignments, roleSlots, getSlotCount]);
-    const actions = useRosterActions({ pool, assignments, onRosterChange, roleSlots, getSlotCount, isGenericGame, announce });
+    const { pool, assignments, unplaced, benchCount } = React.useMemo(
+        () => splitUnplaced(props.pool, props.assignments, getSlotCount),
+        [props.pool, props.assignments, getSlotCount]);
+    const actions = useRosterActions({ pool, assignments, unplaced, onRosterChange, roleSlots, getSlotCount, isGenericGame, announce });
     const availableSlots = useAvailableSlots(roleSlots, assignments, getSlotCount);
     const allSlotsFilled = useAllSlotsFilled(roleSlots, assignments, getSlotCount);
     const isCurrentUserInRoster = currentUserId != null && (pool.some(p => p.userId === currentUserId) || assignments.some(a => a.userId === currentUserId));
     const activePugs = pugs.filter(p => p.status === 'pending' || p.status === 'invited');
-    return { pool, assignments, isGenericGame, roleSlots, getSlotCount, actions, availableSlots, allSlotsFilled, isCurrentUserInRoster, activePugs };
+    return { pool, assignments, benchCount, isGenericGame, roleSlots, getSlotCount, actions, availableSlots, allSlotsFilled, isCurrentUserInRoster, activePugs };
 }
 
 export const RosterBuilder = memo(function RosterBuilder(props: RosterBuilderProps) {
@@ -153,7 +156,7 @@ export const RosterBuilder = memo(function RosterBuilder(props: RosterBuilderPro
             {canEdit && <AdminButtons pool={pool} allSlotsFilled={d.allSlotsFilled} assignmentCount={assignments.length} actions={d.actions} />}
             <AutoFillModal preview={d.actions.autoFillPreview} onClose={() => d.actions.setAutoFillPreview(null)} onConfirm={d.actions.handleAutoFillConfirm} />
             {d.activePugs.length > 0 && <PugInvitesBar pugs={d.activePugs} onRemovePug={onRemovePug} onEditPug={onEditPug} onRegeneratePugLink={onRegeneratePugLink} />}
-            <RoleSlotGrid roleSlots={d.roleSlots} assignments={assignments} getSlotCount={d.getSlotCount}
+            <RoleSlotGrid roleSlots={d.roleSlots} assignments={assignments} getSlotCount={d.getSlotCount} benchCount={d.benchCount}
                 isGenericGame={d.isGenericGame} canEdit={canEdit} canJoin={canJoin} currentUserId={currentUserId}
                 onSlotClick={onSlotClick} onSelfRemove={onSelfRemove} onAdminClick={d.actions.handleAdminSlotClick}
                 onRemove={d.actions.handleRemoveFromSlot} />
@@ -209,6 +212,8 @@ function PugInvitesBar({ pugs, onRemovePug, onEditPug, onRegeneratePugLink }: { 
 interface RoleSlotGridProps {
     roleSlots: { role: RosterRole; count: number; label: string; color: string }[];
     assignments: RosterAssignmentResponse[]; getSlotCount: (role: RosterRole) => number;
+    /** ROK-2348: bench positions to render (capped, from `splitUnplaced`). */
+    benchCount: number;
     isGenericGame: boolean; canEdit: boolean; canJoin: boolean;
     currentUserId?: number | undefined; onSlotClick?: ((role: RosterRole, position: number) => void) | undefined;
     onSelfRemove?: (() => void) | undefined; onAdminClick: (role: RosterRole, position: number) => void;
@@ -221,7 +226,7 @@ function roleGroupLabel(role: RosterRole, label: string, isGeneric: boolean) {
 
 function RoleGroup({ role, label, color, assigned, count, isGenericGame, canEdit, canJoin, currentUserId, onSlotClick, onSelfRemove, onAdminClick, onRemove }: {
     role: RosterRole; label: string; color: string; assigned: RosterAssignmentResponse[]; count: number;
-} & Omit<RoleSlotGridProps, 'roleSlots' | 'assignments' | 'getSlotCount'>) {
+} & Omit<RoleSlotGridProps, 'roleSlots' | 'assignments' | 'getSlotCount' | 'benchCount'>) {
     return (
         <div className="rounded-lg border border-edge bg-surface/50 p-2 sm:p-4">
             <h4 className="mb-2 sm:mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-secondary">
@@ -246,13 +251,12 @@ function RoleGroup({ role, label, color, assigned, count, isGenericGame, canEdit
 }
 
 function RoleSlotGrid(props: RoleSlotGridProps) {
-    const { roleSlots, assignments, getSlotCount, ...rest } = props;
+    const { roleSlots, assignments, getSlotCount, benchCount, ...rest } = props;
     return (
         <div className="space-y-2 sm:space-y-4">
             {roleSlots.map(({ role, label, color }) => {
-                const configuredCount = getSlotCount(role);
                 const assigned = assignments.filter((a) => a.slot === role);
-                const count = role === 'bench' ? benchSlotCount(configuredCount, assigned) : configuredCount;
+                const count = role === 'bench' ? benchCount : getSlotCount(role);
                 if (count === 0) return null;
                 return <RoleGroup key={role} role={role} label={label} color={color} assigned={assigned} count={count} {...rest} />;
             })}
