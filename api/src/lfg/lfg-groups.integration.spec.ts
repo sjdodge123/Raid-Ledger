@@ -95,7 +95,12 @@ function post(m: LfgMember, gameId: number, groupKey?: string) {
   return testApp.request
     .post('/lfg')
     .set('Authorization', `Bearer ${m.token}`)
-    .send({ gameId, ...(groupKey !== undefined ? { groupKey } : {}) });
+    .send({
+      gameId,
+      // Keyed HTTP hands must carry a detail (§3.3); the fake adapter ignores it.
+      ...(groupKey ? { groupKey, handDetail: { roles: ['dps'] } } : {}),
+      ...(groupKey === '' ? { groupKey } : {}),
+    });
 }
 
 async function postOk(m: LfgMember, gameId: number, groupKey?: string) {
@@ -235,6 +240,23 @@ describe('POST /lfg with an active grouping adapter (AC3)', () => {
       'dungeon:1',
       'dungeon:2',
     ]);
+  });
+
+  it('400s a keyed HTTP hand with no handDetail and writes nothing (§3.3, review MINOR-7)', async () => {
+    const [alice] = await createMembers(testApp, 'alice');
+    const game = await groupsGame();
+
+    const res = await testApp.request
+      .post('/lfg')
+      .set('Authorization', `Bearer ${alice.token}`)
+      .send({ gameId: game.id, groupKey: 'dungeon:1' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ handDetail: [expect.any(String)] });
+    expect(await activeKeys(alice.userId, game.id)).toEqual([]);
+    // The whole-game group needs no detail.
+    await postOk(alice, game.id);
+    expect(await activeKeys(alice.userId, game.id)).toEqual(['']);
   });
 
   it('rejects a key the adapter does not know with 400 and writes nothing', async () => {

@@ -96,7 +96,7 @@ async function hand(
   const res = await testApp.request
     .post('/lfg')
     .set('Authorization', `Bearer ${m.token}`)
-    .send({ gameId, groupKey: key, urgency });
+    .send({ gameId, groupKey: key, urgency, handDetail: { roles: ['dps'] } });
   expect(res.status).toBe(201);
 }
 

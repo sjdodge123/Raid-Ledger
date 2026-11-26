@@ -95,6 +95,8 @@ export class LfgController {
           ? { handDetail: parsed.data.handDetail }
           : {}),
       },
+      // ROK-2352 §3.3: a web/API hand in a plugin group must carry roles.
+      { requireHandDetail: true },
     );
     res.status(result.created ? HttpStatus.CREATED : HttpStatus.OK);
     return result.body;

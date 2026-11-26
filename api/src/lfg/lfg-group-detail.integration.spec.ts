@@ -176,7 +176,7 @@ describe('GET /lfg/:gameId?group= — members carry pluginDetail (ROK-2352)', ()
     await testApp.request
       .post('/lfg')
       .set('Authorization', `Bearer ${token}`)
-      .send({ gameId, groupKey })
+      .send({ gameId, groupKey, handDetail: { roles: ['dps'] } })
       .expect(201);
   }
 
@@ -197,11 +197,18 @@ describe('GET /lfg/:gameId?group= — members carry pluginDetail (ROK-2352)', ()
         ),
       );
     if (!char || !intent) throw new Error('seedDetail: no character / hand');
-    await testApp.db.insert(schema.wowLfgHandDetails).values({
-      intentId: intent.id,
-      roles: ['tank', 'healer'],
-      characterId: char.id,
-    });
+    // postKeyed already stored a dps-only detail (§3.3) — overwrite it.
+    await testApp.db
+      .insert(schema.wowLfgHandDetails)
+      .values({
+        intentId: intent.id,
+        roles: ['tank', 'healer'],
+        characterId: char.id,
+      })
+      .onConflictDoUpdate({
+        target: schema.wowLfgHandDetails.intentId,
+        set: { roles: ['tank', 'healer'], characterId: char.id },
+      });
   }
 
   async function readKeyed(token: string, gameId: number, group: string) {

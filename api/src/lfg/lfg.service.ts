@@ -64,16 +64,14 @@ import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.se
 import { assertHandCap, resolveLfgGrouping } from './lfg-grouping.helpers';
 import { attachGroupCounts } from './lfg-group-list.helpers';
 import { announceLfgPost } from './lfg-post-announce.helpers';
-import {
-  clearIntent,
-  resolveWithdrawScope,
-} from './lfg-group-scope.helpers';
+import { clearIntent, resolveWithdrawScope } from './lfg-group-scope.helpers';
 import { resolveLockInGroup } from './lfg-lock-in-group.helpers';
 import { toConversionTarget } from './lfg-provenance.helpers';
 import {
   resolvePostGroup,
   saveHandDetailIfAny,
   type LfgPostRequest,
+  type LfgPostWriteOptions,
   type ResolvedLfgPost,
 } from './lfg-group-post.helpers';
 import {
@@ -109,15 +107,17 @@ export class LfgService {
    * @param opts - Requested urgency class (ROK-1479). Defaults to the
    *   pre-1479 `week`, so the Discord `/lfg` command and the join listener
    *   keep their exact behaviour until Lane C threads a class through.
+   * @param write - ROK-2352: the HTTP route requires `handDetail` on a keyed hand.
    */
   async createIntent(
     userId: number,
     gameId: number,
     opts: LfgPostRequest = WEEK_REQUEST,
+    write: LfgPostWriteOptions = {},
   ): Promise<CreateIntentResult> {
     const game = await requireVisibleGame(this.db, gameId);
     // ROK-2352 §3.7: no active adapter → the hand lands in '' (fold).
-    const post = await resolvePostGroup(this.pluginRegistry, game, opts);
+    const post = await resolvePostGroup(this.pluginRegistry, game, opts, write);
     const outcome = await this.postUnderGroupLock(userId, game, post);
     announceLfgPost(this.eventEmitter, gameId, outcome);
     if (outcome.refreshed) {

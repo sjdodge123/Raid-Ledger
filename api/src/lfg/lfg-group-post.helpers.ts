@@ -2,6 +2,8 @@
  * ROK-2352 — the group half of `POST /lfg`: which group a hand lands in
  * (folded by `resolveLfgGrouping`) and the plugin detail stored with it.
  */
+import { BadRequestException } from '@nestjs/common';
+import { LFG_ANY_GROUP_KEY } from '@raid-ledger/contract';
 import type * as schema from '../drizzle/schema';
 import type { LfgGroupingAdapter } from '../plugins/plugin-host/lfg-grouping.adapter';
 import type { LfgDb } from './lfg-query.helpers';
@@ -24,21 +26,40 @@ export interface ResolvedLfgPost {
   opts: LfgPostRequest & { groupKey: string };
 }
 
+/** How strict a write is about the hand's plugin detail. */
+export interface LfgPostWriteOptions {
+  /**
+   * Spec §3.3 / AC3: an HTTP hand in a plugin group (adapter active, key not
+   * `''`) must carry `handDetail` (WoW: roles). Discord callers leave it off —
+   * their hands legitimately have none (Q8).
+   */
+  requireHandDetail?: boolean;
+}
+
 /**
  * Resolve the adapter and fold/validate the requested group (§3.7).
  *
  * @param registry - Plugin registry.
  * @param game - The (visible) game being posted to.
  * @param opts - The parsed request.
+ * @param write - {@link LfgPostWriteOptions}.
+ * @throws BadRequestException when a required `handDetail` is missing.
  */
 export async function resolvePostGroup(
   registry: LfgGroupingRegistry,
   game: typeof schema.games.$inferSelect,
   opts: LfgPostRequest,
+  write: LfgPostWriteOptions = {},
 ): Promise<ResolvedLfgPost> {
   const grouping = resolveLfgGrouping(registry, game.slug);
   const ctx = { gameId: game.id, gameSlug: game.slug };
   const groupKey = await resolveWriteGroupKey(grouping, ctx, opts.groupKey);
+  const keyed = grouping !== null && groupKey !== LFG_ANY_GROUP_KEY;
+  if (write.requireHandDetail && keyed && opts.handDetail === undefined) {
+    throw new BadRequestException({
+      handDetail: ['Required when raising a hand in this group'],
+    });
+  }
   return { grouping, opts: { ...opts, groupKey } };
 }
 

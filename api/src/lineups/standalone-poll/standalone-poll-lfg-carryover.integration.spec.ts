@@ -87,7 +87,12 @@ async function raiseHand(token: string, gameId: number): Promise<void> {
   const res = await testApp.request
     .post('/lfg')
     .set('Authorization', `Bearer ${token}`)
-    .send({ gameId, groupKey: KEY, urgency: 'week' });
+    .send({
+      gameId,
+      groupKey: KEY,
+      urgency: 'week',
+      handDetail: { roles: ['dps'] },
+    });
   expect(res.status).toBe(201);
 }
 
