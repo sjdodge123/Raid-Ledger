@@ -37,6 +37,9 @@ export interface JoinGroupVars {
     handDetail?: Record<string, unknown>;
 }
 
+/** Live hands one person may hold per game (Q2) — the server's cap, mirrored for the picker. */
+export const LFG_HAND_CAP = 5;
+
 /** Shown when the server refuses a hand over the per-game cap (409, Q2). */
 export const LFG_HAND_CAP_COPY = 'You can be in up to 5 groups for this game';
 
@@ -72,10 +75,10 @@ export function useJoinGroup(onJoined?: (gameId: number) => void) {
 
     return useMutation<void, Error, JoinGroupVars>({
         mutationFn: raiseHands,
-        onSuccess: (_data, vars) => {
-            queryClient.invalidateQueries({ queryKey: ['lfg'] });
-            onJoined?.(vars.gameId);
-        },
+        onSuccess: (_data, vars) => onJoined?.(vars.gameId),
+        // Settled, not success: a multi-pick that stops on a refusal has already
+        // raised the earlier hands, and the page must show them (review r1).
+        onSettled: () => queryClient.invalidateQueries({ queryKey: ['lfg'] }),
         onError: (error) => toast.error(joinErrorCopy(error)),
     });
 }
