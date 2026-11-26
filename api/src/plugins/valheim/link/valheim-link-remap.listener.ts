@@ -18,6 +18,7 @@ export class ValheimLinkRemapListener {
   /** Revoke the server's live token unless it is still mapped to Valheim. */
   @OnEvent(PELICAN_SERVER_GAME_CHANGED)
   async handleGameChanged(payload: { serverId: number }): Promise<void> {
+    // plugin-scope: cleanup
     try {
       if (await this.repo.revokeIfNotValheim(payload.serverId)) {
         this.logger.log(

@@ -1,6 +1,6 @@
 /**
  * Every identity change empties the query cache except `['auth','me']` and the
- * token-less public queries in `VIEWER_INDEPENDENT_PREFIXES` (ROK-1811, after
+ * token-less public queries tagged `VIEWER_INDEPENDENT_META` (ROK-1811, after
  * ROK-1599's Codex P1). Many cached responses belong to one viewer under keys
  * that are not viewer-scoped — `['notifications', limit, offset]`,
  * `['notifications','unread-count']`, `['me','characters', gameId]`, the
@@ -45,24 +45,22 @@ function isAuthMe(query: Query): boolean {
 }
 
 /**
- * Key prefixes of queries whose fetcher never sends the viewer's token or
+ * The `meta` for a query whose fetcher never sends the viewer's token or
  * cookies, so the response is the same for every viewer and holds nothing to
- * drop (ROK-1811 Codex r3 P2). They are left untouched — reset, they would sit
- * pending after a logout because nothing refetches without a token, and the
- * public lineup page would read that as "no longer available". The ONLY place
- * this list lives; forgetting an entry costs a refetch, never a leak.
+ * drop (ROK-1811 Codex r3 P2). Tag it at the `useQuery`; a drop leaves tagged
+ * queries untouched — reset, they would sit pending after a logout because
+ * nothing refetches without a token, and the public page would read that as
+ * "no longer available". ROK-2334 replaced a hand-kept key-prefix allowlist
+ * that missed one public key per review round; the tag lives with the fetcher,
+ * and `viewer-independent-public-routes.guard.test.tsx` fails on any
+ * un-authed route (`/p/*`, `/privacy`) that creates an untagged query.
+ * Forgetting it still costs a stuck page, never a leak.
  */
-const VIEWER_INDEPENDENT_PREFIXES: readonly (readonly string[])[] = [
-    ['lineups', 'public'], // getPublicLineup — raw fetch, no bearer, no credentials
-    ['system', 'status'], // getSystemStatus — raw fetch, no bearer; unguarded, viewer-free route (Codex r4 P2b)
-    ['poll-share', 'preview'], // getPollSharePreview — un-authed `public` route, same card for every viewer (Codex r5 P2)
-    ['wow', 'public-guild-card'], // fetchPublicGuildCard — raw fetch, no bearer, credentials omitted (ROK-1813 Codex P2)
-];
+export const VIEWER_INDEPENDENT_META = { viewerIndependent: true } as const;
 
-/** True when the query's key starts with a viewer-independent prefix. */
+/** True when the query was tagged `meta: VIEWER_INDEPENDENT_META`. */
 function isViewerIndependent(query: Query): boolean {
-    const key = query.queryKey;
-    return VIEWER_INDEPENDENT_PREFIXES.some((prefix) => prefix.every((part, i) => key[i] === part));
+    return query.meta?.['viewerIndependent'] === true;
 }
 
 const VIEWER_PRIVATE_QUERIES = {

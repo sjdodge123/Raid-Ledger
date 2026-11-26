@@ -1,25 +1,24 @@
 /**
  * ROK-2208 (S4) — outbound RL → Discord against the real Discord guild
- * (AC5, AC11): a hub bound to a run-scoped forum `rl-smoke-forum-<runId>`
- * (made by this test, never picked by position); an RL thread appears as a
+ * (AC5, AC11): the hub bound to the run's shared forum (`hub-forum-shared.ts`,
+ * found by the id it made, never by position); an RL thread appears as a
  * webhook forum post; an RL edit edits it; an RL delete deletes it.
  * ROK-2260: signups on an event tagged to the bound hub create the event's
  * post and get one bot @mention (which adds them); a cancel removes them.
- * Teardown deletes the event, unbinds the hub and deletes the forum.
+ * Teardown deletes the event; the shared hub + forum outlive the test.
  */
-import { ChannelType, type ForumChannel, type ThreadChannel } from "discord.js";
+import type { ForumChannel, ThreadChannel } from "discord.js";
 import { getGuild } from "../../client.js";
 import { pollForCondition } from "../../helpers/polling.js";
 import { SmokeAssertionError } from "../assert.js";
 import { cancelSignupAs, createEvent, futureTime, linkDiscord, signupAs } from "../fixtures.js";
 import type { SmokeTest, TestContext } from "../types.js";
+import { activePostIds, sharedHubForum, type SharedHubForum } from "./hub-forum-shared.js";
 
-const SEED_GUILD = "/admin/test/wow/seed-guild";
 export const TIMEOUT_MS = 30_000;
 
+/** What a test's teardown must undo (the shared hub + forum are not its). */
 export interface Made {
-  hub: number | null;
-  forum: string | null;
   event?: number;
 }
 
@@ -63,30 +62,16 @@ async function expectPostGone(postId: string): Promise<void> {
   }
 }
 
-export async function setup(ctx: TestContext, runId: string, made: Made) {
-  const forum = await getGuild().channels.create({
-    name: `rl-smoke-forum-${runId}`,
-    type: ChannelType.GuildForum,
-    reason: "ROK-2208 outbound smoke",
-  });
-  made.forum = forum.id;
-  const seeded = await ctx.api.post<{ guildId?: unknown; gameId?: unknown; users?: unknown }>(SEED_GUILD, { name: `SF-O ${runId}` });
-  if (typeof seeded.guildId !== "number") fail("seed-guild: no guildId", seeded);
-  if (typeof seeded.gameId !== "number") fail("seed-guild: no gameId", seeded);
-  made.hub = seeded.guildId;
-  await ctx.api.put(`/guilds/${String(made.hub)}/forum-discord`, {
-    mode: "existing",
-    channelId: forum.id,
-    ack: true,
-  });
-  return { forum, hub: seeded.guildId, gameId: seeded.gameId, users: seeded.users };
+/** The run's shared forum + the hub bound to it (made on first use). */
+export async function setup(ctx: TestContext): Promise<SharedHubForum> {
+  return sharedHubForum(ctx);
 }
 
 async function outbound(ctx: TestContext): Promise<void> {
   const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
+  const made: Made = {};
   try {
-    const { forum, hub } = await setup(ctx, runId, made);
+    const { forum, hub } = await setup(ctx);
     const base = `/guilds/${String(hub)}/forum`;
     const title = `Smoke thread ${runId}`;
     const created = await ctx.api.post<{ id?: unknown }>(base, { title, body: "Outbound smoke body" });
@@ -150,13 +135,15 @@ async function expectMember(post: ThreadChannel, userId: string, present: boolea
 }
 
 /**
- * Pre-flush check: `userId` is in no post of the run's (fresh) forum yet, so
- * the membership seen after the flush can only have come from the @mention.
+ * Pre-flush check: `userId` is in no post this test made (every post not in
+ * `before`, the forum's posts when the test started), so the membership seen
+ * after the flush can only have come from the @mention.
  */
-async function expectInNoPost(forum: ForumChannel, userId: string): Promise<void> {
+async function expectInNoPost(forum: ForumChannel, userId: string, before: Set<string>): Promise<void> {
   const active = await forum.threads.fetchActive();
   const inPosts: string[] = [];
   for (const post of active.threads.values()) {
+    if (before.has(post.id)) continue;
     const members = await post.members.fetch();
     if (members.has(userId)) inPosts.push(post.id);
   }
@@ -173,16 +160,16 @@ export function farOffTimes(): { startTime: string; endTime: string } {
 }
 
 async function signupPings(ctx: TestContext): Promise<void> {
-  const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
+  const made: Made = {};
   const me = ctx.testBotDiscordId;
   try {
-    const { forum, hub, gameId } = await setup(ctx, runId, made);
+    const { forum, hub, gameId } = await setup(ctx);
+    const before = await activePostIds(forum);
     await linkDiscord(ctx.api, ctx.dmRecipientUserId, me, "SmokeTestBot");
     const event = await createEvent(ctx.api, "forum-pings", { guildId: hub, gameId, ...farOffTimes() });
     made.event = event.id;
     await signupAs(ctx.api, event.id, ctx.dmRecipientUserId);
-    await expectInNoPost(forum, me);
+    await expectInNoPost(forum, me, before);
     const post = await flushPings(ctx, event.id);
     await expectMention(post, me);
     await expectMember(post, me, true, "ROK-2260 ruling 2: the mention must add the signed-up player to the post");
@@ -199,14 +186,6 @@ export async function teardown(ctx: TestContext, made: Made): Promise<void> {
   if (made.event !== undefined) {
     await ctx.api.delete(`/events/${String(made.event)}`).catch(() => undefined);
   }
-  if (made.hub !== null) {
-    await ctx.api.delete(`/guilds/${String(made.hub)}/forum-discord`).catch(() => undefined);
-  }
-  if (made.forum === null) return;
-  const forum = await getGuild().channels.fetch(made.forum, { force: true }).catch(() => null);
-  await forum?.delete("ROK-2208 smoke teardown").catch((err: unknown) => {
-    console.warn(`  forum ${String(made.forum)} delete failed: ${String(err)}`);
-  });
 }
 
 export const hubForumDiscordOutboundTests: SmokeTest[] = [

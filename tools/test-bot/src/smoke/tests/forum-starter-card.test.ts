@@ -7,9 +7,9 @@
  * Two paths: the event-planning forum post (bot-authored starter) and the
  * hub's bound forum (webhook starter — R2: proves Discord accepts components
  * on a webhook message). Bots cannot click buttons; the handlers stay in
- * integration tests. Each test makes its own run-scoped forum via the
- * ROK-2208 `setup()`; `teardown()` deletes this test's event, binding and
- * forum (and with it the post).
+ * integration tests. Both use the run's shared forum (`hub-forum-shared.ts`)
+ * via `setup()`; posts are found by this test's unique event title;
+ * `teardown()` deletes this test's event.
  */
 import { createEvent } from "../fixtures.js";
 import type { SmokeTest, TestContext } from "../types.js";
@@ -18,10 +18,9 @@ import { expectResolvedForum } from "./event-planning-nonhub-event.test.js";
 import { expectCardTracksSignup, expectStarterCard, postCreatedOnAnnounce } from "./forum-starter-card.helpers.js";
 
 async function planningPostCard(ctx: TestContext): Promise<void> {
-  const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
+  const made: Made = {};
   try {
-    const { forum, users } = await setup(ctx, runId, made);
+    const { forum, users } = await setup(ctx);
     await expectResolvedForum(ctx, forum.id);
     const event = await createEvent(ctx.api, "starter-card", farOffTimes());
     made.event = event.id;
@@ -34,10 +33,9 @@ async function planningPostCard(ctx: TestContext): Promise<void> {
 }
 
 async function hubPostCard(ctx: TestContext): Promise<void> {
-  const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
+  const made: Made = {};
   try {
-    const { forum, hub, gameId, users } = await setup(ctx, runId, made);
+    const { forum, hub, gameId, users } = await setup(ctx);
     const event = await createEvent(ctx.api, "hub-starter-card", { guildId: hub, gameId, ...farOffTimes() });
     made.event = event.id;
     const post = await postCreatedOnAnnounce(forum, event.title);
