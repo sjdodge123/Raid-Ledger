@@ -286,3 +286,29 @@ describe('AdHocServerPresenceService — a heartbeat after a spawn (ROK-1802 Cod
     expect(attached).toEqual([OTHER.playerId, PLAYER.playerId]);
   });
 });
+
+describe('AdHocServerPresenceService — Pelican turned off (ROK-2355)', () => {
+  const held = async (): Promise<AdHocServerPresenceService> => {
+    jest
+      .mocked(checkSuppression)
+      .mockResolvedValue(
+        CLEARANCE as unknown as Awaited<ReturnType<typeof checkSuppression>>,
+      );
+    const { svc } = serviceWith(0);
+    await svc.playerJoined(SOURCE, OTHER);
+    expect(await svc.heldPresence(SOURCE)).toEqual([OTHER]);
+    return svc;
+  };
+
+  it('drops every below-threshold hold when Pelican deactivates', async () => {
+    const svc = await held();
+    await svc.onPluginDeactivated({ slug: 'pelican' });
+    expect(await svc.heldPresence(SOURCE)).toEqual([]);
+  });
+
+  it('keeps the holds when another plugin deactivates', async () => {
+    const svc = await held();
+    await svc.onPluginDeactivated({ slug: 'valheim' });
+    expect(await svc.heldPresence(SOURCE)).toEqual([OTHER]);
+  });
+});

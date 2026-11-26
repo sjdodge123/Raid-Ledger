@@ -91,6 +91,11 @@ export class PendingServerPlayers {
     this.held.delete(pelicanServerId);
   }
 
+  /** ROK-2355: forget every hold on every server (Pelican turned off). */
+  clearAll(): void {
+    this.held.clear();
+  }
+
   /** A new presence session: every hold here needs re-confirming (ROK-1802). */
   unconfirm(pelicanServerId: number): void {
     for (const h of this.held.get(pelicanServerId)?.players.values() ?? [])
