@@ -52,10 +52,12 @@ const stubAdapter: LfgGroupingAdapter = {
       .from(schema.lfgIntents)
       .where(inArray(schema.lfgIntents.id, ids));
     const carry = rows.map((r) => [r.userId, { preferredRoles: ['healer'] }]);
+    // The Any group (`''`) is shaped by the creator's picked instance.
+    const key = ctx.groupKey || ctx.chosenGroupKey || 'any';
     return {
       slotConfig: SHAPE,
-      contentInstances: [{ id: ctx.groupKey, name: `Inst ${ctx.groupKey}` }],
-      title: `Inst ${ctx.groupKey}`,
+      contentInstances: [{ id: key, name: `Inst ${key}` }],
+      title: `Inst ${key}`,
       carryover: new Map(carry as [number, { preferredRoles: ['healer'] }][]),
     };
   },
@@ -98,7 +100,12 @@ async function hand(
   expect(res.status).toBe(201);
 }
 
-function lockIn(m: LfgMember, gameId: number, lfgGroupKey?: string) {
+function lockIn(
+  m: LfgMember,
+  gameId: number,
+  lfgGroupKey?: string,
+  lfgChosenGroupKey?: string,
+) {
   const start = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
   const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
   return testApp.request
@@ -111,7 +118,25 @@ function lockIn(m: LfgMember, gameId: number, lfgGroupKey?: string) {
       gameId,
       lfgGameId: gameId,
       ...(lfgGroupKey === undefined ? {} : { lfgGroupKey }),
+      ...(lfgChosenGroupKey === undefined ? {} : { lfgChosenGroupKey }),
     });
+}
+
+/** A plain event (no LFG) on the game, created by a member with no hand. */
+async function plainEvent(m: LfgMember, gameId: number): Promise<number> {
+  const start = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+  const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+  const res = await testApp.request
+    .post('/events')
+    .set('Authorization', `Bearer ${m.token}`)
+    .send({
+      title: 'Plain target',
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+      gameId,
+    });
+  expect(res.status).toBe(201);
+  return (res.body as { id: number }).id;
 }
 
 /** `"<userId>:<groupKey>" → status` for every hand of the game. */
@@ -254,5 +279,91 @@ describe('LFG group Lock-in (ROK-2352)', () => {
       'converted',
       'converted',
     ]);
+  });
+});
+
+describe('Any-group Lock-in picks an instance (ROK-2352 lfgChosenGroupKey)', () => {
+  it('shapes the event from the picked instance; only the Any group converts', async () => {
+    const [a, b, c] = await createMembers(testApp, 'ch-a', 'ch-b', 'ch-c');
+    const game = await createGame(testApp, 'Chosen Spec', { slug: SLUG });
+    await hand(a, game.id, '', 'week');
+    await hand(b, game.id, '', 'week');
+    await hand(c, game.id, 'dungeon:2', 'week');
+
+    const res = await lockIn(a, game.id, '', 'dungeon:2');
+
+    expect(res.status).toBe(201);
+    const eventId = (res.body as { id: number }).id;
+    expect(await readEvent(eventId)).toMatchObject({
+      title: 'Inst dungeon:2',
+      contentInstances: [{ id: 'dungeon:2', name: 'Inst dungeon:2' }],
+    });
+    expect(await handStatuses(game.id)).toEqual({
+      [`${a.userId}:`]: 'converted',
+      [`${b.userId}:`]: 'converted',
+      [`${c.userId}:dungeon:2`]: 'active',
+    });
+  });
+
+  it('400s an unknown picked instance and creates no event', async () => {
+    const [a] = await createMembers(testApp, 'chu-a');
+    const game = await createGame(testApp, 'Chosen Unknown', { slug: SLUG });
+    await hand(a, game.id, '', 'week');
+
+    const res = await lockIn(a, game.id, '', 'dungeon:99');
+
+    expect(res.status).toBe(400);
+    expect(await testApp.db.select().from(schema.events)).toHaveLength(0);
+  });
+});
+
+describe('POST /lfg/:gameId/convert ?group (ROK-2352)', () => {
+  it('converts only the named group; the other group stays live', async () => {
+    const [a, b, c, d] = await createMembers(
+      testApp,
+      'cv-a',
+      'cv-b',
+      'cv-c',
+      'cv-d',
+    );
+    const game = await createGame(testApp, 'Convert Group Spec', {
+      slug: SLUG,
+    });
+    await hand(a, game.id, 'dungeon:1', 'week');
+    await hand(b, game.id, 'dungeon:1', 'week');
+    await hand(a, game.id, 'dungeon:2', 'week');
+    await hand(c, game.id, 'dungeon:2', 'week');
+    const eventId = await plainEvent(d, game.id);
+
+    const res = await testApp.request
+      .post(`/lfg/${game.id}/convert?group=${encodeURIComponent('dungeon:1')}`)
+      .set('Authorization', `Bearer ${a.token}`)
+      .send({ eventId });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ converted: 2 });
+    expect(await handStatuses(game.id)).toEqual({
+      [`${a.userId}:dungeon:1`]: 'converted',
+      [`${b.userId}:dungeon:1`]: 'converted',
+      [`${a.userId}:dungeon:2`]: 'active',
+      [`${c.userId}:dungeon:2`]: 'active',
+    });
+  });
+
+  it('400s an unknown ?group and converts nothing', async () => {
+    const [a, d] = await createMembers(testApp, 'cvu-a', 'cvu-d');
+    const game = await createGame(testApp, 'Convert Unknown', { slug: SLUG });
+    await hand(a, game.id, 'dungeon:1', 'week');
+    const eventId = await plainEvent(d, game.id);
+
+    const res = await testApp.request
+      .post(`/lfg/${game.id}/convert?group=${encodeURIComponent('dungeon:99')}`)
+      .set('Authorization', `Bearer ${a.token}`)
+      .send({ eventId });
+
+    expect(res.status).toBe(400);
+    expect(await handStatuses(game.id)).toEqual({
+      [`${a.userId}:dungeon:1`]: 'active',
+    });
   });
 });
