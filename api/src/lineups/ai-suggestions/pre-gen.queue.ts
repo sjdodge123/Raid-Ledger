@@ -12,6 +12,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
+import { AI_MANIFEST } from '../../ai/ai-manifest';
 
 /** Queue name — registered in `queue-registry.ts` ALL_QUEUE_NAMES. */
 export const AI_SUGGESTIONS_PREGEN_QUEUE = 'ai-suggestions-pregen';
@@ -55,6 +57,7 @@ export class AiSuggestionsPreGenQueueService {
 
   constructor(
     @InjectQueue(AI_SUGGESTIONS_PREGEN_QUEUE) private readonly queue: Queue,
+    private readonly plugins: PluginRegistryService,
   ) {}
 
   /**
@@ -74,6 +77,8 @@ export class AiSuggestionsPreGenQueueService {
     delayMs: number = PREGEN_MUTATION_DELAY_MS,
     reason: PreGenReason = 'mutation',
   ): Promise<void> {
+    // ROK-2354: nothing to warm while the AI plugin is off — no job queued.
+    if (!this.plugins.isActive(AI_MANIFEST.id)) return;
     const jobId = preGenJobId(lineupId);
     try {
       await this.removeExisting(jobId);

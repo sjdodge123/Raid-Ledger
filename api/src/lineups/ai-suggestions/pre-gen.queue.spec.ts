@@ -13,15 +13,18 @@ import {
   AiSuggestionsPreGenQueueService,
   AI_SUGGESTIONS_PREGEN_QUEUE,
 } from './pre-gen.queue';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 
 let service: AiSuggestionsPreGenQueueService;
 let mockQueue: { add: jest.Mock; getJob: jest.Mock };
+let plugins: { isActive: jest.Mock };
 
 beforeEach(async () => {
   mockQueue = {
     add: jest.fn().mockResolvedValue(undefined),
     getJob: jest.fn().mockResolvedValue(null),
   };
+  plugins = { isActive: jest.fn().mockReturnValue(true) };
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       AiSuggestionsPreGenQueueService,
@@ -29,6 +32,7 @@ beforeEach(async () => {
         provide: getQueueToken(AI_SUGGESTIONS_PREGEN_QUEUE),
         useValue: mockQueue,
       },
+      { provide: PluginRegistryService, useValue: plugins },
     ],
   }).compile();
   service = module.get(AiSuggestionsPreGenQueueService);
@@ -117,5 +121,21 @@ describe('AiSuggestionsPreGenQueueService — removeExisting recovery (r3)', () 
     expect(job.remove).not.toHaveBeenCalled();
     // Still attempts to add — BullMQ dedup on the locked jobId is a safe no-op.
     expect(mockQueue.add).toHaveBeenCalled();
+  });
+});
+
+describe('AiSuggestionsPreGenQueueService — AI plugin gate (ROK-2354)', () => {
+  it('queues nothing (no getJob, no add) while the AI plugin is off', async () => {
+    plugins.isActive.mockReturnValue(false);
+    await service.enqueue(42, 30_000, 'mutation');
+    expect(plugins.isActive).toHaveBeenCalledWith('ai');
+    expect(mockQueue.getJob).not.toHaveBeenCalled();
+    expect(mockQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('queues the job as before while the AI plugin is on', async () => {
+    await service.enqueue(42, 30_000, 'mutation');
+    expect(plugins.isActive).toHaveBeenCalledWith('ai');
+    expect(mockQueue.add).toHaveBeenCalledTimes(1);
   });
 });
