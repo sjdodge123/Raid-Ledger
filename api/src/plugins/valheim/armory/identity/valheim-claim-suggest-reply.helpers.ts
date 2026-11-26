@@ -5,10 +5,10 @@ import type { Logger } from '@nestjs/common';
 import { MessageFlags, type ButtonInteraction } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import * as schema from '../../drizzle/schema';
-import type { GuildActor } from '../../guilds/guild-access.service';
-import type { NotificationDedupService } from '../../notifications/notification-dedup.service';
-import { claimSuggestKeys } from '../../plugins/valheim/armory/identity/valheim-claim-suggest.copy';
+import * as schema from '../../../../drizzle/schema';
+import type { GuildActor } from '../../../../guilds/guild-access.service';
+import type { NotificationDedupService } from '../../../../notifications/notification-dedup.service';
+import { claimSuggestKeys } from './valheim-claim-suggest.copy';
 
 /** Edit the DM (buttons off), or answer only the clicker (DM untouched). */
 export interface ClaimOutcome {

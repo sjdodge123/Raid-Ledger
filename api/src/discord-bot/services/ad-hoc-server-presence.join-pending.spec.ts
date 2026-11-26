@@ -13,6 +13,7 @@ import type {
 import { AdHocServerPresenceService } from './ad-hoc-server-presence.service';
 import type { ServerPathVoiceTally } from './ad-hoc-server-voice-tally.service';
 import { checkSuppression } from './ad-hoc-spawn-clearance';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import {
   findGameVoiceBinding,
   findLiveGameAdHocEvent,
@@ -69,6 +70,7 @@ const THIRD = {
 function serviceWith(
   voice: number,
   unconfirmed = 0,
+  moduleRef: unknown = null,
 ): {
   svc: AdHocServerPresenceService;
   countFor: jest.Mock;
@@ -87,6 +89,7 @@ function serviceWith(
     {},
     { emit },
     tally,
+    moduleRef,
   ] as unknown as ConstructorParameters<typeof AdHocServerPresenceService>;
   return { svc: new AdHocServerPresenceService(...deps), countFor, emit };
 }
@@ -284,5 +287,119 @@ describe('AdHocServerPresenceService — a heartbeat after a spawn (ROK-1802 Cod
       .mocked(attachServerPlayer)
       .mock.calls.map(([, , , pl]) => pl.playerId);
     expect(attached).toEqual([OTHER.playerId, PLAYER.playerId]);
+  });
+});
+
+/** A plugin host whose Pelican state the test flips (no event emitted). */
+function pluginHost(): { moduleRef: unknown; setActive: (v: boolean) => void } {
+  let active = true;
+  const registry = {
+    isActive: (slug: string): boolean => slug === 'pelican' && active,
+  };
+  const get = (token: unknown): unknown =>
+    token === PluginRegistryService ? registry : undefined;
+  return { moduleRef: { get }, setActive: (v) => (active = v) };
+}
+
+describe('AdHocServerPresenceService — Pelican turned off (ROK-2355)', () => {
+  const held = async (
+    moduleRef: unknown = null,
+  ): Promise<AdHocServerPresenceService> => {
+    jest
+      .mocked(checkSuppression)
+      .mockResolvedValue(
+        CLEARANCE as unknown as Awaited<ReturnType<typeof checkSuppression>>,
+      );
+    const { svc } = serviceWith(0, 0, moduleRef);
+    await svc.playerJoined(SOURCE, OTHER);
+    expect(await svc.heldPresence(SOURCE)).toEqual([OTHER]);
+    return svc;
+  };
+
+  it('drops every below-threshold hold when Pelican deactivates', async () => {
+    const svc = await held();
+    await svc.onPluginDeactivated({ slug: 'pelican' });
+    expect(await svc.heldPresence(SOURCE)).toEqual([]);
+  });
+
+  it('refuses a hold that lands after Pelican deactivates (a queued session call)', async () => {
+    const svc = await held();
+    await svc.onPluginDeactivated({ slug: 'pelican' });
+    jest.mocked(checkSuppression).mockClear();
+    await svc.playerJoined(SOURCE, PLAYER);
+    expect(await svc.heldPresence(SOURCE)).toEqual([]);
+    expect(checkSuppression).not.toHaveBeenCalled();
+  });
+
+  it('holds again once Pelican is reactivated', async () => {
+    const svc = await held();
+    await svc.onPluginDeactivated({ slug: 'pelican' });
+    svc.onPluginActivated({ slug: 'pelican' });
+    await svc.playerJoined(SOURCE, PLAYER);
+    expect(await svc.heldPresence(SOURCE)).toEqual([PLAYER]);
+  });
+
+  it('an evaluate in flight at deactivation spawns from its holds, never from an emptied set (Codex P2)', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    let reached: () => void = () => undefined;
+    const atGate = new Promise<void>((r) => (reached = r));
+    jest.mocked(checkSuppression).mockImplementation(() => {
+      reached();
+      return new Promise((r) => (release = r));
+    });
+    const { svc } = serviceWith(1); // 1 held + 1 in voice = minPlayers 2
+    const join = svc.playerJoined(SOURCE, PLAYER);
+    await atGate;
+    const off = svc.onPluginDeactivated({ slug: 'pelican' });
+    release(CLEARANCE);
+    await Promise.all([join, off]);
+    const spawnedWith = jest
+      .mocked(buildServerSpawnInput)
+      .mock.calls.map(([, , , players]) => players);
+    expect(spawnedWith).toEqual([[PLAYER]]);
+    expect(await svc.heldPresence(SOURCE)).toEqual([]);
+  });
+
+  it('holds again after deactivate -> uninstall -> install, which emits no ACTIVATED (review r2 M1)', async () => {
+    const host = pluginHost();
+    const svc = await held(host.moduleRef);
+    host.setActive(false);
+    await svc.onPluginDeactivated({ slug: 'pelican' });
+    await svc.playerJoined(SOURCE, PLAYER);
+    expect(await svc.heldPresence(SOURCE)).toEqual([]);
+    host.setActive(true); // install: active row, INSTALLED only
+    await svc.playerJoined(SOURCE, PLAYER);
+    expect(await svc.heldPresence(SOURCE)).toEqual([PLAYER]);
+  });
+
+  it('a reactivation during the drain keeps the holds made since (review r2 m1)', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    let reached: () => void = () => undefined;
+    const atGate = new Promise<void>((r) => (reached = r));
+    jest
+      .mocked(checkSuppression)
+      .mockResolvedValue(
+        CLEARANCE as unknown as Awaited<ReturnType<typeof checkSuppression>>,
+      )
+      .mockImplementationOnce(() => {
+        reached();
+        return new Promise((r) => (release = r));
+      });
+    const { svc } = serviceWith(0);
+    const slow = svc.playerJoined(SOURCE, PLAYER); // game 10 stuck at the gate
+    await atGate;
+    const off = svc.onPluginDeactivated({ slug: 'pelican' });
+    svc.onPluginActivated({ slug: 'pelican' });
+    const other: ServerPresenceSource = { gameId: 20, pelicanServerId: 2 };
+    await svc.playerJoined(other, OTHER);
+    release(CLEARANCE);
+    await Promise.all([slow, off]);
+    expect(await svc.heldPresence(other)).toEqual([OTHER]);
+  });
+
+  it('keeps the holds when another plugin deactivates', async () => {
+    const svc = await held();
+    await svc.onPluginDeactivated({ slug: 'valheim' });
+    expect(await svc.heldPresence(SOURCE)).toEqual([OTHER]);
   });
 });

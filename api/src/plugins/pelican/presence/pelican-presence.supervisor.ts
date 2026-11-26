@@ -105,8 +105,13 @@ export class PelicanPresenceSupervisor
     return [...this.sessions.keys()];
   }
 
-  /** ROK-1801 read port: every player on every open session. */
+  /**
+   * ROK-1801 read port: every player on every open session. ROK-2355: none
+   * while Pelican is off — a session a reconcile opened mid-deactivation must
+   * not feed voice thresholds, enrolment or the roster panel.
+   */
   playersOnGames(): ServerRosterPlayer[] {
+    if (!this.registry.isActive(PELICAN_PLUGIN_ID)) return [];
     return [...this.sessions.values()].flatMap((r) => r.session.players());
   }
 

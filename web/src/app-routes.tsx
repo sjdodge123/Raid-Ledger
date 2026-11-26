@@ -8,6 +8,7 @@ import { RootRedirect } from './components/RootRedirect';
 import { RedirectKeepingLocation } from './components/routing/redirect-keeping-location';
 import { LegacyHubRedirect } from './components/routing/legacy-hub-redirect';
 import { NasOnlyRoute } from './components/admin/nas-only-route';
+import { PluginRoute } from './components/routing/plugin-route';
 import { LegacyCalendarsRedirect, LegacySendEventsRedirect } from './components/features/calendar-sync/calendar-legacy-redirects';
 import { AuthSuccessPage } from './pages/auth-success-page';
 import { PublicLineupPage } from './pages/public/PublicLineupPage';
@@ -42,7 +43,7 @@ import {
   GgArchivePage,
   GgLatestRedirect,
   GgPublicPage,
-  PublicGuildCardPage,
+  PublicGuildCardPage, PublicGuildCardNotFoundPage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -87,12 +88,12 @@ function AdminIntegrationRoutes() {
 }
 
 /** Admin → General → GG and its admin-only "Preview my GG" story (ROK-2187). */
-/** Logs, then the `blizzard` plugin's Addon errors page (ROK-2099; it redirects while the plugin is off). */
+/** Logs, then the `blizzard` plugin's Addon errors page (ROK-2099; ROK-2358: PluginRoute redirects while the plugin is off). */
 function LogsAdminRoutes() {
   return (
     <>
       <Route path="general/logs" element={<LogsPanel />} />
-      <Route path="general/addon-errors" element={<AddonErrorsPage />} />
+      <Route path="general/addon-errors" element={<PluginRoute slug="blizzard" fallback={<Navigate to="/admin/settings/general" replace />}><AddonErrorsPage /></PluginRoute>} />
     </>
   );
 }
@@ -171,7 +172,7 @@ export function AppRoutes() {
       <Route path="/p/lineup/:slug" element={<PublicLineupPage />} />
       <Route path="/p/poll/:token" element={<PollSharePage />} />
       <Route path="/w/:slug" element={<GgPublicPage />} />
-      <Route path="/p/guild/:slug" element={<PublicGuildCardPage />} />
+      <Route path="/p/guild/:slug" element={<PluginRoute slug="blizzard" fallback={<PublicGuildCardNotFoundPage />}><PublicGuildCardPage /></PluginRoute>} />
       <Route path="/h/:token" element={<HubInvitePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/claim" element={<ClaimPage />} />
@@ -198,7 +199,7 @@ export function AppRoutes() {
         <Route path="/hubs/:id" element={<GuildPage />} />
         {/* ROK-2149: a roster member with no character — the same page, read-only. */}
         <Route path="/hubs/:id/members/:memberId" element={<CharacterDetailPage />} />
-        <Route path="/valheim/characters/:id" element={<ValheimCharacterPage />} />
+        <Route path="/valheim/characters/:id" element={<PluginRoute slug="valheim"><ValheimCharacterPage /></PluginRoute>} />
         <Route path="/players" element={<PlayersPage />} />
         {/* ROK-1955: Companion device approval; `#code=` may pre-fill it. */}
         <Route path="/link" element={<CompanionLinkPage />} />

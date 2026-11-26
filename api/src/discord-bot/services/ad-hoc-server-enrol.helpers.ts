@@ -22,6 +22,7 @@ import type {
 } from '../../plugins/pelican/presence/server-presence.sink';
 import { presenceKey } from '../../plugins/pelican/presence/presence-events';
 import type { AdHocParticipantJoinedPayload } from '../discord-bot.constants';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { getEventById } from './ad-hoc-event.helpers';
 import type { PendingServerPlayers } from './ad-hoc-server-pending';
 import {
@@ -60,6 +61,24 @@ export function lazyReader(
     return r ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * ROK-2355 review r2 M1: whether plugin `slug` is on right now, read from the
+ * plugin host at call time (same lazy resolve as `lazyReader`). Unbound
+ * (unit specs) reads as off.
+ */
+export function pluginActive(
+  moduleRef: ModuleRef | null,
+  slug: string,
+): boolean {
+  try {
+    const opts = { strict: false };
+    const registry = moduleRef?.get(PluginRegistryService, opts);
+    return registry?.isActive(slug) ?? false;
+  } catch {
+    return false;
   }
 }
 
