@@ -246,7 +246,13 @@ describe('GET /lfg/:gameId?group= — members carry pluginDetail (ROK-2352)', ()
       roles: ['tank', 'healer'],
       characterName: 'Thrallbek',
     });
-    expect(byUser(group, bob.userId).pluginDetail).toBeUndefined();
+    // A keyed hand always carries a detail now (§3.3, MINOR-7): bob keeps his
+    // own dps-only detail and never gets alice's.
+    expect(byUser(group, bob.userId).pluginDetail).toMatchObject({
+      roles: ['dps'],
+      characterId: null,
+      characterName: null,
+    });
   });
 
   it('carries no detail once the adapter is inactive (the fold)', async () => {
