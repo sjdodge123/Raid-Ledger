@@ -18,7 +18,8 @@
  *     at all so it renders from the stored count. Unifying them is exactly the
  *     defect that got round 1 of this story rejected.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SettingsService } from '../../settings/settings.service';
@@ -58,8 +59,13 @@ import {
 } from './lfm-embed.helpers';
 import { currentView, liveFloorFor, viewForChange } from './lfm-embed.views';
 import {
+  syncKeyedGroups,
+  type LfmKeyedSyncDeps,
+} from './lfm-embed.groups.helpers';
+import {
   closeLfmMessage,
   findOpenLfmMessage,
+  listOpenLfmMessages,
   listUntrackedLfmGames,
   loadLfmGame,
   recordLfmRender,
@@ -83,6 +89,9 @@ export class LfmEmbedService {
     private readonly board: LfgBoardService,
     private readonly events: EventEmitter2,
     private readonly chain: LfgGameChainService,
+    // ROK-2352: global in production; optional so unit specs that predate
+    // groups construct the service unchanged (keyed pass then skipped).
+    @Optional() private readonly pluginRegistry?: PluginRegistryService,
   ) {}
 
   /**
@@ -182,6 +191,30 @@ export class LfmEmbedService {
     } catch (err) {
       this.warn(`post the LFM message for game ${payload.gameId}`, err);
     }
+    await this.syncKeyed(payload.gameId);
+  }
+
+  /**
+   * ROK-2352 — the game's keyed (per-instance) posts, after the `''` post.
+   * Skipped when no registry is wired (unit specs), so the `''` path stays
+   * byte for byte; a non-WoW game reads one empty query and returns.
+   */
+  private async syncKeyed(gameId: number): Promise<void> {
+    const registry = this.pluginRegistry;
+    if (!registry) return;
+    try {
+      const game = await loadLfmGame(this.db, gameId);
+      if (!game) return;
+      const deps: LfmKeyedSyncDeps = {
+        db: this.db,
+        registry,
+        edit: (row, view) => this.editRow(row, view),
+        post: (view) => this.postNew(game.id, view),
+      };
+      await syncKeyedGroups(deps, game, isVisibleGame(game));
+    } catch (err) {
+      this.warn(`sync the keyed LFM posts for game ${gameId}`, err);
+    }
   }
 
   /**
@@ -201,21 +234,29 @@ export class LfmEmbedService {
   private async editForChange(payload: LfgGroupChangedPayload): Promise<void> {
     try {
       const row = await findOpenLfmMessage(this.db, payload.gameId);
-      if (!row) return; // E4
-      const game = await loadLfmGame(this.db, payload.gameId);
-      if (!game) return;
-      const view = await viewForChange(
-        this.db,
-        game,
-        row.lastMemberCount,
-        payload,
-        this.logger,
-        liveFloorFor(row.postKind),
-      );
-      if (view) await this.editRow(row, view);
+      if (row) await this.editOpenRow(row, payload); // else E4
     } catch (err) {
       this.warn(`edit the LFM message for game ${payload.gameId}`, err);
     }
+    await this.syncKeyed(payload.gameId);
+  }
+
+  /** The `''` row's edit for one change (the pre-ROK-2352 body). */
+  private async editOpenRow(
+    row: LfmMessageRow,
+    payload: LfgGroupChangedPayload,
+  ): Promise<void> {
+    const game = await loadLfmGame(this.db, payload.gameId);
+    if (!game) return;
+    const view = await viewForChange(
+      this.db,
+      game,
+      row.lastMemberCount,
+      payload,
+      this.logger,
+      liveFloorFor(row.postKind),
+    );
+    if (view) await this.editRow(row, view);
   }
 
   /**
@@ -231,6 +272,7 @@ export class LfmEmbedService {
     try {
       await this.reconcileOpenRows();
       await this.reconcileUntrackedGroups();
+      await this.reconcileKeyedGroups();
     } catch (err) {
       this.warn('reconcile open LFM messages', err);
     }
@@ -280,6 +322,19 @@ export class LfmEmbedService {
           err,
         );
       }
+    }
+  }
+
+  /** ROK-2352 — the keyed pass for every game holding an open keyed row. */
+  private async reconcileKeyedGroups(): Promise<void> {
+    if (!this.pluginRegistry) return;
+    const gameIds = new Set(
+      (await listOpenLfmMessages(this.db))
+        .filter((row) => row.groupKey)
+        .map((row) => row.gameId),
+    );
+    for (const gameId of gameIds) {
+      await this.serialized(gameId, () => this.syncKeyed(gameId));
     }
   }
 

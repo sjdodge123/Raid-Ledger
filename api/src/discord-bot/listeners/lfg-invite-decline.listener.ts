@@ -67,10 +67,7 @@ export interface LfgInviteDeclinePress {
 export function parseInviteDeclinePress(
   customId: string,
 ): LfgInviteDeclinePress | null {
-  const parsed = parseLfgBoardCustomId(
-    customId,
-    LFG_BUTTON_IDS.INVITE_DECLINE,
-  );
+  const parsed = parseLfgBoardCustomId(customId, LFG_BUTTON_IDS.INVITE_DECLINE);
   if (parsed === null) return null;
   return {
     gameId: parsed.gameId,

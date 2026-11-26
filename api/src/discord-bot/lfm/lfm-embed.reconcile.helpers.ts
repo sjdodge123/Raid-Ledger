@@ -47,6 +47,9 @@ export interface LfmReconcileDeps {
  */
 export async function reconcileOpenRows(deps: LfmReconcileDeps): Promise<void> {
   for (const row of await listOpenLfmMessages(deps.db)) {
+    // ROK-2352: a keyed row is the keyed pass's (`syncKeyedGroups`, run by
+    // the service after this walk) — a game-wide view must never paint it.
+    if (row.groupKey) continue;
     try {
       await deps.serialized(row.gameId, () => reconcileRow(deps, row));
     } catch (err) {
