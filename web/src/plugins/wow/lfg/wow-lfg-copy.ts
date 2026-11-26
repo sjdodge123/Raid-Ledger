@@ -16,7 +16,8 @@ export const WOW_LFG_COPY = {
     rolesRequired: 'Pick at least one role',
     instancesLegend: 'Groups to join',
     rosterPreview: 'Roster',
-    anyLockInNote: 'No instance is set for an Any dungeon group — the event gets a generic roster.',
+    lockInInstance: 'Dungeon or raid',
+    lockInNoInstance: 'No instance (generic roster)',
 } as const;
 
 /** A group's display name: the adapter label, "Any dungeon" for `''`. */

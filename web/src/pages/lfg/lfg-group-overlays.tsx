@@ -3,7 +3,7 @@
  * piece of state that says which. Only one overlay is ever open; the lock-in
  * confirm carries the window its row handed up.
  */
-import type { JSX } from 'react';
+import { useState, type ComponentType, type JSX } from 'react';
 import type { LfgGroupDetailDto, LfgMemberDto, LfgOverlapWindowDto } from '@raid-ledger/contract';
 import type { LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
 import { LfgLockInConfirm } from './LfgLockInConfirm';
@@ -12,12 +12,13 @@ import { LfgParticipantsList } from './LfgParticipantsList';
 import { LfgPollConfirm } from './LfgPollConfirm';
 import { LfgStartNowConfirm } from './LfgStartNowConfirm';
 import type { LfgOverlay } from './use-lfg-overlay';
+import type { LfgGroupingContext, LfgLockInExtra, LfgLockInFieldsProps } from '../../plugins/lfg-grouping';
 
 /** The writes the dialogs confirm; each takes the close to run when it lands. */
 export interface LfgOverlayActions {
     startPoll: (done: () => void) => void;
     startNow: (done: () => void) => void;
-    lockIn: (window: LfgOverlapWindowDto, done: () => void) => void;
+    lockIn: (window: LfgOverlapWindowDto, done: () => void, extra?: LfgLockInExtra) => void;
     pickUrgency: (pick: LfgUrgencyPick, done: () => void) => void;
     withdraw: (done: () => void) => void;
     isPollPending: boolean;
@@ -31,12 +32,22 @@ export interface LfgGroupOverlaysProps {
     overlay: LfgOverlay;
     actions: LfgOverlayActions;
     onClose: () => void;
+    /** ROK-2352: the grouping plugin's lock-in fields, when one is active. */
+    lockInFields?: LfgLockInSlot | undefined;
+}
+
+/** The active grouping's `LockInFields` and the page context. */
+export interface LfgLockInSlot {
+    Fields: ComponentType<LfgLockInFieldsProps>;
+    context: LfgGroupingContext;
 }
 
 /** The lock-in confirm — mounted only while a row's window is being confirmed. */
-function LockInDialog({ group, overlay, actions, onClose }: LfgGroupOverlaysProps): JSX.Element | null {
+function LockInDialog({ group, overlay, actions, onClose, lockInFields }: LfgGroupOverlaysProps): JSX.Element | null {
+    const [extra, setExtra] = useState<LfgLockInExtra>({});
     if (overlay.kind !== 'lockin') return null;
     const { window } = overlay;
+    const Fields = lockInFields?.Fields;
     return (
         <LfgLockInConfirm
             isOpen
@@ -44,7 +55,8 @@ function LockInDialog({ group, overlay, actions, onClose }: LfgGroupOverlaysProp
             members={group.members}
             isPending={actions.isLockInPending}
             onCancel={onClose}
-            onConfirm={() => actions.lockIn(window, onClose)}
+            onConfirm={() => actions.lockIn(window, onClose, extra)}
+            extra={Fields && lockInFields ? <Fields context={lockInFields.context} group={group} onChange={setExtra} /> : undefined}
         />
     );
 }

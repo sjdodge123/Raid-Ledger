@@ -39,8 +39,11 @@ export interface LfgRaiseHandSelection {
 
 /** Extra fields the plugin adds to a lock-in (an "Any" group picks its instance). */
 export interface LfgLockInExtra {
-    /** The group the event is locked in for; defaults to the page's group. */
-    lfgGroupKey?: string;
+    /**
+     * `CreateEventSchema.lfgChosenGroupKey` — the instance picked when locking
+     * in the Any-dungeon (`''`) group. Absent = no instance (generic roster).
+     */
+    lfgChosenGroupKey?: string;
 }
 
 export interface LfgRaiseHandFieldsProps {

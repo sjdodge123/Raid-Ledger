@@ -35,4 +35,16 @@ describe('useLockInEvent — group scope', () => {
         await waitFor(() => expect(createEvent).toHaveBeenCalledTimes(1));
         expect(createEvent.mock.calls[0]?.[0]).not.toHaveProperty('lfgGroupKey');
     });
+
+    it('sends lfgChosenGroupKey only for the Any group', async () => {
+        const any = renderHook(() => useLockInEvent(7, 'WoW'), { wrapper });
+        act(() => any.result.current.lockIn(WINDOW, undefined, 'raid:409'));
+        await waitFor(() => expect(createEvent).toHaveBeenCalledTimes(1));
+        expect(createEvent.mock.calls[0]?.[0]).toMatchObject({ lfgGameId: 7, lfgChosenGroupKey: 'raid:409' });
+        expect(createEvent.mock.calls[0]?.[0]).not.toHaveProperty('lfgGroupKey');
+        const keyed = renderHook(() => useLockInEvent(7, 'WoW', 'dungeon:36'), { wrapper });
+        act(() => keyed.result.current.lockIn(WINDOW, undefined, 'raid:409'));
+        await waitFor(() => expect(createEvent).toHaveBeenCalledTimes(2));
+        expect(createEvent.mock.calls[1]?.[0]).not.toHaveProperty('lfgChosenGroupKey');
+    });
 });

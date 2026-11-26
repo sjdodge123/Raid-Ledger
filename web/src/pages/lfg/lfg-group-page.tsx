@@ -79,7 +79,7 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined, g
         startPoll,
         // ROK-1613: `onSettled`, so an AC6 refusal closes the confirm too.
         startNow: (done) => start.startNow({ onSettled: done }),
-        lockIn: (window, done) => lock.lockIn(window, { onSuccess: done }),
+        lockIn: (window, done, extra) => lock.lockIn(window, { onSuccess: done }, extra?.lfgChosenGroupKey),
         // ROK-1479: spread so a weekly pick contributes NO `ttlMinutes` key.
         pickUrgency: (pick, done) => join.mutate({ gameId, ...pick, ...groupKeysFor(groupKey) }, { onSuccess: done }),
         withdraw: (done) => withdraw.mutate(groupKey === '' ? gameId : { gameId, groupKey }, { onSuccess: done }),
@@ -177,7 +177,8 @@ function LfgGroupLoaded({ context, fallbackName, group }: { context: LfgGrouping
                 isBusy={actions.isBusy}
                 lockInHint={group.ownIntent == null ? LFG_COPY.findATimeNeedsIntent : undefined}
             />
-            <LfgGroupOverlays group={group} overlay={overlays.overlay} actions={actions.dialogs} onClose={overlays.close} />
+            <LfgGroupOverlays group={group} overlay={overlays.overlay} actions={actions.dialogs} onClose={overlays.close}
+                lockInFields={grouping?.LockInFields ? { Fields: grouping.LockInFields, context } : undefined} />
         </div>
     );
 }
