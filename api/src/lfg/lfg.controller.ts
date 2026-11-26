@@ -219,6 +219,7 @@ export class LfgController {
   async convert(
     @Param('gameId', ParseIntPipe) gameId: number,
     @Body() body: unknown,
+    @Query() query: unknown,
     @Req() req: AuthenticatedRequest,
   ): Promise<LfgConvertResponseDto> {
     const parsed = ConvertLfgIntentsSchema.safeParse(body);
@@ -233,6 +234,8 @@ export class LfgController {
         Object.keys(fieldErrors).length > 0 ? fieldErrors : formErrors,
       );
     }
-    return this.service.convert(req.user.id, gameId, parsed.data);
+    // ROK-2352: `?group` (default `''`) — only that group's hands convert.
+    const { group } = parseQuery(LfgGroupQuerySchema, query);
+    return this.service.convert(req.user.id, gameId, parsed.data, group);
   }
 }

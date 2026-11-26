@@ -19,6 +19,11 @@ import type { CreateSignupDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import type { SignupsService } from '../../events/signups.service';
 import { findFollowupSourceEventId } from '../scheduling/scheduling-query.helpers';
+import type { LfgGroupingRegistry } from '../../lfg/lfg-grouping.helpers';
+import {
+  loadLfgPollCarryover,
+  mergeCarryover,
+} from '../../lfg/lfg-poll-carryover.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type CarryRole = NonNullable<CreateSignupDto['preferredRoles']>[number];
@@ -161,6 +166,22 @@ export async function loadFollowupCarryover(
 /** What the creator signup needs. */
 export interface CreatorSignupDeps extends CarryoverDeps {
   signupsService: Pick<SignupsService, 'signup'>;
+  /** ROK-2352: resolves the LFG grouping adapter for the poll carryover. */
+  lfgGrouping?: LfgGroupingRegistry | undefined;
+}
+
+/** The creator's carried dto: the follow-up source wins over the LFG hand. */
+async function loadCreatorCarryover(
+  deps: CreatorSignupDeps,
+  matchId: number,
+  eventId: number,
+  userId: number,
+): Promise<CreateSignupDto | undefined> {
+  const followup = await loadFollowupCarryover(deps, { matchId, eventId }, [
+    userId,
+  ]);
+  const lfg = await loadLfgPollCarryover(deps, matchId, [userId]);
+  return mergeCarryover(lfg, followup).get(userId);
 }
 
 /**
@@ -179,9 +200,7 @@ export async function signUpCreatorWithCarryover(
   const carried =
     eventId === undefined
       ? undefined
-      : (await loadFollowupCarryover(deps, { matchId, eventId }, [userId])).get(
-          userId,
-        );
+      : await loadCreatorCarryover(deps, matchId, eventId, userId);
   const opts = { skipEndedCheck: true };
   for (const id of eventIds) {
     if (!carried) {

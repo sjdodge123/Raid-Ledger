@@ -66,6 +66,7 @@ import { assertHandCap, resolveLfgGrouping } from './lfg-grouping.helpers';
 import { attachGroupCounts } from './lfg-group-list.helpers';
 import { announceLfgPost } from './lfg-post-announce.helpers';
 import { resolveWithdrawScope } from './lfg-group-scope.helpers';
+import { resolveLockInGroup } from './lfg-lock-in-group.helpers';
 import { toConversionTarget } from './lfg-provenance.helpers';
 import {
   resolvePostGroup,
@@ -248,11 +249,15 @@ export class LfgService {
    * @param userId - Caller, who must have taken part in the group.
    * @param gameId - Game whose group converted.
    * @param dto - Exactly one of `pollId` / `eventId`.
+   * @param group - ROK-2352 `?group`: only that group's hands convert
+   *   (unknown key → 400; folded game → every hand). Absent (internal
+   *   callers) = every live hand of the game, as before groups.
    */
   async convert(
     userId: number,
     gameId: number,
     dto: ConvertLfgIntentsDto,
+    group?: string,
   ): Promise<{ converted: number }> {
     await requireVisibleGame(this.db, gameId);
     const target = toConversionTarget(dto);
@@ -267,7 +272,8 @@ export class LfgService {
     // live intent now) gets the idempotent answer and touches nobody: the
     // live rows belong to a LATER group they are not part of.
     if (role === 'retry') return { converted: 0 };
-    const converted = await convertGroup(this.db, gameId, target);
+    const scope = await this.convertScope(gameId, group);
+    const converted = await convertGroup(this.db, gameId, target, scope);
     // Zero rows means this is a retry of an already-converted group (E5): the
     // target message is terminal, so re-announcing it would re-render a card
     // nobody changed.
@@ -275,6 +281,21 @@ export class LfgService {
       this.emitGroupChanged({ gameId, reason: 'converted', ...target });
     }
     return { converted };
+  }
+
+  /** ROK-2352: the group a convert flips; absent = the whole game. */
+  private async convertScope(
+    gameId: number,
+    group: string | undefined,
+  ): Promise<string | null> {
+    if (group === undefined) return null;
+    const lockIn = await resolveLockInGroup(
+      this.db,
+      this.pluginRegistry,
+      gameId,
+      group,
+    );
+    return lockIn.scope;
   }
 
   /**

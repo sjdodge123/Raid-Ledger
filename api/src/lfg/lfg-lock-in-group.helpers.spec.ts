@@ -36,7 +36,7 @@ function fakeAdapter() {
     buildLockInPatch,
     describeGroup,
   } as unknown as LfgGroupingAdapter;
-  const registry: LfgGroupingRegistry = {
+  const registry = {
     getAdapter: jest.fn().mockReturnValue(adapter),
   } as unknown as LfgGroupingRegistry;
   return { adapter, registry, buildLockInPatch };

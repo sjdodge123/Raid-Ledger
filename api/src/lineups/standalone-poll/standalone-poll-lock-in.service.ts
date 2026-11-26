@@ -212,6 +212,7 @@ export class StandalonePollLockInService {
       signupsService: this.signupsService,
       logger: this.logger,
       events: this.events,
+      lfgGrouping: this.pluginRegistry,
       assertCreate: async (dto: CreateEventDto): Promise<void> => {
         await this.guildTag.assertCreate(user, dto);
         await assertSchedulingMatchUsable(this.db, dto, {

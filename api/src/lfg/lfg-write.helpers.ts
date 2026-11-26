@@ -32,6 +32,10 @@ import { convertedToTarget } from './lfg-provenance.helpers';
 import { tonightExpiresAt } from './lfg-tonight.helpers';
 import { agedBoardPostGameIds } from './lfg-post-age.helpers';
 import {
+  groupScopeFilter,
+  type LfgGroupScope,
+} from './lfg-group-scope.helpers';
+import {
   LFG_DEFAULT_NOW_TTL_MINUTES,
   LFG_DEFAULT_VISIBILITY,
   computeExpiresAt,
@@ -279,12 +283,15 @@ export { clearIntent } from './lfg-group-scope.helpers';
  * @param db - Drizzle handle.
  * @param gameId - Game whose group converted.
  * @param target - Exactly one of `pollId` / `eventId`.
+ * @param scope - ROK-2352: one group key, or null (default) = every live hand
+ *   of the game (the fold, and callers that predate groups).
  * @returns How many rows converted.
  */
 export async function convertGroup(
   db: LfgDb,
   gameId: number,
   target: LfgConversionTarget,
+  scope: LfgGroupScope = null,
 ): Promise<number> {
   const rows = await db
     .update(schema.lfgIntents)
@@ -294,7 +301,7 @@ export async function convertGroup(
       convertedToEventId: target.eventId ?? null,
       convertedAt: sql`statement_timestamp()`, // TDB:953 — DB clock at the UPDATE, not tx start
     })
-    .where(liveGroupRow(db, gameId, new Date()))
+    .where(and(liveGroupRow(db, gameId, new Date()), groupScopeFilter(scope)))
     .returning({ id: schema.lfgIntents.id });
   return rows.length;
 }
