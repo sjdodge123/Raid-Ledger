@@ -77,7 +77,11 @@ export function buildLfgPostComponents(
   if (inputs.state !== 'open') return [];
   const join = new ButtonBuilder()
     .setCustomId(
-      buildLfgBoardCustomId(LFG_BUTTON_IDS.JOIN, inputs.gameId, inputs.groupKey),
+      buildLfgBoardCustomId(
+        LFG_BUTTON_IDS.JOIN,
+        inputs.gameId,
+        inputs.groupKey,
+      ),
     )
     .setStyle(ButtonStyle.Primary)
     .setLabel(

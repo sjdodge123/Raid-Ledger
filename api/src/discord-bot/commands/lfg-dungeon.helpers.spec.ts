@@ -31,7 +31,10 @@ function adapterListing(groups: LfgGroupDescriptor[]): {
   listGroups: jest.Mock;
 } {
   const listGroups = jest.fn().mockResolvedValue(groups);
-  return { adapter: { listGroups } as unknown as LfgGroupingAdapter, listGroups };
+  return {
+    adapter: { listGroups } as unknown as LfgGroupingAdapter,
+    listGroups,
+  };
 }
 
 const CTX = { gameId: 42, gameSlug: 'world-of-warcraft-classic' };
@@ -100,9 +103,11 @@ describe('resolveDungeonPick (ROK-2352)', () => {
 
 describe('resolveDungeonGroup (ROK-2352)', () => {
   it('ignores the option when the game folds (no active adapter)', async () => {
-    await expect(resolveDungeonGroup(null, CTX, 'Deadmines')).resolves.toEqual(
-      { groupKey: '', scope: null, label: null },
-    );
+    await expect(resolveDungeonGroup(null, CTX, 'Deadmines')).resolves.toEqual({
+      groupKey: '',
+      scope: null,
+      label: null,
+    });
   });
 
   it("lands in Any dungeon ('' scoped) when the option is empty", async () => {
@@ -117,9 +122,7 @@ describe('resolveDungeonGroup (ROK-2352)', () => {
 
   it('resolves a pick against the adapter catalogue for this game', async () => {
     const { adapter, listGroups } = adapterListing(CATALOGUE);
-    await expect(
-      resolveDungeonGroup(adapter, CTX, 'raid:3'),
-    ).resolves.toEqual({
+    await expect(resolveDungeonGroup(adapter, CTX, 'raid:3')).resolves.toEqual({
       groupKey: 'raid:3',
       scope: 'raid:3',
       label: 'Molten Core',

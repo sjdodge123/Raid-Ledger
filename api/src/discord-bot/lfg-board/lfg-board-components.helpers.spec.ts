@@ -103,8 +103,12 @@ describe('buildLfgPostComponents — ROK-2352, keyed group ids', () => {
     const [join, leave] = buttons({ groupKey: 'dungeon:1234' });
     const joinId = (join as { custom_id: string }).custom_id;
     const leaveId = (leave as { custom_id: string }).custom_id;
-    expect(joinId).toBe(`${LFG_BUTTON_IDS.JOIN}:${String(GAME_ID)}:dungeon:1234`);
-    expect(leaveId).toBe(`${LFG_BUTTON_IDS.LEAVE}:${String(GAME_ID)}:dungeon:1234`);
+    expect(joinId).toBe(
+      `${LFG_BUTTON_IDS.JOIN}:${String(GAME_ID)}:dungeon:1234`,
+    );
+    expect(leaveId).toBe(
+      `${LFG_BUTTON_IDS.LEAVE}:${String(GAME_ID)}:dungeon:1234`,
+    );
     expect(parseJoinCustomId(joinId)).toBe(GAME_ID);
   });
 
