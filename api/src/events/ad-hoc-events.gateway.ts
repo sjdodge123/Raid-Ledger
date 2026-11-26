@@ -16,6 +16,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import type { AdHocParticipantDto } from '@raid-ledger/contract';
+import { toViewerParticipants } from './ad-hoc-roster-projection.helpers';
 
 /**
  * WebSocket gateway for real-time ad-hoc event updates (ROK-293).
@@ -92,6 +93,9 @@ export class AdHocEventsGateway implements OnGatewayInit, OnGatewayDisconnect {
 
   /**
    * Emit a roster update to all clients watching a specific event.
+   * ROK-2323: any signed-in socket may join the room, so the broadcast is
+   * always the viewer projection (no Discord / Steam / platform ids). The
+   * web refetches the REST roster on this event for its per-viewer detail.
    */
   emitRosterUpdate(
     eventId: number,
@@ -101,7 +105,7 @@ export class AdHocEventsGateway implements OnGatewayInit, OnGatewayDisconnect {
     const start = performance.now();
     this.server.to(`event:${eventId}`).emit('roster:update', {
       eventId,
-      participants,
+      participants: toViewerParticipants(participants),
       activeCount,
     });
     perfLog('WS', 'roster:update', performance.now() - start, {

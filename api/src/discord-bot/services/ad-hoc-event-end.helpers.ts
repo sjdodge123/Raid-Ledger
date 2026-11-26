@@ -41,7 +41,8 @@ export async function notifyCompleted(
       endTime: now.toISOString(),
     },
     participants.map((p) => ({
-      discordUserId: p.discordUserId,
+      // getRoster is the server-side (unprojected) roster: always set.
+      discordUserId: p.discordUserId ?? null,
       discordUsername: p.discordUsername,
       totalDurationSeconds: p.totalDurationSeconds,
     })),

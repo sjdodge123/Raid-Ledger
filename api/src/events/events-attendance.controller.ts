@@ -33,6 +33,10 @@ import type { UserRole } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
 import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
 import { resolveVoiceChannelForEvent } from './voice-channel-resolver.helpers';
+import {
+  toViewerRoster,
+  withHasDiscord,
+} from './ad-hoc-roster-projection.helpers';
 import { SettingsService } from '../settings/settings.service';
 
 @Controller('events')
@@ -78,16 +82,24 @@ export class EventsAttendanceController {
     return this.analyticsService.getEventMetrics(eventId);
   }
 
+  /**
+   * ROK-2323: Discord / Steam / platform ids (and a SteamID64 used as a
+   * name) go only to the event owner or an admin/operator; any other active
+   * member gets the viewer projection. Deactivated accounts are refused.
+   */
   @Get(':id/ad-hoc-roster')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async getAdHocRoster(
     @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
   ): Promise<AdHocRosterResponseDto> {
     const event = await this.eventsService.findOne(id);
-    if (event.isAdHoc) {
-      return this.adHocEventService.getAdHocRoster(id);
-    }
-    return this.voiceAttendanceService.getActiveRoster(id);
+    const roster = event.isAdHoc
+      ? await this.adHocEventService.getAdHocRoster(id)
+      : this.voiceAttendanceService.getActiveRoster(id);
+    const privileged =
+      event.creator.id === req.user.id || isOperatorOrAdmin(req.user.role);
+    return privileged ? withHasDiscord(roster) : toViewerRoster(roster);
   }
 
   @Get(':id/voice-channel')
