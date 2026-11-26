@@ -9,7 +9,7 @@ import { Modal } from '../ui/modal';
 import { RoleIcon } from '../shared/RoleIcon';
 import { useAriaLive } from '../../hooks/use-aria-live';
 import { useRosterActions } from './use-roster-actions';
-import { findUnplacedAssignments } from './roster-unplaced';
+import { benchSlotCount, splitUnplaced } from './roster-unplaced';
 
 interface RosterBuilderProps {
     pool: RosterAssignmentResponse[];
@@ -127,29 +127,29 @@ function RosterAssignmentPopup({ actions, pool, assignments, eventId, canSelfAss
 }
 
 function useRosterBuilderData(props: RosterBuilderProps) {
-    const { pool, assignments, slots, onRosterChange, currentUserId, pugs = [] } = props;
+    const { slots, onRosterChange, currentUserId, pugs = [] } = props;
     const { announce } = useAriaLive();
     const { isGenericGame, roleSlots, getSlotCount } = useRosterSlots(slots);
+    // ROK-2348: rows the grid cannot show are worked with as unassigned pool rows.
+    const { pool, assignments } = React.useMemo(
+        () => splitUnplaced(props.pool, props.assignments, roleSlots.map(s => s.role), getSlotCount),
+        [props.pool, props.assignments, roleSlots, getSlotCount]);
     const actions = useRosterActions({ pool, assignments, onRosterChange, roleSlots, getSlotCount, isGenericGame, announce });
     const availableSlots = useAvailableSlots(roleSlots, assignments, getSlotCount);
     const allSlotsFilled = useAllSlotsFilled(roleSlots, assignments, getSlotCount);
     const isCurrentUserInRoster = currentUserId != null && (pool.some(p => p.userId === currentUserId) || assignments.some(a => a.userId === currentUserId));
     const activePugs = pugs.filter(p => p.status === 'pending' || p.status === 'invited');
-    // ROK-2348: rows the grid cannot show count as unassigned in the bar.
-    const barPool = React.useMemo(() => {
-        const unplaced = findUnplacedAssignments(assignments, roleSlots.map(s => s.role), getSlotCount);
-        return unplaced.length > 0 ? [...pool, ...unplaced] : pool;
-    }, [pool, assignments, roleSlots, getSlotCount]);
-    return { isGenericGame, roleSlots, getSlotCount, actions, availableSlots, allSlotsFilled, isCurrentUserInRoster, activePugs, barPool };
+    return { pool, assignments, isGenericGame, roleSlots, getSlotCount, actions, availableSlots, allSlotsFilled, isCurrentUserInRoster, activePugs };
 }
 
 export const RosterBuilder = memo(function RosterBuilder(props: RosterBuilderProps) {
-    const { pool, assignments, canEdit, onSlotClick, canJoin = false, currentUserId, onSelfRemove, stickyExtra, onGenerateInviteLink, onRemovePug, onEditPug, onRegeneratePugLink, eventId, onRemoveFromEvent, gameId, isMMOEvent } = props;
+    const { canEdit, onSlotClick, canJoin = false, currentUserId, onSelfRemove, stickyExtra, onGenerateInviteLink, onRemovePug, onEditPug, onRegeneratePugLink, eventId, onRemoveFromEvent, gameId, isMMOEvent } = props;
     const d = useRosterBuilderData(props);
+    const { pool, assignments } = d;
 
     return (
         <div className="space-y-4">
-            <UnassignedBarSection pool={d.barPool} canEdit={canEdit} stickyExtra={stickyExtra} onBrowseAll={() => d.actions.setBrowseAll(true)} />
+            <UnassignedBarSection pool={pool} canEdit={canEdit} stickyExtra={stickyExtra} onBrowseAll={() => d.actions.setBrowseAll(true)} />
             {canEdit && <AdminButtons pool={pool} allSlotsFilled={d.allSlotsFilled} assignmentCount={assignments.length} actions={d.actions} />}
             <AutoFillModal preview={d.actions.autoFillPreview} onClose={() => d.actions.setAutoFillPreview(null)} onConfirm={d.actions.handleAutoFillConfirm} />
             {d.activePugs.length > 0 && <PugInvitesBar pugs={d.activePugs} onRemovePug={onRemovePug} onEditPug={onEditPug} onRegeneratePugLink={onRegeneratePugLink} />}
@@ -252,7 +252,7 @@ function RoleSlotGrid(props: RoleSlotGridProps) {
             {roleSlots.map(({ role, label, color }) => {
                 const configuredCount = getSlotCount(role);
                 const assigned = assignments.filter((a) => a.slot === role);
-                const count = role === 'bench' ? Math.max(configuredCount, assigned.length + 1) : configuredCount;
+                const count = role === 'bench' ? benchSlotCount(configuredCount, assigned) : configuredCount;
                 if (count === 0) return null;
                 return <RoleGroup key={role} role={role} label={label} color={color} assigned={assigned} count={count} {...rest} />;
             })}
