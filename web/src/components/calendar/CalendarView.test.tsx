@@ -21,9 +21,11 @@ vi.mock('react-router-dom', async () => {
 // ─── useEvents mock with configurable return ──────────────────────────────────
 
 const mockUseEventsReturn = {
-    data: { data: [] as ReturnType<typeof createMockEvent>[] },
+    data: { data: [] as ReturnType<typeof createMockEvent>[] } as { data: ReturnType<typeof createMockEvent>[] } | undefined,
     isLoading: false,
     isFetching: false,
+    error: null as Error | null,
+    refetch: vi.fn(),
 };
 
 vi.mock('../../hooks/use-events', () => ({
@@ -331,5 +333,45 @@ describe('CalendarView — Week card accessible name carries the hub (ROK-1893 P
         const tagged = screen.getByRole('button', { name: /Hub calendar night #34.*· Seed Crew/, description: new RegExp(`^${LABEL}: Hub calendar night #34 · Seed Crew$`) });
         expect(tagged).toHaveAttribute('title', expect.stringMatching(/: Hub calendar night #34 · Seed Crew$/));
         expect(screen.getByRole('button', { name: /Plain night/, description: new RegExp(`^${LABEL}: Plain night$`) })).toBeInTheDocument();
+    });
+});
+
+describe('CalendarView — ROK-2342: a failed events fetch is an error, not an empty range', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        useCalendarViewStore.setState({ viewPref: 'week' });
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-02-10T12:00:00Z'));
+        mockUseEventsReturn.data = undefined;
+        mockUseEventsReturn.error = new Error('HTTP 500');
+        mockUseEventsReturn.refetch = vi.fn();
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+        mockUseEventsReturn.data = { data: [] };
+        mockUseEventsReturn.error = null;
+    });
+
+    it('a failed background refetch keeps the range already shown (no error over cached data)', () => {
+        mockUseEventsReturn.data = { data: [] };
+        renderWithProviders(<CalendarView />);
+        expect(screen.queryByTestId('calendar-error')).not.toBeInTheDocument();
+        expect(screen.getByText('No events this week')).toBeInTheDocument();
+    });
+
+    it('grid: shows the retryable error instead of "No events this week", and Try again refetches', () => {
+        renderWithProviders(<CalendarView />);
+        expect(screen.getByRole('heading', { name: "Couldn't load events" })).toBeInTheDocument();
+        expect(screen.queryByText('No events this week')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(mockUseEventsReturn.refetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('schedule: shows the retryable error instead of "No events scheduled", and Try again refetches', () => {
+        renderWithProviders(<CalendarView calendarView="schedule" />);
+        expect(screen.getByRole('heading', { name: "Couldn't load events" })).toBeInTheDocument();
+        expect(screen.queryByText('No events scheduled')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(mockUseEventsReturn.refetch).toHaveBeenCalledTimes(1);
     });
 });

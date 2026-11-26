@@ -14,6 +14,7 @@ import { SearchInput } from "../components/ui/search-input";
 import { LineupBanner } from "../components/lineups/LineupBanner";
 import { LfgGroupsProvider } from "../hooks/lfg-groups-provider";
 import { LfgHeartedPrompt } from "../components/lfg/lfg-hearted-prompt";
+import { QueryErrorState } from '../components/common/query-error-state';
 import { LfgLookingGrid } from "./games/lfg-looking-grid";
 import { useTileGameIds } from "./games/use-tile-game-ids";
 import { useLfgFilterParam } from "./games/use-lfg-filter-param";
@@ -67,8 +68,8 @@ function useCoopDataAvailable(rows: GameDiscoverRowDto[] | undefined, searchRows
 }
 
 function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilters: CoopFilterState) {
-  const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
-  const { data: searchData, isLoading: searchLoading } = useGameSearch(searchQuery, searchQuery.length >= 2);
+  const { data: discoverData, isLoading: discoverLoading, error: discoverError, refetch: refetchDiscover } = useGamesDiscover();
+  const { data: searchData, isLoading: searchLoading, error: searchError, refetch: refetchSearch } = useGameSearch(searchQuery, searchQuery.length >= 2);
   const isSearching = searchQuery.length >= 2;
   const activeFilters = GENRE_FILTERS.filter(f => selectedGenres.has(f.key));
   // ROK-1525: the player-count / ownership predicates are URL-state and read
@@ -93,7 +94,8 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilt
   // Pre-filter row count: the empty state has to tell "the library is empty"
   // apart from "the predicates emptied a stocked library" (ROK-1525 B2).
   const hasLibraryRows = (discoverData?.rows?.length ?? 0) > 0;
-  return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable, effectiveCoopFilters, hasLibraryRows, isLibraryFiltered, clearLibraryFilters };
+  // ROK-2342: an error only replaces the view when nothing loaded — a failed background refetch keeps the cached rows.
+  return { discoverError: discoverData === undefined ? discoverError : null, refetchDiscover, searchError: searchData === undefined ? searchError : null, refetchSearch, discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable, effectiveCoopFilters, hasLibraryRows, isLibraryFiltered, clearLibraryFilters };
 }
 
 function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS, coopFilters: CoopFilterState, libraryFilters: LibraryFilterState) {
@@ -156,8 +158,12 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
         <DiscoverFilters state={state} data={data} isLfgOnly={isLfgOnly} />
         {isLfgOnly ? (
           <LfgLookingGrid />
+        ) : data.isSearching && data.searchError ? (
+          <QueryErrorState title="Couldn't search games" error={data.searchError} onRetry={data.refetchSearch} testId="games-search-error" />
         ) : data.isSearching ? (
           <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} searchQuery={state.searchQuery} pricingMap={pricingMap} />
+        ) : data.discoverError ? (
+          <QueryErrorState title="Couldn't load games" error={data.discoverError} onRetry={data.refetchDiscover} testId="games-error" />
         ) : (
           <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} pricingMap={pricingMap}
             emptyState={{ isLibraryFiltered: data.isLibraryFiltered, hasLibraryRows: data.hasLibraryRows, onClearFilters: data.clearLibraryFilters }} />

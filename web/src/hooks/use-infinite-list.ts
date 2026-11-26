@@ -25,6 +25,10 @@ export interface UseInfiniteListResult<T> {
     isFetchingNextPage: boolean;
     hasNextPage: boolean;
     error: Error | null;
+    /** True when the failed request was a later page — earlier pages are still in `items` (ROK-2342). */
+    isFetchNextPageError: boolean;
+    /** Retry just the next page (the inline "Couldn't load more" row). */
+    fetchNextPage: () => void;
     sentinelRef: React.RefCallback<HTMLDivElement>;
     refetch: () => Promise<void>;
 }
@@ -65,7 +69,7 @@ export function useInfiniteList<T>({
     queryFn,
     enabled = true,
 }: UseInfiniteListOptions<T>): UseInfiniteListResult<T> {
-    const { data, error, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage, refetch } = useInfiniteQuery({
+    const { data, error, isLoading, isFetchingNextPage, isFetchNextPageError, hasNextPage, fetchNextPage, refetch } = useInfiniteQuery({
         queryKey,
         queryFn: ({ pageParam }) => queryFn(pageParam),
         initialPageParam: 1,
@@ -82,6 +86,8 @@ export function useInfiniteList<T>({
         isFetchingNextPage,
         hasNextPage: hasNextPage ?? false,
         error: error as Error | null,
+        isFetchNextPageError,
+        fetchNextPage: () => { void fetchNextPage(); },
         sentinelRef,
         refetch: async () => { await refetch(); },
     };

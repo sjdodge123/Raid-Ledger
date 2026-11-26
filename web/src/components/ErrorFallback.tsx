@@ -1,33 +1,32 @@
 import { isChunkLoadError } from '../lib/chunk-error';
+import { Button } from './ui/button';
+import { ErrorDetails } from './common/error-details';
 
-const reloadBtnStyle = {
-  marginTop: '1rem',
-  padding: '0.5rem 1rem',
-  borderRadius: '0.5rem',
-  border: '1px solid #444',
-  cursor: 'pointer',
-} as const;
-
+/**
+ * The root boundary's fallback (app-entry.tsx) — only reached when the app shell
+ * itself crashes; a page crash is caught in-shell by `RouteErrorBoundary`. Themed
+ * through tokens (ROK-2342 C10); the raw message sits in "Technical details".
+ */
 export function ErrorFallback({ error }: { error: unknown }) {
   const isChunk = isChunkLoadError(error);
   const message = isChunk
     ? 'The app has been updated. Please reload to get the latest version.'
-    : error instanceof Error
-      ? error.message
-      : 'An unexpected error occurred';
+    : 'Something went wrong. Reload the page to try again.';
 
   return (
-    <div style={{ padding: '2rem', textAlign: 'center' }}>
-      <h1>{isChunk ? 'New Version Available' : 'Something went wrong'}</h1>
-      <p style={{ color: '#888', marginTop: '0.5rem' }}>{message}</p>
-      <button
+    <div role="alert" className="min-h-screen bg-backdrop px-4 py-16 text-center">
+      <h1 className="text-xl font-semibold text-foreground">{isChunk ? 'New Version Available' : 'Something went wrong'}</h1>
+      <p className="mt-2 text-sm text-muted">{message}</p>
+      <Button
+        variant="secondary"
+        className="mt-6"
         // Leaves the auto-reload stamp alone: if the chunk still fails after
         // this reload, the page shows this screen again instead of looping.
         onClick={() => window.location.reload()}
-        style={reloadBtnStyle}
       >
         Reload Page
-      </button>
+      </Button>
+      {!isChunk && <ErrorDetails error={error} />}
     </div>
   );
 }
