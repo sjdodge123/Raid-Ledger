@@ -70,10 +70,10 @@ afterEach(async () => {
     await registry().activate(PELICAN_PLUGIN_ID);
 });
 
-afterAll(async () => {
-  if (registry().isActive(PELICAN_PLUGIN_ID))
-    await registry().deactivate(PELICAN_PLUGIN_ID);
-  testApp.seed = await truncateAllTables(testApp.db);
+// No DB work in afterAll: the global integration-setup afterAll closes the
+// pool first, so a query here fails with CONNECTION_ENDED. The next file
+// truncates (and re-provisions the plugin rows) in its own beforeEach.
+afterAll(() => {
   jest.restoreAllMocks();
 });
 
