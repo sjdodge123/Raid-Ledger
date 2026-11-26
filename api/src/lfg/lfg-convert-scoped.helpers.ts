@@ -10,10 +10,18 @@
  * Ruled (APPLY): a convert to a poll does NOT clear the members' `now` hands
  * in other groups — unlike a Start now, nobody is playing yet.
  */
-import { sql } from 'drizzle-orm';
-import type { LfgGroupScope } from './lfg-group-scope.helpers';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import * as schema from '../drizzle/schema';
+import {
+  groupScopeFilter,
+  type LfgGroupScope,
+} from './lfg-group-scope.helpers';
 import type { LfgDb } from './lfg-query.helpers';
-import { convertGroup, type LfgConversionTarget } from './lfg-write.helpers';
+import {
+  convertGroup,
+  liveGroupRow,
+  type LfgConversionTarget,
+} from './lfg-write.helpers';
 import { lfgGroupLockKey } from './lfg.constants';
 
 /**
@@ -38,4 +46,45 @@ export function convertGroupLocked(
     );
     return convertGroup(tx, gameId, target, scope);
   });
+}
+
+/**
+ * ROK-2352 (delta MAJOR 2) — a keyed ATTACH converts only the `now` hands it
+ * signs up: the named users' live `now` hands in the group. The group's
+ * tonight/week hands stay live, since a keyed Start now converts only the
+ * starter and those players have no signup on the session.
+ *
+ * @param db - Drizzle handle (the spawn transaction).
+ * @param gameId - Game whose group is attaching.
+ * @param eventId - The open session the hands join.
+ * @param scope - The keyed group.
+ * @param userIds - The users being attached (empty → no-op).
+ * @returns How many hands converted.
+ */
+export async function convertAttachedNowHands(
+  db: LfgDb,
+  gameId: number,
+  eventId: number,
+  scope: LfgGroupScope,
+  userIds: number[],
+): Promise<number> {
+  if (userIds.length === 0) return 0;
+  const rows = await db
+    .update(schema.lfgIntents)
+    .set({
+      status: 'converted',
+      convertedToPollId: null,
+      convertedToEventId: eventId,
+      convertedAt: sql`statement_timestamp()`, // TDB:953
+    })
+    .where(
+      and(
+        liveGroupRow(db, gameId, new Date()),
+        groupScopeFilter(scope),
+        eq(schema.lfgIntents.urgency, 'now'),
+        inArray(schema.lfgIntents.userId, userIds),
+      ),
+    )
+    .returning({ id: schema.lfgIntents.id });
+  return rows.length;
 }

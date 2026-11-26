@@ -205,6 +205,31 @@ describe('Keyed Start now session (ROK-2352 Codex lane A)', () => {
     expect(await rosterRole(eventId, b.userId)).not.toBe('none');
   });
 
+  it("delta MAJOR 2: a keyed attach leaves the group's tonight/week hands live", async () => {
+    const [a, b, c, d] = await createMembers(testApp, 'm2-a', 'm2-b', 'c', 'd');
+    const game = await createGame(testApp, 'M2', { slug: SLUG });
+    await hand(a, game.id, 'dungeon:1', 'now');
+    await hand(b, game.id, 'dungeon:1', 'now');
+    await hand(c, game.id, 'dungeon:1', 'week');
+    await hand(d, game.id, 'dungeon:1', 'tonight');
+    const eventId = await startNow(a, game.id, 'dungeon:1');
+
+    await testApp.app.get(LfgNowSpawnService).onGroupChanged({
+      gameId: game.id,
+      reason: 'joined',
+      groupKey: 'dungeon:1',
+    });
+
+    // MUTATION: attach via convertGroup (whole group) and c/d read 'converted'.
+    const s = await handStatuses(game.id);
+    expect({
+      b: s[`${b.userId}:dungeon:1`],
+      c: s[`${c.userId}:dungeon:1`],
+      d: s[`${d.userId}:dungeon:1`],
+    }).toEqual({ b: 'converted', c: 'active', d: 'active' });
+    expect(await rosterRole(eventId, c.userId)).toBe('none');
+  });
+
   it("P1-1: joining a keyed session's voice converts only that group's hand", async () => {
     const [a, b] = await createMembers(testApp, 'p11-a', 'p11-b');
     const game = await createGame(testApp, 'P11', { slug: SLUG });

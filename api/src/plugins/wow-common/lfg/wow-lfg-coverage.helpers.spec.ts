@@ -23,17 +23,21 @@ describe('assignRoleCoverage (ROK-2352 §3.4)', () => {
     expect(
       assignRoleCoverage(FIVE, [['tank', 'healer', 'dps'], ['dps'], ['dps']]),
     ).toEqual({ tank: 1, healer: 0, dps: 2 });
-    expect(
-      assignRoleCoverage(FIVE, [['tank'], ['tank'], ['tank']]),
-    ).toEqual({ tank: 1, healer: 0, dps: 0 });
+    expect(assignRoleCoverage(FIVE, [['tank'], ['tank'], ['tank']])).toEqual({
+      tank: 1,
+      healer: 0,
+      dps: 0,
+    });
   });
 
   // A greedy first-fit seats the tank/healer member as tank and leaves the
   // healer slot empty; the augmenting path moves them to free it.
   it('re-seats a flexible member so a single-role one can fill', () => {
-    expect(
-      assignRoleCoverage(FIVE, [['tank', 'healer'], ['tank']]),
-    ).toEqual({ tank: 1, healer: 1, dps: 0 });
+    expect(assignRoleCoverage(FIVE, [['tank', 'healer'], ['tank']])).toEqual({
+      tank: 1,
+      healer: 1,
+      dps: 0,
+    });
   });
 
   it('counts nothing for a member with no role set', () => {

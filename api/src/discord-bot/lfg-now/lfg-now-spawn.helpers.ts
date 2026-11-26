@@ -18,6 +18,7 @@ import * as schema from '../../drizzle/schema';
 import { openLfgNowEventWhere } from '../../lfg/lfg-playing.helpers';
 import { lfgGroupLockKey } from '../../lfg/lfg.constants';
 import { convertGroup } from '../../lfg/lfg-write.helpers';
+import { convertAttachedNowHands } from '../../lfg/lfg-convert-scoped.helpers';
 import {
   groupScopeFilter,
   type LfgGroupScope,
@@ -357,6 +358,23 @@ async function rosterHands(
 }
 
 /**
+ * ROK-2352 delta MAJOR 2: a keyed attach converts only the attached users'
+ * `now` hands (the ones it signs up). `''` / the fold keep the whole-group
+ * convert, where the spawn already converted every hand.
+ */
+function convertAttached(
+  tx: Db,
+  gameId: number,
+  eventId: number,
+  scope: LfgGroupScope,
+  userIds: number[],
+): Promise<number> {
+  if (isKeyedScope(scope))
+    return convertAttachedNowHands(tx, gameId, eventId, scope, userIds);
+  return convertGroup(tx, gameId, { eventId }, scope);
+}
+
+/**
  * The ATTACH branch: a late hand joins the open session rather than minting a
  * second event. Idempotent — with no live hands it converts zero rows.
  *
@@ -380,8 +398,8 @@ export async function attachToOpenEvent(
   // ROK-1888 m4, see manualStart
   const restored = await restoreFromGracePeriod(tx, eventId);
   const deferred = await rosterHands(tx, eventId, hands, scope, carryover);
-  await convertGroup(tx, gameId, { eventId }, scope);
   const userIds = hands.map((h) => h.userId);
+  await convertAttached(tx, gameId, eventId, scope, userIds);
   return {
     eventId,
     spawned: false,
