@@ -1,5 +1,10 @@
 import { API_BASE_URL } from '../config';
-import { AUTH_METHOD_KEY, LEGACY_MIGRATION_PENDING_KEY, SILENT_GUARD_KEY } from './auth-storage-keys';
+import {
+  AUTH_METHOD_KEY,
+  DISCORD_OAUTH_AT_KEY,
+  LEGACY_MIGRATION_PENDING_KEY,
+  SILENT_GUARD_KEY,
+} from './auth-storage-keys';
 import {
   safeGetItem,
   safeRemoveItem,
@@ -30,6 +35,30 @@ import {
 
 /** How long a silent-reauth attempt suppresses further attempts. */
 export const SILENT_REAUTH_COOLDOWN_MS = 10 * 60 * 1000;
+
+/**
+ * ROK-2370: how long a finished Discord OAuth sign-in keeps the silent bounce
+ * armed on a touch device (ruling Q4).
+ */
+export const DISCORD_OAUTH_FRESH_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** ROK-2370: remember that this browser just finished a Discord OAuth sign-in. */
+export function recordDiscordOAuth(now: number = Date.now()): void {
+  safeSetItem(DISCORD_OAUTH_AT_KEY, String(now));
+}
+
+/** True when this browser finished a Discord OAuth sign-in under 14 days ago. */
+function hasRecentDiscordOAuth(now: number): boolean {
+  const at = Number(safeGetItem(DISCORD_OAUTH_AT_KEY));
+  if (!Number.isFinite(at) || at <= 0) return false;
+  return now - at < DISCORD_OAUTH_FRESH_MS;
+}
+
+/** Touch device = coarse primary pointer (phones AND iPads, whatever the width). */
+function isTouchDevice(): boolean {
+  if (typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(pointer: coarse)').matches;
+}
 
 /** Record how the user authenticated (for the silent-reauth decision). */
 export function setAuthMethod(method: 'discord' | 'local' | 'magic'): void {
@@ -77,6 +106,7 @@ function isSilentGuardFresh(): boolean {
 export function clearAuthMethod(): void {
   safeRemoveItem(AUTH_METHOD_KEY);
   safeRemoveItem(LEGACY_MIGRATION_PENDING_KEY);
+  safeRemoveItem(DISCORD_OAUTH_AT_KEY);
 }
 
 /**
@@ -87,6 +117,9 @@ export function clearAuthMethod(): void {
  */
 export function attemptSilentReauth(returnTo: string): boolean {
   if (getAuthMethod() !== 'discord') return false;
+  // ROK-2370: a phone/iPad with no recent Discord OAuth here would land on
+  // Discord's own sign-in form — show our login page instead.
+  if (isTouchDevice() && !hasRecentDiscordOAuth(Date.now())) return false;
   if (isSilentGuardFresh()) return false;
   // No guard, no redirect: fall through to the login screen instead of looping.
   if (!armSilentGuard()) return false;

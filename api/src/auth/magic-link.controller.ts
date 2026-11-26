@@ -21,7 +21,7 @@ import {
   INVALID_MAGIC_LINK_MESSAGE,
 } from './magic-link.service';
 import { RefreshTokenService } from './refresh/refresh-token.service';
-import { setRefreshCookie } from './refresh/refresh-cookie.helpers';
+import { issueLinkSession } from './link-session.helpers';
 
 /**
  * ROK-1366: exchange a one-time magic-link token (read by the web from the
@@ -60,20 +60,14 @@ export class MagicLinkController {
       throw new UnauthorizedException(INVALID_MAGIC_LINK_MESSAGE);
     }
     const user = await this.magicLinkService.redeem(parsed.data.token);
-    // ROK-1823 review P3: the family and the access token both bind to the
-    // version `redeem` checked. A bump landing after that check refuses the
-    // family, and the access token never re-reads a newer version.
-    const issued = await this.refreshService.issueAtTokenVersion(
-      user.id,
-      user.tokenVersion,
-      { authMethod: 'magic', userAgent: req.headers['user-agent'] ?? null },
+    // ROK-2370: the session tail is shared with the sign-in code poll.
+    return issueLinkSession(
+      { authService: this.authService, refreshService: this.refreshService },
+      user,
+      'magic',
+      INVALID_MAGIC_LINK_MESSAGE,
+      req,
+      res,
     );
-    if (!issued) throw new UnauthorizedException(INVALID_MAGIC_LINK_MESSAGE);
-    setRefreshCookie(res, issued.rawToken, issued.maxAgeMs);
-    // ROK-2283: a `/login` link is a Discord sign-in — guild stamp, claims.
-    if (user.commandDiscordId !== undefined) {
-      this.authService.emitDiscordLogin(user.id, user.commandDiscordId);
-    }
-    return this.authService.login(user, user.tokenVersion);
   }
 }

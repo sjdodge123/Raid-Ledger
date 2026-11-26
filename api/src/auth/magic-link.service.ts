@@ -82,9 +82,22 @@ export class MagicLinkService {
     clientUrl: string,
     opts: MagicLinkOptions = {},
   ): Promise<string | null> {
+    const token = await this.generateToken(userId, opts);
+    return token === null ? null : buildFragmentLink(clientUrl, path, token);
+  }
+
+  /**
+   * ROK-2370: the bare one-time token `generateLink` wraps (same claims, 15m),
+   * for flows that hand it over without a URL — the sign-in code approval.
+   * Null when the user does not exist.
+   */
+  async generateToken(
+    userId: number,
+    opts: MagicLinkOptions = {},
+  ): Promise<string | null> {
     const user = await this.usersService.findById(userId);
     if (!user) return null;
-    const token = signPurposeJwt(
+    return signPurposeJwt(
       this.jwtService,
       'magic-link',
       {
@@ -99,7 +112,6 @@ export class MagicLinkService {
       },
       '15m',
     );
-    return buildFragmentLink(clientUrl, path, token);
   }
 
   /**

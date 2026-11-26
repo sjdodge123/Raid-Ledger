@@ -19,6 +19,7 @@ import { useSystemStatus } from '../hooks/use-system-status';
 import { clearCapturedSigninLinkToken, peekCapturedSigninLinkToken } from '../lib/magic-link-capture';
 import { readSigninLinkClaims, type SigninLinkClaims } from '../lib/signin-link-token';
 import { redeemSigninLink } from '../lib/signin-link-redeem';
+import { recordLastSignin } from '../lib/last-signin';
 import {
     SigninLinkContinueCard, SigninLinkDeadCard, SigninLinkLoadingCard, SigninLinkSessionErrorCard, SigninLinkSignedInCard,
 } from './signin-link/signin-link-cards';
@@ -35,7 +36,8 @@ function useContinue(token: string, claims: SigninLinkClaims) {
         const outcome = await redeemSigninLink(token, claims.kind);
         if (outcome !== 'retry') clearCapturedSigninLinkToken();
         if (outcome !== 'ok') { setPhase(outcome); return; }
-        await refetch();
+        const { data: user } = await refetch();
+        if (user) recordLastSignin('discord-app-code', user);
         navigate('/calendar', { replace: true });
     };
     return { phase, onContinue: () => void onContinue() };

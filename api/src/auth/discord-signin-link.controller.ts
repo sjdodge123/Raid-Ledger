@@ -21,7 +21,7 @@ import {
   INVALID_DISCORD_LINK_MESSAGE,
 } from './discord-signin-link.service';
 import { RefreshTokenService } from './refresh/refresh-token.service';
-import { setRefreshCookie } from './refresh/refresh-cookie.helpers';
+import { issueLinkSession } from './link-session.helpers';
 
 /**
  * ROK-2283: exchange a first-time member's `/login` sign-in token for a
@@ -59,16 +59,14 @@ export class DiscordSigninLinkController {
       throw new UnauthorizedException(INVALID_DISCORD_LINK_MESSAGE);
     }
     const user = await this.signinLinkService.redeem(parsed.data.token);
-    const issued = await this.refreshService.issueAtTokenVersion(
-      user.id,
-      user.tokenVersion,
-      {
-        authMethod: 'discord-link',
-        userAgent: req.headers['user-agent'] ?? null,
-      },
+    // ROK-2370: the session tail is shared with the sign-in code poll.
+    return issueLinkSession(
+      { authService: this.authService, refreshService: this.refreshService },
+      user,
+      'discord-link',
+      INVALID_DISCORD_LINK_MESSAGE,
+      req,
+      res,
     );
-    if (!issued) throw new UnauthorizedException(INVALID_DISCORD_LINK_MESSAGE);
-    setRefreshCookie(res, issued.rawToken, issued.maxAgeMs);
-    return this.authService.login(user, user.tokenVersion);
   }
 }

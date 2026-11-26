@@ -8,6 +8,7 @@ import { fetchCurrentUser, getAuthToken, setAuthToken, useAuth } from './use-aut
 import { startMagicLinkRedeem } from '../lib/magic-link-redeem';
 import { getAccessToken } from '../lib/api/access-token-store';
 import { dropViewerPrivateCaches } from './viewer-private-caches';
+import { SIGNIN_CODE_STORAGE_KEY, readPendingSigninCode } from '../lib/signin-code';
 
 
 describe('setAuthToken / getAuthToken', () => {
@@ -159,7 +160,7 @@ describe('useAuth identity change — clears the whole query cache (ROK-1599, RO
         );
     });
 
-    afterEach(() => { localStorage.clear(); });
+    afterEach(() => { localStorage.clear(); sessionStorage.clear(); });
 
     it('logout removes the previous viewer\'s notifications, characters and overview, and signs out', () => {
         queryClient.setQueryData(['auth', 'me'], userA);
@@ -175,6 +176,26 @@ describe('useAuth identity change — clears the whole query cache (ROK-1599, RO
         await act(async () => { await result.current.login('user-b-jwt'); });
         expect(PRIVATE_KEYS.map((key) => queryClient.getQueryData(key))).toEqual(PRIVATE_KEYS.map(() => undefined));
         expect(queryClient.getQueryData(['auth', 'me'])).toEqual(userB);
+    });
+
+    const PENDING_CODE = JSON.stringify({
+        code: 'K7QD-2M9X', deviceSecret: 's'.repeat(43), expiresAt: '2099-01-01T00:00:00.000Z', pollIntervalMs: 2000,
+    });
+
+    it('ROK-2370: logout forgets a pending sign-in code, so the next /login visit cannot resume it', () => {
+        sessionStorage.setItem(SIGNIN_CODE_STORAGE_KEY, PENDING_CODE);
+        queryClient.setQueryData(['auth', 'me'], userA);
+        const { result } = renderHook(() => useAuth(), { wrapper });
+        act(() => { result.current.logout(); });
+        expect(sessionStorage.getItem(SIGNIN_CODE_STORAGE_KEY), 'an abandoned code must not survive sign-out').toBeNull();
+        expect(readPendingSigninCode(Date.now()), 'the login page resumes from this read').toBeNull();
+    });
+
+    it('ROK-2370: a password (or any other) sign-in forgets a pending sign-in code', async () => {
+        sessionStorage.setItem(SIGNIN_CODE_STORAGE_KEY, PENDING_CODE);
+        const { result } = renderHook(() => useAuth(), { wrapper });
+        await act(async () => { await result.current.login('user-b-jwt'); });
+        expect(sessionStorage.getItem(SIGNIN_CODE_STORAGE_KEY), 'an abandoned code must not survive another sign-in').toBeNull();
     });
 });
 

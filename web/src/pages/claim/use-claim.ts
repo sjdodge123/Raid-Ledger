@@ -12,6 +12,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { API_BASE_URL } from '../../lib/config';
 import { nativeFetch } from '../../lib/api/native-fetch';
 import { clearSilentGuard, setAuthMethod } from '../../lib/api/silent-reauth';
+import { recordLastSignin } from '../../lib/last-signin';
 import type { ClaimFailure } from './claim.helpers';
 
 /** A refused claim, carrying only the mapped failure (no code, no password). */
@@ -90,7 +91,9 @@ export function useClaimSignIn(): ClaimSignIn {
         setAuthMethod('local');
         clearSilentGuard();
         try {
-            return (await login(accessToken)) !== null;
+            const user = await login(accessToken);
+            if (user) recordLastSignin('password', user);
+            return user !== null;
         } finally {
             setSigningIn(false);
         }

@@ -21,6 +21,7 @@ import { CalendarBusySection } from './calendar-busy-section';
 import { MapViewportSection } from './map-viewport-section';
 import { SkillTrendSection } from './skill-trend-demo';
 import { FormsSection } from './forms-section';
+import { SigninSection } from './signin-section';
 import { HubWidgetsSection } from './hub-widgets-section';
 import { HubHeroBannerSection } from './hub-hero-banner-section';
 import { ArrangeListSection } from './arrange-list-section';
@@ -58,6 +59,7 @@ const NAV = [
     { id: 'accents', label: 'Accents' },
     { id: 'primitives', label: 'Primitives' },
     { id: 'forms', label: 'Forms' },
+    { id: 'signin', label: 'Sign-in' },
     { id: 'overlays', label: 'Overlays' },
     { id: 'filtering', label: 'Filtering' },
     { id: 'hero', label: 'Hero' },
@@ -111,6 +113,7 @@ function FoundationSections(): JSX.Element {
             <AccentsSection />
             <PrimitivesSection />
             <FormsSection />
+            <SigninSection />
             <OverlaysSection />
             <FilteringSection />
             <HeroSection />
