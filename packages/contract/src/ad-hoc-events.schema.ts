@@ -22,9 +22,10 @@ export const AdHocParticipantSchema = z.object({
     eventId: z.number(),
     userId: z.number().nullable(),
     /**
-     * Null for a Steam-only (game-server) participant (ROK-1800). Sent only
-     * to the event owner or an admin/operator (ROK-2323); omitted for any
-     * other viewer and on the `roster:update` socket broadcast.
+     * Null for a Steam-only (game-server) participant (ROK-1800). Sent to
+     * the event owner or an admin/operator (ROK-2323); any other viewer and
+     * the `roster:update` socket broadcast get it only on a LINKED row
+     * (`userId` set — that id is already public to members), else omitted.
      */
     discordUserId: z.string().nullable().optional(),
     /**

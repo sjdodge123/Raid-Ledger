@@ -114,7 +114,9 @@ function testEmitRosterUpdate() {
   gateway.emitRosterUpdate(42, participants, 1);
   expect(mockServer.to).toHaveBeenCalledWith('event:42');
   // ROK-2323: any signed-in socket can join the room, so the broadcast is
-  // the viewer projection — no Discord id, no avatar hash, a hasDiscord flag.
+  // the viewer projection with a hasDiscord flag. This row is LINKED, so it
+  // keeps its Discord id + avatar hash (already public to members via the
+  // players list and signup roster); an unlinked row loses both.
   expect(mockEmit).toHaveBeenCalledWith('roster:update', {
     eventId: 42,
     participants: [
@@ -124,7 +126,8 @@ function testEmitRosterUpdate() {
         userId: 1,
         hasDiscord: true,
         discordUsername: 'Player1',
-        discordAvatarHash: null,
+        discordUserId: 'discord-1',
+        discordAvatarHash: 'hash-1',
         joinedAt: player.joinedAt,
         leftAt: null,
         totalDurationSeconds: null,

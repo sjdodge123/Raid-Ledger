@@ -11,7 +11,8 @@ import type {
  * platform player id, and an anonymous game-server player's display name can
  * BE their SteamID64. Only the event owner or an admin/operator receives that
  * detail; everyone else (and every `roster:update` socket broadcast, which
- * goes to any subscriber of the event room) gets this projection.
+ * goes to any subscriber of the event room) gets this projection. A linked
+ * row keeps its Discord id + avatar hash (see `viewerDiscordFields`).
  */
 
 /** The name a non-owner sees for a server player whose name is a platform id. */
@@ -30,14 +31,40 @@ function nameIsPlatformId(p: AdHocParticipantDto): boolean {
 /** Per-process key: a row id derived from a Discord id cannot be reversed. */
 const ROW_ID_KEY = randomBytes(32);
 
+/** Formats 32 hex chars as an RFC 4122 v4 UUID (version + variant nibbles set). */
+function hexToUuidV4(h: string): string {
+  const variant = '89ab'.charAt(parseInt(h.charAt(16), 16) & 3);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${variant}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
 /**
  * The live voice roster (planned events) uses the Discord snowflake as the
- * row id; a viewer gets a stable, non-reversible stand-in instead.
+ * row id; a viewer gets a stable, non-reversible stand-in instead. Keyed by
+ * event too, so one Discord user's rows cannot be correlated across events.
  */
 function viewerRowId(p: AdHocParticipantDto): string {
   if (!p.discordUserId || p.id !== p.discordUserId) return p.id;
-  const h = createHmac('sha256', ROW_ID_KEY).update(p.id).digest('hex');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+  const h = createHmac('sha256', ROW_ID_KEY)
+    .update(`${p.eventId}:${p.id}`)
+    .digest('hex');
+  return hexToUuidV4(h);
+}
+
+/**
+ * A LINKED participant's Discord id already reaches every signed-in member
+ * (`GET /users` → `UserPreviewSchema.discordId`; `GET /events/:id/roster` →
+ * `SignupUserSchema.discordId`), so hiding it here bought no privacy and cost
+ * the avatar: a linked row keeps its id + avatar hash. An unlinked voice user
+ * (no Raid Ledger account) is not exposed anywhere else — no id, initials.
+ */
+function viewerDiscordFields(
+  p: AdHocParticipantDto,
+): Pick<AdHocParticipantDto, 'discordUserId' | 'discordAvatarHash'> {
+  if (p.userId === null || !p.discordUserId) return { discordAvatarHash: null };
+  return {
+    discordUserId: p.discordUserId,
+    discordAvatarHash: p.discordAvatarHash,
+  };
 }
 
 /** True for a row whose name may be a raw platform id: an unlinked server player. */
@@ -46,7 +73,8 @@ function isAnonServerPlayer(p: AdHocParticipantDto): boolean {
 }
 
 /**
- * One participant without its Discord / Steam / platform ids. An allow-list:
+ * One participant without its Steam / platform ids (and, when unlinked, its
+ * Discord id). An allow-list:
  * a field added to the DTO later stays owner-only until it is listed here.
  */
 export function toViewerParticipant(
@@ -62,9 +90,7 @@ export function toViewerParticipant(
     ...(p.inVoice !== undefined ? { inVoice: p.inVoice } : {}),
     ...(p.onServer !== undefined ? { onServer: p.onServer } : {}),
     discordUsername: anonName ? ANON_SERVER_PLAYER_LABEL : p.discordUsername,
-    // The avatar hash is useless without the Discord id the web builds the
-    // CDN url from; drop it so the payload carries nothing id-shaped.
-    discordAvatarHash: null,
+    ...viewerDiscordFields(p),
     joinedAt: p.joinedAt,
     leftAt: p.leftAt,
     totalDurationSeconds: p.totalDurationSeconds,

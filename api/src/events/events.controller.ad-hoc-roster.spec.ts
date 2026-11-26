@@ -348,9 +348,27 @@ describe('getAdHocRoster — viewer projection (ROK-2323)', () => {
 
   it('the planned-event voice roster is projected for a non-owner too', async () => {
     mockEventsService.findOne.mockResolvedValue(buildPlannedEvent(2));
+    mockVoiceAttendanceService.getActiveRoster.mockReturnValue({
+      ...voiceRosterResponse,
+      participants: voiceRosterResponse.participants.map((p) => ({
+        ...p,
+        userId: null,
+      })),
+    });
     const result = await controller.getAdHocRoster(2, VIEWER);
     expect(idKeysOf(result)).toEqual([]);
     // The live voice roster keys rows by the Discord id — not on the wire.
     expect(JSON.stringify(result)).not.toContain('discord-planned');
+  });
+
+  it('a linked voice row keeps its Discord id for the avatar (already public to members)', async () => {
+    mockEventsService.findOne.mockResolvedValue(buildPlannedEvent(2));
+    const result = await controller.getAdHocRoster(2, VIEWER);
+    expect(idKeysOf(result)).toEqual(['discordUserId']);
+    expect(result.participants[0]).toMatchObject({
+      userId: 42,
+      discordUserId: 'discord-planned',
+    });
+    expect(result.participants[0]?.id).not.toBe('discord-planned');
   });
 });
