@@ -4,7 +4,8 @@
  * provider buttons → "Try another way" disclosure (Discord-app code, then
  * username/password). With a last-used card, the providers + disclosure sit
  * under an "or" divider behind "Sign in another way". With no providers the
- * password form shows on its own, as before.
+ * password form shows on its own, as before — plus the code disclosure when
+ * the bot can confirm codes.
  */
 import type { JSX } from 'react';
 import type { LoginMethodDto } from '@raid-ledger/contract';
@@ -19,6 +20,7 @@ import { LastUsedSigninCard } from './LastUsedSigninCard';
 import { useLastUsedSignin, type LastUsedSignin } from './use-last-used-signin';
 
 export const ANOTHER_WAY_INTRO = 'If the button above doesn’t work in your browser, get a code and confirm it in Discord.';
+export const NO_PROVIDER_INTRO = 'Have Discord? Get a code and confirm it there instead of using a password.';
 export const CODE_SECTION_TITLE = 'Get a code to confirm in Discord';
 export const PASSWORD_SECTION_TITLE = 'Sign in with username';
 export const SIGN_IN_ANOTHER_WAY_TOGGLE = 'Sign in another way';
@@ -53,18 +55,37 @@ export function ProviderButtons({ providers, isRedirecting, onLogin }: {
     );
 }
 
+/** The Discord-app code section (only offered when the server reports it). */
+function codeSection(props: LoginBodyProps): SignInSection {
+    return {
+        id: 'discord-app-code', title: CODE_SECTION_TITLE, showHeading: false,
+        node: <SigninCodePanel onSignedIn={props.onCodeSignedIn} />,
+    };
+}
+
 /** The ordered workaround sections; the code panel only when the server offers it. */
 function buildSections(props: LoginBodyProps): SignInSection[] {
     const password: SignInSection = {
         id: 'password', title: PASSWORD_SECTION_TITLE, showHeading: true,
         node: <LocalLoginForm onSubmit={props.onLocalLogin} isLoading={props.isLoading} error={props.error} />,
     };
-    if (!props.discordSigninCode) return [password];
-    const code: SignInSection = {
-        id: 'discord-app-code', title: CODE_SECTION_TITLE, showHeading: false,
-        node: <SigninCodePanel onSignedIn={props.onCodeSignedIn} />,
-    };
-    return [code, password];
+    return props.discordSigninCode ? [codeSection(props), password] : [password];
+}
+
+/**
+ * No OAuth provider but the bot can confirm codes (Codex P2): the password
+ * form stays primary, with the code behind the disclosure — opened at once
+ * when this tab is resuming one.
+ */
+function NoProviderBody({ props }: { props: LoginBodyProps }): JSX.Element {
+    return (
+        <>
+            <LocalLoginForm onSubmit={props.onLocalLogin} isLoading={props.isLoading} error={props.error} />
+            <SignInAnotherWay sections={[codeSection(props)]} intro={NO_PROVIDER_INTRO}
+                defaultOpen={readPendingSigninCode(Date.now()) !== null} initialSection="discord-app-code"
+                onClose={clearPendingSigninCode} />
+        </>
+    );
 }
 
 /** Open on a code resumed from this tab (back from Discord), else on first run's password section. */
@@ -103,6 +124,7 @@ export function LoginBody(props: LoginBodyProps): JSX.Element {
         providers: props.authProviders, codeOffered: props.discordSigninCode, onProviderLogin: props.onProviderLogin,
     });
     if (props.authProviders.length === 0) {
+        if (props.discordSigninCode) return <NoProviderBody props={props} />;
         return <LocalLoginForm onSubmit={props.onLocalLogin} isLoading={props.isLoading} error={props.error} />;
     }
     if (!lastUsed.marker) return <OtherMethods props={props} lastUsed={lastUsed} />;

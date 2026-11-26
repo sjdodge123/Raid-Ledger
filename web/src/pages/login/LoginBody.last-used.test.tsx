@@ -97,4 +97,18 @@ describe('LoginBody last-used card (ROK-2370)', () => {
         expect(card()).toBeInTheDocument();
         expect(screen.queryByText('code panel'), 'a pending code must not hide behind the collapsed card').toBeInTheDocument();
     });
+
+    it('no OAuth provider but codes offered: the password form AND the code option both show (Codex P2)', () => {
+        render(<LoginBody {...props({ authProviders: [] })} />);
+        const toggle = screen.queryByRole('button', { name: TRY_ANOTHER_WAY_LABEL });
+        expect(toggle, 'code sign-in must be offered without Discord OAuth').toBeInTheDocument();
+        if (toggle) fireEvent.click(toggle);
+        expect(screen.queryByLabelText(/username/i), 'the password form stays primary').toBeInTheDocument();
+        expect(screen.queryByText('code panel'), 'code sign-in must be offered without Discord OAuth').toBeInTheDocument();
+    });
+
+    it('no OAuth provider and no codes: the password form alone, as before', () => {
+        render(<LoginBody {...props({ authProviders: [], discordSigninCode: false })} />);
+        expect(screen.queryByRole('button', { name: TRY_ANOTHER_WAY_LABEL })).not.toBeInTheDocument();
+    });
 });
