@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseHubParam } from './lfg-grouping-slots';
+import { parseHubParam } from './lfg-hub-param';
 
 describe('parseHubParam', () => {
     it('accepts a positive integer and ignores anything else', () => {

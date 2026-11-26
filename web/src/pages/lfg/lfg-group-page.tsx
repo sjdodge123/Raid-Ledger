@@ -38,7 +38,8 @@ import { useLfgOverlay } from './use-lfg-overlay';
 import { LfgGroupTop } from './lfg-group-top';
 import { LfgLoading, LfgNotFound, PendingPollCard } from './lfg-group-states';
 import { useLfgGrouping, type LfgGroupingContext } from '../../plugins/lfg-grouping';
-import { LfgGroupingHeader, LfgGroupingList, useLfgHubParam } from './lfg-grouping-slots';
+import { LfgGroupingHeader, LfgGroupingList } from './lfg-grouping-slots';
+import { useLfgHubParam } from './lfg-hub-param';
 
 /** ROK-2352: the join vars for the page's group — none for the whole-game group. */
 function groupKeysFor(groupKey: string): { groupKeys?: string[] } {

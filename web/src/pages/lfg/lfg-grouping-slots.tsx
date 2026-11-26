@@ -4,22 +4,8 @@
  * (and WoW with its plugin off) shows exactly today's page.
  */
 import type { JSX } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import type { LfgGrouping, LfgGroupingContext } from '../../plugins/lfg-grouping';
 import { useLfgGameGroups } from '../../hooks/use-lfg-game-groups';
-
-/** `?hub=<id>` as a positive integer, else null (§3.6: the URL is the source of truth). */
-export function parseHubParam(raw: string | null): number | null {
-    if (raw == null || !/^\d+$/.test(raw)) return null;
-    const id = Number(raw);
-    return id > 0 ? id : null;
-}
-
-/** The page's `?hub`, read from the URL. */
-export function useLfgHubParam(): number | null {
-    const [params] = useSearchParams();
-    return parseHubParam(params.get('hub'));
-}
 
 interface SlotProps {
     grouping: LfgGrouping | null;
