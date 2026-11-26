@@ -49,7 +49,7 @@ import {
   executeIgdbQuery,
 } from './igdb-helpers.barrel';
 import { runSyncAllGames } from './igdb-sync-orchestration.helpers';
-import { sortByRelevance } from './igdb-search-sort.helpers';
+import { sortByRelevance, sortAndDedupe } from './igdb-search-sort.helpers';
 import {
   runSearchPipeline,
   triggerSearchRefreshIfNeeded,
@@ -222,7 +222,7 @@ export class IgdbService {
       query,
       await this.isAdultFilterEnabled(),
     );
-    return sortByRelevance(this.db, result, this.normalizeQuery(query));
+    return sortAndDedupe(this.db, result, this.normalizeQuery(query));
   }
   async getGameById(id: number): Promise<IgdbGameDto | null> {
     return lookupGameById(this.db, id);
