@@ -74,7 +74,7 @@ import { lfgInviteTests } from "./tests/lfg-invite.test.js";
 import { gameRoleTests } from "./tests/game-role.test.js";
 import { joinPostTests } from "./tests/join-post.test.js";
 import { guildDiscordMirrorTests } from "./tests/guild-discord-mirror.test.js";
-import { hubForumDiscordTests } from "./tests/hub-forum-discord.suite.js";
+import { hubForumDiscordTests, releaseSharedHubForum } from "./tests/hub-forum-discord.suite.js";
 import { channelLifecycleTests } from "./tests/channel-lifecycle.test.js";
 import { embedHubLinkTests } from "./tests/embed-hub-link.test.js";
 import { seriesSignupEmbedTests } from "./tests/series-signup-embed.test.js";
@@ -279,6 +279,7 @@ async function teardown(
 ): Promise<never> {
   console.log("\n=== Teardown ===");
   await teardownChannelPool(ctx.api, ctx.channelPool ?? []);
+  await releaseSharedHubForum(ctx.api);
   await reportEphemeralLeaks(runStartMs);
   await disconnect();
   console.log("  Done.");

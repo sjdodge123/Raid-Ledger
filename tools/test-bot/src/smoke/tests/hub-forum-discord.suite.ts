@@ -1,8 +1,10 @@
 /**
  * Every hub ↔ Discord forum smoke test (ROK-2208, ROK-2260, ROK-2271, ROK-2272, ROK-2292, ROK-2297), in
  * run order — one import for `run.ts`, which sits at the max-lines limit.
+ * The runner's teardown calls `releaseSharedHubForum` (the run's shared forum).
  */
 import type { SmokeTest } from "../types.js";
+export { releaseSharedHubForum } from "./hub-forum-shared.js";
 import { hubForumDiscordBindingTests } from "./hub-forum-discord-binding.test.js";
 import { hubForumDiscordInboundTests } from "./hub-forum-discord-inbound.test.js";
 import { hubForumDiscordOutboundTests } from "./hub-forum-discord-outbound.test.js";
