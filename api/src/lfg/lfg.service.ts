@@ -66,7 +66,7 @@ import { attachGroupCounts } from './lfg-group-list.helpers';
 import { announceLfgPost } from './lfg-post-announce.helpers';
 import { clearIntent, resolveWithdrawScope } from './lfg-group-scope.helpers';
 import { resolveLockInGroup } from './lfg-lock-in-group.helpers';
-import { toConversionTarget } from './lfg-provenance.helpers';
+import { convertedPayload, toConversionTarget } from './lfg-provenance.helpers';
 import {
   assertHandDetailIfNew,
   resolvePostGroup,
@@ -290,7 +290,8 @@ export class LfgService {
     // target message is terminal, so re-announcing it would re-render a card
     // nobody changed.
     if (converted > 0) {
-      this.emitGroupChanged({ gameId, reason: 'converted', ...target });
+      // ROK-2352: a keyed convert re-renders only its own group's post.
+      this.emitGroupChanged(convertedPayload(gameId, target, scope));
     }
     return { converted };
   }

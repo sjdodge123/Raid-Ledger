@@ -4,6 +4,7 @@
  * Kept out of `lfg.command.helpers.ts`, which is pure copy and components by
  * design: this one reads the database.
  */
+import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
 import {
   horizonJoinRequest,
   readOpenGroupHorizon,
@@ -44,15 +45,17 @@ import { LFG_URGENCY_CHOICES, parseUrgencyChoice } from './lfg.command.helpers';
  * @param db - Drizzle handle.
  * @param gameId - The resolved game.
  * @param raw - The raw `urgency` option value; null when the player gave none.
+ * @param scope - ROK-2352 P2-4: the group the hand lands in (null = fold).
  * @returns The urgency part of the `createIntent` request.
  */
 export async function resolveLfgCommandUrgency(
   db: LfgDb,
   gameId: number,
   raw: string | null,
+  scope: LfgGroupScope = null,
 ): Promise<LfgUrgencyRequest> {
   if (raw !== null) return parseUrgencyChoice(raw);
-  const open = await readOpenGroupHorizon(db, gameId);
+  const open = await readOpenGroupHorizon(db, gameId, new Date(), scope);
   if (open) return horizonJoinRequest(open);
   if ((await findOpenLfgNowEventId(db, gameId)) !== null) {
     return { urgency: 'now', ttlMinutes: LFG_DEFAULT_NOW_TTL_MINUTES };

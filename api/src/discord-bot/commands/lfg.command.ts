@@ -278,6 +278,7 @@ export class LfgCommand
       this.db,
       game.id,
       options.urgency,
+      group.scope,
     );
     const result = await this.lfgService.createIntent(
       userId,

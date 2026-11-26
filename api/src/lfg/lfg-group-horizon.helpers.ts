@@ -164,19 +164,22 @@ export async function readGroupHorizon(
  * @param db - Drizzle handle (or a transaction).
  * @param gameId - Game whose group to read.
  * @param now - Instant to measure expiry against.
+ * @param scope - ROK-2352 P2-4: the group a bare `/lfg` joins (null = the
+ *   whole game, the fold).
  */
 export async function readOpenGroupHorizon(
   db: LfgDb,
   gameId: number,
   now: Date = new Date(),
+  scope: LfgGroupScope = null,
 ): Promise<LfgGroupHorizon | null> {
-  const horizon = await readGroupHorizon(db, gameId, now);
+  const horizon = await readGroupHorizon(db, gameId, now, scope);
   if (horizon.urgency !== 'week') return horizon;
   const [live] = await db
     .select({ id: schema.lfgIntents.id })
     .from(schema.lfgIntents)
     .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
-    .where(and(eq(schema.lfgIntents.gameId, gameId), liveIntent(now)))
+    .where(and(eq(schema.lfgIntents.gameId, gameId), liveIntent(now, scope)))
     .limit(1);
   return live ? horizon : null;
 }
