@@ -30,12 +30,21 @@ class RouteBoundary extends Component<BoundaryProps, BoundaryState> {
     }
 }
 
+/** True when there is an earlier entry inside this app to go back to. */
+function hasInAppHistory(): boolean {
+    const state: unknown = window.history.state;
+    const idx: unknown = typeof state === 'object' && state !== null && 'idx' in state ? state.idx : undefined;
+    return typeof idx === 'number' && idx > 0;
+}
+
 /** The in-shell fallback: friendly copy, Back + Reload, the raw message in a `<details>`. */
 export function RouteErrorFallback({ error }: { error: unknown }): JSX.Element {
     const navigate = useNavigate();
     const isChunk = isChunkLoadError(error);
     const goBack = (): void => {
-        if (window.history.length > 1) void navigate(-1);
+        // react-router stamps its own history index on `history.state.idx`; `history.length`
+        // also counts pages from before the app loaded, so Back could leave the site.
+        if (hasInAppHistory()) void navigate(-1);
         else void navigate('/');
     };
     return (

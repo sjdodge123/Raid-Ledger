@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { QueryErrorState } from '../../components/common/query-error-state';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { readCharacterPrefill, type CharacterPrefill } from '../../plugins/character-identity';
@@ -7,6 +6,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useGameRegistry } from '../../hooks/use-game-registry';
 import { CharacterList, AddCharacterModal } from '../../components/profile';
+import { QueryErrorState } from '../../components/common/query-error-state';
 
 function useCharacterModal(games: { id: number }[]) {
     const [showAddModal, setShowAddModal] = useState(false);
@@ -114,7 +114,7 @@ export function CharactersPanel() {
                 <CharactersPanelHeader onAdd={modal.handleAdd} disabled={games.length === 0} />
                 {charactersLoading
                     ? <div className="flex items-center justify-center py-12"><div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin" /></div>
-                    : charactersError
+                    : charactersError && !charactersData
                         ? <QueryErrorState title="Couldn't load your characters" error={charactersError} onRetry={refetch} testId="characters-error" />
                         : <CharacterList characters={characters} onEdit={modal.handleEdit} />}
             </div>

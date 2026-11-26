@@ -1,5 +1,4 @@
 import type { JSX } from 'react';
-import { QueryErrorState } from '../components/common/query-error-state';
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useInfiniteEvents } from "../hooks/use-events";
@@ -12,6 +11,7 @@ import { EventsEmptyState } from "../components/events/events-empty-state";
 import { EventsMobileToolbar, type EventsTab } from "../components/events/events-mobile-toolbar";
 import { EventPlansList } from "../components/events/event-plans-list";
 import { InfiniteScrollSentinel } from "../components/ui/infinite-scroll-sentinel";
+import { QueryErrorState } from '../components/common/query-error-state';
 import { PullToRefresh } from "../components/ui/pull-to-refresh";
 import { FAB } from "../components/ui/fab";
 import { SearchInput } from "../components/ui/search-input";
@@ -94,7 +94,7 @@ export function EventsPage() {
   const navigate = useNavigate();
   const state = useEventsPageState();
   const eventQueryParams = useMemo(() => buildEventQueryParams(state.activeTab), [state.activeTab]);
-  const { items, isLoading, error, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfiniteEvents(eventQueryParams);
+  const { items, isLoading, error, isFetchingNextPage, isFetchNextPageError, fetchNextPage, hasNextPage, sentinelRef, refetch } = useInfiniteEvents(eventQueryParams);
   const { isAuthenticated } = useAuth();
   const { data: gameTime } = useGameTime({ enabled: isAuthenticated });
   const { games: registryGames } = useGameRegistry();
@@ -106,7 +106,8 @@ export function EventsPage() {
   const { slotSet, overlapSet } = useGameTimeOverlaps(genreFiltered, gameTime?.slots as GameTimeSlot[] | undefined);
   const displayEvents = useMemo(() => filterAndSortEvents(genreFiltered, state.searchQuery, overlapSet, state.filterGameTime, state.activeTab), [genreFiltered, overlapSet, state.filterGameTime, state.searchQuery, state.activeTab]);
 
-  if (error) return <QueryErrorState title="Couldn't load events" error={error} onRetry={refetch} testId="events-error" className="min-h-[50vh] flex flex-col items-center justify-center" />;
+  // A failed later page or background refetch keeps the events already shown (ROK-2342).
+  if (error && items.length === 0) return <QueryErrorState title="Couldn't load events" error={error} onRetry={refetch} testId="events-error" className="min-h-[50vh] flex flex-col items-center justify-center" />;
 
   return (
     <PullToRefresh onRefresh={refetch}>
@@ -120,7 +121,8 @@ export function EventsPage() {
           isAuthenticated={isAuthenticated} genreLabel={genreLabel} genreOptions={genreOptions} genreFilter={state.genreFilter}
           searchParams={state.searchParams} setSearchParams={state.setSearchParams} isLoading={isLoading} displayEvents={displayEvents}
           filterGameTime={state.filterGameTime} setFilterGameTime={state.setFilterGameTime} slotSet={slotSet} overlapSet={overlapSet}
-          sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} navigate={navigate} />
+          sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} navigate={navigate}
+          nextPageError={isFetchNextPageError ? { error, retry: fetchNextPage } : null} />
         {isAuthenticated && <FAB onClick={() => navigate('/events/new')} label="Create Event" />}
       </>
     </PullToRefresh>
@@ -129,13 +131,14 @@ export function EventsPage() {
 
 function EventsContent({ activeTab, setActiveTab, searchQuery, setSearchQuery, isAuthenticated, genreLabel, genreOptions,
   genreFilter, searchParams, setSearchParams, isLoading, displayEvents, filterGameTime, setFilterGameTime, slotSet, overlapSet,
-  sentinelRef, isFetchingNextPage, hasNextPage, navigate }: {
+  sentinelRef, isFetchingNextPage, hasNextPage, navigate, nextPageError }: {
   activeTab: EventsTab; setActiveTab: (t: EventsTab) => void; searchQuery: string; setSearchQuery: (q: string) => void;
   isAuthenticated: boolean; genreLabel: string | null; genreOptions: GenreOption[];
   genreFilter: string | undefined; searchParams: URLSearchParams; setSearchParams: (p: URLSearchParams) => void;
   isLoading: boolean; displayEvents: EventResponseDto[]; filterGameTime: boolean; setFilterGameTime: (v: boolean) => void;
   slotSet: Set<string> | null; overlapSet: Set<number> | null;
   sentinelRef: React.RefCallback<HTMLDivElement>; isFetchingNextPage: boolean; hasNextPage: boolean; navigate: (path: string) => void;
+  nextPageError: { error: unknown; retry: () => void } | null;
 }) {
   return (
     <div className="py-8 px-4">
@@ -149,7 +152,9 @@ function EventsContent({ activeTab, setActiveTab, searchQuery, setSearchQuery, i
             <GenreFilterChip genreFilter={genreFilter} genreLabel={genreLabel} searchParams={searchParams} setSearchParams={setSearchParams} />
             <GameTimeFilter slotSet={slotSet} filterGameTime={filterGameTime} setFilterGameTime={setFilterGameTime} overlapSet={overlapSet} />
             <EventsGrid isLoading={isLoading} displayEvents={displayEvents} filterGameTime={filterGameTime} setFilterGameTime={setFilterGameTime} overlapSet={overlapSet} navigate={navigate} />
-            {!isLoading && displayEvents.length > 0 && <InfiniteScrollSentinel sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} />}
+            {nextPageError
+              ? <QueryErrorState title="Couldn't load more events" error={nextPageError.error} onRetry={nextPageError.retry} testId="events-next-page-error" className="py-6" />
+              : !isLoading && displayEvents.length > 0 && <InfiniteScrollSentinel sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} />}
           </>
         )}
       </div>

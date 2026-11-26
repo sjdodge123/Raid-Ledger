@@ -1,8 +1,9 @@
 import { Link, useParams } from 'react-router-dom';
-import { QueryErrorState } from '../components/common/query-error-state';
 import { useEventMetrics } from '../hooks/use-analytics';
 import { EventAttendanceDonut } from '../components/analytics/event-attendance-donut';
 import { VoiceTimeline } from '../components/analytics/voice-timeline';
+import { buttonClass } from '../components/ui/button-classes';
+import { QueryErrorState } from '../components/common/query-error-state';
 import { RosterBreakdownTable } from '../components/analytics/roster-breakdown-table';
 
 export function EventMetricsPage() {
@@ -11,7 +12,7 @@ export function EventMetricsPage() {
     const { data: metrics, isLoading, error, refetch } = useEventMetrics(eventId);
 
     if (isLoading) return <MetricsLoadingSkeleton />;
-    if (error) return <MetricsError eventId={eventId} error={error} onRetry={refetch} />;
+    if (error && !metrics) return <MetricsError eventId={eventId} error={error} onRetry={refetch} />;
     if (!metrics) return null;
 
     return (
@@ -49,7 +50,7 @@ function MetricsError({ eventId, error, onRetry }: { eventId: number; error: unk
     return (
         <div className="min-h-[50vh] flex flex-col items-center justify-center px-4">
             <QueryErrorState title="Couldn't load event metrics" error={error} onRetry={onRetry} testId="event-metrics-error" className="py-0" />
-            <Link to={`/events/${eventId}`} className="mt-4 inline-block text-sm text-emerald-400 hover:text-emerald-300">Back to event</Link>
+            <Link to={`/events/${eventId}`} className={buttonClass({ variant: 'secondary', className: 'mt-4' })}>Back to event</Link>
         </div>
     );
 }

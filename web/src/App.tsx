@@ -122,14 +122,16 @@ function App() {
           duration={5000}
         />
         <ConnectivityBanner />
-        <Layout><RouteErrorBoundary>
+        <Layout>
+          <RouteErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
               <ClaimGate>
                 <AppRoutes />
               </ClaimGate>
               <PrefetchAfterFirstRoute />
             </Suspense>
-        </RouteErrorBoundary></Layout>
+          </RouteErrorBoundary>
+        </Layout>
       </BrowserRouter>
     </StartupGate>
   );

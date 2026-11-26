@@ -1,5 +1,4 @@
 import type { JSX, ReactNode } from 'react';
-import { QueryErrorState } from '../components/common/query-error-state';
 import { useState, useMemo } from "react";
 import { useGamesDiscover } from "../hooks/use-games-discover";
 import { useGameSearch } from "../hooks/use-game-search";
@@ -15,6 +14,7 @@ import { SearchInput } from "../components/ui/search-input";
 import { LineupBanner } from "../components/lineups/LineupBanner";
 import { LfgGroupsProvider } from "../hooks/lfg-groups-provider";
 import { LfgHeartedPrompt } from "../components/lfg/lfg-hearted-prompt";
+import { QueryErrorState } from '../components/common/query-error-state';
 import { LfgLookingGrid } from "./games/lfg-looking-grid";
 import { useTileGameIds } from "./games/use-tile-game-ids";
 import { useLfgFilterParam } from "./games/use-lfg-filter-param";
@@ -94,7 +94,8 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilt
   // Pre-filter row count: the empty state has to tell "the library is empty"
   // apart from "the predicates emptied a stocked library" (ROK-1525 B2).
   const hasLibraryRows = (discoverData?.rows?.length ?? 0) > 0;
-  return { discoverError, refetchDiscover, searchError, refetchSearch, discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable, effectiveCoopFilters, hasLibraryRows, isLibraryFiltered, clearLibraryFilters };
+  // ROK-2342: an error only replaces the view when nothing loaded — a failed background refetch keeps the cached rows.
+  return { discoverError: discoverData === undefined ? discoverError : null, refetchDiscover, searchError: searchData === undefined ? searchError : null, refetchSearch, discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable, effectiveCoopFilters, hasLibraryRows, isLibraryFiltered, clearLibraryFilters };
 }
 
 function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS, coopFilters: CoopFilterState, libraryFilters: LibraryFilterState) {

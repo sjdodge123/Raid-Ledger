@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react';
-import { QueryErrorState } from '../common/query-error-state';
 import { Calendar, dateFnsLocalizer, Views, type View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from 'date-fns';
 import { enUS } from 'date-fns/locale';
@@ -23,6 +22,7 @@ import { CalendarToolbar } from './CalendarToolbar';
 import { MonthEventComponent } from './MonthEventComponent';
 import { VIEW_MAP, viewToStr, computeDateRange, shouldRenderInCalendar, isShownOnCalendar } from './calendar-view.utils';
 import type { CalendarViewMode } from './calendar-mobile-toolbar';
+import { QueryErrorState } from '../common/query-error-state';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import { isLayerEvent, type LayerWindowEvent } from './layers/calendar-layer-events';
 import { useCalendarLayerData, type CalendarLayerData } from './layers/use-calendar-layer-data';
@@ -208,7 +208,8 @@ function useCalendarViewState(
     const { handlePrev, handleNext, handleToday } = useCalendarNavigation(currentDate, setCurrentDate, view);
     const isGridLoading = isLoading || (isFetching && calendarEvents.length === 0);
     useDayViewScrollRestore(format(currentDate, 'yyyy-MM-dd'), view === Views.DAY && !isScheduleView, !isGridLoading);
-    const loadError = !isFetching ? error : null;
+    // ROK-2342: a failed background refetch keeps the events already shown.
+    const loadError = !isFetching && eventsData === undefined ? error : null;
     return { loadError, refetch, navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, isGridLoading, calendarEvents, handlePrev, handleNext, handleToday };
 }
 

@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { QueryErrorState } from '../common/query-error-state';
 import {
     useMyEventPlans,
     useCancelEventPlan,
@@ -10,6 +9,7 @@ import { useAuth } from '../../hooks/use-auth';
 import type { EventPlanResponseDto } from '@raid-ledger/contract';
 import { STATUS_STYLES, POLL_MODE_LABELS, formatTimeRemaining, formatDuration, formatSlotConfig } from './event-plans-list.utils';
 import { PollResultsSection, CompletedResultsSection } from './PollResultsSection';
+import { QueryErrorState } from '../common/query-error-state';
 
 function PlanHeader({ plan, gameName }: { plan: EventPlanResponseDto; gameName: string | null }) {
     const statusStyle = STATUS_STYLES[plan.status] ?? STATUS_STYLES.draft;
@@ -173,7 +173,7 @@ export function EventPlansList() {
     }, [games]);
 
     if (isLoading) return <PlansLoadingSkeleton />;
-    if (error) return <QueryErrorState title="Couldn't load plans" error={error} onRetry={refetch} testId="event-plans-error" />;
+    if (error && !plans) return <QueryErrorState title="Couldn't load plans" error={error} onRetry={refetch} testId="event-plans-error" />;
     if (!plans || plans.length === 0) return <PlansEmptyState />;
 
     return (
