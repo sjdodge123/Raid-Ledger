@@ -4,7 +4,7 @@
  * plugin page"); outside `AuthGuard` and the app chrome, like `/p/lineup` and
  * `/w`. Off, unknown, malformed and hidden all read the same not-found (D2).
  */
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { LoadingSpinner } from '../../../components/ui/loading-spinner';
 import { useNoIndex } from '../../../hooks/use-noindex';
@@ -27,18 +27,27 @@ function PageBody({ slug }: { slug: string | undefined }): JSX.Element {
     return <PublicGuildCardView card={data} />;
 }
 
-/** The route element. */
-export function PublicGuildCardPage(): JSX.Element {
+function Shell({ children }: { children: ReactNode }): JSX.Element {
     useNoIndex();
-    const { slug } = useParams();
     return (
         <main className="min-h-screen bg-backdrop px-4 pb-16 pt-6">
             <div className="mx-auto max-w-[560px]">
                 <p className="mb-3 text-xs text-dim">Raid Ledger</p>
-                <PageBody slug={slug} />
+                {children}
             </div>
         </main>
     );
+}
+
+/** The route element. */
+export function PublicGuildCardPage(): JSX.Element {
+    const { slug } = useParams();
+    return <Shell><PageBody slug={slug} /></Shell>;
+}
+
+/** ROK-2358: the route's element while `blizzard` is off — the same not-found, no card request. */
+export function PublicGuildCardNotFoundPage(): JSX.Element {
+    return <Shell><NotFound /></Shell>;
 }
 
 export default PublicGuildCardPage;

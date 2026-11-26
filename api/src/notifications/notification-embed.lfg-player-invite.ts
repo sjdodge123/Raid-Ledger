@@ -29,6 +29,7 @@ import {
   type PersonalizedField,
 } from '../discord-bot/embeds/embed-personalized.helpers';
 import { lfgViewGroupButton } from '../discord-bot/embeds/lfg-view-group-button.helpers';
+import { neutraliseMaskedLinks } from './notification-embed.discord-text';
 import { resolveNowIndicatorEmoji } from '../discord-bot/lfg-now/lfg-now-indicator.helpers';
 
 /**
@@ -204,7 +205,10 @@ export function applyLfgPlayerInviteEmbed(
 ): DmEmbed {
   const input = readLfgPlayerInvitePayload(payload);
   embed.setAuthor({ name: lfgPlayerInviteAuthorLine(input.inviterName) });
-  embed.setDescription(buildLfgPlayerInviteLines(input).join('\n'));
+  // The game and inviter names are user text and the body carries no link of
+  // the bot's own (the masked Join line was removed), so neutralise it whole.
+  const body = buildLfgPlayerInviteLines(input).join('\n');
+  embed.setDescription(neutraliseMaskedLinks(body));
   return addPersonalizedFields(embed, pickLfgPlayerInviteFields(input));
 }
 

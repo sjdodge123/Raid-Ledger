@@ -81,3 +81,18 @@ test('a drizzle-kit crash (it still exits 0) fails the check instead of passing'
   assert.equal(status, 1, `expected failure on a crashed generate, got exit ${status}:\n${out}`);
   assert.match(out, /did not report 'No schema changes'/);
 });
+
+test('the relay hub schema matches its latest snapshot (ROK-1670, RL_DRIFT_* hooks)', () => {
+  const res = spawnSync('bash', [SCRIPT, '--drift-only'], {
+    cwd: REPO_ROOT,
+    env: {
+      ...process.env,
+      RL_DRIFT_SCHEMA: path.join(REPO_ROOT, 'relay-hub/src/drizzle/schema.ts'),
+      RL_DRIFT_MIGRATIONS_DIR: path.join(REPO_ROOT, 'relay-hub/drizzle/migrations'),
+    },
+    encoding: 'utf8',
+    timeout: 60_000,
+  });
+  assert.equal(res.status, 0, `${res.stdout}\n${res.stderr}`);
+  assert.match(`${res.stdout}`, /schema\.ts/);
+});

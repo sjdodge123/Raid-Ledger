@@ -7,11 +7,8 @@
 import * as Sentry from '@sentry/react';
 import { scrubBreadcrumb } from './sentry-scrub';
 import { scrubPiiBreadcrumb, scrubPiiEvent } from './sentry-scrub-pii';
-import {
-    scrubErrorEvent,
-    scrubReplayEventUrls,
-    scrubTransactionEvent,
-} from './sentry-scrub-events';
+import { scrubErrorEvent, scrubTransactionEvent } from './sentry-scrub-events';
+import { processReplayEvent } from './sentry-replay-secret-routes';
 import { carriesEvent, reportUndeliveredSends } from './sentry-reporting-transport';
 
 /** `@sentry/react` does not re-export it; derive it from the hook it feeds. */
@@ -55,10 +52,12 @@ function isAbortNoise(event: Sentry.ErrorEvent): boolean {
 
 /**
  * Drops abort noise, then (ROK-1366 backstop + ROK-1750) scrubs a `token=` /
- * poll share token from request.url, transaction name and trace data. The
- * join page's intent `?token=` stays in the address bar, so it still reaches
- * the Replay Meta href (TECH-DEBT-BACKLOG.md, 2026-09-27). ROK-1779: then
- * strips usernames, emails and IPs (`sentry-scrub-pii.ts`).
+ * poll share token from request.url, transaction name and trace data.
+ * ROK-1779: then strips usernames, emails and IPs (`sentry-scrub-pii.ts`).
+ * The Replay Meta href is not reachable here: ROK-1839 takes the join
+ * `?token=` out of the address bar before Sentry starts, and replay segments
+ * from the secret-address routes (share poll, invite, auth success) are
+ * dropped whole (`sentry-replay-secret-routes.ts`, TDB L3350).
  */
 export function beforeSendError(event: Sentry.ErrorEvent): Sentry.ErrorEvent | null {
     if (isAbortNoise(event)) return null;
@@ -136,7 +135,7 @@ export function buildSentryOptions(onTransportFailure: () => void): Sentry.Brows
         // Replay is added lazily after init (lib/sentry-replay.ts).
         integrations: [
             Sentry.browserTracingIntegration(),
-            { name: 'ScrubReplayUrls', processEvent: scrubReplayEventUrls },
+            { name: 'ScrubReplayUrls', processEvent: processReplayEvent },
         ],
         beforeSend: beforeSendError,
         beforeBreadcrumb: beforeBreadcrumbScrub,

@@ -1,5 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { LlmProviderRegistry } from './llm-provider-registry';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { AI_MANIFEST } from './ai-manifest';
 import { AiRequestLogService } from './ai-request-log.service';
 import { CircuitBreaker } from './guardrails/circuit-breaker';
 import { ConcurrencyLimiter } from './guardrails/concurrency-limiter';
@@ -36,6 +38,7 @@ export class LlmService {
   constructor(
     private readonly registry: LlmProviderRegistry,
     private readonly logService: AiRequestLogService,
+    private readonly plugins: PluginRegistryService,
   ) {
     this.circuitBreaker = new CircuitBreaker(
       AI_DEFAULTS.circuitBreakerThreshold,
@@ -109,9 +112,18 @@ export class LlmService {
     });
   }
 
+  /**
+   * True when the `ai` plugin is active. A synchronous read of the plugin
+   * registry's cache (no I/O), so cron/queue consumers can check it first
+   * and skip instead of throwing (ROK-2353).
+   */
+  isPluginActive(): boolean {
+    return this.plugins.isActive(AI_MANIFEST.id);
+  }
+
   /** Check if the active provider is reachable. */
   async isAvailable(): Promise<boolean> {
-    const resolution = await this.registry.resolveActive();
+    const resolution = await this.resolveActive();
     if (!resolution) return false;
     return resolution.provider.isAvailable();
   }
@@ -123,13 +135,13 @@ export class LlmService {
    * Haiku when the interactive chat is on Sonnet).
    */
   async getActiveProviderKey(): Promise<string | null> {
-    const resolution = await this.registry.resolveActive();
+    const resolution = await this.resolveActive();
     return resolution?.provider.key ?? null;
   }
 
   /** Model `chat` uses when no `options.model` is passed; null without a provider. */
   async getActiveDefaultModel(): Promise<string | null> {
-    const resolution = await this.registry.resolveActive();
+    const resolution = await this.resolveActive();
     return resolution?.provider.defaultModel ?? null;
   }
 
@@ -139,7 +151,24 @@ export class LlmService {
     return provider.listModels();
   }
 
+  /**
+   * The one choke point every provider call goes through: an inactive `ai`
+   * plugin resolves to "no provider", so no consumer can reach a paid
+   * provider while the plugin is off (ROK-2353).
+   */
+  private async resolveActive() {
+    if (!this.isPluginActive()) return undefined;
+    return this.registry.resolveActive();
+  }
+
   private async resolveOrThrow() {
+    if (!this.isPluginActive()) {
+      // Same exception + "ai provider" wording as the no-provider path, so
+      // callers keep mapping it to 503 / their existing fallback.
+      throw new NotFoundException(
+        'No AI provider configured (AI plugin inactive)',
+      );
+    }
     const resolution = await this.registry.resolveActive();
     if (!resolution) {
       throw new NotFoundException('No AI provider configured');

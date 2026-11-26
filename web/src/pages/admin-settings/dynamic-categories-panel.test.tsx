@@ -6,6 +6,7 @@ import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { DynamicCategoriesPanel } from './dynamic-categories-panel';
 import { at } from '../../test/defined';
+import { usePluginStore } from '../../stores/plugin-store';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -64,6 +65,8 @@ function stubList(byStatus: Record<string, DiscoveryCategorySuggestionDto[]>) {
 describe('DynamicCategoriesPanel', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // ROK-2363: the panel is the AI plugin's; it mounts only while `ai` is active.
+        usePluginStore.setState({ activeSlugs: new Set(['core', 'ai']), initialized: true, settled: true });
         // Default: feature enabled so the panel body renders.
         server.use(
             http.get(`${API_BASE}/admin/ai/features`, () =>
@@ -339,5 +342,20 @@ describe('DynamicCategoriesPanel — regenerate toast counts (ROK-1530 A7)', () 
             ),
         );
         expect(mockToastSuccess).not.toHaveBeenCalled();
+    });
+
+    it('shows a retryable error instead of the empty state when the list fails (ROK-2342)', async () => {
+        let fail = true;
+        server.use(
+            http.get(`${API_BASE}/admin/discovery-categories`, () =>
+                fail
+                    ? HttpResponse.json({ message: 'boom' }, { status: 500 })
+                    : HttpResponse.json({ suggestions: [] })),
+        );
+        renderWithProviders(<DynamicCategoriesPanel />);
+        expect(await screen.findByRole('heading', { name: "Couldn't load category suggestions" })).toBeInTheDocument();
+        fail = false;
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(screen.queryByTestId('dynamic-categories-error')).not.toBeInTheDocument());
     });
 });

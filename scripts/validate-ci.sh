@@ -259,6 +259,9 @@ playwright_relevant=false
 # paths as ci.yml's relay_hub filter, plus validate-ci.sh itself (a change
 # to the gate must exercise its own rows). Gates the two relay-hub rows.
 relay_hub_changed=false
+# The diff touches the hub's own migrations: gates its merge-order guard, as
+# migrations_changed gates the api one (both need origin/main to resolve).
+relay_hub_migrations_changed=false
 discord_smoke_relevant=false
 # ROK-1793 S2 — parallel fleet gate child modes (see _skip_for_parallel_child).
 # Read once and UNSET: the node:test specs and harnesses spawn validate-ci.sh
@@ -581,11 +584,14 @@ detect_scope() {
   fi
 
   if echo "$changed_files" \
-    | grep -qE '^relay-hub/|^packages/contract/|^package(-lock)?\.json$|^scripts/check-relay-hub-deps\.|^\.github/workflows/ci\.yml$|^scripts/validate-ci\.sh$'; then
+    | grep -qE '^relay-hub/|^packages/contract/|^package(-lock)?\.json$|^scripts/check-relay-hub-deps\.|^scripts/(fix-migration-order\.sh|check-migration-merge-order\.mjs|validate-migrations\.sh)$|^\.github/workflows/ci\.yml$|^scripts/validate-ci\.sh$'; then
     relay_hub_changed=true
     echo -e "  Relay-hub-relevant changes: ${YELLOW}yes${NC}"
   else
     echo -e "  Relay-hub-relevant changes: no"
+  fi
+  if echo "$changed_files" | grep -q '^relay-hub/drizzle/migrations/'; then
+    relay_hub_migrations_changed=true
   fi
 
   # Playwright-relevant: web UI, auth (smoke tests log in), demo-test endpoints,
@@ -1021,14 +1027,37 @@ run_relay_hub_checks() {
     npm run lint -w @raid-ledger/relay-hub || exit 1
     npm run typecheck -w @raid-ledger/relay-hub || exit 1
     npm run build -w @raid-ledger/relay-hub || exit 1
-    npm test -w @raid-ledger/relay-hub
+    npm test -w @raid-ledger/relay-hub || exit 1
+    # ROK-1670: the hub's own migration journal + snapshot drift (ci.yml).
+    bash scripts/fix-migration-order.sh --check \
+      --journal relay-hub/drizzle/migrations/meta/_journal.json || exit 1
+    # ROK-1693 merge-order guard on the hub journal (base: the merge base
+    # with origin/main). Only when the hub's migrations changed, as the api
+    # guard runs only on migrations_changed: elsewhere a missing origin/main
+    # would turn a non-migration diff's row red.
+    if $relay_hub_migrations_changed; then
+      node scripts/check-migration-merge-order.mjs \
+        --journal relay-hub/drizzle/migrations/meta/_journal.json || exit 1
+    fi
+    RL_DRIFT_SCHEMA=relay-hub/src/drizzle/schema.ts \
+      RL_DRIFT_MIGRATIONS_DIR=relay-hub/drizzle/migrations \
+      bash scripts/validate-migrations.sh --drift-only
   )
 }
 
-# No database yet (RH-2b adds Postgres): one Nest boot over supertest.
+# ROK-1670: the hub specs need a Postgres server in DATABASE_URL (each file
+# creates its own throwaway database). Without one this step SKIPS
+# and GitHub CI's relay-hub job, which has a Postgres service, is the gate.
 run_relay_hub_integration() {
   _skip_unless_relay_hub_changed && return 0
-  (cd "$REPO_ROOT" && npm run test:integration -w @raid-ledger/relay-hub)
+  if [ -z "${RELAY_HUB_DATABASE_URL:-${DATABASE_URL:-}}" ]; then
+    STEP_SKIP_REASON="no DATABASE_URL / RELAY_HUB_DATABASE_URL (GitHub CI runs it)"
+    echo -e "${YELLOW}Not run: ${STEP_SKIP_REASON}.${NC}"
+    skip_step
+    return 0
+  fi
+  (cd "$REPO_ROOT" && DATABASE_URL="${RELAY_HUB_DATABASE_URL:-$DATABASE_URL}" \
+    npm run test:integration -w @raid-ledger/relay-hub)
 }
 
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.

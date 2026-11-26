@@ -155,6 +155,9 @@ export class AiSuggestionsPreGenProcessor extends WorkerHost {
   }
 
   private async isFeatureDisabled(): Promise<boolean> {
+    // ROK-2353: an inactive AI plugin skips queued jobs instead of throwing
+    // (a throw would retry 3× and report each attempt as an error).
+    if (!this.llmService.isPluginActive()) return true;
     const value = await this.settings.get(AI_SETTING_KEYS.SUGGESTIONS_ENABLED);
     return value === 'false';
   }

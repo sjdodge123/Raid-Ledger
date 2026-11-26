@@ -71,7 +71,9 @@ export function scrubErrorEvent<T extends ScrubbableError>(event: T): T {
 /**
  * Replay beforeAddRecordingEvent: a custom (type-5) event's payload
  * (performanceSpan / breadcrumb description, message, data). Replay passes
- * only custom events to this hook, so the rrweb Meta `href` never reaches it.
+ * only custom events to this hook, so the rrweb Meta `href` never reaches it
+ * — routes whose address is a secret drop the whole segment instead
+ * (`sentry-replay-secret-routes.ts`, TDB L3350).
  */
 export function scrubRecordingEvent<T>(event: T): T {
     const data = isRecord(event) ? event.data : undefined;

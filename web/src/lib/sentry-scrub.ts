@@ -38,9 +38,9 @@ const TOKEN_PARAM = new RegExp(String.raw`([#?&](?:token|code)=)` + SECRET_VALUE
  * ROK-1750: a private poll's share token is a PATH segment — the page
  * `/p/poll/<t>` and the API `/scheduling-polls/share/<t>` (+ `/join`). It is
  * a bearer credential (invitee access until reset), so it never reaches
- * Sentry either.
+ * Sentry either. ROK-1893's hub invite page `/h/<t>` carries the same token.
  */
-const SHARE_TOKEN_PATH = /(\/(?:api\/)?(?:scheduling-polls\/share|p\/poll)\/)[A-Za-z0-9_-]{16,}/g;
+const SHARE_TOKEN_PATH = /(\/(?:api\/)?(?:scheduling-polls\/share|p\/poll|h)\/)[A-Za-z0-9_-]{16,}/g;
 
 /**
  * ROK-1838 r4: the ICS subscribe feed `/api/cal/u/<token>.ics` is the same

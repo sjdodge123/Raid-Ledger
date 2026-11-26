@@ -1,5 +1,4 @@
 {
-    "components/ErrorFallback.tsx": 1,
     "components/admin/DemoDataCard.tsx": 2,
     "components/admin/UpdateBanner.tsx": 1,
     "components/admin/admin-settings-layout.tsx": 1,
@@ -14,7 +13,6 @@
     "components/calendar/calendar-mobile-nav.tsx": 2,
     "components/calendar/calendar-mobile-toolbar.tsx": 1,
     "components/common/ActivityTimeline.tsx": 2,
-    "components/common/HeroNextStep.tsx": 2,
     "components/discord/threaded-chat-viewer.tsx": 1,
     "components/events/AttendanceTracker.tsx": 2,
     "components/events/SignupCharacterCard.tsx": 1,

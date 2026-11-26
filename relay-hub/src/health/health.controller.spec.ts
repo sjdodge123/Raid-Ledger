@@ -1,10 +1,15 @@
+import { HttpException } from '@nestjs/common';
 import {
   HUB_SCHEMA_VERSION,
   HubHealthResponseSchema,
 } from '@raid-ledger/contract';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { HealthController } from './health.controller';
+import postgres from 'postgres';
+import * as schema from '../drizzle/schema';
+import { EpochService } from './epoch.service';
+import { HealthController, READY_TIMEOUT_MS } from './health.controller';
 
 const FIXTURE_PATH = join(
   __dirname,
@@ -14,27 +19,142 @@ const fixture = HubHealthResponseSchema.parse(
   JSON.parse(readFileSync(FIXTURE_PATH, 'utf8')),
 );
 
-describe('HealthController', () => {
-  const controller = new HealthController();
+/** A lazy client on a refused port, counting every query issued through it. */
+function deadSql() {
+  const real = postgres('postgres://x:y@127.0.0.1:1/none', {
+    max: 1,
+    connect_timeout: 1,
+  });
+  const calls: unknown[] = [];
+  const sql = new Proxy(real, {
+    apply(target, thisArg, args: unknown[]) {
+      calls.push(args);
+      const result: unknown = Reflect.apply(target, thisArg, args);
+      return result;
+    },
+  });
+  return { sql, calls };
+}
 
-  it('returns a body that parses with HubHealthResponseSchema', () => {
-    const body = controller.health();
+describe('HealthController', () => {
+  const { sql, calls } = deadSql();
+  const epoch = new EpochService(drizzle(sql, { schema }));
+  const controller = new HealthController(sql, epoch);
+
+  afterAll(async () => {
+    await sql.end({ timeout: 1 });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('equals the golden fixture once the epoch is known', async () => {
+    jest.spyOn(epoch, 'current').mockResolvedValue(fixture.epoch);
+    const body = await controller.health();
+    expect(body).toEqual(fixture);
     expect(HubHealthResponseSchema.parse(body)).toEqual(body);
   });
 
-  it('equals the golden fixture minus epoch (RH-2b adds it)', () => {
-    expect(controller.health()).toEqual({
-      status: fixture.status,
-      schemaVersions: fixture.schemaVersions,
+  it('omits epoch (still a valid body) while the DB was never reached', async () => {
+    const body = await controller.health();
+    expect(body).toEqual({
+      status: 'ok',
+      schemaVersions: [HUB_SCHEMA_VERSION],
     });
-    expect(controller.health()).not.toHaveProperty('epoch');
+    expect(HubHealthResponseSchema.safeParse(body).success).toBe(true);
   });
 
-  it('builds schemaVersions from HUB_SCHEMA_VERSION', () => {
-    expect(controller.health().schemaVersions).toEqual([HUB_SCHEMA_VERSION]);
-  });
-
-  it('answers the live probe with {status: ok}', () => {
+  it('answers the live probe without issuing a query', () => {
+    const before = calls.length;
     expect(controller.live()).toEqual({ status: 'ok' });
+    expect(calls).toHaveLength(before);
+  });
+
+  it('answers ready with 503 {status: unavailable} when the DB is down', async () => {
+    const err = await controller.ready().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(HttpException);
+    expect(err instanceof HttpException && err.getStatus()).toBe(503);
+    expect(err instanceof HttpException && err.getResponse()).toEqual({
+      status: 'unavailable',
+    });
+  });
+});
+
+/**
+ * A client whose queries hang until cancelled. As in postgres.js, cancel()
+ * rejects the query AND returns a promise of its own, which rejects when the
+ * cancel connection cannot be opened (the DB host is unreachable).
+ */
+function hungSql() {
+  const real = postgres('postgres://x:y@127.0.0.1:1/none', { max: 1 });
+  const issued: { cancel: jest.Mock }[] = [];
+  /** `then` spies on each promise cancel() returned, in call order. */
+  const cancelThens: jest.SpyInstance[] = [];
+  const sql = new Proxy(real, {
+    apply() {
+      let fail: (err: Error) => void = () => undefined;
+      const cancel = jest.fn(() => {
+        fail(new Error('57014 canceled'));
+        const result = Promise.reject(
+          new Error('connect ECONNREFUSED (cancel)'),
+        );
+        // Pre-handled, so the assertion below (not jest's own unhandled-
+        // rejection hook) judges whether the controller consumed it.
+        result.catch(() => undefined);
+        cancelThens.push(jest.spyOn(result, 'then'));
+        return result;
+      });
+      const query = Object.assign(
+        new Promise<never>((_resolve, reject) => (fail = reject)),
+        { cancel },
+      );
+      issued.push(query);
+      return query;
+    },
+  });
+  return { sql, issued, cancelThens, real };
+}
+
+describe('HealthController ready single-flight', () => {
+  const { sql, issued, cancelThens, real } = hungSql();
+  const epoch = new EpochService(drizzle(sql, { schema }));
+  const controller = new HealthController(sql, epoch);
+
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  afterAll(async () => {
+    await real.end({ timeout: 1 });
+  });
+
+  it('shares one hung query between probes and cancels it on timeout', async () => {
+    const probes = [controller.ready(), controller.ready(), controller.ready()];
+    const outcomes = Promise.allSettled(probes);
+    expect(issued).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(READY_TIMEOUT_MS);
+    const statuses = (await outcomes).map((o) =>
+      o.status === 'rejected' && o.reason instanceof HttpException
+        ? o.reason.getStatus()
+        : o.status,
+    );
+    expect(statuses).toEqual([503, 503, 503]);
+    expect(issued[0]?.cancel).toHaveBeenCalled();
+  });
+
+  it('attaches a rejection handler to the promise cancel() returns', async () => {
+    const probe = controller.ready().catch((e: unknown) => e);
+    await jest.advanceTimersByTimeAsync(READY_TIMEOUT_MS);
+    expect(await probe).toBeInstanceOf(HttpException);
+    // Unconsumed, a cancel connection that fails is an unhandled rejection,
+    // which kills the hub when no Sentry DSN installs a listener.
+    expect(cancelThens.at(-1)).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Function),
+    );
+  });
+
+  it('starts a fresh query once the cancelled one has settled', async () => {
+    const before = issued.length;
+    const probe = controller.ready().catch((e: unknown) => e);
+    expect(issued).toHaveLength(before + 1);
+    await jest.advanceTimersByTimeAsync(READY_TIMEOUT_MS);
+    expect(await probe).toBeInstanceOf(HttpException);
   });
 });

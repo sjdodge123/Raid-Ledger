@@ -3,6 +3,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { invalidateSubjectDiscussion } from './subject-discussion-key';
+import { VIEWER_INDEPENDENT_META } from './viewer-private-caches';
 import type {
   LineupDetailResponseDto,
   LineupParticipantsResponseDto,
@@ -329,6 +330,7 @@ export interface PublicLineupQueryError {
 export function usePublicLineup(slug: string | undefined) {
   return useQuery<PublicLineupResponseDto, PublicLineupQueryError>({
     queryKey: ['lineups', 'public', slug],
+    meta: VIEWER_INDEPENDENT_META, // getPublicLineup: raw fetch, no bearer (ROK-2334)
     queryFn: () => getPublicLineup(slug!),
     enabled: !!slug,
     retry: false,
