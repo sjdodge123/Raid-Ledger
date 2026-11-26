@@ -72,23 +72,42 @@ export function announceLfgPost(
       handPayload(gameId, outcome.group.activeCount, outcome.inserted),
     );
   }
-  if (
-    outcome.inserted &&
-    (outcome.group.activeCount >= 3 || joinsOpenSession(outcome))
-  ) {
-    emitter.emit(LFG_EVENTS.GROUP_CHANGED, {
-      gameId,
-      reason: 'joined',
-      userIds: [outcome.inserted.userId],
-      // ROK-2352 P1-4 — a keyed joiner attaches to its own group's session.
-      ...(outcome.inserted.groupKey
-        ? { groupKey: outcome.inserted.groupKey }
-        : {}),
-    });
-  }
-  // D8: gated on `>= 2` to match `emitGroupChanged`'s contract — a group
-  // nobody else has joined has no Discord post to re-render.
-  if (outcome.bumped && outcome.group.activeCount >= 2) {
-    emitter.emit(LFG_EVENTS.GROUP_CHANGED, { gameId, reason: 'bumped' });
-  }
+  emitJoined(emitter, gameId, outcome);
+  emitBumped(emitter, gameId, outcome);
+}
+
+/** `>= 3`, or a solo-by-count hand joining an open session (ROK-1494). */
+function emitJoined(
+  emitter: EventEmitter2,
+  gameId: number,
+  outcome: GroupPostOutcome,
+): void {
+  const { inserted } = outcome;
+  if (!inserted) return;
+  if (outcome.group.activeCount < 3 && !joinsOpenSession(outcome)) return;
+  emitter.emit(LFG_EVENTS.GROUP_CHANGED, {
+    gameId,
+    reason: 'joined',
+    userIds: [inserted.userId],
+    // ROK-2352 P1-4 — a keyed joiner attaches to its own group's session.
+    ...(inserted.groupKey ? { groupKey: inserted.groupKey } : {}),
+  });
+}
+
+/**
+ * D8: gated on `>= 2` to match `emitGroupChanged`'s contract — a group nobody
+ * else has joined has no Discord post to re-render.
+ */
+function emitBumped(
+  emitter: EventEmitter2,
+  gameId: number,
+  outcome: GroupPostOutcome,
+): void {
+  if (!outcome.bumped || outcome.group.activeCount < 2) return;
+  emitter.emit(LFG_EVENTS.GROUP_CHANGED, {
+    gameId,
+    reason: 'bumped',
+    // ROK-2352 — a keyed bump re-renders (and attaches) its own group.
+    ...(outcome.row.groupKey ? { groupKey: outcome.row.groupKey } : {}),
+  });
 }
