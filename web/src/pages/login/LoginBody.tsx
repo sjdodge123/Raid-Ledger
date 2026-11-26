@@ -82,10 +82,15 @@ function NoProviderBody({ props }: { props: LoginBodyProps }): JSX.Element {
         <>
             <LocalLoginForm onSubmit={props.onLocalLogin} isLoading={props.isLoading} error={props.error} />
             <SignInAnotherWay sections={[codeSection(props)]} intro={NO_PROVIDER_INTRO}
-                defaultOpen={readPendingSigninCode(Date.now()) !== null} initialSection="discord-app-code"
+                defaultOpen={hasPendingCode()} initialSection="discord-app-code"
                 onClose={clearPendingSigninCode} />
         </>
     );
+}
+
+/** True when this tab saved a live sign-in code (back from Discord). Kept out of render for react-hooks/purity. */
+function hasPendingCode(): boolean {
+    return readPendingSigninCode(Date.now()) !== null;
 }
 
 /** Open on a code resumed from this tab (back from Discord), else on first run's password section. */
