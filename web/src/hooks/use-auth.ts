@@ -15,6 +15,7 @@ import { awaitMagicLinkRedeem, takeMagicLinkAdoption } from '../lib/magic-link-r
 import { recordLastSignin } from '../lib/last-signin';
 import { peekCapturedSigninLinkToken, isSigninLinkPage } from '../lib/magic-link-capture';
 import { clearCapturedQueryToken } from '../lib/query-token-capture';
+import { clearPendingSigninCode } from '../lib/signin-code';
 import { bumpIdentityEpoch } from '../lib/api/cross-tab-auth';
 import { dropViewerPrivateCaches } from './viewer-private-caches';
 import type { UserRole } from '@raid-ledger/contract';
@@ -194,6 +195,9 @@ function useLogin(queryClient: ReturnType<typeof useQueryClient>) {
         setAccessToken(token);
         try {
             const user = await fetchCurrentUser();
+            // ROK-2370: a code left pending in this tab must not resume and
+            // sign the browser in (or back in) once a session started another way.
+            if (user) clearPendingSigninCode();
             dropViewerPrivateCaches(queryClient);
             queryClient.setQueryData(['auth', 'me'], user);
             queryClient.invalidateQueries({ queryKey: ['events'] });
@@ -331,12 +335,15 @@ export function useViewerCacheScope(): number | 'anon' {
  * ROK-1353: revoke the refresh family + clear the cookie server-side before
  * dropping local storage. Fire-and-forget — local logout must succeed even if
  * the network call fails. ROK-1599: viewer-private caches go with it.
+ * ROK-2370: so does a pending sign-in code, which would otherwise resume on
+ * the next /login visit and sign the browser back in.
  */
 function performLogout(queryClient: ReturnType<typeof useQueryClient>): void {
     void serverLogout();
     clearAllAuthStorage();
     clearSilentGuard();
     clearAuthMethod();
+    clearPendingSigninCode();
     dropViewerPrivateCaches(queryClient);
     queryClient.setQueryData(['auth', 'me'], null);
 }
