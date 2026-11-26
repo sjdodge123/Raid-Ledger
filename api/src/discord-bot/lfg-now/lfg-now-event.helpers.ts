@@ -12,6 +12,7 @@
  *     and the per-event row an admin already sees is Q2's "reason in the event",
  *   the title suffix.
  */
+import type { LfgLockInPatch } from '../../plugins/plugin-host/lfg-grouping.adapter';
 import { defined } from '../../common/defined.helpers';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -94,11 +95,17 @@ export async function createLfgNowEventRow(
   gameId: number,
   creatorId: number,
   now: Date = new Date(),
+  opts: { patch?: LfgLockInPatch | undefined } = {},
 ): Promise<number> {
-  const title = await buildLfgNowTitle(db, gameId);
+  const patch = opts.patch;
+  const title = patch?.title ?? (await buildLfgNowTitle(db, gameId));
+  const values = buildLfgNowEventValues(title, gameId, creatorId, now);
+  // ROK-2352 §3.8: a keyed group's Start now takes the lock-in's roster shape.
+  if (patch?.slotConfig) values.slotConfig = patch.slotConfig;
+  if (patch?.contentInstances) values.contentInstances = patch.contentInstances;
   const [event] = await db
     .insert(schema.events)
-    .values(buildLfgNowEventValues(title, gameId, creatorId, now))
+    .values(values)
     .returning({ id: schema.events.id });
   return defined(event, 'inserted LFG-now event').id;
 }

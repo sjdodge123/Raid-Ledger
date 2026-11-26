@@ -11,7 +11,11 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { LfgNowHand } from './lfg-now-spawn.types';
 import { holdsLiveIntent } from '../../lfg/lfg-invite.helpers';
-import { convertHolderIntent } from '../../lfg/lfg-write.helpers';
+import { convertHolderIntent, liveGroupRow } from '../../lfg/lfg-write.helpers';
+import {
+  groupScopeFilter,
+  type LfgGroupScope,
+} from '../../lfg/lfg-group-scope.helpers';
 import { findOpenLfgNowEvent } from './lfg-now-spawn.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -40,6 +44,7 @@ export async function listLiveGroupHands(
   db: Db,
   gameId: number,
   now: Date = new Date(),
+  scope: LfgGroupScope = null,
 ): Promise<LfgNowHand[]> {
   return db
     .select({
@@ -58,6 +63,7 @@ export async function listLiveGroupHands(
         isNull(schema.users.deactivatedAt),
         isNull(schema.users.bannedAt),
         sql`${schema.lfgIntents.expiresAt} > ${now.toISOString()}::timestamptz`,
+        groupScopeFilter(scope),
       ),
     )
     .orderBy(asc(schema.lfgIntents.createdAt));
@@ -95,8 +101,29 @@ export async function convertStarterIntent(
   userId: number,
   target: { eventId: number },
   now: Date,
+  scope: LfgGroupScope = null,
 ): Promise<number> {
-  return convertHolderIntent(db, gameId, userId, target, now);
+  if (scope === null) {
+    return convertHolderIntent(db, gameId, userId, target, now);
+  }
+  // ROK-2352: only the starter's hand in THIS group; their other groups stay.
+  const rows = await db
+    .update(schema.lfgIntents)
+    .set({
+      status: 'converted',
+      convertedToPollId: null,
+      convertedToEventId: target.eventId,
+      convertedAt: sql`statement_timestamp()`,
+    })
+    .where(
+      and(
+        liveGroupRow(db, gameId, now),
+        eq(schema.lfgIntents.userId, userId),
+        groupScopeFilter(scope),
+      ),
+    )
+    .returning({ id: schema.lfgIntents.id });
+  return rows.length;
 }
 
 /**
@@ -123,9 +150,10 @@ export async function mayStartGroup(
   userId: number,
   gameId: number,
   now: Date,
+  scope: LfgGroupScope = null,
 ): Promise<boolean> {
-  if (await holdsLiveIntent(db, userId, gameId, now)) return true;
-  const openEventId = await findOpenLfgNowEvent(db, gameId);
+  if (await holdsLiveIntent(db, userId, gameId, now, scope)) return true;
+  const openEventId = await findOpenLfgNowEvent(db, gameId, scope);
   if (openEventId === null) return false;
   const [signup] = await db
     .select({ id: schema.eventSignups.id })

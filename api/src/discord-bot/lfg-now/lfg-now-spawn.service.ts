@@ -44,6 +44,12 @@ import {
   LFG_NOW_START_NEEDS_INTENT,
 } from './lfg-now.constants';
 import { spawnUnderGroupLock } from './lfg-now-spawn.helpers';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
+import {
+  LFG_FOLD_LOCK_IN,
+  resolveLockInGroup,
+  type LfgLockInGroup,
+} from '../../lfg/lfg-lock-in-group.helpers';
 import type { LfgNowSpawnResult } from './lfg-now-spawn.types';
 import { rearmGraceIfVoiceEmpty } from './lfg-now-grace.helpers';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
@@ -87,6 +93,9 @@ export class LfgNowSpawnService {
     @Optional()
     @Inject(AdHocEventsGateway)
     private readonly gateway: AdHocEventsGateway | null = null,
+    @Optional()
+    @Inject(PluginRegistryService)
+    private readonly pluginRegistry: PluginRegistryService | null = null,
   ) {}
 
   /**
@@ -99,20 +108,27 @@ export class LfgNowSpawnService {
    * @param starterUserId - The caller; must hold a live intent (AC6).
    * @param gameId - The group to start.
    * @param now - Injected clock, so the liveness reads are testable.
+   * @param groupKey - ROK-2352 `?group` (default `''`); ignored when folded.
    * @throws 403 when the caller is not in the group.
+   * @throws 400 on a group key the game's active adapter does not know.
    */
   async startNow(
     starterUserId: number,
     gameId: number,
     now: Date = new Date(),
+    groupKey?: string,
   ): Promise<LfgStartNowResponseDto> {
+    const group = await this.resolveGroup(gameId, groupKey);
     // ROK-1613 AC6 — see `mayStartGroup`: a live intent OR already being on
     // the open session, because the first start converts the starter's intent.
-    if (!(await mayStartGroup(this.db, starterUserId, gameId, now))) {
+    if (
+      !(await mayStartGroup(this.db, starterUserId, gameId, now, group.scope))
+    ) {
       throw new ForbiddenException(LFG_NOW_START_NEEDS_INTENT);
     }
     const result = await spawnUnderGroupLock(this.db, gameId, now, {
       manual: { starterUserId },
+      group,
     });
     if (!result) {
       // Unreachable: the manual branch always settles on an event. Loud rather
@@ -213,10 +229,30 @@ export class LfgNowSpawnService {
     await this.announceRosterChange(payload?.eventId);
   }
 
-  /** Spawn or attach for one game, then create voice and announce. */
+  /**
+   * ROK-2352: the group a start-now / threshold spawn is about. No registry or
+   * no active adapter → the fold (scope null): the whole game, as before.
+   */
+  private resolveGroup(
+    gameId: number,
+    groupKey: string | undefined,
+  ): Promise<LfgLockInGroup> {
+    if (!this.pluginRegistry) return Promise.resolve(LFG_FOLD_LOCK_IN);
+    return resolveLockInGroup(this.db, this.pluginRegistry, gameId, groupKey);
+  }
+
+  /**
+   * Spawn or attach for one game, then create voice and announce. ROK-2352:
+   * the threshold spawn is game-level "playing now" — with a grouping adapter
+   * it counts and converts only the `''` group's hands; a keyed group (a WoW
+   * instance) is started by a member's Start now, never by two `now` hands.
+   */
   private async trySpawn(gameId: number): Promise<void> {
     try {
-      const result = await spawnUnderGroupLock(this.db, gameId);
+      const group = await this.resolveGroup(gameId, '');
+      const result = await spawnUnderGroupLock(this.db, gameId, undefined, {
+        group,
+      });
       if (!result) return;
       await this.rearmGrace(result);
       // A voice-creation failure must NOT suppress the announcement: the event
