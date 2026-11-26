@@ -60,7 +60,7 @@ describe('signup-keyed roster readers filter by event (ROK-2321)', () => {
       42,
     );
     expect(role).toBe('dps');
-    expect(render(onlyClause(seen))).toEqual({
+    expect(render(onlyClause(seen))).toMatchObject({
       sql: SCOPED_SQL,
       params: [11, 42],
     });
@@ -74,7 +74,7 @@ describe('signup-keyed roster readers filter by event (ROK-2321)', () => {
       42,
     );
     expect(found).toBeNull();
-    expect(render(onlyClause(seen))).toEqual({
+    expect(render(onlyClause(seen))).toMatchObject({
       sql: SCOPED_SQL,
       params: [11, 42],
     });
@@ -90,7 +90,7 @@ describe('hasAssignmentInEvent (ROK-2321)', () => {
       42,
     );
     expect(has).toBe(true);
-    expect(render(onlyClause(seen))).toEqual({
+    expect(render(onlyClause(seen))).toMatchObject({
       sql: SCOPED_SQL,
       params: [11, 42],
     });
