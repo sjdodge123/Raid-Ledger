@@ -39,6 +39,7 @@ export class ValheimSteamLinkListener {
   /** A3 — detach `auto` claims on unlink, regardless of plugin state. */
   @OnEvent(STEAM_ACCOUNT_UNLINKED)
   async handleUnlinked(e: SteamAccountLinkEvent): Promise<void> {
+    // plugin-scope: cleanup
     await this.safely('detach', e.userId, () =>
       this.identity.detachForUser(e.userId, e.steamId64),
     );
