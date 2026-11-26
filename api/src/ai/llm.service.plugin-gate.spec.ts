@@ -134,9 +134,31 @@ describe('LlmService refuses while the AI plugin is inactive (ROK-2368)', () => 
       expectNoProviderCall();
     });
 
+    it('Discord AI chat summary skips chat() quietly: no warn per reply', async () => {
+      const chatSpy = jest.spyOn(service, 'chat');
+      const logger = new Logger('t');
+      const warnSpy = jest.spyOn(logger, 'warn');
+      await summarizeWithLlm(service, logger, 'raw data');
+      expect(chatSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
     it('Discord AI chat classifier returns null, no provider call', async () => {
       expect(await llmClassify(service, 'when is raid')).toBeNull();
       expectNoProviderCall();
+    });
+
+    it('Discord AI chat classifier never calls chat() while inactive', async () => {
+      const chatSpy = jest.spyOn(service, 'chat');
+      await llmClassify(service, 'when is raid');
+      expect(chatSpy).not.toHaveBeenCalled();
+    });
+
+    it('Discord AI chat summary still uses the LLM once the plugin is active', async () => {
+      plugins.isActive.mockReturnValue(true);
+      const out = await summarizeWithLlm(service, new Logger('t'), 'raw data');
+      expect(out).toContain('paid');
+      expect(provider.chat).toHaveBeenCalledTimes(1);
     });
 
     it('weekly discovery-categories generation inserts nothing, no provider call', async () => {
