@@ -1,23 +1,17 @@
 /**
  * ROK-2208 (S5) — inbound Discord → RL against the real Discord guild (AC8,
- * R7): a hub bound to a run-scoped forum `rl-smoke-forum-in-<runId>`; the
+ * R7): the hub bound to the run's shared forum (`hub-forum-shared.ts`); the
  * test bot (another bot, so it imports as a Discord guest) opens a post and
- * replies; both appear in the hub Forum with `source: "discord"`. No sleep():
- * every wait is `pollForCondition` on the RL API. Teardown unbinds + deletes.
+ * replies; both appear in the hub Forum with `source: "discord"`, found by
+ * this test's run-unique title. No sleep(): every wait is `pollForCondition`
+ * on the RL API. The post goes with the shared forum at the run's teardown.
  */
-import { ChannelType } from "discord.js";
-import { getGuild } from "../../client.js";
 import { pollForCondition } from "../../helpers/polling.js";
 import { SmokeAssertionError } from "../assert.js";
 import type { SmokeTest, TestContext } from "../types.js";
+import { sharedHubForum } from "./hub-forum-shared.js";
 
-const SEED_GUILD = "/admin/test/wow/seed-guild";
 const TIMEOUT_MS = 30_000;
-
-interface Made {
-  hub: number | null;
-  forum: string | null;
-}
 
 function fail(what: string, got: unknown): never {
   throw new SmokeAssertionError(`${what}; got ${JSON.stringify(got)}`);
@@ -88,53 +82,18 @@ async function expectReply(
 
 async function inbound(ctx: TestContext): Promise<void> {
   const runId = Date.now().toString(36);
-  const made: Made = { hub: null, forum: null };
-  try {
-    const forum = await getGuild().channels.create({
-      name: `rl-smoke-forum-in-${runId}`,
-      type: ChannelType.GuildForum,
-      reason: "ROK-2208 inbound smoke",
-    });
-    made.forum = forum.id;
-    const seeded = await ctx.api.post<{ guildId?: unknown }>(SEED_GUILD, {
-      name: `SF-I ${runId}`,
-    });
-    if (typeof seeded.guildId !== "number")
-      fail("seed-guild: no guildId", seeded);
-    made.hub = seeded.guildId;
-    await ctx.api.put(`/guilds/${String(made.hub)}/forum-discord`, {
-      mode: "existing",
-      channelId: forum.id,
-      ack: true,
-    });
-    const title = `Inbound smoke ${runId}`;
-    const post = await forum.threads.create({
-      name: title,
-      message: { content: "Posted on Discord" },
-    });
-    const threadId = await expectThread(ctx, made.hub, title);
-    const reply = `Discord reply ${runId}`;
-    await post.send(reply);
-    await expectReply(ctx, made.hub, threadId, reply);
-  } finally {
-    await teardown(ctx, made);
-  }
-}
-
-/** Best-effort undo; never masks the failure that got us here. */
-async function teardown(ctx: TestContext, made: Made): Promise<void> {
-  if (made.hub !== null) {
-    await ctx.api
-      .delete(`/guilds/${String(made.hub)}/forum-discord`)
-      .catch(() => undefined);
-  }
-  if (made.forum === null) return;
-  const forum = await getGuild()
-    .channels.fetch(made.forum, { force: true })
-    .catch(() => null);
-  await forum?.delete("ROK-2208 smoke teardown").catch((err: unknown) => {
-    console.warn(`  forum ${String(made.forum)} delete failed: ${String(err)}`);
+  const { forum, hub } = await sharedHubForum(ctx);
+  const title = `Inbound smoke ${runId}`;
+  const post = await forum.threads.create({
+    name: title,
+    message: { content: "Posted on Discord" },
   });
+  // No per-test delete: the companion bot cannot delete threads (50013); the
+  // shared forum's teardown removes the post with the channel.
+  const threadId = await expectThread(ctx, hub, title);
+  const reply = `Discord reply ${runId}`;
+  await post.send(reply);
+  await expectReply(ctx, hub, threadId, reply);
 }
 
 export const hubForumDiscordInboundTests: SmokeTest[] = [

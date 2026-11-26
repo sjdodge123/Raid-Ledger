@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import type { SystemStatusDto } from '@raid-ledger/contract';
+import { VIEWER_INDEPENDENT_META } from './viewer-private-caches';
 
 /**
  * Fetch system status from API (ROK-175 AC-4)
@@ -25,6 +26,7 @@ async function getSystemStatus(): Promise<SystemStatusDto> {
  */
 export const systemStatusQueryOptions = {
     queryKey: ['system', 'status'] as const,
+    meta: VIEWER_INDEPENDENT_META, // raw fetch, no bearer; read by the viewer-free /privacy (ROK-2334)
     queryFn: getSystemStatus,
     staleTime: 60_000, // Cache for 1 minute
     retry: 1, // Only retry once on failure
