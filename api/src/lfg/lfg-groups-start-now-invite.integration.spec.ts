@@ -198,11 +198,31 @@ describe('Start now by group (ROK-2352 §3.8)', () => {
       slotConfig: SHAPE,
       contentInstances: [{ id: 'dungeon:1', name: 'Inst dungeon:1' }],
     });
+    // Q1 (review MAJOR-2): the starter's OTHER `now` hand clears in the
+    // same locked tx; nobody else's hand moves.
+    expect(await handStatuses(game.id)).toEqual({
+      [`${a.userId}:dungeon:1`]: 'converted',
+      [`${b.userId}:dungeon:1`]: 'active',
+      [`${a.userId}:dungeon:2`]: 'cleared',
+      [`${c.userId}:dungeon:2`]: 'active',
+    });
+  });
+
+  it("keeps the starter's week hand in another group (Q1: only now hands clear)", async () => {
+    const [a, b] = await createMembers(testApp, 'snw-a', 'snw-b');
+    await link(b);
+    const game = await createGame(testApp, 'Start Now Week', { slug: SLUG });
+    await hand(a, game.id, 'dungeon:1', 'now');
+    await hand(b, game.id, 'dungeon:1', 'now');
+    await hand(a, game.id, 'dungeon:2', 'week');
+
+    const res = await startNow(a, game.id, 'dungeon:1');
+
+    expect(res.status).toBe(200);
     expect(await handStatuses(game.id)).toEqual({
       [`${a.userId}:dungeon:1`]: 'converted',
       [`${b.userId}:dungeon:1`]: 'active',
       [`${a.userId}:dungeon:2`]: 'active',
-      [`${c.userId}:dungeon:2`]: 'active',
     });
   });
 

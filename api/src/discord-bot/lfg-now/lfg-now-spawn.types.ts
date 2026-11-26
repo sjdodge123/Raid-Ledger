@@ -31,4 +31,9 @@ export interface LfgNowSpawnResult {
    * live — the caller re-arms grace post-COMMIT if nobody is in voice.
    */
   restoredFromGrace?: true;
+  /**
+   * ROK-2352 Q1: users whose OTHER `now` hand in the game this pass cleared
+   * (in-tx); the caller emits `withdrawn` for them post-COMMIT.
+   */
+  clearedSiblingUserIds?: number[];
 }

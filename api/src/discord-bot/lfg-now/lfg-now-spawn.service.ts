@@ -145,6 +145,7 @@ export class LfgNowSpawnService {
       );
     }
     this.emitPlaying(gameId, result.eventId);
+    this.emitClearedSiblings(gameId, result);
     const invited = await this.inviteOthers(gameId, starterUserId, result);
     return { eventId: result.eventId, spawned: result.spawned, invited };
   }
@@ -267,6 +268,7 @@ export class LfgNowSpawnService {
         );
       }
       this.emitPlaying(gameId, result.eventId);
+      this.emitClearedSiblings(gameId, result);
     } catch (err) {
       // Never rethrow: this handler's stack is POST /lfg.
       this.logger.warn(
@@ -356,6 +358,20 @@ export class LfgNowSpawnService {
    * D4: `playing`, never `converted`. `converted` renders a terminal view that
    * closes the LFM row, after which the head-count could never update again.
    */
+  /** Post-COMMIT (Q1): the members' other `now` hands the spawn cleared. */
+  private emitClearedSiblings(
+    gameId: number,
+    result: { clearedSiblingUserIds?: number[] },
+  ): void {
+    const userIds = result.clearedSiblingUserIds ?? [];
+    if (userIds.length === 0) return;
+    this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, {
+      gameId,
+      reason: 'withdrawn',
+      userIds,
+    } satisfies LfgGroupChangedPayload);
+  }
+
   private emitPlaying(gameId: number, eventId: number): void {
     this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, {
       gameId,

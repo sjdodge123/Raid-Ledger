@@ -38,6 +38,7 @@ import {
   convertStarterIntent,
   listLiveGroupHands,
   type ManualStart,
+  withClearedNowSiblings,
 } from './lfg-now-manual-start.helpers';
 import { LFG_NOW_SPAWN_THRESHOLD } from './lfg-now.constants';
 import type { LfgNowHand, LfgNowSpawnResult } from './lfg-now-spawn.types';
@@ -224,16 +225,33 @@ export function spawnUnderGroupLock(
       return attachToOpenEvent(tx, gameId, open, hands, group.scope);
     }
     if (hands.length < LFG_NOW_SPAWN_THRESHOLD) return null;
-    const eventId = await createLfgNowEventRow(
-      tx,
-      gameId,
-      defined(hands[0], 'earliest live now-hand').userId,
-      now,
-    );
-    await signupNowHands(tx, eventId, hands);
-    await convertGroup(tx, gameId, { eventId }, group.scope);
-    return { eventId, spawned: true, invitedUserIds: [] };
+    return spawnFromHands(tx, gameId, hands, now, group.scope);
   });
+}
+
+/** The THRESHOLD branch: mint the session, roster and convert the hands. */
+async function spawnFromHands(
+  tx: Db,
+  gameId: number,
+  hands: LfgNowHand[],
+  now: Date,
+  scope: LfgGroupScope,
+): Promise<LfgNowSpawnResult> {
+  const eventId = await createLfgNowEventRow(
+    tx,
+    gameId,
+    defined(hands[0], 'earliest live now-hand').userId,
+    now,
+  );
+  await signupNowHands(tx, eventId, hands);
+  await convertGroup(tx, gameId, { eventId }, scope);
+  const userIds = hands.map((h) => h.userId);
+  return {
+    eventId,
+    spawned: true,
+    invitedUserIds: [],
+    ...(await withClearedNowSiblings(tx, gameId, userIds, scope)),
+  };
 }
 
 /**
@@ -272,7 +290,7 @@ async function manualStart(
       patch: await startNowPatch(tx, gameId, group),
     }));
   if (starter) await signupNowHands(tx, eventId, [starter]);
-  await convertStarterIntent(
+  const converted = await convertStarterIntent(
     tx,
     gameId,
     manual.starterUserId,
@@ -280,6 +298,7 @@ async function manualStart(
     now,
     group.scope,
   );
+  const startedIds = converted > 0 ? [manual.starterUserId] : [];
   return {
     eventId,
     spawned: open === null,
@@ -287,6 +306,7 @@ async function manualStart(
       .filter((p) => p.userId !== manual.starterUserId)
       .map((p) => p.userId),
     ...(restored ? { restoredFromGrace: true as const } : {}),
+    ...(await withClearedNowSiblings(tx, gameId, startedIds, group.scope)),
   };
 }
 
@@ -323,10 +343,12 @@ export async function attachToOpenEvent(
   const restored = await restoreFromGracePeriod(tx, eventId);
   await signupNowHands(tx, eventId, hands);
   await convertGroup(tx, gameId, { eventId }, scope);
+  const userIds = hands.map((h) => h.userId);
   return {
     eventId,
     spawned: false,
     invitedUserIds: [],
     ...(restored ? { restoredFromGrace: true as const } : {}),
+    ...(await withClearedNowSiblings(tx, gameId, userIds, scope)),
   };
 }

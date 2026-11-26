@@ -16,6 +16,7 @@ import {
   groupScopeFilter,
   type LfgGroupScope,
 } from '../../lfg/lfg-group-scope.helpers';
+import { clearNowSiblings } from '../../lfg/lfg-lock-in-group.helpers';
 import { findOpenLfgNowEvent } from './lfg-now-spawn.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -166,4 +167,29 @@ export async function mayStartGroup(
     )
     .limit(1);
   return signup !== undefined;
+}
+
+/**
+ * ROK-2352 review MAJOR-2 (Q1, spec §3.2): the members a scoped spawn just put
+ * on a session leave their OTHER `now` hands in the game, inside the same
+ * locked transaction — so a concurrent Start now / Lock-in of another group,
+ * which waits on the same lock, can never roster them a second time.
+ * `tonight` / `week` hands stay. The fold (null scope) already converted every
+ * live hand of the game, so there is nothing to clear.
+ *
+ * @param tx - The spawn transaction handle (holds the per-game lock).
+ * @param gameId - Game whose group started.
+ * @param userIds - Members whose hand in the group converted.
+ * @param scope - The group that started.
+ * @returns A spread for {@link LfgNowSpawnResult}: the cleared users, if any.
+ */
+export async function withClearedNowSiblings(
+  tx: Db,
+  gameId: number,
+  userIds: readonly number[],
+  scope: LfgGroupScope,
+): Promise<{ clearedSiblingUserIds?: number[] }> {
+  if (scope === null) return {};
+  const cleared = await clearNowSiblings(tx, gameId, userIds);
+  return cleared.length > 0 ? { clearedSiblingUserIds: cleared } : {};
 }
