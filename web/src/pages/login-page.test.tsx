@@ -15,6 +15,15 @@ vi.mock('../hooks/use-auth', () => ({
 
 vi.mock('../hooks/use-system-status');
 vi.mock('../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
+vi.mock('../lib/signin-code', async (importActual) => ({
+    ...(await importActual<typeof import('../lib/signin-code')>()),
+    startSigninCode: vi.fn().mockResolvedValue({
+        code: 'K7QD-2M9X', deviceSecret: 's'.repeat(43), expiresAt: '2099-01-01T00:00:00.000Z', pollIntervalMs: 2000,
+    }),
+    pollSigninCode: vi.fn().mockResolvedValue({ status: 'pending', expiresAt: '2099-01-01T00:00:00.000Z' }),
+}));
+
+const TRY_ANOTHER_WAY = 'Sign in not working? Try another way';
 
 // Type-safe mock helper
 function mockSystemStatus(data: Partial<SystemStatusDto>) {
@@ -95,7 +104,7 @@ describe('LoginPage — part 1', () => {
 
         expect(screen.queryByLabelText(/username/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
-        expect(screen.getByText(/sign in with username instead/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: TRY_ANOTHER_WAY })).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('shows local login form when toggle is clicked', () => {
@@ -107,13 +116,12 @@ describe('LoginPage — part 1', () => {
 
         renderWithRouter(<LoginPage />);
 
-        const toggle = screen.getByText(/sign in with username instead/i);
-        fireEvent.click(toggle);
+        fireEvent.click(screen.getByRole('button', { name: TRY_ANOTHER_WAY }));
 
         expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
         expect(screen.getByLabelText('Password')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
-        expect(screen.getByText(/hide username login/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^sign in$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: TRY_ANOTHER_WAY })).toHaveAttribute('aria-expanded', 'true');
     });
 
 });
@@ -132,9 +140,45 @@ describe('LoginPage — part 2', () => {
 
         renderWithRouter(<LoginPage />);
 
-        // Both auth provider and local login should be visible
+        // Both auth provider and local login should be visible — first run opens the disclosure on password
         expect(screen.getByText(/continue with discord/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
+        expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    });
+
+    it('first run opens on the password section even when the code path is offered (ROK-2370)', () => {
+        mockSystemStatus({ isFirstRun: true, discordSigninCode: true, authProviders: [discordProvider] });
+
+        renderWithRouter(<LoginPage />);
+
+        expect(screen.getByLabelText('Password')).toBeInTheDocument();
+        expect(screen.queryByTestId('signin-code-waiting')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Get a code to confirm in Discord' })).toBeInTheDocument();
+    });
+
+    it('opens on the Discord-app code, then password, when discordSigninCode is on (ROK-2370)', async () => {
+        sessionStorage.clear();
+        mockSystemStatus({ isFirstRun: false, discordSigninCode: true, authProviders: [discordProvider] });
+
+        renderWithRouter(<LoginPage />);
+        expect(screen.queryByRole('note')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: TRY_ANOTHER_WAY }));
+
+        expect(await screen.findByTestId('signin-code-value')).toHaveTextContent('K7QD-2M9X');
+        expect(screen.getByText(/In Discord, type/)).toHaveTextContent(
+            'In Discord, type /login code:K7QD-2M9X and tap Yes, sign me in. Then come back to this browser.');
+        expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Sign in with username' })).toBeInTheDocument();
+    });
+
+    it('offers no code section when discordSigninCode is off (ROK-2370)', () => {
+        mockSystemStatus({ isFirstRun: false, authProviders: [discordProvider] });
+
+        renderWithRouter(<LoginPage />);
+        fireEvent.click(screen.getByRole('button', { name: TRY_ANOTHER_WAY }));
+
+        expect(screen.queryByRole('button', { name: 'Get a code to confirm in Discord' })).not.toBeInTheDocument();
+        expect(screen.queryByText(/get a code and confirm it in Discord/)).not.toBeInTheDocument();
         expect(screen.getByLabelText('Password')).toBeInTheDocument();
     });
 
@@ -226,17 +270,17 @@ describe('LoginPage on the form primitives (ROK-1648)', () => {
         expect(busy).toHaveAttribute('aria-disabled', 'true');
     });
 
-    it('renders the "username instead" toggle as a non-submitting ghost Button', () => {
+    it('renders the "Try another way" trigger as a non-submitting ghost Button', () => {
         mockSystemStatus({ isFirstRun: false, authProviders: [discordProvider] });
 
         renderWithRouter(<LoginPage />);
 
-        const toggle = screen.getByRole('button', { name: 'Sign in with username instead' });
+        const toggle = screen.getByRole('button', { name: TRY_ANOTHER_WAY });
         expect(toggle).toHaveAttribute('type', 'button');
         // Button wraps its label in a [data-button-label] span; a raw <button> does not.
         expect(toggle.querySelector('[data-button-label]'), 'toggle is the shared Button (has a data-button-label span)').not.toBeNull();
         fireEvent.click(toggle);
-        expect(screen.getByRole('button', { name: 'Hide username login' })).toBeInTheDocument();
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
         expect(document.querySelector('#username')).not.toBeNull();
     });
 });

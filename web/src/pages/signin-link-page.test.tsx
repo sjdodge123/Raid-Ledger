@@ -14,6 +14,7 @@ import type { User } from '../hooks/use-auth';
 import { renderWithProviders } from '../test/render-helpers';
 import { server } from '../test/mocks/server';
 import { clearAccessToken, getAccessToken } from '../lib/api/access-token-store';
+import { LAST_SIGNIN_KEY } from '../lib/last-signin';
 import { SigninLinkPage } from './signin-link-page';
 
 const API_BASE = 'http://localhost:3000';
@@ -149,5 +150,21 @@ describe('SigninLinkPage — refusals, sessions and dead links', () => {
         expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
         expect(discord.calls).toBe(1);
         expect(held.clear).not.toHaveBeenCalled();
+    });
+});
+
+describe('SigninLinkPage — ROK-2370 last-used marker', () => {
+    it('records discord-app-code once Continue signs the member in', async () => {
+        localStorage.clear();
+        held.token = SIGNIN_TOKEN;
+        redeemCounter(DISCORD_REDEEM, 200, { access_token: 'session.jwt' });
+        auth.refetch.mockResolvedValue({ data: { id: 9, username: 'Disco', displayName: null, avatar: null, customAvatarUrl: null, discordId: '123456789012345678', role: 'member' } });
+        renderPage();
+        await userEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+        await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/calendar'));
+
+        const marker = JSON.parse(localStorage.getItem(LAST_SIGNIN_KEY) ?? '{}') as Record<string, unknown>;
+        expect(marker.method, 'sign-in link must write the last-used marker').toBe('discord-app-code');
+        expect(marker.name).toBe('Disco');
     });
 });

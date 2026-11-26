@@ -10,6 +10,7 @@ import { resolveCharacterImportUrl } from '../utils/character-import-link.helper
 import type { CharacterDto } from '@raid-ledger/contract';
 import type { EventRow, RescheduleDeps } from './reschedule-response.helpers';
 import { reconfirmSignup } from './reschedule-roster.handlers';
+import { benchSuffix } from './signup-bench-feedback.helpers';
 import { defined } from '../../common/defined.helpers';
 
 /** Context for a confirm/tentative button handler. */
@@ -208,10 +209,16 @@ async function finalizeQuick(
 ): Promise<void> {
   const isTentative = mode === 'tentative';
   const opts = isTentative ? { signupStatus: 'tentative' as const } : undefined;
-  await reconfirmSignup(ctx.deps, ctx.interaction, ctx.event, userId, opts);
+  const slot = await reconfirmSignup(
+    ctx.deps,
+    ctx.interaction,
+    ctx.event,
+    userId,
+    opts,
+  );
   const label = isTentative ? 'marked as **tentative**' : 'confirmed';
   await ctx.interaction.editReply({
-    content: `You're ${label} for **${ctx.event.title}**.`,
+    content: `You're ${label} for **${ctx.event.title}**.${benchSuffix(slot)}`,
   });
   const state = isTentative ? 'tentative' : 'confirmed';
   await ctx.editDm(ctx.interaction, state);
@@ -226,13 +233,19 @@ async function finalizeSingleChar(
   mode: 'signed_up' | 'tentative',
 ): Promise<void> {
   const isTentative = mode === 'tentative';
-  await reconfirmSignup(ctx.deps, ctx.interaction, ctx.event, userId, {
-    characterId: char.id,
-    ...(isTentative ? { signupStatus: 'tentative' as const } : {}),
-  });
+  const slot = await reconfirmSignup(
+    ctx.deps,
+    ctx.interaction,
+    ctx.event,
+    userId,
+    {
+      characterId: char.id,
+      ...(isTentative ? { signupStatus: 'tentative' as const } : {}),
+    },
+  );
   const label = isTentative ? 'marked as **tentative**' : 'confirmed';
   await ctx.interaction.editReply({
-    content: `You're ${label} for **${ctx.event.title}** with **${char.name}**.`,
+    content: `You're ${label} for **${ctx.event.title}** with **${char.name}**.${benchSuffix(slot)}`,
   });
   const state = isTentative ? 'tentative' : 'confirmed';
   await ctx.editDm(ctx.interaction, state);

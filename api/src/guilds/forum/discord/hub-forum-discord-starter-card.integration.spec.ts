@@ -3,7 +3,8 @@
  * its starter, against a real database (Discord = the in-memory outbound
  * gateway). D8: the announcement creates the post; the lazy first-reply
  * creator racing it (either order) never makes a second post or a second
- * starter row, and the row is `channel_id = message_id = thread id`. D6: a
+ * starter row, and the row is `channel_id = message_id = thread id`; a reply
+ * held while the post was in flight is sent the moment it lands. D6: a
  * retitle of a carded post renames only. D7 + reopen: the lock sweep drops
  * the row and a reschedule restores it and queues a re-sync. R4: our own
  * starter's edit (empty content) is never ingested as an RL body edit.
@@ -11,7 +12,7 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { waitFor } from '../../../common/testing/integration-helpers';
-import { nonEmpty } from '../../../common/testing/narrow';
+import { at, nonEmpty } from '../../../common/testing/narrow';
 import { APP_EVENT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import * as schema from '../../../drizzle/schema';
 import { settle } from '../../posts/hub-posts.test-fixtures';
@@ -96,6 +97,24 @@ async function reply(s: Scene, body: string, replies: number): Promise<void> {
   await settle(out.apply);
 }
 
+/**
+ * A live RL reply posted while the event's post is still in flight: its
+ * outbound job runs to the end and leaves the reply held (not yet sent).
+ */
+async function replyHeld(s: Scene, body: string): Promise<void> {
+  const path = `/events/${s.eventId}/discussion/replies`;
+  const res = await as(ctx, 'signed', 'post', path, { body });
+  expect(res.status).toBe(201);
+  const isReply = ([c]: [{ op: string }]) => c.op === 'reply.created';
+  await waitFor(async () => {
+    expect(out.apply.mock.calls.some(isReply)).toBe(true);
+    return Promise.resolve();
+  });
+  const i = out.apply.mock.calls.findIndex(isReply);
+  await at(out.apply.mock.results, i).value;
+  expect(out.spies.createReply).not.toHaveBeenCalled();
+}
+
 async function postLink(threadId: number) {
   const l = schema.hubForumDiscordLinks;
   const rows = await db().select().from(l).where(eq(l.threadId, threadId));
@@ -140,7 +159,23 @@ describe('ROK-2292 D8 hub event post on announce', () => {
   it('a concurrent announce and first reply make exactly one post', async () => {
     const s = await boundScene();
     await Promise.all([announce(s.eventId), reply(s, 'Racing', 1)]);
-    await expectOneCardedPost(s);
+    const threadId = await expectOneCardedPost(s);
+    expect(out.spies.createReply).toHaveBeenCalledTimes(1);
+    expect(out.spies.createReply.mock.calls[0]?.[1]).toBe(threadId);
+  });
+
+  it('a reply made while the post is in flight is sent into it as soon as it lands', async () => {
+    const s = await boundScene();
+    out.spies.createPost.mockImplementationOnce(async () => {
+      await replyHeld(s, 'Mid-flight');
+      const id = snowflake();
+      return { threadId: id, messageId: id };
+    });
+    await announce(s.eventId);
+    const threadId = await expectOneCardedPost(s);
+    // Not left for the S6 sweep minutes later: sent when the post landed.
+    expect(out.spies.createReply).toHaveBeenCalledTimes(1);
+    expect(out.spies.createReply.mock.calls[0]?.[1]).toBe(threadId);
   });
 });
 

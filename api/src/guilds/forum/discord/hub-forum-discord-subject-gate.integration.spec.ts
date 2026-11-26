@@ -274,3 +274,33 @@ describe('ROK-2272 S8 — lineup thread write gate', () => {
     });
   });
 });
+
+describe('ROK-2328 — a banned or deactivated account earns no participation credit', () => {
+  it.each<[string, Partial<typeof schema.users.$inferInsert>]>([
+    ['banned', { bannedAt: new Date() }],
+    ['deactivated', { deactivatedAt: new Date() }],
+  ])('refuses a %s voter on a poll thread', async (_label, block) => {
+    const p = await pollThread();
+    const u = await discordUser();
+    await vote(p.matchId, u.id);
+    await db().update(schema.users).set(block).where(eq(schema.users.id, u.id));
+    expect(await gate.admits({ threadId: p.threadId }, u.discordId)).toBe(
+      false,
+    );
+  });
+
+  it.each<[string, Partial<typeof schema.users.$inferInsert>]>([
+    ['banned', { bannedAt: new Date() }],
+    ['deactivated', { deactivatedAt: new Date() }],
+  ])('refuses a %s nominator on a lineup thread', async (_label, block) => {
+    const l = await lineupThread();
+    const u = await discordUser();
+    await db()
+      .insert(schema.communityLineupEntries)
+      .values({ lineupId: l.lineupId, gameId: gameId(), nominatedBy: u.id });
+    await db().update(schema.users).set(block).where(eq(schema.users.id, u.id));
+    expect(await gate.admits({ threadId: l.threadId }, u.discordId)).toBe(
+      false,
+    );
+  });
+});

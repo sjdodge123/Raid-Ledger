@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
+import { LAST_SIGNIN_KEY } from '../../lib/last-signin';
 import { ClaimForm } from './claim-form';
 
 const fetchMock = vi.fn();
@@ -19,6 +20,7 @@ const ADMIN = { id: 1, username: 'admin', role: 'admin', discordId: 'local:admin
 describe('ClaimForm with the real useAuth', () => {
     beforeEach(() => {
         fetchMock.mockReset();
+        localStorage.clear();
         fetchMock.mockImplementation((url: unknown) => Promise.resolve(
             String(url).endsWith('/setup/claim') ? json(200, { access_token: 'jwt-1' }) : json(200, ADMIN),
         ));
@@ -36,5 +38,8 @@ describe('ClaimForm with the real useAuth', () => {
         expect(screen.getByText('Code accepted. This Raid Ledger is yours.')).toBeInTheDocument();
         expect(queryClient.getQueryData(['auth', 'me'])).toMatchObject({ id: 1 });
         expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/auth/me'))).toBe(true);
+        // ROK-2370: the claim signs the admin in with a password → "Last used" marker.
+        const marker = JSON.parse(localStorage.getItem(LAST_SIGNIN_KEY) ?? '{}') as Record<string, unknown>;
+        expect(marker.method, 'claim sign-in must write the last-used marker').toBe('password');
     });
 });

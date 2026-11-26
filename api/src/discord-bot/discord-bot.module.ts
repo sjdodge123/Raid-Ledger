@@ -111,6 +111,7 @@ import { PlayingCommand } from './commands/playing.command';
 import { LfgCommand } from './commands/lfg.command';
 import { LfgLeaveCommand } from './commands/lfg-leave.command';
 import { LoginCommand } from './commands/login.command';
+import { SigninCodeButtonListener } from './listeners/signin-code-button.listener';
 import { LfgWithdrawListener } from './listeners/lfg-withdraw.listener';
 import { LfgLeaveListener } from './listeners/lfg-leave.listener';
 import { LfgJoinListener } from './listeners/lfg-join.listener';
@@ -244,6 +245,7 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     LfgCommand,
     LfgLeaveCommand,
     LoginCommand,
+    SigninCodeButtonListener,
     LfgWithdrawListener,
     LfgLeaveListener,
     LfgJoinListener,

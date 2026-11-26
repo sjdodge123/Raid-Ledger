@@ -17,10 +17,13 @@ function build(): { ctrl: SlashCommandTestController; del: jest.Mock } {
 }
 
 describe('SlashCommandTestController.clearLoginRateLimit', () => {
-  it("deletes the member's signin-link:rl key", async () => {
+  it("deletes the member's signin-link:rl and signin-code:rl keys (ROK-2370)", async () => {
     const { ctrl, del } = build();
     await ctrl.clearLoginRateLimit(SNOWFLAKE);
-    expect(del).toHaveBeenCalledWith(`signin-link:rl:${SNOWFLAKE}`);
+    expect(del).toHaveBeenCalledWith(
+      `signin-link:rl:${SNOWFLAKE}`,
+      `signin-code:rl:${SNOWFLAKE}`,
+    );
   });
 
   it('400s a non-snowflake id and touches nothing', async () => {

@@ -51,6 +51,42 @@ export const RedeemDiscordLinkSchema = z.object({
 
 export type RedeemDiscordLinkDto = z.infer<typeof RedeemDiscordLinkSchema>;
 
+/** ROK-2370: the sign-in code alphabet — no 0/O, 1/I/L or U. */
+const SIGNIN_CODE_PATTERN = /^[A-HJKMNP-TV-Z2-9]{4}-[A-HJKMNP-TV-Z2-9]{4}$/;
+
+/**
+ * ROK-2370: response of POST /auth/discord/signin-code. The page shows `code`
+ * (typed into `/login code:` in Discord) and keeps `deviceSecret` to poll.
+ * Relay: instance-private (carries a credential).
+ */
+export const SigninCodeStartResponseSchema = z.object({
+    code: z.string().regex(SIGNIN_CODE_PATTERN),
+    deviceSecret: z.string().min(43).max(128),
+    expiresAt: z.string().datetime(),
+    pollIntervalMs: z.number().int().positive(),
+});
+
+export type SigninCodeStartResponseDto = z.infer<typeof SigninCodeStartResponseSchema>;
+
+/** ROK-2370: body of POST /auth/discord/signin-code/poll. Relay: instance-private. */
+export const SigninCodePollRequestSchema = z.object({
+    deviceSecret: z.string().min(43).max(128),
+});
+
+export type SigninCodePollRequestDto = z.infer<typeof SigninCodePollRequestSchema>;
+
+/**
+ * ROK-2370: poll response; `approved` carries the usual token response (the
+ * refresh cookie is set alongside). Relay: instance-private.
+ */
+export const SigninCodePollResponseSchema = z.discriminatedUnion('status', [
+    z.object({ status: z.literal('pending'), expiresAt: z.string().datetime() }),
+    z.object({ status: z.literal('expired') }),
+    z.object({ status: z.literal('approved'), session: TokenResponseSchema }),
+]);
+
+export type SigninCodePollResponseDto = z.infer<typeof SigninCodePollResponseSchema>;
+
 /**
  * ROK-1630: body of POST /auth/{discord,steam}/link/start. Strict — the start
  * endpoints authenticate ONLY via the Authorization header and must never read

@@ -66,6 +66,11 @@ export interface EventPostDeps {
    * job path (unbound / stale ⇒ nothing; locked ⇒ skipped until reopened).
    */
   redrive: (link: links.ForumLink) => Promise<unknown>;
+  /**
+   * Send one re-homed held reply with the op the S6 sweep would choose
+   * (binding-checked): a reply deleted meanwhile is never published.
+   */
+  resendReply: (link: links.ForumLink) => Promise<unknown>;
   /** ROK-2292 D2: an event post opens with its tracked signup card. */
   starters: Pick<EventForumStarterCards, 'build' | 'track'>;
   /** ROK-2295: a poll post opens with the live poll embed. */
@@ -99,6 +104,8 @@ interface PostView {
 
 const starterLogger = new Logger('HubForumDiscordEventOutbound');
 
+type StarterState = Parameters<EventForumStarterCards['track']>[2];
+
 /**
  * ROK-2292 delta-3 MINOR: the post is already sent and its link marked sent,
  * so a starter-tracking failure must not fail `attempt` (that would mark the
@@ -109,7 +116,7 @@ async function trackSentStarter(
   starters: Pick<EventForumStarterCards, 'track'>,
   eventId: number,
   threadId: string,
-  state: Parameters<EventForumStarterCards['track']>[2],
+  state: StarterState,
 ): Promise<void> {
   try {
     await starters.track(eventId, threadId, state);
@@ -117,6 +124,12 @@ async function trackSentStarter(
     const why = err instanceof Error ? err.message : String(err);
     starterLogger.warn(`starter tracking of event ${eventId} failed: ${why}`);
   }
+}
+
+/** A held reply could not be re-homed or sent now; S6 will retry it. */
+function warnHeld(threadId: number, err: unknown): void {
+  const why = err instanceof Error ? err.message : String(err);
+  starterLogger.warn(`held replies of thread ${threadId}: ${why}`);
 }
 
 export class EventPostOutbound {
@@ -206,6 +219,32 @@ export class EventPostOutbound {
     for (const link of posts) await this.deps.redrive(link);
   }
 
+  /**
+   * A post just went out: the replies that waited on it (a first reply that
+   * raced the post) move onto it and are sent now, not at the next S6 sweep
+   * minutes later. Never throws — the post is already sent, and a failure
+   * here must not mark it failed (a retry would post twice), and one
+   * reply's failure never holds back the next; S6 is the backstop for any
+   * reply left unsent. Known gap (review m3): a post whose send outlasts the
+   * S6 grace can have a held reply sent by a concurrent sweep too — closing
+   * it needs a claim-to-send state on the link.
+   */
+  async rehome(threadId: number, discordThreadId: string): Promise<void> {
+    let held: links.ForumLink[] = [];
+    try {
+      held = await links.rehomeReplies(this.deps.db, threadId, discordThreadId);
+    } catch (err) {
+      warnHeld(threadId, err);
+    }
+    for (const link of held) {
+      try {
+        await this.deps.resendReply(link);
+      } catch (err) {
+        warnHeld(threadId, err);
+      }
+    }
+  }
+
   private async send(
     to: EventPostTarget,
     link: links.ForumLink,
@@ -231,16 +270,20 @@ export class EventPostOutbound {
     await this.deps.attempt(link, async () => {
       const sent = await gateway.createPost(to.target, post, ROOT_AUTHOR);
       await links.markSent(db, link.id, sent, this.deps.now());
-      await links.rehomeReplies(db, link.threadId, sent.threadId);
-      if (eventCard && eventId !== null) {
-        await trackSentStarter(
-          this.deps.starters,
-          eventId,
-          sent.threadId,
-          eventCard.state,
-        );
-      }
+      await this.landed(link.threadId, sent.threadId, eventId, eventCard);
     });
+  }
+
+  /** D8: a post landed — its starter row first, then its held replies. */
+  private async landed(
+    threadId: number,
+    postId: string,
+    eventId: number | null,
+    card: { state: StarterState } | null,
+  ): Promise<void> {
+    if (card && eventId !== null)
+      await trackSentStarter(this.deps.starters, eventId, postId, card.state);
+    await this.rehome(threadId, postId);
   }
 
   /**
