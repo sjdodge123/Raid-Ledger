@@ -51,7 +51,9 @@ export interface PendingConvert {
 export function useWithdraw() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (gameId: number) => withdrawIntent(gameId),
+        // ROK-2352: a bare id withdraws the whole-game group, as before.
+        mutationFn: (target: number | { gameId: number; groupKey: string }) =>
+            typeof target === 'number' ? withdrawIntent(target) : withdrawIntent(target.gameId, target.groupKey),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['lfg'] });
         },

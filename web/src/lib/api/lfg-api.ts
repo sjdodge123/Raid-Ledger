@@ -37,6 +37,7 @@ import {
     type LfgSuggestionsResponseDto,
 } from '@raid-ledger/contract';
 import { fetchApi, fetchWithAuth } from './fetch-api';
+import { groupQuery } from './lfg-group-api';
 
 const LfgGroupListSchema = z.array(LfgGroupSummarySchema);
 
@@ -101,8 +102,8 @@ export async function getLfgBridgeOffers(
  *
  * @param gameId - Numeric game id (the route is id-based, not slug-based).
  */
-export async function getLfgGroup(gameId: number): Promise<LfgGroupDetailDto> {
-    return fetchApi(`/lfg/${gameId}`, {}, LfgGroupDetailSchema);
+export async function getLfgGroup(gameId: number, groupKey = ''): Promise<LfgGroupDetailDto> {
+    return fetchApi(`/lfg/${gameId}${groupQuery(groupKey)}`, {}, LfgGroupDetailSchema);
 }
 
 /**
@@ -111,8 +112,9 @@ export async function getLfgGroup(gameId: number): Promise<LfgGroupDetailDto> {
  */
 export async function getLfgOverlap(
     gameId: number,
+    groupKey = '',
 ): Promise<LfgOverlapResponseDto> {
-    return fetchApi(`/lfg/${gameId}/overlap`, {}, LfgOverlapResponseSchema);
+    return fetchApi(`/lfg/${gameId}/overlap${groupQuery(groupKey)}`, {}, LfgOverlapResponseSchema);
 }
 
 /**
@@ -121,8 +123,9 @@ export async function getLfgOverlap(
  */
 export async function getLfgHistory(
     gameId: number,
+    groupKey = '',
 ): Promise<LfgHistoryResponseDto> {
-    return fetchApi(`/lfg/${gameId}/history`, {}, LfgHistoryResponseSchema);
+    return fetchApi(`/lfg/${gameId}/history${groupQuery(groupKey)}`, {}, LfgHistoryResponseSchema);
 }
 
 /**
@@ -131,9 +134,10 @@ export async function getLfgHistory(
  */
 export async function getLfgSuggestions(
     gameId: number,
+    groupKey = '',
 ): Promise<LfgSuggestionsResponseDto> {
     return fetchApi(
-        `/lfg/${gameId}/suggestions`,
+        `/lfg/${gameId}/suggestions${groupQuery(groupKey)}`,
         {},
         LfgSuggestionsResponseSchema,
     );
@@ -164,8 +168,8 @@ export async function createIntent(
  *
  * @param gameId - Game to stop looking for.
  */
-export async function withdrawIntent(gameId: number): Promise<void> {
-    await fetchApi(`/lfg/${gameId}`, { method: 'DELETE' });
+export async function withdrawIntent(gameId: number, groupKey = ''): Promise<void> {
+    await fetchApi(`/lfg/${gameId}${groupQuery(groupKey)}`, { method: 'DELETE' });
 }
 
 /**
@@ -237,8 +241,9 @@ export class LfgInviteCapError extends Error {
 export async function inviteToGroup(
     gameId: number,
     userId: number,
+    groupKey = '',
 ): Promise<LfgInviteResponseDto> {
-    const response = await fetchWithAuth(`/lfg/${gameId}/invites`, {
+    const response = await fetchWithAuth(`/lfg/${gameId}/invites${groupQuery(groupKey)}`, {
         method: 'POST',
         body: JSON.stringify({ userId }),
     });

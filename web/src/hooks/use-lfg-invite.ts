@@ -42,7 +42,7 @@ function reportInviteError(
 }
 
 /** `POST /lfg/:gameId/invites` for one group, with per-row outcome state. */
-export function useInviteToGroup(gameId: number): InviteToGroup {
+export function useInviteToGroup(gameId: number, groupKey = ''): InviteToGroup {
     const queryClient = useQueryClient();
     const [outcomes, setOutcomes] = useState<Record<number, LfgInviteOutcome>>(
         {},
@@ -50,12 +50,12 @@ export function useInviteToGroup(gameId: number): InviteToGroup {
     const [capMessage, setCapMessage] = useState<string | null>(null);
 
     const mutation = useMutation<LfgInviteResponseDto, Error, number>({
-        mutationFn: (userId) => inviteToGroup(gameId, userId),
+        mutationFn: (userId) => inviteToGroup(gameId, userId, groupKey),
         onSuccess: (result, userId) => {
             setOutcomes((prev) => ({ ...prev, [userId]: result.status }));
             if (result.status === 'sent') {
                 queryClient.invalidateQueries({
-                    queryKey: lfgSuggestionsKey(gameId),
+                    queryKey: lfgSuggestionsKey(gameId, groupKey),
                 });
             }
         },

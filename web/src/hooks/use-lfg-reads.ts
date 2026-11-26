@@ -43,10 +43,11 @@ export function useGameBySlug(
 /** Windows the live roster could all play in. */
 export function useLfgOverlap(
     gameId: number | undefined,
+    groupKey = '',
 ): UseQueryResult<LfgOverlapResponseDto> {
     return useQuery({
-        queryKey: ['lfg', 'overlap', gameId],
-        queryFn: () => getLfgOverlap(gameId as number),
+        queryKey: ['lfg', 'overlap', gameId, groupKey],
+        queryFn: () => getLfgOverlap(gameId as number, groupKey),
         enabled: Boolean(gameId),
     });
 }
@@ -54,26 +55,28 @@ export function useLfgOverlap(
 /** Past scheduled events and Quick Play sessions for the game. */
 export function useLfgHistory(
     gameId: number | undefined,
+    groupKey = '',
 ): UseQueryResult<LfgHistoryResponseDto> {
     return useQuery({
-        queryKey: ['lfg', 'history', gameId],
-        queryFn: () => getLfgHistory(gameId as number),
+        queryKey: ['lfg', 'history', gameId, groupKey],
+        queryFn: () => getLfgHistory(gameId as number, groupKey),
         enabled: Boolean(gameId),
     });
 }
 
 /** The suggestions read's key — `useInviteToGroup` invalidates exactly this. */
-export function lfgSuggestionsKey(gameId: number | undefined) {
-    return ['lfg', 'suggestions', gameId] as const;
+export function lfgSuggestionsKey(gameId: number | undefined, groupKey = '') {
+    return ['lfg', 'suggestions', gameId, groupKey] as const;
 }
 
 /** Players who might want in on this group. */
 export function useLfgSuggestions(
     gameId: number | undefined,
+    groupKey = '',
 ): UseQueryResult<LfgSuggestionsResponseDto> {
     return useQuery({
-        queryKey: lfgSuggestionsKey(gameId),
-        queryFn: () => getLfgSuggestions(gameId as number),
+        queryKey: lfgSuggestionsKey(gameId, groupKey),
+        queryFn: () => getLfgSuggestions(gameId as number, groupKey),
         enabled: Boolean(gameId),
     });
 }

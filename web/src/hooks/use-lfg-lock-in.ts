@@ -33,11 +33,13 @@ export interface LockInOptions {
 }
 
 /** The create body — the group's game, its name as the title, the capped window. */
-function lockInBody(gameId: number, gameName: string, window: LockInWindow) {
+function lockInBody(gameId: number, gameName: string, window: LockInWindow, groupKey: string) {
     const { start, end } = capLockInWindow(window);
     return {
         gameId,
         lfgGameId: gameId,
+        // ROK-2352: only that group converts; the whole-game group sends no key.
+        ...(groupKey === '' ? {} : { lfgGroupKey: groupKey }),
         title: gameName.slice(0, TITLE_MAX),
         startTime: start,
         endTime: end,
@@ -45,11 +47,11 @@ function lockInBody(gameId: number, gameName: string, window: LockInWindow) {
 }
 
 /** Create an event from the LFG group for `gameId`, converting the group. */
-export function useLockInEvent(gameId: number, gameName: string) {
+export function useLockInEvent(gameId: number, gameName: string, groupKey = '') {
     const queryClient = useQueryClient();
     const mutation = useMutation({
         mutationFn: (window: LockInWindow) =>
-            createEvent(lockInBody(gameId, gameName, window)),
+            createEvent(lockInBody(gameId, gameName, window, groupKey)),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['lfg'] });
             void queryClient.invalidateQueries({ queryKey: ['events'] });

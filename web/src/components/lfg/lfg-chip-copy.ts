@@ -23,6 +23,14 @@ export {
 import { groupLine } from '@raid-ledger/contract';
 
 /**
+ * ROK-2352 Q7 — the chip's sub-line when a game's LFG is split into several
+ * groups (WoW dungeons/raids). Null at one group, so other games are unchanged.
+ */
+export function groupsLine(groupCount?: number | null): string | null {
+    return groupCount != null && groupCount > 1 ? `in ${groupCount} groups` : null;
+}
+
+/**
  * The urgency headline: how many people want to play RIGHT NOW (ROK-1479 A6).
  *
  * Counts PLAYERS, and deliberately says nothing about the weekly cohort — the
