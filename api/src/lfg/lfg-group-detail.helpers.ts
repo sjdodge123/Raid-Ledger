@@ -26,6 +26,7 @@ import {
   resolveLfgGrouping,
   type LfgGroupingRegistry,
 } from './lfg-grouping.helpers';
+import { attachMemberDetails } from './lfg-member-details.helpers';
 
 /** `?group` → the scope + label, folding when the game has no active adapter. */
 function resolveGroupFor(
@@ -36,6 +37,14 @@ function resolveGroupFor(
   const adapter = resolveLfgGrouping(grouping.registry, game.slug);
   const ctx = { gameId: game.id, gameSlug: game.slug };
   return resolveDetailGroup(adapter, ctx, grouping.groupKey);
+}
+
+/** The game's active grouping adapter, or null (no registry / plugin off). */
+function adapterFor(
+  game: typeof schema.games.$inferSelect,
+  grouping?: { registry: LfgGroupingRegistry },
+) {
+  return grouping ? resolveLfgGrouping(grouping.registry, game.slug) : null;
 }
 
 /**
@@ -66,13 +75,22 @@ export async function readGroupDetail(
       readConvertedEvent(db, game.id),
       listOwnOtherGroups(db, userId, game.id, group),
     ]);
+  // ROK-2352: the plugin's per-member detail (badges) for the viewed group.
+  const adapter = adapterFor(game, grouping);
+  const roster = await attachMemberDetails(
+    db,
+    adapter,
+    game.id,
+    scope,
+    members,
+  );
   const spawns = groupReadPressWouldSpawnNow(summary, live?.urgency === 'now');
   return {
     ...summary,
     groupKey: scope ?? '',
     groupLabel: group.label,
     ...(group.describe ? { ownOtherGroups: others } : {}),
-    members,
+    members: roster,
     ownIntent: live ? toIntentDto(live) : null,
     threadId,
     convertedEvent,

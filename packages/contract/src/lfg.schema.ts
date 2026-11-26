@@ -231,6 +231,13 @@ export const LfgMemberSchema = z.object({
     joinedAt: z.string(),
     /** `week` or `now` — the group page orders `now` members first. */
     urgency: LfgUrgencySchema,
+    /**
+     * ROK-2352: the active `lfg-grouping` plugin's detail for this member's
+     * hand in the viewed group (WoW: `WowLfgMemberDetailDto`). Absent without
+     * an active adapter, on the folded whole-game read, or with no stored
+     * detail. Core never interprets it; the plugin's `MemberBadges` does.
+     */
+    pluginDetail: z.record(z.string(), z.unknown()).optional(),
 });
 export type LfgMemberDto = z.infer<typeof LfgMemberSchema>;
 
