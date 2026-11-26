@@ -6,6 +6,8 @@ import * as schema from '../drizzle/schema';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { LlmService } from '../ai/llm.service';
 import { SettingsService } from '../settings/settings.service';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { AI_MANIFEST } from '../ai/ai-manifest';
 import { runGenerateSuggestions } from './pipelines/generate-suggestions';
 import { runExpireSuggestions } from './pipelines/expire-suggestions';
 
@@ -28,10 +30,13 @@ export class DiscoveryCategoriesService {
     private readonly cronJobService: CronJobService,
     private readonly llmService: LlmService,
     private readonly settingsService: SettingsService,
+    private readonly plugins: PluginRegistryService,
   ) {}
 
   @Cron('0 0 0 * * 0', { name: 'DiscoveryCategoriesService_weeklyGenerate' })
   async weeklyGenerateCron(): Promise<void> {
+    // ROK-2354: no LLM call, generate or expire pass while the AI plugin is off.
+    if (!this.plugins.isActive(AI_MANIFEST.id)) return;
     await this.cronJobService.executeWithTracking(
       'DiscoveryCategoriesService_weeklyGenerate',
       async () => {

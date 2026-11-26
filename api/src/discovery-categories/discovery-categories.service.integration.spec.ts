@@ -16,6 +16,7 @@ import type { LlmService } from '../ai/llm.service';
 import type { SettingsService } from '../settings/settings.service';
 import type { CronJobService } from '../cron-jobs/cron-job.service';
 import { DiscoveryCategoriesService } from './discovery-categories.service';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { nonEmpty } from '../common/testing/narrow';
 
 const PROPOSAL: LlmCategoryProposalDto = {
@@ -73,6 +74,7 @@ describe('DiscoveryCategoriesService.weeklyGenerate (ROK-1127 A6)', () => {
       cronJobService,
       llmService,
       settingsService,
+      testApp.app.get(PluginRegistryService),
     );
     return { service, chat };
   }
