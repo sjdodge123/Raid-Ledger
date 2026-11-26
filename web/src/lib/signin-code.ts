@@ -15,10 +15,10 @@ import {
 } from '@raid-ledger/contract';
 import { API_BASE_URL } from './config';
 import { nativeFetch } from './api/native-fetch';
-import { safeSessionGetItem, safeSessionRemoveItem, safeSessionSetItem } from './safe-storage';
+import { safeSessionGetItem, safeSessionSetItem } from './safe-storage';
+import { SIGNIN_CODE_STORAGE_KEY, clearPendingSigninCode } from './signin-code-storage';
 
-/** sessionStorage key for the pending code (tab-scoped, survives reload). */
-export const SIGNIN_CODE_STORAGE_KEY = 'rl_signin_code';
+export { SIGNIN_CODE_STORAGE_KEY, clearPendingSigninCode };
 
 const START_PATH = '/auth/discord/signin-code';
 const POLL_PATH = '/auth/discord/signin-code/poll';
@@ -90,11 +90,6 @@ export function formatCountdown(ms: number): string {
 /** Remember the pending code for this tab. A no-op when storage is blocked. */
 export function savePendingSigninCode(code: PendingSigninCode): void {
     safeSessionSetItem(SIGNIN_CODE_STORAGE_KEY, JSON.stringify(code));
-}
-
-/** Forget the pending code (cancel, close, expiry, success). */
-export function clearPendingSigninCode(): void {
-    safeSessionRemoveItem(SIGNIN_CODE_STORAGE_KEY);
 }
 
 /** The saved code when it is well-formed and not yet expired at `now`; junk is cleared. */

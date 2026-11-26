@@ -15,7 +15,7 @@ import { awaitMagicLinkRedeem, takeMagicLinkAdoption } from '../lib/magic-link-r
 import { recordLastSignin } from '../lib/last-signin';
 import { peekCapturedSigninLinkToken, isSigninLinkPage } from '../lib/magic-link-capture';
 import { clearCapturedQueryToken } from '../lib/query-token-capture';
-import { clearPendingSigninCode } from '../lib/signin-code';
+import { clearPendingSigninCode } from '../lib/signin-code-storage';
 import { bumpIdentityEpoch } from '../lib/api/cross-tab-auth';
 import { dropViewerPrivateCaches } from './viewer-private-caches';
 import type { UserRole } from '@raid-ledger/contract';
