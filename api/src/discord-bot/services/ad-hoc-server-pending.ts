@@ -46,9 +46,16 @@ const eligible = (h: Held): boolean => h.state !== 'unconfirmed';
 
 export class PendingServerPlayers {
   private readonly held = new Map<number, Entry>();
+  /** ROK-2355: Pelican is off — presence is no longer observed, hold nothing. */
+  private suspended = false;
 
-  /** Hold (or re-confirm) a player; returns how many this server can enrol. */
+  /**
+   * Hold (or re-confirm) a player; returns how many this server can enrol.
+   * While suspended (Pelican off) nothing is held and this returns 0 — a sink
+   * call the session queued before the deactivation lands after the clear.
+   */
   hold(source: ServerPresenceSource, player: ServerPresencePlayer): number {
+    if (this.suspended) return 0;
     const entry = this.held.get(source.pelicanServerId) ?? {
       source,
       players: new Map<string, Held>(),
@@ -94,6 +101,21 @@ export class PendingServerPlayers {
   /** ROK-2355: forget every hold on every server (Pelican turned off). */
   clearAll(): void {
     this.held.clear();
+  }
+
+  /** ROK-2355: forget every hold of one game's servers. */
+  clearGame(gameId: number): void {
+    for (const [id, entry] of this.held)
+      if (entry.source.gameId === gameId) this.held.delete(id);
+  }
+
+  /** ROK-2355: Pelican off — refuse holds until `resume` (Pelican on). */
+  suspend(): void {
+    this.suspended = true;
+  }
+
+  resume(): void {
+    this.suspended = false;
   }
 
   /** A new presence session: every hold here needs re-confirming (ROK-1802). */

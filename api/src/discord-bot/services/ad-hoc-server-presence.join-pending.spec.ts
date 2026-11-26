@@ -306,6 +306,44 @@ describe('AdHocServerPresenceService — Pelican turned off (ROK-2355)', () => {
     expect(await svc.heldPresence(SOURCE)).toEqual([]);
   });
 
+  it('refuses a hold that lands after Pelican deactivates (a queued session call)', async () => {
+    const svc = await held();
+    await svc.onPluginDeactivated({ slug: 'pelican' });
+    jest.mocked(checkSuppression).mockClear();
+    await svc.playerJoined(SOURCE, PLAYER);
+    expect(await svc.heldPresence(SOURCE)).toEqual([]);
+    expect(checkSuppression).not.toHaveBeenCalled();
+  });
+
+  it('holds again once Pelican is reactivated', async () => {
+    const svc = await held();
+    await svc.onPluginDeactivated({ slug: 'pelican' });
+    svc.onPluginActivated({ slug: 'pelican' });
+    await svc.playerJoined(SOURCE, PLAYER);
+    expect(await svc.heldPresence(SOURCE)).toEqual([PLAYER]);
+  });
+
+  it('an evaluate in flight at deactivation spawns from its holds, never from an emptied set (Codex P2)', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    let reached: () => void = () => undefined;
+    const atGate = new Promise<void>((r) => (reached = r));
+    jest.mocked(checkSuppression).mockImplementation(() => {
+      reached();
+      return new Promise((r) => (release = r));
+    });
+    const { svc } = serviceWith(1); // 1 held + 1 in voice = minPlayers 2
+    const join = svc.playerJoined(SOURCE, PLAYER);
+    await atGate;
+    const off = svc.onPluginDeactivated({ slug: 'pelican' });
+    release(CLEARANCE);
+    await Promise.all([join, off]);
+    const spawnedWith = jest
+      .mocked(buildServerSpawnInput)
+      .mock.calls.map(([, , , players]) => players);
+    expect(spawnedWith).toEqual([[PLAYER]]);
+    expect(await svc.heldPresence(SOURCE)).toEqual([]);
+  });
+
   it('keeps the holds when another plugin deactivates', async () => {
     const svc = await held();
     await svc.onPluginDeactivated({ slug: 'valheim' });

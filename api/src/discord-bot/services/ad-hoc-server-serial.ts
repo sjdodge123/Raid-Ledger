@@ -18,6 +18,17 @@ export class PerGameSerial {
     return next;
   }
 
+  /**
+   * Queue `fn(gameId)` behind every game seen so far, each in its own turn,
+   * so it runs after that game's in-flight calls and before later ones.
+   */
+  async runAll(fn: (gameId: number) => void): Promise<void> {
+    const games = [...this.chains.keys()];
+    await Promise.all(
+      games.map((g) => this.run(g, () => Promise.resolve(fn(g)))),
+    );
+  }
+
   /** Resolves once every call queued so far, on every game, has settled. */
   async settled(): Promise<void> {
     await Promise.all([...this.chains.values()]);
