@@ -783,7 +783,9 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
   `aria-expanded`), opening a `border-t border-edge` block with an ordered list of sections, one open at a time
   (Discord-app code, then username/password). The code panel (`SigninCodePanel`) shows the code in a `font-mono`
   `bg-panel border-edge` tile with a labelled `CopyButton`, and the `/login code:` instruction in this neutral
-  callout (`p-3`). Top-level providers never go inside the disclosure.
+  callout (`p-3`). At 320–375px the code (`text-xl`, `sm:text-2xl`), "Copy code" and the `/login code:` command
+  are each `whitespace-nowrap`; the tile is `flex-wrap`, so "Copy code" drops under the code rather than the code
+  breaking at its hyphen. Top-level providers never go inside the disclosure.
 - **Claim your character (ROK-2153)** is the core adopter on hubs: `HubClaimPrompt`
   (`components/hub/claim/`) is a neutral instruction callout `<section aria-label="Claim your character">`
   with an `h2` (`text-base font-semibold text-foreground`), a `text-secondary` body (a shorter one below

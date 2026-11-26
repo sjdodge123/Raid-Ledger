@@ -30,14 +30,15 @@ export function SigninCodeWaiting({ code, expiresAt, onCancel }: {
     const remaining = useRemainingMs(expiresAt);
     return (
         <div className="space-y-3" data-testid="signin-code-waiting">
-            <div className="flex items-center justify-between gap-2 p-3 bg-panel border border-edge rounded-lg">
-                <span className="font-mono text-2xl font-semibold tracking-widest text-foreground" data-testid="signin-code-value">
+            {/* The code and "Copy code" never break mid-word: below ~360px the button drops under the code. */}
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 p-3 bg-panel border border-edge rounded-lg">
+                <span className="font-mono text-xl sm:text-2xl font-semibold tracking-widest text-foreground whitespace-nowrap" data-testid="signin-code-value">
                     {code}
                 </span>
-                <CopyButton text={code} label="Copy code" />
+                <CopyButton text={code} label="Copy code" className="ml-auto shrink-0 whitespace-nowrap" />
             </div>
             <p className="p-3 bg-overlay/30 border border-edge rounded-lg text-sm text-secondary">
-                In Discord, type <strong className="font-semibold text-foreground">/login code:{code}</strong> and tap{' '}
+                In Discord, type <strong className="font-semibold text-foreground whitespace-nowrap" data-testid="signin-code-command">/login code:{code}</strong> and tap{' '}
                 <strong className="font-semibold text-foreground">Yes, sign me in</strong>. Then come back to this browser.
             </p>
             <div className="flex items-center justify-between gap-2">
