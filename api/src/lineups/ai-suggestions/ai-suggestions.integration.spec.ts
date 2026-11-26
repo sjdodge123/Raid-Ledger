@@ -18,6 +18,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { LlmService } from '../../ai/llm.service';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import * as schema from '../../drizzle/schema';
 import { SETTING_KEYS } from '../../drizzle/schema';
 import { computeVoterSetHash } from './voter-scope.helpers';
@@ -36,9 +37,27 @@ function describeAiSuggestions() {
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   });
 
+  beforeEach(async () => {
+    // ROK-2353: LlmService refuses while the `ai` plugin is inactive, and
+    // truncateAllTables may wipe `plugins`; re-install, then activate.
+    const plugins = testApp.app.get(PluginRegistryService);
+    await plugins.ensureInstalled('ai');
+    await plugins.activate('ai');
+  });
+
   afterEach(async () => {
     testApp.seed = await truncateAllTables(testApp.db);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+  });
+
+  // ROK-2353 review r1: leave `ai` inactive for later files. truncateAllTables
+  // deletes the plugins row but never refreshes the registry's in-memory
+  // cache, so re-install, deactivate (refreshes the cache), then truncate.
+  afterAll(async () => {
+    const plugins = testApp.app.get(PluginRegistryService);
+    await plugins.ensureInstalled('ai');
+    await plugins.deactivate('ai');
+    testApp.seed = await truncateAllTables(testApp.db);
   });
 
   async function createLineup(): Promise<number> {

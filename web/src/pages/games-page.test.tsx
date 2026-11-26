@@ -897,3 +897,21 @@ describe('GamesPage — ROK-1402: co-op filters persist across remount', () => {
         expect(screen.queryByTestId(COOP_HINT)).not.toBeInTheDocument();
     });
 });
+
+describe('GamesPage — ROK-2342: a failed discover query is an error, not an empty library', () => {
+    it('shows the retryable error state instead of "No games in the library yet", and Try again refetches', () => {
+        const refetch = vi.fn();
+        vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            error: new Error('HTTP 500'),
+            refetch,
+        } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
+        mockSearch();
+        renderPage();
+        expect(screen.getByRole('heading', { name: "Couldn't load games" })).toBeInTheDocument();
+        expect(screen.queryByText('No games in the library yet')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(refetch).toHaveBeenCalledTimes(1);
+    });
+});
