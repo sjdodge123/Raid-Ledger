@@ -29,16 +29,17 @@ export interface StartNowOptions {
 }
 
 /**
- * Start the LFG group for `gameId` playing right now.
+ * Start the LFG group `(gameId, groupKey)` playing right now. ROK-2352:
+ * `groupKey` rides as `?group`; `''` (the default) is the whole-game group.
  *
  * Invalidates every `['lfg']` read (the detail's `playingNow` is what flips
  * the page into the session state) and every `['events']` read (the ad-hoc
  * event is new on the calendar), exactly as lock-in does.
  */
-export function useStartNow(gameId: number) {
+export function useStartNow(gameId: number, groupKey = '') {
     const queryClient = useQueryClient();
     const mutation = useMutation({
-        mutationFn: (): Promise<LfgStartNowResponseDto> => startNowSession(gameId),
+        mutationFn: (): Promise<LfgStartNowResponseDto> => startNowSession(gameId, groupKey),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['lfg'] });
             void queryClient.invalidateQueries({ queryKey: ['events'] });

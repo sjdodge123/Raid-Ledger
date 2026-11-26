@@ -197,12 +197,15 @@ export async function convertIntents(
  * event, rosters the caller and invites every other +1. A press on a game that
  * already has a live session ATTACHES to it and still answers 200 with
  * `spawned: false` (AC5), so a caller must not treat that as a failure.
+ * ROK-2352: `groupKey` (`?group`) starts only that group; `''` (the default)
+ * is the whole-game / Any group.
  */
 export async function startNowSession(
     gameId: number,
+    groupKey = '',
 ): Promise<LfgStartNowResponseDto> {
     return fetchApi(
-        `/lfg/${gameId}/start-now`,
+        `/lfg/${gameId}/start-now${groupQuery(groupKey)}`,
         { method: 'POST' },
         LfgStartNowResponseSchema,
     );

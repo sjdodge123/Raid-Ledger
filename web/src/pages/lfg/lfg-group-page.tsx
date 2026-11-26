@@ -68,7 +68,7 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined, g
     const withdraw = useWithdraw();
     const find = useFindATime();
     const lock = useLockInEvent(gameId, group?.gameName ?? '', groupKey);
-    const start = useStartNow(gameId);
+    const start = useStartNow(gameId, groupKey);
     const memberUserIds = usePollMemberIds(group);
     const startPoll = useCallback(
         (done: () => void) => find.findATime({ gameId, memberUserIds, groupKey }, { onSettled: done }),
