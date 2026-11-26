@@ -23,7 +23,7 @@ export interface LfgParticipantsListProps {
     badges?: LfgMemberBadgesSlot | undefined;
 }
 
-/** Urgency chip — amber for right now (the now-strip family), neutral for the week. */
+/** Urgency chip — amber for right now (the now-strip family), neutral for tonight and the week. */
 function UrgencyChip({ member, now }: { member: LfgMemberDto; now: number }): JSX.Element {
     if (member.urgency === 'now') {
         const left = expiresIn(Date.parse(member.expiresAt) - now);
@@ -35,7 +35,7 @@ function UrgencyChip({ member, now }: { member: LfgMemberDto; now: number }): JS
     }
     return (
         <span data-testid="lfg-participant-urgency" className="inline-flex items-center rounded-full border border-edge bg-overlay/40 px-2 py-0.5 text-[10px] text-muted">
-            {LFG_COPY.urgencyWeek}
+            {member.urgency === 'tonight' ? LFG_COPY.urgencyTonight : LFG_COPY.urgencyWeek}
         </span>
     );
 }
