@@ -98,11 +98,12 @@ export async function finalizeDuplicate(
  */
 export async function reconfirmPendingWithSlot(
   db: Db,
+  eventId: number,
   signupId: number,
   confirmationStatus: string,
 ): Promise<boolean> {
   if (confirmationStatus !== 'pending') return false;
-  const role = await getAssignedSlotRole(db, signupId);
+  const role = await getAssignedSlotRole(db, eventId, signupId);
   if (!role || role === 'bench') return false;
   await db
     .update(schema.eventSignups)
@@ -130,6 +131,7 @@ export async function healPendingFromDiscord(
 ): Promise<boolean> {
   const healed = await reconfirmPendingWithSlot(
     db,
+    signup.eventId,
     signup.id,
     signup.confirmationStatus,
   );

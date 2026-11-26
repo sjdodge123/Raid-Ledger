@@ -98,25 +98,42 @@ function testHandleUnsubscribe() {
 }
 
 function testEmitRosterUpdate() {
-  const participants = [
-    {
-      id: 'uuid-1',
-      eventId: 42,
-      userId: 1,
-      discordUserId: 'discord-1',
-      discordUsername: 'Player1',
-      discordAvatarHash: null,
-      joinedAt: '2026-02-10T18:00:00Z',
-      leftAt: null,
-      totalDurationSeconds: null,
-      sessionCount: 1,
-    },
-  ];
+  const player = {
+    id: 'uuid-1',
+    eventId: 42,
+    userId: 1,
+    discordUserId: 'discord-1',
+    discordUsername: 'Player1',
+    discordAvatarHash: 'hash-1',
+    joinedAt: '2026-02-10T18:00:00Z',
+    leftAt: null,
+    totalDurationSeconds: null,
+    sessionCount: 1,
+  };
+  const participants = [player];
   gateway.emitRosterUpdate(42, participants, 1);
   expect(mockServer.to).toHaveBeenCalledWith('event:42');
+  // ROK-2323: any signed-in socket can join the room, so the broadcast is
+  // the viewer projection with a hasDiscord flag. This row is LINKED, so it
+  // keeps its Discord id + avatar hash (already public to members via the
+  // players list and signup roster); an unlinked row loses both.
   expect(mockEmit).toHaveBeenCalledWith('roster:update', {
     eventId: 42,
-    participants,
+    participants: [
+      {
+        id: player.id,
+        eventId: 42,
+        userId: 1,
+        hasDiscord: true,
+        discordUsername: 'Player1',
+        discordUserId: 'discord-1',
+        discordAvatarHash: 'hash-1',
+        joinedAt: player.joinedAt,
+        leftAt: null,
+        totalDurationSeconds: null,
+        sessionCount: 1,
+      },
+    ],
     activeCount: 1,
   });
 }

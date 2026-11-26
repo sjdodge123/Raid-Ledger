@@ -9,14 +9,25 @@ import type { AdHocParticipantDto } from '@raid-ledger/contract';
  * under Left once it leaves voice (Codex r3). A row with no `source` is a
  * legacy (pre-ROK-1800) voice row. A game-server row with no Discord identity,
  * not in voice — linked to a Raid Ledger user or not — stays on the event
- * roster but is never shown as voice.
+ * roster but is never shown as voice. "Carries a Discord identity" reads
+ * `hasDiscord` (ROK-2323), since a non-owner gets no Discord id.
  */
 export function isVoiceParticipant(participant: AdHocParticipantDto): boolean {
   return (
     participant.source !== 'steam' ||
     participant.inVoice === true ||
-    participant.discordUserId !== null
+    hasDiscordIdentity(participant)
   );
+}
+
+/**
+ * ROK-2323 — a non-owner viewer never receives `discordUserId`; the server
+ * sends `hasDiscord` instead. A legacy payload without the flag falls back
+ * to the id itself.
+ */
+function hasDiscordIdentity(participant: AdHocParticipantDto): boolean {
+  if (participant.hasDiscord !== undefined) return participant.hasDiscord;
+  return (participant.discordUserId ?? null) !== null;
 }
 
 /** ROK-1821 — the voice rows of an ad-hoc roster, in their original order. */

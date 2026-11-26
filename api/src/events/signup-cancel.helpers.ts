@@ -3,6 +3,7 @@ import { Logger, NotFoundException } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
+import { assignmentOfSignupInEvent } from './roster-assignment-scope.helpers';
 import { BenchPromotionService } from './bench-promotion.service';
 import { reslotTentativePlayer } from './signup-tentative-reslot.helpers';
 import type { SignupEventPayload } from '../discord-bot/discord-bot.constants';
@@ -149,7 +150,7 @@ async function prepareCancelData(
   const [assignment] = await db
     .select()
     .from(schema.rosterAssignments)
-    .where(eq(schema.rosterAssignments.signupId, signup.id))
+    .where(assignmentOfSignupInEvent(eventId, signup.id))
     .limit(1);
   const notifyData = await gatherCancelNotifyData(
     db,
@@ -169,7 +170,7 @@ async function applyCancellation(
   if (data.assignment)
     await db
       .delete(schema.rosterAssignments)
-      .where(eq(schema.rosterAssignments.signupId, data.signup.id));
+      .where(eq(schema.rosterAssignments.id, data.assignment.id));
   await db
     .update(schema.eventSignups)
     .set({

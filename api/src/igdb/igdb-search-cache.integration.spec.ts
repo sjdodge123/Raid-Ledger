@@ -10,6 +10,7 @@
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
+import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
 import * as schema from '../drizzle/schema';
 import { IgdbService } from './igdb.service';
 import { ItadService } from '../itad/itad.service';
@@ -67,8 +68,24 @@ describe('ITAD search cache (integration, ROK-1381)', () => {
     };
   }
 
+  // ROK-2325: only signed-in callers reach the ITAD/IGDB search path this
+  // spec caches; an anonymous search stays local-DB-only.
+  let token: string;
+  const search = (q: string) =>
+    testApp.request
+      .get(`/games/search?q=${q}`)
+      .set('Authorization', `Bearer ${token}`);
+
   beforeAll(async () => {
     testApp = await getTestApp();
+  });
+
+  beforeEach(async () => {
+    ({ token } = await createMemberAndLogin(
+      testApp,
+      'cachetest',
+      'cachetest@test.local',
+    ));
   });
 
   afterEach(async () => {
@@ -83,7 +100,7 @@ describe('ITAD search cache (integration, ROK-1381)', () => {
       fakeIgdbGame('Cachetest Alpha', 'cachetest-alpha', 990001),
     );
 
-    const first = await testApp.request.get('/games/search?q=cachetest alpha');
+    const first = await search('cachetest alpha');
     expect(first.status).toBe(200);
     expect(first.body.meta.source).toBe('itad');
     expect(first.body.meta.cached).toBe(false);
@@ -97,7 +114,7 @@ describe('ITAD search cache (integration, ROK-1381)', () => {
     expect(countsAfterFirst.queryIgdb).toBe(1);
     const gamesAfterFirst = await snapshotGames(testApp);
 
-    const second = await testApp.request.get('/games/search?q=cachetest alpha');
+    const second = await search('cachetest alpha');
     expect(second.status).toBe(200);
     expect(second.body.meta.cached).toBe(true);
     expect(second.body.meta.source).toBe('redis');
@@ -119,16 +136,14 @@ describe('ITAD search cache (integration, ROK-1381)', () => {
       .spyOn(igdb, 'isAdultFilterEnabled')
       .mockResolvedValue(false);
 
-    const first = await testApp.request.get('/games/search?q=cachetest beta');
+    const first = await search('cachetest beta');
     expect(first.status).toBe(200);
     expect(first.body.meta.source).toBe('itad');
     expect(itadSearchSpy).toHaveBeenCalledTimes(1);
 
     // Same query under the OTHER filter state must NOT hit the cached entry.
     adultSpy.mockResolvedValue(true);
-    const filtered = await testApp.request.get(
-      '/games/search?q=cachetest beta',
-    );
+    const filtered = await search('cachetest beta');
     expect(filtered.status).toBe(200);
     expect(filtered.body.meta.source).toBe('itad');
     expect(itadSearchSpy).toHaveBeenCalledTimes(2);
@@ -142,9 +157,7 @@ describe('ITAD search cache (integration, ROK-1381)', () => {
     ).toBe(true);
 
     // Repeat under the second state serves from ITS entry — no external call.
-    const filteredRepeat = await testApp.request.get(
-      '/games/search?q=cachetest beta',
-    );
+    const filteredRepeat = await search('cachetest beta');
     expect(filteredRepeat.status).toBe(200);
     expect(filteredRepeat.body.meta.source).toBe('redis');
     expect(itadSearchSpy).toHaveBeenCalledTimes(2);

@@ -10,7 +10,10 @@
  */
 import { eq, sql, type SQL } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
-import { truncateAllTables } from '../common/testing/integration-helpers';
+import {
+  truncateAllTables,
+  loginAsAdmin,
+} from '../common/testing/integration-helpers';
 import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { ItadService } from '../itad/itad.service';
@@ -77,7 +80,18 @@ function syncDeps(game: ItadGame, adultFilterEnabled = false): DiscoveryDeps {
 }
 
 describe('ROK-1843 by-steam-id never rediscovers a moderated game', () => {
-  it('a hidden game stays hidden and the anonymous lookup 404s', async () => {
+  // Signed in: since ROK-2325 only signed-in callers reach ITAD discovery,
+  // which is the path these cases guard. Anonymous callers never discover.
+  let token: string;
+  beforeEach(async () => {
+    token = await loginAsAdmin(testApp.request, testApp.seed);
+  });
+  const getBySteamId = (appId: number) =>
+    testApp.request
+      .get(`/games/by-steam-id/${appId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+  it('a hidden game stays hidden and the lookup 404s', async () => {
     const hidden = await insertGame({
       slug: 'rok1843-hidden',
       name: 'Rok1843 Hidden',
@@ -88,7 +102,7 @@ describe('ROK-1843 by-steam-id never rediscovers a moderated game', () => {
       .spyOn(testApp.app.get(ItadService), 'lookupBySteamAppId')
       .mockResolvedValue(itadGame('rok1843-hidden', 'Rok1843 Hidden'));
 
-    const res = await testApp.request.get('/games/by-steam-id/184301');
+    const res = await getBySteamId(184301);
 
     expect(res.status).toBe(404);
     expect((await reload(hidden.id)).hidden).toBe(true);
@@ -106,7 +120,7 @@ describe('ROK-1843 by-steam-id never rediscovers a moderated game', () => {
       .spyOn(testApp.app.get(ItadService), 'lookupBySteamAppId')
       .mockResolvedValue(itadGame('rok1843-banned-other', 'Rok1843 Banned'));
 
-    const res = await testApp.request.get('/games/by-steam-id/184302');
+    const res = await getBySteamId(184302);
 
     expect(res.status).toBe(404);
     expect(await reload(banned.id)).toEqual(banned);
@@ -124,7 +138,7 @@ describe('ROK-1843 by-steam-id never rediscovers a moderated game', () => {
         itadGame('rok1843-name-hidden-itad', 'Rok1843 Name Hidden'),
       );
 
-    const res = await testApp.request.get('/games/by-steam-id/184303');
+    const res = await getBySteamId(184303);
 
     expect(res.status).toBe(404);
     expect((await reload(hidden.id)).hidden).toBe(true);
@@ -141,7 +155,7 @@ describe('ROK-1843 by-steam-id never rediscovers a moderated game', () => {
       .spyOn(testApp.app.get(ItadService), 'lookupBySteamAppId')
       .mockResolvedValue(itadGame('rok1843-twin', 'Rok1843 Twin'));
 
-    const res = await testApp.request.get('/games/by-steam-id/184305');
+    const res = await getBySteamId(184305);
 
     expect(res.status).toBe(404);
     const rows = await testApp.db
@@ -324,9 +338,11 @@ describe('ROK-1843 ITAD search never returns or rewrites a moderated row', () =>
         appId,
       );
 
-      const res = await testApp.request.get(
-        `/games/search?q=rok1843 zq ${label}`,
-      );
+      // ROK-2325: only signed-in searches reach ITAD discovery.
+      const token = await loginAsAdmin(testApp.request, testApp.seed);
+      const res = await testApp.request
+        .get(`/games/search?q=rok1843 zq ${label}`)
+        .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
       // The ITAD layer swallows errors and falls back — prove it really ran.

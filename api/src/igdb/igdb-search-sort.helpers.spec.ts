@@ -197,4 +197,20 @@ describe('IgdbService.searchLocalGames — relevance ranking (ROK-1084)', () => 
       'World of Warcraft: Burning Crusade Classic',
     ]);
   });
+
+  it('collapses separate IGDB and ITAD rows for the same title (ROK-2325)', async () => {
+    selectResults = [
+      gameRow({ id: 21, name: 'Hades' }),
+      {
+        ...gameRow({ id: 22, name: 'Hades' }),
+        igdbId: null,
+        itadGameId: 'itad-hades',
+      },
+    ];
+
+    const result = await service.searchLocalGames('hades');
+
+    expect(result.games).toHaveLength(1);
+    expect(result.games[0]?.name).toBe('Hades');
+  });
 });

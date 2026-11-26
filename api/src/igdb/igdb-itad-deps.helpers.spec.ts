@@ -10,7 +10,11 @@ import type * as schema from '../drizzle/schema';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import type { ItadService } from '../itad/itad.service';
 import { ITAD_INTERACTIVE_FETCH, type ItadGame } from '../itad/itad.constants';
-import { buildItadSearchDeps } from './igdb-itad-deps.helpers';
+import {
+  buildItadSearchDeps,
+  ITAD_INFO_CONCURRENCY,
+  mapWithConcurrency,
+} from './igdb-itad-deps.helpers';
 import { executeItadSearch } from './igdb-itad-search.helpers';
 
 function itadGame(slug: string): ItadGame {
@@ -115,5 +119,60 @@ describe('buildItadSearchDeps — interactive fail-fast', () => {
       ],
       ITAD_INTERACTIVE_FETCH,
     );
+  });
+});
+
+/** A fn whose calls stay in flight until released; tracks the peak. */
+function gatedCalls<T>() {
+  let inFlight = 0;
+  let peak = 0;
+  const waiters: (() => void)[] = [];
+  const fn = (item: T): Promise<T> => {
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    return new Promise<T>((resolve) => {
+      waiters.push(() => {
+        inFlight -= 1;
+        resolve(item);
+      });
+    });
+  };
+  /** Release every waiting call, repeatedly, until the run settles. */
+  async function drain(run: Promise<unknown>): Promise<void> {
+    let done = false;
+    void run.finally(() => (done = true));
+    while (!done) {
+      waiters.splice(0).forEach((release) => release());
+      await new Promise((r) => setImmediate(r));
+    }
+  }
+  return { fn, drain, peak: () => peak };
+}
+
+describe('ITAD getGameInfo fan-out cap (ROK-2325)', () => {
+  it('mapWithConcurrency never exceeds the limit and keeps input order', async () => {
+    const gate = gatedCalls<number>();
+    const items = Array.from({ length: 11 }, (_, i) => i);
+    const run = mapWithConcurrency(items, 3, gate.fn);
+    await gate.drain(run);
+    expect(gate.peak()).toBe(3);
+    expect(await run).toEqual(items);
+  });
+
+  it('a search with 10 ITAD hits has at most ITAD_INFO_CONCURRENCY getGameInfo calls in flight', async () => {
+    const gate = gatedCalls<string>();
+    const slugs = Array.from({ length: 10 }, (_, i) => `cap-${i}`);
+    const itad = mockItadService(slugs);
+    itad.getGameInfo.mockImplementation(async (id: string) => {
+      await gate.fn(id);
+      return null;
+    });
+    const deps = buildDeps(createDrizzleMock(), slugs, itad);
+    const run = deps.searchItad('cap');
+    await gate.drain(run);
+    expect(ITAD_INFO_CONCURRENCY).toBe(4);
+    expect(gate.peak()).toBe(ITAD_INFO_CONCURRENCY);
+    expect(itad.getGameInfo).toHaveBeenCalledTimes(10);
+    expect((await run).map((g) => g.slug)).toEqual(slugs);
   });
 });

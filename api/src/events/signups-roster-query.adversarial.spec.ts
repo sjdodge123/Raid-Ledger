@@ -23,13 +23,13 @@ function createMockDb(rows: unknown[] = []) {
 describe('getAssignedSlotRole', () => {
   it('returns role when assignment exists', async () => {
     const db = createMockDb([{ role: 'bench' }]);
-    const result = await getAssignedSlotRole(db, 1);
+    const result = await getAssignedSlotRole(db, 7, 1);
     expect(result).toBe('bench');
   });
 
   it('returns null when no assignment exists', async () => {
     const db = createMockDb([]);
-    const result = await getAssignedSlotRole(db, 1);
+    const result = await getAssignedSlotRole(db, 7, 1);
     expect(result).toBeNull();
   });
 
@@ -37,7 +37,7 @@ describe('getAssignedSlotRole', () => {
     'returns %s for role assignments of that type',
     async (role) => {
       const db = createMockDb([{ role }]);
-      const result = await getAssignedSlotRole(db, 1);
+      const result = await getAssignedSlotRole(db, 7, 1);
       expect(result).toBe(role);
     },
   );

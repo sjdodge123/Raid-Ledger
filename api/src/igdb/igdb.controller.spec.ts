@@ -37,6 +37,11 @@ function describeIgdbController() {
       searchGames: jest
         .fn()
         .mockResolvedValue({ games: mockGames, cached: true }),
+      // ROK-2325: an anonymous caller (`{}` below) is served by the
+      // local-DB search only; `searchGames` (ITAD/IGDB) is signed-in only.
+      searchLocalGames: jest
+        .fn()
+        .mockResolvedValue({ games: mockGames, cached: true }),
       /**
        * ROK-1314: `personalizeGames` overlays the community aggregates for
        * EVERY caller (anonymous included, AC4), so the controller now reaches
@@ -76,13 +81,14 @@ function describeIgdbController() {
   });
 
   function describeSearchGames() {
-    it('should return search results for valid query', async () => {
+    it('anonymous: returns local-DB results and never runs the provider search', async () => {
       const result = await controller.searchGames('valheim', {});
 
       expect(result.data).toEqual(mockGames);
       expect(result.meta.total).toBe(1);
       expect(result.meta.cached).toBe(true);
-      expect(mockIgdbService.searchGames).toHaveBeenCalledWith('valheim');
+      expect(mockIgdbService.searchLocalGames).toHaveBeenCalledWith('valheim');
+      expect(mockIgdbService.searchGames).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException for empty query', async () => {
@@ -105,7 +111,7 @@ function describeIgdbController() {
     });
 
     it('should throw InternalServerErrorException for IGDB API errors', async () => {
-      mockIgdbService.searchGames = jest
+      mockIgdbService.searchLocalGames = jest
         .fn()
         .mockRejectedValue(new Error('IGDB API error: Unauthorized'));
 
@@ -116,7 +122,7 @@ function describeIgdbController() {
 
     it('should re-throw unexpected errors', async () => {
       const unexpectedError = new Error('Unexpected database error');
-      mockIgdbService.searchGames = jest
+      mockIgdbService.searchLocalGames = jest
         .fn()
         .mockRejectedValue(unexpectedError);
 

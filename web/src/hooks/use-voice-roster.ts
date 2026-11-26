@@ -47,18 +47,58 @@ function invalidateSignupRoster(queryClient: ReturnType<typeof useQueryClient>, 
   void queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'], exact: true });
 }
 
+type RosterPayload = { participants: AdHocParticipantDto[]; activeCount: number };
+type SetVoiceState = React.Dispatch<React.SetStateAction<VoiceRosterState>>;
+
+/** Trailing window that coalesces a burst of `roster:update`s (ROK-2323). */
+export const ROSTER_REFETCH_DEBOUNCE_MS = 750;
+
+/**
+ * ROK-2323: the broadcast is the viewer projection (no unlinked Discord /
+ * Steam ids), so the per-viewer REST roster is refetched — the owner keeps
+ * the full detail. A raid-start burst would otherwise send one REST call
+ * plus two invalidations per update and trip the 60/min/IP throttle, so the
+ * refetch and the invalidations run once per quiet window. The latest
+ * broadcast is the fallback when the refetch fails; a newer refetch
+ * supersedes an older one still in flight (seq guard).
+ */
+function createRosterRefetcher(eventId: number, setState: SetVoiceState, queryClient: ReturnType<typeof useQueryClient>) {
+  let latest = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let fallback: RosterPayload | null = null;
+  const run = () => {
+    timer = undefined;
+    const seq = ++latest;
+    const broadcast = fallback;
+    void fetchInitialRoster(eventId).then((fresh) => {
+      const next = fresh ?? broadcast;
+      if (seq !== latest || !next) return;
+      setState((prev) => ({ ...prev, participants: next.participants, activeCount: next.activeCount }));
+    });
+    invalidateSignupRoster(queryClient, eventId);
+  };
+  const onUpdate = (data: RosterPayload) => {
+    fallback = data;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(run, ROSTER_REFETCH_DEBOUNCE_MS);
+  };
+  const cancel = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    latest++;
+  };
+  return { onUpdate, cancel };
+}
+
 function bindSocketEvents(
   socket: Socket,
   eventId: number,
-  setState: React.Dispatch<React.SetStateAction<VoiceRosterState>>,
+  setState: SetVoiceState,
   queryClient: ReturnType<typeof useQueryClient>,
-) {
+): () => void {
   socket.on('connect', () => { setState((prev) => ({ ...prev, connected: true })); socket.emit('subscribe', { eventId }); });
   socket.on('disconnect', () => setState((prev) => ({ ...prev, connected: false })));
-  socket.on('roster:update', (data: { participants: AdHocParticipantDto[]; activeCount: number }) => {
-    setState((prev) => ({ ...prev, participants: data.participants, activeCount: data.activeCount }));
-    invalidateSignupRoster(queryClient, eventId);
-  });
+  const refetcher = createRosterRefetcher(eventId, setState, queryClient);
+  socket.on('roster:update', refetcher.onUpdate);
   socket.on('event:status', (data: { status: 'live' | 'grace_period' | 'ended' }) => {
     setState((prev) => ({ ...prev, status: data.status }));
   });
@@ -67,11 +107,12 @@ function bindSocketEvents(
     queryClient.setQueryData<EventResponseDto>(['events', data.eventId], (old) => old ? { ...old, endTime: data.newEndTime } : old);
     queryClient.invalidateQueries({ queryKey: ['events', data.eventId, 'detail'], exact: true });
   });
+  return refetcher.cancel;
 }
 
 function createVoiceSocket(
   eventId: number,
-  setState: React.Dispatch<React.SetStateAction<VoiceRosterState>>,
+  setState: SetVoiceState,
   queryClient: ReturnType<typeof useQueryClient>,
 ) {
   const { url, path } = resolveSocketTarget('/ad-hoc');
@@ -90,8 +131,8 @@ function createVoiceSocket(
     reconnection: true, reconnectionAttempts: 5, reconnectionDelay: 1000,
   });
 
-  bindSocketEvents(socket, eventId, setState, queryClient);
-  const cleanup = () => { socket.emit('unsubscribe', { eventId }); socket.disconnect(); };
+  const cancelRefetch = bindSocketEvents(socket, eventId, setState, queryClient);
+  const cleanup = () => { cancelRefetch(); socket.emit('unsubscribe', { eventId }); socket.disconnect(); };
   return { socket, cleanup };
 }
 

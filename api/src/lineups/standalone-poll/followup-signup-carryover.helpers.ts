@@ -88,7 +88,10 @@ function selectSourceSignups(
     .leftJoin(c, and(eq(c.id, s.characterId), eq(c.userId, s.userId), sameGame))
     .leftJoin(
       schema.rosterAssignments,
-      eq(schema.rosterAssignments.signupId, s.id),
+      and(
+        eq(schema.rosterAssignments.signupId, s.id),
+        eq(schema.rosterAssignments.eventId, s.eventId),
+      ),
     )
     .where(and(eq(s.eventId, eventId), inArray(s.userId, userIds)));
 }

@@ -18,6 +18,7 @@ import {
   buildAnonymousSignupResponseDto,
 } from './signups-roster.helpers';
 import { MMO_SLOT_DEFAULTS } from './signups-signup.helpers';
+import { assignmentOfSignupInEvent } from './roster-assignment-scope.helpers';
 
 export async function fetchRosterSignups(db: Tx, eventId: number) {
   return db
@@ -200,15 +201,16 @@ export async function resolveGenericSlotRole(
   return 'player';
 }
 
-/** Look up the assigned roster slot for a signup (ROK-626). */
+/** Look up the signup's roster slot in this event (ROK-626, ROK-2321). */
 export async function getAssignedSlotRole(
   db: Tx,
+  eventId: number,
   signupId: number,
 ): Promise<string | null> {
   const [assignment] = await db
     .select({ role: schema.rosterAssignments.role })
     .from(schema.rosterAssignments)
-    .where(eq(schema.rosterAssignments.signupId, signupId))
+    .where(assignmentOfSignupInEvent(eventId, signupId))
     .limit(1);
   return assignment?.role ?? null;
 }

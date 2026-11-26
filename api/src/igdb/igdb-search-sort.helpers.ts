@@ -8,6 +8,7 @@ import type * as schema from '../drizzle/schema';
 import { gameInterests } from '../drizzle/schema';
 import { INTERESTED_ROW } from './igdb-interest-sources.helpers';
 import type { SearchResult } from './igdb.constants';
+import { deduplicateGames } from './igdb-search-dedup.helpers';
 import {
   isAcronymQuery,
   nameAcronym,
@@ -100,4 +101,17 @@ export async function sortByRelevance(
     compareSearchRank(a, b, query, countMap),
   );
   return { ...result, games: sorted };
+}
+
+/**
+ * Rank, then collapse IGDB/ITAD rows for the same title — the same dedup the
+ * signed-in pipeline applies, for local-only callers (ROK-2325).
+ */
+export async function sortAndDedupe(
+  db: PostgresJsDatabase<typeof schema>,
+  result: SearchResult,
+  query: string,
+): Promise<SearchResult> {
+  const sorted = await sortByRelevance(db, result, query);
+  return { ...sorted, games: deduplicateGames(sorted.games) };
 }
