@@ -12,13 +12,18 @@ import {
 import { formatLeafResponse, formatRawFallback } from './response-formatter';
 import type { AiChatResponse } from '../ai-chat.service';
 
-/** Summarize data using the LLM service with fallback. */
+/**
+ * Summarize data using the LLM service with fallback. While the `ai`
+ * plugin is inactive the raw fallback is used quietly, with no LLM call
+ * and no warn per reply (ROK-2353).
+ */
 export async function summarizeWithLlm(
   llmService: LlmService,
   logger: Logger,
   data: string,
   hint?: string,
 ): Promise<string> {
+  if (!llmService.isPluginActive()) return formatRawFallback(data);
   try {
     const systemPrompt = hint
       ? `${SUMMARIZE_SYSTEM_PROMPT} ${hint}`
@@ -41,11 +46,13 @@ export async function summarizeWithLlm(
   }
 }
 
-/** Use LLM to classify ambiguous free-text (10-token cap). */
+/** Use LLM to classify ambiguous free-text (10-token cap). Returns null
+ *  without an LLM call while the `ai` plugin is inactive (ROK-2353). */
 export async function llmClassify(
   llmService: LlmService,
   text: string,
 ): Promise<string | null> {
+  if (!llmService.isPluginActive()) return null;
   try {
     const res = await llmService.chat(
       {

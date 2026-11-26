@@ -6,6 +6,7 @@ import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { DynamicCategoriesPanel } from './dynamic-categories-panel';
 import { at } from '../../test/defined';
+import { usePluginStore } from '../../stores/plugin-store';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -64,6 +65,8 @@ function stubList(byStatus: Record<string, DiscoveryCategorySuggestionDto[]>) {
 describe('DynamicCategoriesPanel', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // ROK-2363: the panel is the AI plugin's; it mounts only while `ai` is active.
+        usePluginStore.setState({ activeSlugs: new Set(['core', 'ai']), initialized: true, settled: true });
         // Default: feature enabled so the panel body renders.
         server.use(
             http.get(`${API_BASE}/admin/ai/features`, () =>
