@@ -9,7 +9,13 @@ import { noPrintfLoggerSyntax } from '../api/eslint.no-printf-logger.mjs';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs', 'dist/**', 'jest*.config.js'],
+    ignores: [
+      'eslint.config.mjs',
+      'dist/**',
+      'jest*.config.js',
+      'drizzle.config.ts',
+      'drizzle/migrations/**',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

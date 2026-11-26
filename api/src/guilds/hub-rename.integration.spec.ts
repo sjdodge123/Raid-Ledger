@@ -12,7 +12,7 @@
  * move the audit out of the rename transaction → case 17 goes red (the name
  * reads 'Atomic New', not 'Atomic Old').
  */
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -150,7 +150,8 @@ async function auditRows(id: number) {
         eq(a.entityId, id),
         eq(a.action, 'hub_renamed'),
       ),
-    );
+    )
+    .orderBy(asc(a.id));
 }
 
 beforeAll(async () => {

@@ -26,6 +26,10 @@ describe('RATE_LIMIT_TIERS', () => {
   it('should define media tier as 600/min (ROK-1942)', () => {
     expect(RATE_LIMIT_TIERS.media).toEqual({ ttl: 60_000, limit: 600 });
   });
+
+  it('should define pollCreate tier as 10/min (TDB L2886)', () => {
+    expect(RATE_LIMIT_TIERS.pollCreate).toEqual({ ttl: 60_000, limit: 10 });
+  });
 });
 
 /** Re-evaluate the module under a given env — the tiers are read at import. */
@@ -51,7 +55,7 @@ function loadTiers(env: Record<string, string | undefined>) {
 describe('RATE_LIMIT_TIERS under DEMO_MODE (ROK-1633)', () => {
   const demo = { DEMO_MODE: 'true', THROTTLE_DISABLED: undefined };
 
-  it.each(['search', 'refresh', 'media'] as const)(
+  it.each(['search', 'refresh', 'media', 'pollCreate'] as const)(
     'lifts the %s tier',
     (tier) => {
       expect(loadTiers(demo)[tier].limit).toBe(999_999);

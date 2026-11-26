@@ -54,6 +54,13 @@ export const RATE_LIMIT_TIERS = {
   // leaves room for two devices behind one NAT. The device secret is 256-bit
   // and hash-matched, so this is not the guessing defence.
   signinPoll: { ttl: 60_000, limit: isTestEnv ? 999_999 : 40 },
+  // TDB L2886: POST /scheduling-polls DMs every game-interested user (or every
+  // invited member) and posts a channel card per poll, so the global 60/min
+  // let one client fan out 60 polls' worth of DMs a minute. 10/min is far
+  // above any real organiser's pace. Lifted in fleet/demo envs like the
+  // browse tiers: Playwright creates many polls from one IP, and the route is
+  // auth-gated (NotDeactivatedGuard) anyway.
+  pollCreate: { ttl: 60_000, limit: isBrowseRelaxed ? 999_999 : 10 },
 } as const;
 
 export type RateLimitTier = keyof typeof RATE_LIMIT_TIERS;

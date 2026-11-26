@@ -6,17 +6,50 @@ describe('loadHubConfig', () => {
       port: 3000,
       host: '0.0.0.0',
       nodeEnv: 'production',
+      dataDir: '/data',
+      telemetryDisabled: false,
     });
   });
 
   it('reads PORT, HOST and NODE_ENV from the env', () => {
     expect(
       loadHubConfig({ PORT: '8081', HOST: '127.0.0.1', NODE_ENV: 'test' }),
-    ).toEqual({
+    ).toMatchObject({
       port: 8081,
       host: '127.0.0.1',
       nodeEnv: 'test',
     });
+  });
+});
+
+describe('loadHubConfig validation and the ROK-1670 keys', () => {
+  it('reads the database, Sentry and migration keys', () => {
+    expect(
+      loadHubConfig({
+        HUB_DATA_DIR: '/srv/hub',
+        DATABASE_URL: 'postgres://u:p@db:5432/hub',
+        SENTRY_DSN: 'dsn-from-env',
+        DISABLE_TELEMETRY: 'true',
+        APP_VERSION: '1.2.3',
+        HUB_MIGRATIONS_FOLDER: '/opt/migrations',
+      }),
+    ).toEqual({
+      port: 3000,
+      host: '0.0.0.0',
+      nodeEnv: 'production',
+      dataDir: '/srv/hub',
+      databaseUrl: 'postgres://u:p@db:5432/hub',
+      sentryDsn: 'dsn-from-env',
+      telemetryDisabled: true,
+      appVersion: '1.2.3',
+      migrationsFolder: '/opt/migrations',
+    });
+  });
+
+  it('treats empty optional keys as unset', () => {
+    const config = loadHubConfig({ HUB_DATA_DIR: '', SENTRY_DSN: '' });
+    expect(config.dataDir).toBe('/data');
+    expect(config).not.toHaveProperty('sentryDsn');
   });
 
   it.each(['0', '65536', '30.5', 'abc'])('rejects PORT=%s', (port) => {

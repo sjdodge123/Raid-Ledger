@@ -1,7 +1,7 @@
 /**
  * useLineupHero — composes persona + phase-state + copy registry, then wires
  * CTA `onClick` per copy variant (ROK-1209). Returns props ready for
- * `<HeroNextStep>`.
+ * a hero banner.
  */
 import { useCallback, useMemo, type RefObject } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -20,7 +20,30 @@ import {
     type HeroCopy,
     type PageId,
 } from '../lib/lineup-hero-copy';
-import type { HeroNextStepProps } from '../components/common/HeroNextStep';
+
+export type HeroTone = 'action' | 'waiting' | 'aborted' | 'privacy';
+
+export interface HeroCta {
+    text: string;
+    onClick?: () => void;
+    ariaLabel?: string;
+    disabled?: boolean;
+    tooltip?: string;
+}
+
+export interface HeroSecondary {
+    text: string;
+    onClick?: () => void;
+}
+
+export interface HeroNextStepProps {
+    tone?: HeroTone;
+    label?: string;
+    headline: string;
+    detail?: string;
+    cta?: HeroCta;
+    secondary?: HeroSecondary;
+}
 
 export interface LineupHeroScrollTargets {
     leaderboard: RefObject<HTMLElement | null>;
