@@ -35,7 +35,7 @@ import {
   type AdHocParticipantJoinedPayload,
 } from '../discord-bot.constants';
 import { afterServerSpawn } from './ad-hoc-server-after-spawn.helpers';
-import { PendingServerPlayers } from './ad-hoc-server-pending';
+import { PendingServerPlayers, suspendAndClear } from './ad-hoc-server-pending';
 import { PerGameSerial } from './ad-hoc-server-serial';
 import {
   enrolGame,
@@ -44,6 +44,7 @@ import {
   hasTrackedPlayers,
   isServerRowJoin,
   lazyReader,
+  pluginActive,
   attachUnenrolled,
   openServerRows,
   type EnrolDeps,
@@ -87,7 +88,9 @@ import {
 export class AdHocServerPresenceService implements ServerPresenceSink {
   private readonly logger = new Logger(AdHocServerPresenceService.name);
   /** Players present before the threshold is met, per Pelican server. */
-  private readonly pending = new PendingServerPlayers();
+  private readonly pending = new PendingServerPlayers(() =>
+    pluginActive(this.moduleRef, PELICAN_PLUGIN_ID),
+  );
   /** Per-game serialisation: one spawn decision at a time. */
   private readonly queue = new PerGameSerial();
   private readonly onWindowExtended: SuppressionWindowHook = (p) =>
@@ -253,9 +256,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   @OnEvent(PLUGIN_EVENTS.DEACTIVATED)
   async onPluginDeactivated({ slug }: { slug: string }): Promise<void> {
     if (slug !== PELICAN_PLUGIN_ID) return;
-    this.pending.suspend();
-    await this.queue.runAll((gameId) => this.pending.clearGame(gameId));
-    this.pending.clearAll();
+    await suspendAndClear(this.pending, this.queue);
   }
 
   /** ROK-2355: Pelican back on — its sessions may hold players again. */

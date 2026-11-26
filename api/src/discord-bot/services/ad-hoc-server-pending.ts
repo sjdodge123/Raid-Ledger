@@ -23,6 +23,7 @@ import type {
   ServerPresencePlayer,
   ServerPresenceSource,
 } from '../../plugins/pelican/presence/server-presence.sink';
+import type { PerGameSerial } from './ad-hoc-server-serial';
 
 export interface HeldServer {
   source: ServerPresenceSource;
@@ -46,16 +47,21 @@ const eligible = (h: Held): boolean => h.state !== 'unconfirmed';
 
 export class PendingServerPlayers {
   private readonly held = new Map<number, Entry>();
-  /** ROK-2355: Pelican is off — presence is no longer observed, hold nothing. */
+  /** ROK-2355: Pelican was turned off in this process — see `refusing`. */
   private suspended = false;
+  /** ROK-2355 review r2 m1: bumped on suspend/resume; stale clears no-op. */
+  private generation = 0;
+
+  /** `pelicanActive` reads the plugin host; absent (specs) means "not on". */
+  constructor(private readonly pelicanActive: () => boolean = () => false) {}
 
   /**
    * Hold (or re-confirm) a player; returns how many this server can enrol.
-   * While suspended (Pelican off) nothing is held and this returns 0 — a sink
-   * call the session queued before the deactivation lands after the clear.
+   * While Pelican is off nothing is held and this returns 0 — a sink call
+   * the session queued before the deactivation lands after the clear.
    */
   hold(source: ServerPresenceSource, player: ServerPresencePlayer): number {
-    if (this.suspended) return 0;
+    if (this.refusing()) return 0;
     const entry = this.held.get(source.pelicanServerId) ?? {
       source,
       players: new Map<string, Held>(),
@@ -99,23 +105,46 @@ export class PendingServerPlayers {
   }
 
   /** ROK-2355: forget every hold on every server (Pelican turned off). */
-  clearAll(): void {
-    this.held.clear();
+  clearAll(gen?: number): void {
+    if (!this.stale(gen)) this.held.clear();
   }
 
   /** ROK-2355: forget every hold of one game's servers. */
-  clearGame(gameId: number): void {
+  clearGame(gameId: number, gen?: number): void {
+    if (this.stale(gen)) return;
     for (const [id, entry] of this.held)
       if (entry.source.gameId === gameId) this.held.delete(id);
   }
 
-  /** ROK-2355: Pelican off — refuse holds until `resume` (Pelican on). */
-  suspend(): void {
+  /**
+   * ROK-2355: Pelican off — refuse holds until it is on again. Returns this
+   * deactivation's generation, which the clears it queues pass back.
+   */
+  suspend(): number {
     this.suspended = true;
+    return ++this.generation;
   }
 
   resume(): void {
     this.suspended = false;
+    this.generation++;
+  }
+
+  /**
+   * Review r2 M1: refuse only while Pelican is still off. `install` emits
+   * INSTALLED, never ACTIVATED, so a flag alone would wedge after a reinstall.
+   */
+  private refusing(): boolean {
+    return this.suspended && !this.pelicanActive();
+  }
+
+  /**
+   * Review r2 m1: a clear queued by deactivation `gen` is stale once Pelican
+   * came back on (any path) — it must not wipe holds made since.
+   */
+  private stale(gen: number | undefined): boolean {
+    if (gen === undefined) return false;
+    return gen !== this.generation || this.pelicanActive();
   }
 
   /** A new presence session: every hold here needs re-confirming (ROK-1802). */
@@ -187,4 +216,18 @@ export class PendingServerPlayers {
     }
     return out;
   }
+}
+
+/**
+ * ROK-2355: Pelican off — refuse holds, then clear each game's holds in that
+ * game's queue turn (Codex P2), then every hold. The clears carry this
+ * deactivation's generation, so a reactivation mid-drain keeps fresh holds.
+ */
+export async function suspendAndClear(
+  pending: PendingServerPlayers,
+  queue: PerGameSerial,
+): Promise<void> {
+  const gen = pending.suspend();
+  await queue.runAll((gameId) => pending.clearGame(gameId, gen));
+  pending.clearAll(gen);
 }
