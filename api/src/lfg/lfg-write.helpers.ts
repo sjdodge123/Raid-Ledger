@@ -363,21 +363,26 @@ export async function convertHolderIntent(
  * @param userId - Caller.
  * @param gameId - Game to check.
  * @param target - The conversion target from the request.
+ * @param scope - ROK-2352: the group being converted; only a row IN it
+ *   counts (null = the whole game: the fold and pre-group callers).
  */
 export async function resolveConvertRole(
   db: LfgDb,
   userId: number,
   gameId: number,
   target: LfgConversionTarget,
+  scope: LfgGroupScope = null,
 ): Promise<LfgConvertRole> {
   const live = and(
     eq(schema.lfgIntents.status, 'active'),
     gt(schema.lfgIntents.expiresAt, new Date()),
+    groupScopeFilter(scope),
   );
   if (await hasIntentRow(db, userId, gameId, live)) return 'member';
   const retried = and(
     eq(schema.lfgIntents.status, 'converted'),
     convertedToTarget(target),
+    groupScopeFilter(scope),
   );
   return (await hasIntentRow(db, userId, gameId, retried)) ? 'retry' : null;
 }

@@ -350,6 +350,36 @@ describe('POST /lfg/:gameId/convert ?group (ROK-2352)', () => {
     });
   });
 
+  it('403s a member of another group (review MAJOR-1); that group stays live', async () => {
+    const [a, b, c, d] = await createMembers(
+      testApp,
+      'cvx-a',
+      'cvx-b',
+      'cvx-c',
+      'cvx-d',
+    );
+    const game = await createGame(testApp, 'Convert Cross Group', {
+      slug: SLUG,
+    });
+    await hand(a, game.id, 'dungeon:1', 'week');
+    await hand(b, game.id, 'dungeon:2', 'week');
+    await hand(c, game.id, 'dungeon:2', 'week');
+    const eventId = await plainEvent(d, game.id);
+
+    // A holds a hand in dungeon:1 only — that is no standing over dungeon:2.
+    const res = await testApp.request
+      .post(`/lfg/${game.id}/convert?group=${encodeURIComponent('dungeon:2')}`)
+      .set('Authorization', `Bearer ${a.token}`)
+      .send({ eventId });
+
+    expect(res.status).toBe(403);
+    expect(await handStatuses(game.id)).toEqual({
+      [`${a.userId}:dungeon:1`]: 'active',
+      [`${b.userId}:dungeon:2`]: 'active',
+      [`${c.userId}:dungeon:2`]: 'active',
+    });
+  });
+
   it('400s an unknown ?group and converts nothing', async () => {
     const [a, d] = await createMembers(testApp, 'cvu-a', 'cvu-d');
     const game = await createGame(testApp, 'Convert Unknown', { slug: SLUG });

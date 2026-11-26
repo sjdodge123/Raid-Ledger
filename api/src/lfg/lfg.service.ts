@@ -261,7 +261,16 @@ export class LfgService {
   ): Promise<{ converted: number }> {
     await requireVisibleGame(this.db, gameId);
     const target = toConversionTarget(dto);
-    const role = await resolveConvertRole(this.db, userId, gameId, target);
+    // ROK-2352 review MAJOR-1: authorise against the GROUP being converted —
+    // a hand in another group of the game grants nothing over this one.
+    const scope = await this.convertScope(gameId, group);
+    const role = await resolveConvertRole(
+      this.db,
+      userId,
+      gameId,
+      target,
+      scope,
+    );
     if (role === null) {
       throw new ForbiddenException(
         'Only a member of this LFG group can convert it',
@@ -272,7 +281,6 @@ export class LfgService {
     // live intent now) gets the idempotent answer and touches nobody: the
     // live rows belong to a LATER group they are not part of.
     if (role === 'retry') return { converted: 0 };
-    const scope = await this.convertScope(gameId, group);
     const converted = await convertGroup(this.db, gameId, target, scope);
     // Zero rows means this is a retry of an already-converted group (E5): the
     // target message is terminal, so re-announcing it would re-render a card
