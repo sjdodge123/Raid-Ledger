@@ -11,6 +11,8 @@ import { NominationCard } from './NominationCard';
 interface NominationGridProps {
     entries: LineupEntryResponseDto[];
     lineupId: number;
+    /** ROK-2349: an archived / aborted lineup's grid offers no Remove. */
+    readOnly?: boolean;
 }
 
 /** Sort entries by ownerCount descending. */
@@ -19,7 +21,7 @@ function sortByOwnership(entries: LineupEntryResponseDto[]): LineupEntryResponse
 }
 
 /** Nomination grid with heading, sorted cards. */
-export function NominationGrid({ entries, lineupId }: NominationGridProps): JSX.Element {
+export function NominationGrid({ entries, lineupId, readOnly = false }: NominationGridProps): JSX.Element {
     const sorted = useMemo(() => sortByOwnership(entries), [entries]);
     const removeMutation = useRemoveNomination();
     const handleRemove = useCallback(
@@ -35,7 +37,7 @@ export function NominationGrid({ entries, lineupId }: NominationGridProps): JSX.
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {sorted.map((entry) => (
-                    <NominationCard key={entry.id} entry={entry} onRemove={handleRemove} />
+                    <NominationCard key={entry.id} entry={entry} onRemove={readOnly ? undefined : handleRemove} />
                 ))}
             </div>
         </section>

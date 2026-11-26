@@ -16,7 +16,8 @@ import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 interface NominationCardProps {
     entry: LineupEntryResponseDto;
-    onRemove: (gameId: number) => void;
+    /** Omitted on a read-only grid (archived / aborted lineup, ROK-2349): no Remove. */
+    onRemove?: ((gameId: number) => void) | undefined;
     /**
      * ROK-1444: number of people actually IN this lineup. When the group grows
      * past a nominated game's co-op capacity the card is flagged, so they can
@@ -87,7 +88,7 @@ function CardBody({ entry, canRemove, isMine, onRemove }: {
     entry: LineupEntryResponseDto;
     canRemove: boolean;
     isMine: boolean;
-    onRemove: (id: number) => void;
+    onRemove?: ((id: number) => void) | undefined;
 }): JSX.Element {
     const priceText = formatPrice(entry);
     const primaryGenre = entry.genres?.[0] != null
@@ -124,7 +125,7 @@ function CardBody({ entry, canRemove, isMine, onRemove }: {
                 <p className="text-[10px] text-dim italic mt-1 line-clamp-2">&ldquo;{entry.note}&rdquo;</p>
             )}
             {canRemove && (
-                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(entry.gameId); }}
+                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove?.(entry.gameId); }}
                     className="text-[10px] text-danger/60 hover:text-danger mt-1 transition-colors"
                 >Remove</button>
             )}
@@ -157,7 +158,7 @@ function rosterFit(
 export function NominationCard({ entry, onRemove, participantCount }: NominationCardProps): JSX.Element {
     const { user } = useAuth();
     const isMine = !!user && entry.nominatedBy.id === user.id;
-    const canRemove = isMine || isOperatorOrAdmin(user);
+    const canRemove = onRemove !== undefined && (isMine || isOperatorOrAdmin(user));
     const { tooSmall, max } = rosterFit(entry, participantCount);
     const fitClass = tooSmall
         ? 'border border-warning/70 ring-1 ring-warning/30 hover:border-warning'

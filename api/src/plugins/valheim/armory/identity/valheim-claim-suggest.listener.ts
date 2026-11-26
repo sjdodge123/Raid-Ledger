@@ -10,7 +10,9 @@
  * Yes runs the manual-claim path (hidden-hub check + `claim`, same audit row).
  * Not me writes the permanent declined key and frees the per-character 24h
  * key so the scan can ask the next candidate. Both edit the DM: buttons off,
- * the outcome copy on. Registered in `ValheimModule` (its services live there).
+ * the outcome copy on. Registered in `ValheimModule` and owned by the Valheim
+ * plugin (ROK-2356): while Valheim is off a press changes nothing and the
+ * clicker alone is told so.
  */
 import {
   ConflictException,
@@ -22,33 +24,35 @@ import {
 import { OnEvent } from '@nestjs/event-emitter';
 import type { ButtonInteraction } from 'discord.js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import * as schema from '../../drizzle/schema';
-import type { GuildActor } from '../../guilds/guild-access.service';
-import { NotificationDedupService } from '../../notifications/notification-dedup.service';
-import { ValheimArmoryClaimsService } from '../../plugins/valheim/armory/identity/valheim-armory-claims.service';
+import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
+import * as schema from '../../../../drizzle/schema';
+import type { GuildActor } from '../../../../guilds/guild-access.service';
+import { NotificationDedupService } from '../../../../notifications/notification-dedup.service';
+import { ValheimArmoryClaimsService } from './valheim-armory-claims.service';
 import {
   CLAIM_REPLY_COPY,
   buildClaimCharacterUrl,
   claimSuggestKeys,
   parseClaimButtonId,
-} from '../../plugins/valheim/armory/identity/valheim-claim-suggest.copy';
-import { ValheimArmoryReadService } from '../../plugins/valheim/armory/read/valheim-armory-read.service';
-import { SettingsService } from '../../settings/settings.service';
-import { getClientUrl } from '../../settings/settings-bot.helpers';
-import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
-import { DiscordBotClientService } from '../discord-bot-client.service';
+} from './valheim-claim-suggest.copy';
+import { ValheimArmoryReadService } from '../read/valheim-armory-read.service';
+import { SettingsService } from '../../../../settings/settings.service';
+import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
+import { VALHEIM_PLUGIN_ID } from '../../valheim.constants';
+import { getClientUrl } from '../../../../settings/settings-bot.helpers';
+import { DISCORD_BOT_EVENTS } from '../../../../discord-bot/discord-bot.constants';
+import { DiscordBotClientService } from '../../../../discord-bot/discord-bot-client.service';
 import {
   DiscordListenerBinding,
   gatewayBinding,
-} from './discord-listener-binding';
+} from '../../../../discord-bot/listeners/discord-listener-binding';
 import {
   type ClaimOutcome,
   editDm as edit,
   deliverClaimOutcome,
   findAskedClicker,
   refuseClick as refuse,
-} from './valheim-claim-suggest.helpers';
+} from './valheim-claim-suggest-reply.helpers';
 
 @Injectable()
 export class ValheimClaimSuggestListener {
@@ -66,6 +70,7 @@ export class ValheimClaimSuggestListener {
     private readonly reads: ValheimArmoryReadService,
     private readonly dedup: NotificationDedupService,
     private readonly settings: SettingsService,
+    private readonly registry: PluginRegistryService,
   ) {}
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
@@ -95,6 +100,10 @@ export class ValheimClaimSuggestListener {
     if (!press) return;
     try {
       await interaction.deferUpdate();
+      // ROK-2356: an already-sent DM's buttons are inert while Valheim is off.
+      if (!this.registry.isActive(VALHEIM_PLUGIN_ID)) {
+        return await this.answer(interaction, refuse(CLAIM_REPLY_COPY.off));
+      }
       const clicker = await findAskedClicker(
         this.db,
         this.dedup,

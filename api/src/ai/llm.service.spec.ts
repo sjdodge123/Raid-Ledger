@@ -4,6 +4,13 @@ import { LlmQuotaExhaustedError } from './llm-errors';
 import { LlmService } from './llm.service';
 import { LlmProviderRegistry } from './llm-provider-registry';
 import { AiRequestLogService } from './ai-request-log.service';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+
+/** ROK-2353: the `ai` plugin is active here; the inactive path lives in llm.service.plugin-gate.spec.ts. */
+const activeAiPlugin = {
+  provide: PluginRegistryService,
+  useValue: { isActive: jest.fn().mockReturnValue(true) },
+};
 import type { LlmProvider } from './llm-provider.interface';
 
 function createMockProvider(): LlmProvider {
@@ -56,6 +63,7 @@ describe('LlmService', () => {
         LlmService,
         { provide: LlmProviderRegistry, useValue: mockRegistry },
         { provide: AiRequestLogService, useValue: mockLogService },
+        activeAiPlugin,
       ],
     }).compile();
     service = module.get(LlmService);
@@ -198,6 +206,7 @@ describe('LlmService (adversarial)', () => {
         LlmService,
         { provide: LlmProviderRegistry, useValue: mockRegistry },
         { provide: AiRequestLogService, useValue: mockLogService },
+        activeAiPlugin,
       ],
     }).compile();
     service = module.get(LlmService);
@@ -449,6 +458,7 @@ describe('ROK-1000: LlmService diagnostic logging', () => {
         LlmService,
         { provide: LlmProviderRegistry, useValue: mockRegistry },
         { provide: AiRequestLogService, useValue: mockLogService },
+        activeAiPlugin,
       ],
     }).compile();
     service = module.get(LlmService);

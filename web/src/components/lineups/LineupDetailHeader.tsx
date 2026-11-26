@@ -18,6 +18,7 @@ import { LineupOperatorMenu } from './LineupOperatorMenu';
 import { LineupShareCopy } from './LineupShareCopy';
 import { LineupHeroMeta } from './LineupHeroMeta';
 import { LineupParticipantsButton } from './LineupParticipantsButton';
+import { LineupStatusBadge } from './LineupStatusBadge';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -51,9 +52,14 @@ export function LineupDetailHeader({
       lineup.status === 'decided');
   const showFallbackTitle = !hasCompositeHero;
 
+  // ROK-2349: on a phone the fallback title takes its own row and the
+  // right-hand cluster (Participants / copy / ⋮) wraps beneath it, so a badge
+  // never squeezes the title down to one letter. sm+ keeps a single row.
+  const leftLayout = showFallbackTitle ? 'flex-1 basis-full sm:basis-0' : '';
+
   return (
-    <div className="flex w-full items-center justify-between gap-2">
-      <div className="flex items-center gap-2 min-w-0">
+    <div className="flex w-full flex-wrap items-center justify-between gap-2" data-testid="lineup-detail-header">
+      <div className={`flex items-center gap-2 min-w-0 ${leftLayout}`} data-testid="lineup-header-lead">
         <button
           type="button"
           onClick={() => navigate(-1)}
@@ -68,9 +74,15 @@ export function LineupDetailHeader({
           <span
             data-testid="lineup-private-badge"
             title="Invite-only lineup"
-            className="px-2 py-0.5 text-xs font-semibold rounded bg-warning/10 text-warning border border-warning/40"
+            className="flex-shrink-0 px-2 py-0.5 text-xs font-semibold rounded bg-warning/10 text-warning border border-warning/40"
           >
             Private
+          </span>
+        )}
+        {/* ROK-2349: an archived lineup says so (an aborted one has its own banner). */}
+        {!isAborted && lineup.status === 'archived' && (
+          <span data-testid="lineup-archived-badge" className="flex-shrink-0">
+            <LineupStatusBadge status="archived" />
           </span>
         )}
         {showFallbackTitle && (
@@ -79,7 +91,7 @@ export function LineupDetailHeader({
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="ml-auto flex items-center gap-2 flex-shrink-0" data-testid="lineup-header-actions">
         {/* ROK-1346: phases that render a composite JourneyHero host the
             Participants button in the hero `action` slot; the fallback states
             (archived / aborted / empty-voting) have no hero, so surface it

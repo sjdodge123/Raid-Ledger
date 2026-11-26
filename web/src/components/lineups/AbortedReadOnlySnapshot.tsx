@@ -28,7 +28,7 @@ export function AbortedReadOnlySnapshot({ lineup }: Props): JSX.Element {
                 votes are closed.
             </p>
             {lineup.entries.length > 0 ? (
-                <NominationGrid entries={lineup.entries} lineupId={lineup.id} />
+                <NominationGrid entries={lineup.entries} lineupId={lineup.id} readOnly />
             ) : (
                 <LineupEmptyState />
             )}

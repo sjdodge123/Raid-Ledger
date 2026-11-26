@@ -6,8 +6,8 @@ import { useLineupRealtime } from '../hooks/use-lineup-realtime';
 import { useTiebreakerDetail } from '../hooks/use-tiebreaker';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
 import { MarkdownText } from '../components/ui/markdown-text';
-import { InviteeList } from '../components/lineups/InviteeList';
-import { AddInviteesButton } from '../components/lineups/AddInviteesButton';
+import { LineupInviteesSection } from '../components/lineups/LineupInviteesSection';
+import { isLineupReadOnly } from '../lib/lineup-read-only';
 import { StillWaitingPanel } from '../components/lineups/StillWaitingPanel';
 import { LineupDetailSkeleton } from '../components/lineups/LineupDetailSkeleton';
 import { NominatingComposite } from '../components/lineups/cycle-4/NominatingComposite';
@@ -29,63 +29,6 @@ import { LineupAbortedBanner } from '../components/lineups/LineupAbortedBanner';
 import { useLineupAbortedAt } from '../lib/lineup-aborted';
 import { useNominateRosterSize } from '../components/lineups/lineup-roster-size';
 import { SubjectDiscussionCardLazy } from '../components/discussion/subject-discussion-lazy';
-
-/**
- * Render the lineup invitee panel (ROK-1065, ROK-1440). Creator/operator
- * sees the "Invite more" button; everyone else sees the read-only roster.
- *
- * ROK-1440: rendered for public lineups too. The two visibilities mean
- * different things, so the chrome differs — on PRIVATE the roster is an
- * access gate (amber callout, the established ROK-1065 treatment); on
- * PUBLIC it is a seed list, so it gets neutral panel chrome plus an
- * explicit "anyone else can still join" line. The panel is hidden entirely
- * on a public lineup with no invitees and no ability to add any, so an
- * ordinary viewer sees no new empty box.
- */
-function LineupInviteesSection({
-  lineupId,
-  invitees,
-  canManage,
-  visibility,
-}: {
-  lineupId: number;
-  invitees: NonNullable<ReturnType<typeof useLineupDetail>['data']>['invitees'];
-  canManage: boolean;
-  visibility: 'public' | 'private';
-}): JSX.Element | null {
-  const isPrivate = visibility === 'private';
-  if (!isPrivate && invitees.length === 0 && !canManage) return null;
-  return (
-    <section
-      data-testid="lineup-invitees-section"
-      data-visibility={visibility}
-      className={`mt-4 p-4 rounded-lg border ${
-        isPrivate
-          ? 'border-warning/30 bg-warning/5'
-          : 'border-edge bg-panel/40'
-      }`}
-    >
-      <div className="flex items-center justify-between mb-1">
-        <h2 className="text-sm font-semibold text-foreground">
-          {isPrivate ? 'Invitees' : 'Invited members'} ({invitees.length})
-        </h2>
-        {canManage && (
-          <AddInviteesButton lineupId={lineupId} visibility={visibility} />
-        )}
-      </div>
-      <p className="text-xs text-muted mb-3">
-        {isPrivate
-          ? 'Only these members can see and join this lineup.'
-          : 'Pulled in directly. Anyone else in the community can still see and join.'}
-      </p>
-      <InviteeList
-        lineupId={lineupId}
-        invitees={invitees}
-        canManage={canManage}
-      />
-    </section>
-  );
-}
 
 function LineupNotFound(): JSX.Element {
   return (
@@ -247,6 +190,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         lineupId={lineup.id}
         invitees={lineup.invitees}
         canManage={isOperator || user?.id === lineup.createdBy.id}
+        readOnly={isLineupReadOnly(lineup.status, isAborted)}
         visibility={lineup.visibility}
       />
 
