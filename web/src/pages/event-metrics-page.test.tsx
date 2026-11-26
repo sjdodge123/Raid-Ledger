@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
 import { renderWithProviders } from '../test/render-helpers';
@@ -230,7 +230,7 @@ describe('EventMetricsPage — part 4', () => {
             initialEntries: ['/events/10/metrics'],
         });
         await waitFor(() => {
-            expect(screen.getByText('Failed to load event metrics')).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: "Couldn't load event metrics" })).toBeInTheDocument();
         });
     });
 
@@ -388,4 +388,23 @@ describe('EventMetricsPage — part 7', () => {
         expect(screen.queryByText('Voice Duration')).not.toBeInTheDocument();
     });
 
+});
+
+describe('EventMetricsPage — ROK-2342: retryable error state', () => {
+    it('a 500 shows the error state, no metrics sections, and Try again refetches', async () => {
+        let calls = 0;
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () => {
+                calls += 1;
+                return HttpResponse.json({ message: 'Boom' }, { status: 500 });
+            }),
+        );
+        renderWithProviders(<EventMetricsPage />, { initialEntries: ['/events/10/metrics'] });
+        expect(await screen.findByRole('heading', { name: "Couldn't load event metrics" })).toBeInTheDocument();
+        expect(screen.queryByText('Attendance Summary')).not.toBeInTheDocument();
+        const before = calls;
+        expect(before).toBeGreaterThan(0);
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(calls).toBeGreaterThan(before));
+    });
 });

@@ -27,6 +27,7 @@ import {
 import { useAiFeatures } from '../../hooks/admin/use-ai-settings';
 import { toast } from '../../lib/toast';
 import { DynamicCategoryEditModal } from '../../components/admin/DynamicCategoryEditModal';
+import { QueryErrorState } from '../../components/common/query-error-state';
 import {
     Header,
     LoadingSkeleton,
@@ -114,6 +115,9 @@ function panelPlaceholder(
 ): JSX.Element | null {
     const isRegenerating = actions.regenerate.isPending;
     if (list.isLoading) return <LoadingSkeleton />;
+    if (list.isError && list.data === undefined) {
+        return <QueryErrorState title="Couldn't load category suggestions" error={list.error} onRetry={list.refetch} testId="dynamic-categories-error" />;
+    }
     // Regenerate pass replaces the pending view with skeleton cards so
     // operators get immediate feedback that the LLM is working.
     if (isRegenerating && status === 'pending') {
