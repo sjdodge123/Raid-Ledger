@@ -57,7 +57,10 @@ describe('LlmService refuses while the AI plugin is inactive (ROK-2368)', () => 
       providers: [
         LlmService,
         { provide: LlmProviderRegistry, useValue: registry },
-        { provide: AiRequestLogService, useValue: { log: jest.fn() } },
+        {
+          provide: AiRequestLogService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
+        },
         { provide: PluginRegistryService, useValue: plugins },
       ],
     }).compile();
