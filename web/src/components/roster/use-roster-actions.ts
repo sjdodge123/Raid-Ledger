@@ -3,6 +3,7 @@ import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract
 import { toast } from '../../lib/toast';
 import type { AutoFillResult } from './roster-auto-fill';
 import { computeAutoFill } from './roster-auto-fill';
+import { unplacedMovedNote } from './roster-unplaced';
 
 interface RosterSlotConfig {
     role: RosterRole;
@@ -17,6 +18,8 @@ export type RosterChangeResult = boolean | void;
 interface UseRosterActionsArgs {
     pool: RosterAssignmentResponse[];
     assignments: RosterAssignmentResponse[];
+    /** ROK-2348: rows the grid cannot place, already moved into `pool`; a save unassigns them. */
+    unplaced?: RosterAssignmentResponse[];
     onRosterChange: (pool: RosterAssignmentResponse[], assignments: RosterAssignmentResponse[], charMap?: Map<number, string>) => RosterChangeResult | Promise<RosterChangeResult>;
     roleSlots: RosterSlotConfig[];
     getSlotCount: (role: RosterRole) => number;
@@ -38,6 +41,15 @@ async function saveThenAnnounce(
         return;
     }
     toast.success(msg); announce(msg);
+}
+
+/** Saves the roster; the toast also says how many unplaced rows the save unassigns (ROK-2348). */
+function saveRoster(
+    args: UseRosterActionsArgs, pool: RosterAssignmentResponse[], assignments: RosterAssignmentResponse[],
+    msg: string, charMap?: Map<number, string>,
+): Promise<void> {
+    const fullMsg = msg + unplacedMovedNote(args.unplaced ?? [], assignments);
+    return saveThenAnnounce(() => args.onRosterChange(pool, assignments, charMap), fullMsg, args.announce);
 }
 
 function formatSlotLabel(role: RosterRole, position: number) {
@@ -109,7 +121,7 @@ function makeAssignHandler(args: UseRosterActionsArgs, state: RosterActionsState
         const charMap = selection?.characterId ? new Map([[signupId, selection.characterId]]) : undefined;
         const msg = `${sourceItem.username} assigned to ${formatSlotLabel(target.role, target.position)}`;
         state.setAssignmentTarget(null);
-        void saveThenAnnounce(() => args.onRosterChange(newPool, newAssignments, charMap), msg, args.announce);
+        void saveRoster(args, newPool, newAssignments, msg, charMap);
     };
 }
 
@@ -121,7 +133,7 @@ function makeAssignToSlotHandler(args: UseRosterActionsArgs, state: RosterAction
         const charMap = selection?.characterId ? new Map([[signupId, selection.characterId]]) : undefined;
         const msg = `${sourceItem.username} assigned to ${formatSlotLabel(role, position)}`;
         state.setBrowseAll(false);
-        void saveThenAnnounce(() => args.onRosterChange(args.pool.filter(p => p.signupId !== signupId), newAssignments, charMap), msg, args.announce);
+        void saveRoster(args, args.pool.filter(p => p.signupId !== signupId), newAssignments, msg, charMap);
     };
 }
 
@@ -136,7 +148,7 @@ function makeBulkHandlers(args: UseRosterActionsArgs, state: RosterActionsState)
         if (!preview) return;
         state.setIsBulkUpdating(true); state.setAutoFillPreview(null);
         const msg = `Auto-filled ${preview.totalFilled} players`;
-        void saveThenAnnounce(() => args.onRosterChange(preview.newPool, preview.newAssignments), msg, args.announce)
+        void saveRoster(args, preview.newPool, preview.newAssignments, msg)
             .finally(() => state.setIsBulkUpdating(false));
     };
     const handleClearAllClick = () => {
@@ -144,7 +156,7 @@ function makeBulkHandlers(args: UseRosterActionsArgs, state: RosterActionsState)
         state.setClearPending(false); state.setIsBulkUpdating(true);
         const msg = `Roster cleared — ${args.assignments.length} players moved to pool`;
         const newPool = [...args.pool, ...args.assignments.map(a => ({ ...a, slot: null, position: 0 }))];
-        void saveThenAnnounce(() => args.onRosterChange(newPool, []), msg, args.announce)
+        void saveRoster(args, newPool, [], msg)
             .finally(() => state.setIsBulkUpdating(false));
     };
     return { handleAutoFillClick, handleAutoFillConfirm, handleClearAllClick };
@@ -163,7 +175,7 @@ export function useRosterActions(args: UseRosterActionsArgs) {
         if (!sourceItem) return;
         const msg = `${sourceItem.username} moved to unassigned`;
         state.setAssignmentTarget(null);
-        void saveThenAnnounce(() => args.onRosterChange([...args.pool, { ...sourceItem, slot: null, position: 0 }], args.assignments.filter(a => a.signupId !== signupId)), msg, args.announce);
+        void saveRoster(args, [...args.pool, { ...sourceItem, slot: null, position: 0 }], args.assignments.filter(a => a.signupId !== signupId), msg);
     };
 
     const handleReassignToSlot = (fromSignupId: number, toRole: RosterRole, toPosition: number) => {
@@ -171,7 +183,7 @@ export function useRosterActions(args: UseRosterActionsArgs) {
         if (!sourcePlayer) return;
         const { updated, msg } = buildReassignment(args.assignments, fromSignupId, sourcePlayer, toRole, toPosition);
         state.setAssignmentTarget(null);
-        void saveThenAnnounce(() => args.onRosterChange(args.pool, updated), msg, args.announce);
+        void saveRoster(args, args.pool, updated, msg);
     };
 
     const bulk = makeBulkHandlers(args, state);

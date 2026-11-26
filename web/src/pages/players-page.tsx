@@ -13,6 +13,7 @@ import { InfiniteScrollSentinel } from '../components/ui/infinite-scroll-sentine
 import { PullToRefresh } from '../components/ui/pull-to-refresh';
 import { SearchInput } from '../components/ui/search-input';
 import type { UserPreviewDto } from '@raid-ledger/contract';
+import { QueryErrorState } from '../components/common/query-error-state';
 
 /** Debounced search state for text input. */
 function useDebounceSearch() {
@@ -69,10 +70,30 @@ function PlayerGrid({ players, debouncedSearch }: { players: UserPreviewDto[]; d
     );
 }
 
+/**
+ * Skeleton, a failed first load (never "No players found", ROK-2342) or the grid.
+ * A failed later page or background refetch keeps the players already shown; a
+ * failed next page swaps the scroll sentinel for an inline retry (no retry loop).
+ */
+function PlayersBody({ list, debouncedSearch }: { list: ReturnType<typeof useInfinitePlayers>; debouncedSearch: string }) {
+    const { items: players, isLoading, error, refetch } = list;
+    if (isLoading) return <PlayersLoadingSkeleton />;
+    if (error && players.length === 0) return <QueryErrorState title="Couldn't load players" error={error} onRetry={refetch} testId="players-error" />;
+    return (
+        <>
+            <PlayerGrid players={players} debouncedSearch={debouncedSearch} />
+            {list.isFetchNextPageError
+                ? <QueryErrorState title="Couldn't load more players" error={error} onRetry={list.fetchNextPage} testId="players-next-page-error" className="py-6" />
+                : players.length > 0 && <InfiniteScrollSentinel sentinelRef={list.sentinelRef} isFetchingNextPage={list.isFetchingNextPage} hasNextPage={list.hasNextPage} />}
+        </>
+    );
+}
+
 export function PlayersPage() {
     const { search, setSearch, debouncedSearch } = useDebounceSearch();
     const { filters, setFilter, clearAll, activeFilterCount, apiParams, isOpen, toggleOpen } = usePlayerFilters();
-    const { items: players, total, isLoading, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfinitePlayers(debouncedSearch, apiParams);
+    const list = useInfinitePlayers(debouncedSearch, apiParams);
+    const { total, refetch } = list;
 
     return (
         <PullToRefresh onRefresh={refetch}>
@@ -92,8 +113,7 @@ export function PlayersPage() {
                     <PluginSlot name="players:header-cards" />
                     {activeFilterCount === 0 && !debouncedSearch && <NewMembersSection />}
                     <DesktopSearchInput search={search} setSearch={setSearch} />
-                    {isLoading ? <PlayersLoadingSkeleton /> : <PlayerGrid players={players} debouncedSearch={debouncedSearch} />}
-                    {!isLoading && players.length > 0 && <InfiniteScrollSentinel sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} />}
+                    <PlayersBody list={list} debouncedSearch={debouncedSearch} />
                 </div>
             </>
         </PullToRefresh>

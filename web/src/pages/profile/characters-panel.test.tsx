@@ -2,8 +2,8 @@
  * ROK-1724 core hook #2: router state `{ addCharacter }` opens Add Character
  * prefilled (the name-mismatch deep link). Game-neutral: any registered game.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { screen, within, fireEvent } from '@testing-library/react';
 import { useLocation } from 'react-router-dom';
 import { renderWithProviders } from '../../test/render-helpers';
 import { readCharacterPrefill } from '../../plugins/character-identity';
@@ -13,8 +13,9 @@ vi.mock('../../hooks/use-auth', async (importOriginal) => ({
     ...await importOriginal<typeof import('../../hooks/use-auth')>(),
     useAuth: () => ({ isAuthenticated: true, user: { id: 1 } }),
 }));
+const charactersQuery = { data: { data: [] } as { data: unknown[] } | undefined, isLoading: false, error: null as Error | null, refetch: vi.fn() };
 vi.mock('../../hooks/use-characters', () => ({
-    useMyCharacters: () => ({ data: { data: [] }, isLoading: false }),
+    useMyCharacters: () => charactersQuery,
 }));
 // One stable array, like the registry query's cached data.
 const GAMES = [{ id: 7, name: 'Test Quest', slug: 'test-quest', hasRoles: true }];
@@ -81,5 +82,30 @@ describe('readCharacterPrefill', () => {
     it('accepts a well-formed prefill', () => {
         const addCharacter = { gameId: 7, name: 'Ana', region: 'us', ruleset: null };
         expect(readCharacterPrefill({ addCharacter })).toBe(addCharacter);
+    });
+});
+
+describe('CharactersPanel — ROK-2342: a failed characters query is an error, not "No characters yet"', () => {
+    afterEach(() => {
+        charactersQuery.data = { data: [] };
+        charactersQuery.error = null;
+    });
+
+    it('shows the retryable error state and Try again refetches', () => {
+        charactersQuery.data = undefined;
+        charactersQuery.error = new Error('HTTP 500');
+        charactersQuery.refetch = vi.fn();
+        renderPanel(null);
+        expect(screen.getByRole('heading', { name: "Couldn't load your characters" })).toBeInTheDocument();
+        expect(screen.queryByText('No characters yet')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(charactersQuery.refetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('a failed background refetch keeps the cached list instead of the error state', () => {
+        charactersQuery.data = { data: [] };
+        charactersQuery.error = new Error('HTTP 500');
+        renderPanel(null);
+        expect(screen.queryByTestId('characters-error')).not.toBeInTheDocument();
     });
 });

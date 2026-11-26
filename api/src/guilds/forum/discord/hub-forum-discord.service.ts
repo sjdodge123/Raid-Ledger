@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME as SHARED_NAME,
   type HubForumDiscordChannelOptions,
@@ -43,6 +43,7 @@ import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import { shareForumTags } from './hub-forum-discord.share';
 import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
+import { WebhookCreateTimeoutError } from './hub-forum-discord-webhook.create';
 
 const alreadyBound = () =>
   forumDiscordError(
@@ -66,6 +67,8 @@ function healthOf(
  */
 @Injectable()
 export class HubForumDiscordService {
+  private readonly logger = new Logger(HubForumDiscordService.name);
+
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordGateway,
@@ -141,7 +144,7 @@ export class HubForumDiscordService {
       forum,
       info,
     });
-    await this.ensureWebhook(forum, info.id);
+    await this.ensureWebhookOrDiscard(forum, info.id, managed);
     await this.insert(actor, guildId, forum.id, tagId);
     this.routes.invalidate(); // §5.4: inbound routing sees the new hub now
     this.planningForum.invalidate(); // ROK-2272 §3.2: candidates changed
@@ -190,6 +193,33 @@ export class HubForumDiscordService {
     );
     if (webhookId !== forum.webhookId)
       await updateForum(this.db, forum.id, { webhookId });
+  }
+
+  /**
+   * ROK-2337 (Codex P2) — a webhook timeout on a forum THIS request created
+   * (`managed`: create mode made it just now) deletes that channel and its
+   * row before the 503, so a retry cannot stack unbound channels. Discord
+   * drops the channel's webhooks with it, a late one included. An existing
+   * or adopted forum is never touched. Best-effort: the 503 always surfaces.
+   */
+  private async ensureWebhookOrDiscard(
+    forum: { id: number; webhookId: string | null },
+    channelId: string,
+    createdHere: boolean,
+  ): Promise<void> {
+    try {
+      await this.ensureWebhook(forum, channelId);
+    } catch (err) {
+      if (createdHere && err instanceof WebhookCreateTimeoutError) {
+        await this.gateway.discardCreatedForum(channelId);
+        await deleteForumRow(this.db, forum.id).catch((e: unknown) =>
+          this.logger.warn(
+            `Could not drop forum row ${forum.id}: ${e instanceof Error ? e.message : String(e)}`,
+          ),
+        );
+      }
+      throw err;
+    }
   }
 
   private async insert(
