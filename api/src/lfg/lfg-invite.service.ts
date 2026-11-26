@@ -218,7 +218,7 @@ export class LfgInviteService {
     const ids: InviteIds = { inviterUserId, recipientUserId, gameId, scope };
     // Send-time horizon snapshot only, for the copy. The Join button re-reads
     // it at PRESS time, so a DM opened later cannot raise a stale hand.
-    const horizon = await readGroupHorizon(this.db, gameId, now);
+    const horizon = await readGroupHorizon(this.db, gameId, now, scope);
     const body = await this.buildNotification(game, ids, horizon);
     return this.db.transaction((tx) => this.sendUnderLocks(tx, ids, body, now));
   }

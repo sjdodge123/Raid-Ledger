@@ -307,6 +307,7 @@ export class LfgAffinityDmService {
     const url = buildLfgInviteUrl(
       await getClientUrl(this.settingsService),
       game.slug,
+      payload.groupKey, // ROK-2352 P2-9; absent = the Any page
     );
     const body = this.buildInviteBody(
       payload,

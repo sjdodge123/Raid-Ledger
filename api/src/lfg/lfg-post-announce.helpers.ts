@@ -33,6 +33,8 @@ function handPayload(
     urgency: inserted.urgency as LfgUrgency,
     ttlMinutes: (inserted.ttlMinutes as LfgNowTtl | null) ?? null,
     userId: inserted.userId,
+    // ROK-2352 P2-9 — the affinity DM links the group that reached LFM.
+    ...(inserted.groupKey ? { groupKey: inserted.groupKey } : {}),
   };
 }
 

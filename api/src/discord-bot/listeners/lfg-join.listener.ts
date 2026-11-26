@@ -190,7 +190,8 @@ export class LfgJoinListener {
     // (rather than copying the group's `expires_at`) is what stops a late
     // joiner inheriting a clock that has already run out.
     const [horizon, timezone] = await Promise.all([
-      readGroupHorizon(this.db, gameId),
+      // ROK-2352 P2-4 — a keyed button inherits ITS group's horizon.
+      readGroupHorizon(this.db, gameId, new Date(), groupKey || null),
       this.settingsService.getDiscordBotTimezone(),
     ]);
     // ROK-2352 — a v2 id raises the hand in its group; v1 omits the key
