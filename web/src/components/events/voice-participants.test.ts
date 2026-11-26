@@ -120,6 +120,8 @@ function viewerRow(overrides: Partial<AdHocParticipantDto> = {}): AdHocParticipa
 }
 
 describe('isVoiceParticipant — non-owner payload (ROK-2323)', () => {
+  // Not a regression test: pre-fix `undefined !== null` was already true, so
+  // this passes either way. The `hasDiscord: false` case below is the proof.
   it('a merged steam row with hasDiscord stays a voice row without the Discord id', () => {
     const merged = viewerRow({ hasDiscord: true, source: 'steam', inVoice: false, leftAt: '2026-10-16T18:30:00Z' });
     expect(isVoiceParticipant(merged)).toBe(true);
