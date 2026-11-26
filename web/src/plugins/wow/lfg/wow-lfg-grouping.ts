@@ -9,6 +9,7 @@ import { WowLfgGroupSections } from './wow-lfg-group-sections';
 import { WowLfgRaiseHandFields } from './wow-lfg-raise-hand-fields';
 import { WowLfgLockInFields } from './wow-lfg-lock-in-fields';
 import { WowLfgMemberBadges } from './wow-lfg-member-badges';
+import { WowLfgGroupCoverage } from './wow-lfg-group-coverage';
 import { wowLfgGroupLabel } from './wow-lfg-copy';
 
 /** Mirrors `api/src/plugins/wow-common/manifest.ts::ALL_WOW_GAME_SLUGS`. */
@@ -26,6 +27,7 @@ export const wowLfgGrouping: LfgGrouping = {
     gameSlugs: WOW_LFG_GAME_SLUGS,
     HeaderControls: LfgHubPicker,
     GroupSections: WowLfgGroupSections,
+    GroupPageSection: WowLfgGroupCoverage,
     RaiseHandFields: WowLfgRaiseHandFields,
     MemberBadges: WowLfgMemberBadges,
     LockInFields: WowLfgLockInFields,

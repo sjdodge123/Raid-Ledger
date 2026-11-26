@@ -18,6 +18,7 @@ export const WOW_LFG_COPY = {
     noCharacter: 'No character',
     instancesLegend: 'Groups to join',
     rosterPreview: 'Roster',
+    coverageHeading: 'Role coverage',
     lockInInstance: 'Dungeon or raid',
     lockInNoInstance: 'No instance (generic roster)',
     roleNotSet: 'Role not set',

@@ -4,6 +4,7 @@
  * (and WoW with its plugin off) shows exactly today's page.
  */
 import type { JSX } from 'react';
+import type { LfgGroupDetailDto } from '@raid-ledger/contract';
 import type { LfgGrouping, LfgGroupingContext } from '../../plugins/lfg-grouping';
 import { useLfgGameGroups } from '../../hooks/use-lfg-game-groups';
 
@@ -26,3 +27,11 @@ export function LfgGroupingList({ grouping, context }: SlotProps): JSX.Element |
     if (!Sections || !onWholeGame) return null;
     return <Sections context={context} groups={groups.data?.groups ?? []} isLoading={groups.isLoading} />;
 }
+
+/** The plugin's section for a keyed group (`/lfg/<game>/<key>`) — never the whole-game page. */
+export function LfgGroupingPageSection({ grouping, context, group }: SlotProps & { group: LfgGroupDetailDto }): JSX.Element | null {
+    const Section = grouping?.GroupPageSection;
+    if (!Section || context.groupKey === '') return null;
+    return <Section context={context} group={group} />;
+}
+

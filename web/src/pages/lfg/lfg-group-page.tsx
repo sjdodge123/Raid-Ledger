@@ -37,7 +37,8 @@ import { useLfgOverlay } from './use-lfg-overlay';
 import { LfgGroupTop } from './lfg-group-top';
 import { LfgLoading, LfgNotFound, PendingPollCard } from './lfg-group-states';
 import { useLfgGrouping, type LfgGroupingContext } from '../../plugins/lfg-grouping';
-import { LfgGroupingHeader, LfgGroupingList } from './lfg-grouping-slots';
+import { LfgGroupingHeader, LfgGroupingList, LfgGroupingPageSection } from './lfg-grouping-slots';
+import { groupPageTitle } from './lfg-group-title';
 import type { LfgJoinPick } from './LfgJoinControl';
 import { useLfgHubParam } from './lfg-hub-param';
 import { useGroupingSlots } from './use-grouping-slots';
@@ -159,10 +160,11 @@ function LfgGroupLoaded({ context, fallbackName, group }: { context: LfgGrouping
         <div className="mx-auto max-w-4xl space-y-4 px-4 pt-6 md:pb-6">
             <LfgTopBar onManage={() => overlays.open('manage')} canManage={group.playingNow == null} />
             <LfgGroupingHeader grouping={grouping} context={context} />
-            <LfgHeader gameId={gameId} game={detail.data} fallbackName={fallbackName} />
+            <LfgHeader gameId={gameId} game={detail.data} fallbackName={fallbackName} title={groupPageTitle(grouping, context, group)} />
             <LfgGroupTop group={group} onJoin={actions.join} raiseHand={slots.raiseHand} isBusy={actions.isBusy}
                 onStartPoll={() => overlays.open('poll')} onStartNow={() => overlays.open('startnow')}
                 onParticipants={() => overlays.open('participants')} />
+            <LfgGroupingPageSection grouping={grouping} context={context} group={group} />
             <LfgYourHandCard group={group} context={context} grouping={grouping} />
             <LfgGroupingList grouping={grouping} context={context} />
             <PendingPollCard pending={actions.pendingConvert} onRetry={actions.retryConvert} />

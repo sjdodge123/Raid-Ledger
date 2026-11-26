@@ -64,6 +64,12 @@ export interface LfgMemberBadgesProps {
     member: LfgMemberDto;
 }
 
+/** A keyed group page's own plugin section (WoW: the role coverage strip). */
+export interface LfgGroupPageSectionProps {
+    context: LfgGroupingContext;
+    group: LfgGroupDetailDto;
+}
+
 export interface LfgLockInFieldsProps {
     context: LfgGroupingContext;
     group: LfgGroupDetailDto;
@@ -80,6 +86,8 @@ export interface LfgGrouping {
     HeaderControls?: ComponentType<LfgGroupingContext>;
     /** The group list on the whole-game page (dungeon / raid sections). */
     GroupSections?: ComponentType<LfgGroupSectionsProps>;
+    /** Shown on a keyed group page (never the whole-game `''` page), above "Your hand". */
+    GroupPageSection?: ComponentType<LfgGroupPageSectionProps>;
     /** Fields shown after the urgency pick, before the hand is raised. */
     RaiseHandFields?: ComponentType<LfgRaiseHandFieldsProps>;
     /** Per-member badges (role, character) on the group page. */

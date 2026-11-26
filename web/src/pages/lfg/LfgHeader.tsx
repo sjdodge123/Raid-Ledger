@@ -20,6 +20,8 @@ export interface LfgHeaderProps {
     game: GameDetailDto | undefined;
     /** Name from the slug lookup, shown while the detail request is in flight. */
     fallbackName: string;
+    /** ROK-2352: a keyed group's name — headlines the page, the game name moves beneath it. */
+    title?: string | undefined;
 }
 
 /** Box art, when the DTO carries any. Above the fold, so not lazy-loaded. */
@@ -42,19 +44,43 @@ function Cover({
     );
 }
 
+/** The h1 — a keyed group's name over the game name (ROK-2352), else the game name. */
+function HeaderTitle({
+    title,
+    gameName,
+}: {
+    title: string | undefined;
+    gameName: string;
+}): JSX.Element {
+    return (
+        <>
+            <h1 className="text-2xl font-bold text-foreground">
+                {title ?? gameName}
+            </h1>
+            {title !== undefined && (
+                <p data-testid="lfg-header-game" className="text-sm text-muted">
+                    {gameName}
+                </p>
+            )}
+        </>
+    );
+}
+
 /** Cover, title, the shared badge row, and the co-op deep link. */
 export function LfgHeader({
     gameId,
     game,
     fallbackName,
+    title,
 }: LfgHeaderProps): JSX.Element {
     return (
         <header data-testid="lfg-header" className="flex items-start gap-4">
             <Cover url={game?.coverUrl} />
             <div className="min-w-0 flex-1 space-y-2">
-                <h1 className="text-2xl font-bold text-foreground">
-                    {game?.name ?? fallbackName}
-                </h1>
+                <HeaderTitle
+                    title={title}
+                    gameName={game?.name ?? fallbackName}
+                />
                 <GameBadgeRow
                     game={fromGameDetail(game ?? {})}
                     variant="full"
