@@ -58,6 +58,7 @@ import {
   type LfmGroupView,
 } from './lfm-embed.helpers';
 import { liveFloorFor, viewForChange } from './lfm-embed.views';
+import * as lfmOverflow from './lfm-embed.overflow.helpers';
 import {
   anyGroupScope,
   nothingToPost,
@@ -88,6 +89,8 @@ export class LfmEmbedService {
   private readonly logger = new Logger(LfmEmbedService.name);
   /** ROK-2352 Q11 — new keyed posts per game, the rename budget's ration. */
   private readonly keyedPostBudget = createKeyedPostBudget();
+  /** ROK-2352 Q11 — the `''` post's overflow line, per game. */
+  private readonly overflow = new lfmOverflow.LfmOverflowCache();
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: LfgDb,
@@ -217,6 +220,10 @@ export class LfmEmbedService {
       registry: this.pluginRegistry,
       postBudget: this.keyedPostBudget,
       postNew: (gameId, view) => this.postNew(gameId, view),
+      onOverflow: lfmOverflow.overflowRefresher({
+        ...this.reconcileDeps(),
+        cache: this.overflow,
+      }),
     };
   }
 
@@ -337,7 +344,8 @@ export class LfmEmbedService {
    * (E4/E5). The forum adapter deliberately lets Discord's errors through, so
    * the heal + close-anyway rules below apply identically to both surfaces.
    */
-  private async editRow(row: LfmMessageRow, view: LfmGroupView): Promise<void> {
+  private async editRow(row: LfmMessageRow, raw: LfmGroupView): Promise<void> {
+    const view = this.overflow.decorate(raw); // ROK-2352 Q11 overflow line
     const context = await this.context();
     if (await this.retiresInstead(row, view)) {
       await retireOpenRow(this.retireDeps(), row, context);
@@ -431,7 +439,8 @@ export class LfmEmbedService {
    * via `replaceDeletedPost`, handing over the same `postDeps` bag.
    */
   private async postNew(gameId: number, view: LfmGroupView): Promise<void> {
-    await postNew(this.postDeps(await this.context()), gameId, view);
+    const shown = this.overflow.decorate(view);
+    await postNew(this.postDeps(await this.context()), gameId, shown);
   }
 
   /** The bag `postNew` reads — the service's collaborators plus the chrome. */

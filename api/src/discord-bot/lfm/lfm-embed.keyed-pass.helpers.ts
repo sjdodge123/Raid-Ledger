@@ -25,6 +25,7 @@ import {
   syncKeyedGroups,
   type LfmKeyedPostBudget,
 } from './lfm-embed.groups.helpers';
+import type { LfmOverflowGroup } from './lfm-embed.overflow-line';
 
 /** The reads the reconnect walk makes — a seam for the unit spec. */
 export interface LfmKeyedReconnectReads {
@@ -43,6 +44,8 @@ export interface LfmKeyedPassDeps {
   editRow(row: LfmMessageRow, view: LfmGroupView): Promise<void>;
   postNew(gameId: number, view: LfmGroupView): Promise<void>;
   warn(action: string, err: unknown): void;
+  /** The pass's over-cap groups — the `''` post's overflow line (Q11). */
+  onOverflow?(gameId: number, groups: LfmOverflowGroup[]): Promise<void>;
   /** Defaults to {@link LFM_KEYED_RECONNECT_READS}; specs inject fakes. */
   reconnectReads?: LfmKeyedReconnectReads;
 }
@@ -92,7 +95,7 @@ export async function runKeyedPass(
   try {
     const game = await loadLfmGame(deps.db, gameId);
     if (!game) return;
-    await syncKeyedGroups(
+    const overflow = await syncKeyedGroups(
       {
         db: deps.db,
         registry,
@@ -103,6 +106,7 @@ export async function runKeyedPass(
       game,
       isVisibleGame(game),
     );
+    await deps.onOverflow?.(game.id, overflow);
   } catch (err) {
     deps.warn(`sync the keyed LFM posts for game ${gameId}`, err);
   }
