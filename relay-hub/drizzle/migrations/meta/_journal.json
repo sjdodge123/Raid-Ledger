@@ -22,6 +22,13 @@
       "when": 1795596664330,
       "tag": "0002_create_hub_instances",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795598791458,
+      "tag": "0003_create_hub_crosswalk",
+      "breakpoints": true
     }
   ]
 }

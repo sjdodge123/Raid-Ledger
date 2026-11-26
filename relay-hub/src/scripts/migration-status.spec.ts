@@ -49,6 +49,7 @@ describe('readJournal', () => {
       '0000_create_hub_meta',
       '0001_seed_catalog_epoch',
       '0002_create_hub_instances',
+      '0003_create_hub_crosswalk',
     ]);
     expect(path.basename(DEFAULT_MIGRATIONS_FOLDER)).toBe('migrations');
   });
