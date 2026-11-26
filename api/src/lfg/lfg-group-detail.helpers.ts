@@ -71,8 +71,8 @@ export async function readGroupDetail(
       getGroupSummary(db, game, userId, scope),
       listGroupMembers(db, game.id, scope),
       findOwnLiveHand(db, userId, game.id, scope),
-      findOpenForumThreadId(db, game.id),
-      readConvertedEvent(db, game.id),
+      findOpenForumThreadId(db, game.id, scope),
+      readConvertedEvent(db, game.id, new Date(), scope),
       listOwnOtherGroups(db, userId, game.id, group),
     ]);
   // ROK-2352: the plugin's per-member detail (badges) for the viewed group.

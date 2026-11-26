@@ -16,6 +16,7 @@ import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { LfgConvertedEventDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { LfgDb } from './lfg-query.helpers';
+import type { LfgGroupScope } from './lfg-group-scope.helpers';
 
 /**
  * SQL predicate: the game's LFG-born, scheduled, uncancelled event that has
@@ -26,11 +27,15 @@ import type { LfgDb } from './lfg-query.helpers';
  *
  * @param gameId - Game whose group is being read.
  * @param now - The instant "has not ended" is measured against.
+ * @param scope - ROK-2352 (review MAJOR-3): only an event THAT group's hands
+ *   converted into; null (default) = any group of the game (the fold).
  */
 export function convertedEventWhere(
   gameId: number,
   now: Date,
+  scope: LfgGroupScope = null,
 ): SQL | undefined {
+  const inGroup = scope === null ? sql`` : sql` AND i.group_key = ${scope}`;
   return and(
     eq(schema.events.gameId, gameId),
     eq(schema.events.isAdHoc, false),
@@ -38,7 +43,7 @@ export function convertedEventWhere(
     sql`upper(${schema.events.duration}) > ${now.toISOString()}::timestamp`,
     sql`EXISTS (
       SELECT 1 FROM lfg_intents i
-      WHERE i.converted_to_event_id = ${schema.events.id}
+      WHERE i.converted_to_event_id = ${schema.events.id}${inGroup}
     )`,
   );
 }
@@ -68,9 +73,15 @@ function signupCountSql() {
  * @param db - Drizzle handle.
  * @param gameId - Game whose group is being read.
  * @param now - Clock for the "not ended" cut-off.
+ * @param scope - ROK-2352: the group being read (null = the whole game).
  * @returns The query builder (await it for the rows).
  */
-export function selectConvertedEvent(db: LfgDb, gameId: number, now: Date) {
+export function selectConvertedEvent(
+  db: LfgDb,
+  gameId: number,
+  now: Date,
+  scope: LfgGroupScope = null,
+) {
   return db
     .select({
       eventId: schema.events.id,
@@ -79,7 +90,7 @@ export function selectConvertedEvent(db: LfgDb, gameId: number, now: Date) {
       signupCount: signupCountSql(),
     })
     .from(schema.events)
-    .where(convertedEventWhere(gameId, now))
+    .where(convertedEventWhere(gameId, now, scope))
     .orderBy(sql`lower(${schema.events.duration}) ASC`)
     .limit(1);
 }
@@ -90,14 +101,16 @@ export function selectConvertedEvent(db: LfgDb, gameId: number, now: Date) {
  * @param db - Drizzle handle.
  * @param gameId - Game whose group is being read.
  * @param now - Clock for the "not ended" cut-off (injectable for tests).
+ * @param scope - ROK-2352: the group being read (null = the whole game).
  * @returns The converted-event projection, or null when there is none.
  */
 export async function readConvertedEvent(
   db: LfgDb,
   gameId: number,
   now: Date = new Date(),
+  scope: LfgGroupScope = null,
 ): Promise<LfgConvertedEventDto | null> {
-  const [row] = await selectConvertedEvent(db, gameId, now);
+  const [row] = await selectConvertedEvent(db, gameId, now, scope);
   if (!row) return null;
   return {
     eventId: row.eventId,

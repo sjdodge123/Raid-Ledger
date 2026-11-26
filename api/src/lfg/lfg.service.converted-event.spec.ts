@@ -68,9 +68,12 @@ describe('LfgService.getGroupDetail — convertedEvent (ROK-1573)', () => {
     const service = await buildService(CONVERTED);
     const detail = await service.getGroupDetail(7, 42);
     expect(detail.convertedEvent).toEqual(CONVERTED);
+    // ROK-2352: a plain read (no `?group`) is the whole game — scope null.
     expect(convertedHelpers.readConvertedEvent).toHaveBeenCalledWith(
       expect.anything(),
       42,
+      expect.any(Date),
+      null,
     );
   });
 

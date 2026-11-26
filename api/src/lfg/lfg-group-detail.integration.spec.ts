@@ -251,6 +251,70 @@ describe('GET /lfg/:gameId?group= — members carry pluginDetail (ROK-2352)', ()
     expect(byUser(group, alice.userId).pluginDetail).toBeUndefined();
   });
 
+  it("shows only its own group's thread and converted event (review MAJOR-3)", async () => {
+    const carol = await member('carol');
+    const dave = await member('dave');
+    const game = await createGame(testApp, 'WoW Classic Era', { slug: ERA });
+    const dungeons = (catalogueInstancesFor('classic_era') ?? []).filter(
+      (i) => i.category === 'dungeon',
+    );
+    const [instA, instB] = dungeons;
+    if (!instA || !instB) throw new Error('need two classic_era dungeons');
+    const [keyA, keyB] = [wowGroupKey(instA), wowGroupKey(instB)];
+    await postKeyed(carol.token, game.id, keyA);
+    await postKeyed(dave.token, game.id, keyB);
+    // B's post first, so an unscoped `LIMIT 1` would hand it to A's page.
+    const post = { gameId: game.id, guildId: 'g', channelId: 'c' };
+    await testApp.db.insert(schema.lfgGroupMessages).values([
+      {
+        ...post,
+        messageId: 'm-b',
+        threadId: 'thread-b',
+        postKind: 'forum',
+        groupKey: keyB,
+      },
+      {
+        ...post,
+        messageId: 'm-a',
+        threadId: 'thread-a',
+        postKind: 'forum',
+        groupKey: keyA,
+      },
+    ]);
+    const start = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    const created = await testApp.request
+      .post('/events')
+      .set('Authorization', `Bearer ${dave.token}`)
+      .send({
+        title: 'B locked in',
+        startTime: start.toISOString(),
+        endTime: new Date(start.getTime() + 7_200_000).toISOString(),
+        gameId: game.id,
+      })
+      .expect(201);
+    const eventId = (created.body as { id: number }).id;
+    await testApp.db
+      .update(schema.lfgIntents)
+      .set({ status: 'converted', convertedToEventId: eventId })
+      .where(
+        and(
+          eq(schema.lfgIntents.userId, dave.userId),
+          eq(schema.lfgIntents.groupKey, keyB),
+        ),
+      );
+
+    const pageOf = async (key: string) => {
+      const g = await readKeyed(carol.token, game.id, key);
+      return { threadId: g.threadId, event: g.convertedEvent?.eventId ?? null };
+    };
+
+    expect(await pageOf(keyA)).toEqual({ threadId: 'thread-a', event: null });
+    expect(await pageOf(keyB)).toEqual({
+      threadId: 'thread-b',
+      event: eventId,
+    });
+  });
+
   it('never carries detail on the list endpoints', async () => {
     const { alice, game } = await keyedGame();
 
