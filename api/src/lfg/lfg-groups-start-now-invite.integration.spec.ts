@@ -10,6 +10,8 @@
  *   lock-in patch, and invites only that group's members. Two `now` hands in a
  *   keyed group never auto-spawn a session (the threshold spawn is game-level
  *   "playing now", `''` only) — AC5/AC6 in `lfg-groups-lock-in` pin that too.
+ * - Threshold spawn on `''` (review r2 MINOR-B): the spawned members' keyed
+ *   `now` hands clear in the spawn tx; their tonight/week hands stay.
  *
  * A stub `lfg-grouping` adapter owned by `blizzard` is registered on this
  * spec's own slug (same pattern as `lfg-groups-lock-in.integration.spec.ts`).
@@ -23,6 +25,7 @@ import { EXTENSION_POINTS } from '../plugins/plugin-host/extension-points';
 import type { LfgGroupingAdapter } from '../plugins/plugin-host/lfg-grouping.adapter';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { DiscordNotificationService } from '../notifications/discord-notification.service';
+import { LfgNowSpawnService } from '../discord-bot/lfg-now/lfg-now-spawn.service';
 import {
   createGame,
   createMembers,
@@ -239,5 +242,34 @@ describe('Start now by group (ROK-2352 §3.8)', () => {
       .from(schema.events)
       .where(eq(schema.events.gameId, game.id));
     expect(events).toEqual([]);
+  });
+});
+
+describe("Threshold spawn on '' clears keyed now hands only (review r2 MINOR-B)", () => {
+  it("converts the '' pair, clears the member's keyed now hand, keeps tonight/week", async () => {
+    const [a, b] = await createMembers(testApp, 'th-a', 'th-b');
+    const game = await createGame(testApp, 'Threshold Any', { slug: SLUG });
+    await hand(a, game.id, 'dungeon:1', 'now');
+    await hand(a, game.id, 'dungeon:2', 'week');
+    await hand(b, game.id, 'dungeon:2', 'tonight');
+    await hand(a, game.id, '', 'now');
+    await hand(b, game.id, '', 'now');
+
+    // One fully-awaited decision through the real subscriber: it serialises
+    // on the per-game lock behind any LFM-triggered spawn, so either way the
+    // spawn has committed when it returns (it attaches if one already did).
+    await testApp.app
+      .get(LfgNowSpawnService)
+      .onGroupChanged({ gameId: game.id, reason: 'joined' });
+
+    // MUTATION: drop `withClearedNowSiblings` from `spawnFromHands` and
+    // a's dungeon:1 reads 'active', not 'cleared'.
+    expect(await handStatuses(game.id)).toEqual({
+      [`${a.userId}:`]: 'converted',
+      [`${b.userId}:`]: 'converted',
+      [`${a.userId}:dungeon:1`]: 'cleared',
+      [`${a.userId}:dungeon:2`]: 'active',
+      [`${b.userId}:dungeon:2`]: 'active',
+    });
   });
 });
