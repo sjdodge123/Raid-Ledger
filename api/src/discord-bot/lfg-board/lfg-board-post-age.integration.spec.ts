@@ -14,7 +14,7 @@
  * `isTerminalRender` branch, already covered by ROK-1494. What this file proves
  * is that an AGED post reaches that branch and a young one does not.
  *
- * Mutation proof: drop the `inArray(... agedBoardPostGameIds(now))` arm from
+ * Mutation proof: drop the `inArray(... agedBoardPostGroups(now))` arm from
  * `expireStaleIntents` and the first case fails on the hand statuses —
  * `Expected: ["expired", "expired"] Received: ["active", "active"]` — not on a
  * timeout.
@@ -36,7 +36,7 @@ import { LfmEmbedService } from '../lfm/lfm-embed.service';
 import { isTerminalRender, type LfmGroupView } from '../lfm/lfm-embed.helpers';
 import type { LfmMessageRow } from '../lfm/lfm-embed.db-helpers';
 import { LfgBoardService } from './lfg-board.service';
-import { at, nonEmpty } from '../../common/testing/narrow';
+import { at, defined, nonEmpty } from '../../common/testing/narrow';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -183,6 +183,38 @@ describe('LFG board post-age cap (ROK-1691, integration)', () => {
     expect(isTerminalRender(at(edits, 0).view.state)).toBe(true);
   });
 
+  // ROK-2352 P2-7: one post per (game, group_key). The Any post aging out
+  // must not lapse a hand in ANOTHER group of the game (§3.1: each hand keeps
+  // its own expiry). Mutation: match the sweep on `game_id` alone and the
+  // raid hand below comes back `expired`.
+  it('expires only the aged post\'s own group, not a keyed hand of the game', async () => {
+    const { gameId } = await freshGroupOnPostAged('keyed', 8);
+    const c = await createMemberAndLogin(testApp, 'keyed-c', 'keyed-c@test.dev');
+    const [anyHand] = nonEmpty(await hands(gameId), 'any hand');
+    const [raid] = await testApp.db
+      .insert(schema.lfgIntents)
+      .values({
+        userId: c.userId,
+        gameId,
+        groupKey: 'raid:409',
+        status: 'active',
+        urgency: anyHand.urgency,
+        expiresAt: anyHand.expiresAt,
+      })
+      .returning({ id: schema.lfgIntents.id });
+    const raidId = defined(raid, 'raid hand').id;
+
+    await sweepExpiry(gameId);
+
+    const after = await hands(gameId);
+    expect(after.map((h) => [h.groupKey, h.status])).toEqual([
+      ['', 'expired'],
+      ['', 'expired'],
+      ['raid:409', 'active'],
+    ]);
+    expect(after.find((h) => h.id === raidId)?.status).toBe('active');
+  });
+
   it('leaves a 3-day-old post with live hands untouched', async () => {
     const { gameId, row } = await freshGroupOnPostAged('young', 3);
 
@@ -198,7 +230,7 @@ describe('LFG board post-age cap (ROK-1691, integration)', () => {
   // A re-post is a NEW row with its own clock, and the retired row stays
   // behind: closed, 8 days old, same game. The cap must read only the OPEN
   // row, or that old row would retire every re-post on the very next sweep.
-  // Mutation: drop `eq(posts.state, 'open')` from `agedBoardPostGameIds` and
+  // Mutation: drop `eq(posts.state, 'open')` from `agedBoardPostGroups` and
   // this fails on the statuses — `Expected: [..., "active", "active"]
   // Received: [..., "expired", "expired"]`.
   it('leaves a young re-post live beside the old closed row', async () => {

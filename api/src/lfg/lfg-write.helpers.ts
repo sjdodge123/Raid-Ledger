@@ -30,7 +30,7 @@ import { defined } from '../common/defined.helpers';
 import type { LfgDb } from './lfg-query.helpers';
 import { convertedToTarget } from './lfg-provenance.helpers';
 import { tonightExpiresAt } from './lfg-tonight.helpers';
-import { agedBoardPostGameIds } from './lfg-post-age.helpers';
+import { agedBoardPostGroups } from './lfg-post-age.helpers';
 import {
   groupScopeFilter,
   type LfgGroupScope,
@@ -442,8 +442,8 @@ export interface LfgExpirySweep {
  * consumer can only re-render the group, so a member who quietly lapsed stayed
  * in the board post's forum thread forever.
  *
- * ROK-1691 — a hand ALSO lapses when its game's open forum post opened more
- * than `LFG_POST_MAX_AGE_DAYS` ago, however recently it was refreshed. Same
+ * ROK-1691 — a hand ALSO lapses when its group's open forum post opened more
+ * than `LFG_POST_MAX_AGE_DAYS` ago (ROK-2352: matched on `(game, group_key)`), however recently it was refreshed. Same
  * UPDATE, same RETURNING, same per-game emit: the board retires that post
  * exactly as it retires one whose hands ran out, with no new path.
  *
@@ -463,7 +463,8 @@ export async function expireStaleIntents(
         eq(schema.lfgIntents.status, 'active'),
         or(
           lte(schema.lfgIntents.expiresAt, now),
-          inArray(schema.lfgIntents.gameId, agedBoardPostGameIds(now)),
+          // ROK-2352 P2-7: the hand's own group's post, not any post of the game.
+          sql`(${schema.lfgIntents.gameId}, ${schema.lfgIntents.groupKey}) in (${agedBoardPostGroups(now)})`,
         ),
       ),
     )
