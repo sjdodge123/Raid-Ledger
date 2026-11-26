@@ -80,6 +80,9 @@ function setup() {
   const redrive = jest
     .fn<Promise<unknown>, [ForumLink]>()
     .mockResolvedValue('dispatched');
+  const resendReply = jest
+    .fn<Promise<unknown>, [ForumLink]>()
+    .mockResolvedValue('dispatched');
   const attempt = jest.fn(async (_l: ForumLink, run: () => Promise<void>) =>
     run(),
   );
@@ -94,6 +97,7 @@ function setup() {
     now: () => NOW,
     attempt,
     redrive,
+    resendReply,
     clientUrl: () => Promise.resolve('https://rl.example'),
     timeZone: () => Promise.resolve('UTC'),
     starters,
@@ -103,6 +107,7 @@ function setup() {
     svc: new EventPostOutbound(deps),
     gateway,
     redrive,
+    resendReply,
     attempt,
     starters,
     pollCards,
@@ -116,12 +121,59 @@ const mocked = {
   claim: jest.mocked(links.claimThreadLink),
   find: jest.mocked(links.findThreadLink),
   markSent: jest.mocked(links.markSent),
+  rehome: jest.mocked(links.rehomeReplies),
 };
 
 beforeEach(() => {
   jest.clearAllMocks();
   mocked.claim.mockResolvedValue(linkRow());
   mocked.find.mockResolvedValue(linkRow({ discordThreadId: 'p1' }));
+  mocked.rehome.mockResolvedValue([]);
+});
+
+describe('ROK-2292 D8: replies held while the post was in flight', () => {
+  const held = (id: number) =>
+    linkRow({ id, kind: 'reply', replyId: id, discordThreadId: 'p1' });
+
+  it('sends every re-homed reply, in order, once the post is sent', async () => {
+    const { svc, resendReply } = setup();
+    mocked.source.mockResolvedValue(source());
+    mocked.rehome.mockResolvedValue([held(21), held(22)]);
+    await svc.ensurePost(TO, REF);
+    expect(mocked.rehome).toHaveBeenCalledWith({}, 3, 'p1');
+    expect(resendReply.mock.calls.map(([l]) => l.id)).toEqual([21, 22]);
+  });
+
+  it('a resend failure never fails the sent post (no retry, no second post)', async () => {
+    const { svc, resendReply, gateway } = setup();
+    mocked.source.mockResolvedValue(source());
+    mocked.rehome.mockResolvedValue([held(21)]);
+    resendReply.mockRejectedValue(new Error('db down'));
+    await expect(svc.ensurePost(TO, REF)).resolves.toBeTruthy();
+    expect(gateway.createPost).toHaveBeenCalledTimes(1);
+    expect(mocked.markSent).toHaveBeenCalledTimes(1);
+  });
+
+  it('one held reply failing never holds back the next (review m1)', async () => {
+    const { svc, resendReply } = setup();
+    mocked.source.mockResolvedValue(source());
+    mocked.rehome.mockResolvedValue([held(21), held(22)]);
+    resendReply.mockRejectedValueOnce(new Error('db down'));
+    await svc.ensurePost(TO, REF);
+    expect(resendReply.mock.calls.map(([l]) => l.id)).toEqual([21, 22]);
+  });
+
+  it('the starter row is tracked before any held reply is sent (review m2)', async () => {
+    const { svc, resendReply, starters } = setup();
+    mocked.source.mockResolvedValue(source());
+    const card = { embeds: [], components: [], state: 'posted' };
+    starters.build.mockResolvedValue(card);
+    mocked.rehome.mockResolvedValue([held(21)]);
+    await svc.ensurePost(TO, REF);
+    const tracked = starters.track.mock.invocationCallOrder[0] ?? Infinity;
+    const sent = resendReply.mock.invocationCallOrder[0] ?? -Infinity;
+    expect(tracked).toBeLessThan(sent);
+  });
 });
 
 describe('EventPostOutbound.ensurePost (item 1, lazy post)', () => {

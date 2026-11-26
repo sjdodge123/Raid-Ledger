@@ -217,8 +217,15 @@ export class HubForumDiscordReconcileService {
     }
   }
 
-  /** Placeholder ids are re-sent (never edited); errors never stop the sweep. */
-  private async retryOne(link: links.ForumLink): Promise<void> {
+  /**
+   * Placeholder ids are re-sent (never edited); errors never stop the sweep.
+   * The row is re-read first (ROK-2292 Codex P2): re-sending a post earlier
+   * in the same sweep sends its held replies, so the queue's copy of such a
+   * reply is stale — re-driving it would post it a second time.
+   */
+  private async retryOne(queued: links.ForumLink): Promise<void> {
+    const link = await this.stillQueued(queued);
+    if (!link) return;
     try {
       const op = retryOp(link, await links.rlRowDeleted(this.db, link));
       if (op === null) {
@@ -233,6 +240,24 @@ export class HubForumDiscordReconcileService {
       }
     } catch (err) {
       this.logger.warn(`Forum retry link ${link.id}: ${describe(err)}`);
+    }
+  }
+
+  /**
+   * The row as it is now, or null when something else already handled it
+   * since the queue was read: sent (synced), gone, or attempted again (a
+   * failed attempt has its own backoff before the next try).
+   */
+  private async stillQueued(
+    queued: links.ForumLink,
+  ): Promise<links.ForumLink | null> {
+    try {
+      const fresh = await links.findLinkById(this.db, queued.id);
+      if (!fresh || fresh.syncState === 'synced') return null;
+      return fresh.attempts > queued.attempts ? null : fresh;
+    } catch (err) {
+      this.logger.warn(`Forum retry link ${queued.id}: ${describe(err)}`);
+      return null;
     }
   }
 
