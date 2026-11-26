@@ -247,3 +247,28 @@ describe('LineupDetailHeader — non-operator creator (ROK-1323)', () => {
         expect(screen.queryByTestId('lineup-operator-menu-abort')).toBeNull();
     });
 });
+
+describe('LineupDetailHeader — archived state (ROK-2349)', () => {
+    beforeEach(() => {
+        vi.mocked(useAuth).mockReturnValue({ user: null } as ReturnType<typeof useAuth>);
+        vi.mocked(isOperatorOrAdmin).mockReturnValue(false);
+    });
+
+    it('shows the Archived status badge on an archived lineup', () => {
+        const lineup = buildDetail({ title: 'Old Picks', status: 'archived' } as DetailOverrides);
+        renderWithProviders(<LineupDetailHeader lineup={lineup} />);
+        expect(screen.getByTestId('lineup-archived-badge')).toHaveTextContent('Archived');
+    });
+
+    it('shows no Archived badge on a live lineup', () => {
+        const lineup = buildDetail({ title: 'Live Picks', status: 'voting' } as DetailOverrides);
+        renderWithProviders(<LineupDetailHeader lineup={lineup} />);
+        expect(screen.queryByTestId('lineup-archived-badge')).toBeNull();
+    });
+
+    it('leaves an aborted archived lineup to its own banner', () => {
+        const lineup = buildDetail({ title: 'Aborted Picks', status: 'archived' } as DetailOverrides);
+        renderWithProviders(<LineupDetailHeader lineup={lineup} isAborted />);
+        expect(screen.queryByTestId('lineup-archived-badge')).toBeNull();
+    });
+});

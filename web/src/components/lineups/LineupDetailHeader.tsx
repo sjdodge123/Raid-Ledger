@@ -18,6 +18,7 @@ import { LineupOperatorMenu } from './LineupOperatorMenu';
 import { LineupShareCopy } from './LineupShareCopy';
 import { LineupHeroMeta } from './LineupHeroMeta';
 import { LineupParticipantsButton } from './LineupParticipantsButton';
+import { LineupStatusBadge } from './LineupStatusBadge';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -71,6 +72,12 @@ export function LineupDetailHeader({
             className="px-2 py-0.5 text-xs font-semibold rounded bg-warning/10 text-warning border border-warning/40"
           >
             Private
+          </span>
+        )}
+        {/* ROK-2349: an archived lineup says so (an aborted one has its own banner). */}
+        {!isAborted && lineup.status === 'archived' && (
+          <span data-testid="lineup-archived-badge" className="flex-shrink-0">
+            <LineupStatusBadge status="archived" />
           </span>
         )}
         {showFallbackTitle && (
