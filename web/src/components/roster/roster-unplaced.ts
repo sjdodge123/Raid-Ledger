@@ -47,7 +47,7 @@ export interface RosterSplit {
     assignments: RosterAssignmentResponse[];
     /** The rows moved from the assignments to the pool. */
     unplaced: RosterAssignmentResponse[];
-    /** Bench positions the grid renders (`benchSlotCount` over every bench row). */
+    /** Bench positions the grid renders: past every kept bench row, plus one open seat. */
     benchCount: number;
 }
 
@@ -62,11 +62,15 @@ export function splitUnplaced(
     assignments: RosterAssignmentResponse[],
     getSlotCount: (role: RosterRole) => number,
 ): RosterSplit {
+    const configuredBench = getSlotCount('bench');
     const bench = assignments.filter((a) => a.slot === 'bench' && a.position >= 1);
-    const benchCount = benchSlotCount(getSlotCount('bench'), bench);
-    const unplaced = findUnplacedAssignments(assignments, getSlotCount, benchCount);
-    if (unplaced.length === 0) return { pool, assignments, unplaced, benchCount };
+    const unplaced = findUnplacedAssignments(assignments, getSlotCount, benchSlotCount(configuredBench, bench));
     const ids = new Set(unplaced.map((a) => a.signupId));
+    // Every kept bench row is under the cap, so this reach is bounded and shows each one.
+    const keptBench = bench.filter((a) => !ids.has(a.signupId));
+    const maxKept = keptBench.reduce((max, a) => Math.max(max, a.position), 0);
+    const benchCount = Math.max(configuredBench, keptBench.length + 1, maxKept + 1);
+    if (unplaced.length === 0) return { pool, assignments, unplaced, benchCount };
     return {
         pool: [...pool, ...unplaced.map((a) => ({ ...a, slot: null, position: 0 }))],
         assignments: assignments.filter((a) => !ids.has(a.signupId)),
