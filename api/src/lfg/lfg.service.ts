@@ -49,7 +49,6 @@ import { SettingsService } from '../settings/settings.service';
 import { getLfgNowIndicatorEmoji } from '../settings/settings-lfg-board.helpers';
 import { resolveTargetGameId } from './lfg-convert.helpers';
 import {
-  clearIntent,
   convertGroup,
   findActiveIntent,
   insertIntent,
@@ -65,7 +64,10 @@ import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.se
 import { assertHandCap, resolveLfgGrouping } from './lfg-grouping.helpers';
 import { attachGroupCounts } from './lfg-group-list.helpers';
 import { announceLfgPost } from './lfg-post-announce.helpers';
-import { resolveWithdrawScope } from './lfg-group-scope.helpers';
+import {
+  clearIntent,
+  resolveWithdrawScope,
+} from './lfg-group-scope.helpers';
 import { resolveLockInGroup } from './lfg-lock-in-group.helpers';
 import { toConversionTarget } from './lfg-provenance.helpers';
 import {

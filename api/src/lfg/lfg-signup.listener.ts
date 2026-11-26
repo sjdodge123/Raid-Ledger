@@ -24,7 +24,7 @@ import {
   type SignupEventPayload,
 } from '../discord-bot/discord-bot.constants';
 import { clearNowSiblings } from './lfg-lock-in-group.helpers';
-import { clearIntent } from './lfg-write.helpers';
+import { clearIntent } from './lfg-group-scope.helpers';
 
 @Injectable()
 export class LfgSignupListener {

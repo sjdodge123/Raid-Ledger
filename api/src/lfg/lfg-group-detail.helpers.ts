@@ -9,8 +9,8 @@ import {
   resolveNowIndicatorEmoji,
 } from '../discord-bot/lfg-now/lfg-now-indicator.helpers';
 import { readConvertedEvent } from './lfg-converted-event.helpers';
+import { findOpenForumThreadId } from './lfg-forum-thread.helpers';
 import {
-  findOpenForumThreadId,
   getGroupSummary,
   listGroupMembers,
   type LfgDb,

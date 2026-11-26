@@ -271,7 +271,6 @@ export async function reviveIntent(
   return defined(row, 'revived intent row');
 }
 
-export { clearIntent } from './lfg-group-scope.helpers';
 
 /**
  * Conversion (AC8): flip every LIVE intent on the game to `converted` and

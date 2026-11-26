@@ -451,4 +451,3 @@ async function loadGameOr404(
   return game;
 }
 
-export { findOpenForumThreadId } from './lfg-forum-thread.helpers';
