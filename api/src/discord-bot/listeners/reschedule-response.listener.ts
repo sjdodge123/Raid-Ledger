@@ -32,12 +32,17 @@ import {
   lookupRescheduleEvent,
   findLinkedUserByDiscordId,
   replyIfEventEnded,
-  type RescheduleEventRow,
   dmEditFor,
   selectDmEditFor,
   editDmEmbed,
-  safeEditReply,
 } from './reschedule-response.helpers';
+import {
+  editClearingMenu,
+  editPlain,
+  replyIfDeparted,
+  replyRescheduleError,
+  validateRescheduleSignup,
+} from './reschedule-reactivation.helpers';
 import {
   handleLinkedConfirm,
   handleUnlinkedConfirm,
@@ -49,7 +54,6 @@ import {
   handleRoleSelect as doRoleSelect,
   type SelectCtx,
 } from './reschedule-roster.handlers';
-import { errorStack } from '../../common/error-format.helpers';
 import { routeRescheduleBack } from './reschedule-back.handlers';
 import { emitSignupUpdated } from './reschedule-signup-emit.helpers';
 import { LFG_BLOCKED_REPLY } from '../commands/lfg.command.helpers';
@@ -132,10 +136,8 @@ export class RescheduleResponseListener {
     try {
       await this.routeButton(action, i, eventId);
     } catch (error) {
-      this.logger.error(`Reschedule error event ${eventId}`, errorStack(error));
-      await safeEditReply(i, {
-        content: 'Something went wrong. Please try again.',
-      });
+      const label = `Reschedule error event ${eventId}`;
+      await replyRescheduleError(i, error, this.logger, label, editPlain);
     }
   }
 
@@ -182,9 +184,10 @@ export class RescheduleResponseListener {
     eventId: number,
     on: AttendingHandlers,
   ): Promise<void> {
-    const v = await this.validateSignup(i, eventId);
+    const v = await validateRescheduleSignup(this.deps, i, eventId);
     if (!v) return;
     if (await replyIfEventEnded(i, v.event)) return;
+    if (await replyIfDeparted(i, v.signup.status)) return; // ROK-2329
     const linkedUser = await findLinkedUserByDiscordId(this.db, i.user.id);
     if (linkedUser && (linkedUser.bannedAt || linkedUser.deactivatedAt)) {
       await i.editReply({ content: LFG_BLOCKED_REPLY });
@@ -204,7 +207,7 @@ export class RescheduleResponseListener {
     i: ButtonInteraction,
     eventId: number,
   ): Promise<void> {
-    const v = await this.validateSignup(i, eventId);
+    const v = await validateRescheduleSignup(this.deps, i, eventId);
     if (!v) return;
     await this.db
       .update(schema.eventSignups)
@@ -252,11 +255,9 @@ export class RescheduleResponseListener {
         await this.handleRoleSelect(i, eventId, characterId, signupStatus);
       }
     } catch (error) {
-      this.logger.error(`Select error event ${eventId}`, errorStack(error));
-      await safeEditReply(i, {
-        content: 'Something went wrong. Please try again.',
-        components: [],
-      });
+      const label = `Select error event ${eventId}`;
+      const edit = editClearingMenu;
+      await replyRescheduleError(i, error, this.logger, label, edit);
     }
   }
 
@@ -292,34 +293,5 @@ export class RescheduleResponseListener {
       characterId,
       signupStatus,
     );
-  }
-
-  private async validateSignup(
-    i: ButtonInteraction,
-    eventId: number,
-  ): Promise<{
-    event: RescheduleEventRow;
-    signup: { id: number; status: string };
-  } | null> {
-    const event = await lookupRescheduleEvent(this.db, eventId);
-    if (!event) {
-      await i.editReply({ content: 'Event not found.' });
-      return null;
-    }
-    if (event.cancelledAt) {
-      await i.editReply({ content: 'This event has been cancelled.' });
-      return null;
-    }
-    // ROK-2097: a row owned by an account this Discord id left is not theirs.
-    const signup = await this.signupsService.findByDiscordUser(
-      eventId,
-      i.user.id,
-      { managedOnly: true },
-    );
-    if (!signup) {
-      await i.editReply({ content: "You're not signed up for this event." });
-      return null;
-    }
-    return { event, signup };
   }
 }

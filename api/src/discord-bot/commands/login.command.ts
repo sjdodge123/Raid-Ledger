@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   SlashCommandBuilder,
   MessageFlags,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
@@ -10,6 +11,10 @@ import { UsersService } from '../../users/users.service';
 import { SettingsService } from '../../settings/settings.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
 import { DiscordSigninLinkService } from '../../auth/discord-signin-link.service';
+import {
+  SigninCodeStore,
+  type SigninCodeApproval,
+} from '../../auth/signin-code.store';
 import {
   COMMAND_LINK_SRC,
   SIGNIN_LINK_PATH,
@@ -28,6 +33,19 @@ import {
   type LoginDecision,
   type LoginRateLimitRedis,
 } from './login.helpers';
+import {
+  approveSigninCode,
+  firstTimeMintInput,
+  parseSigninCodeApproveId,
+  replyToSigninCode,
+  type LoginGrant,
+  type SigninCodeDeps,
+  type SigninCodeEligibility,
+  type SigninCodeUser,
+} from './login-code.helpers';
+
+/** ROK-2370: the optional `/login code:` option. */
+export const LOGIN_CODE_OPTION = 'code';
 
 /** The minted link plus the id the Q6 log line names. */
 interface MintedLink {
@@ -55,13 +73,31 @@ export class LoginCommand
     private readonly magicLinkService: MagicLinkService,
     private readonly discordSigninLinkService: DiscordSigninLinkService,
     private readonly clientService: DiscordBotClientService,
+    private readonly signinCodeStore: SigninCodeStore,
   ) {}
+
+  /** ROK-2370: the services the `/login code:` flows run on. */
+  private codeDeps(): SigninCodeDeps {
+    return {
+      redis: this.redis,
+      store: this.signinCodeStore,
+      decide: (user) => this.eligibility(user),
+      mint: (grant, user, name) => this.mintApproval(grant, user, name),
+    };
+  }
 
   getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
     return new SlashCommandBuilder()
       .setName('login')
       .setDescription('Get a private one-time link that signs you in')
       .setDMPermission(true)
+      .addStringOption((o) =>
+        o
+          .setName(LOGIN_CODE_OPTION)
+          .setDescription('The code shown on the sign-in page')
+          .setRequired(false)
+          .setMaxLength(32),
+      )
       .toJSON();
   }
 
@@ -70,7 +106,9 @@ export class LoginCommand
   ): Promise<void> {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
-      await this.respond(interaction);
+      const code = interaction.options.getString(LOGIN_CODE_OPTION);
+      if (code) await replyToSigninCode(interaction, code, this.codeDeps());
+      else await this.respond(interaction);
     } catch (error) {
       // MINOR-2: never the error object — a failed editReply's DiscordAPIError
       // carries the request body, which holds the link.
@@ -112,9 +150,65 @@ export class LoginCommand
     });
   }
 
+  /**
+   * ROK-2370 "Yes, sign me in" (custom id `signin-code:approve:<CODE>`):
+   * re-checks the clicking member, mints, approves the code once and turns
+   * the card into its done / expired state. Never logs the token.
+   */
+  async handleSigninCodeButton(interaction: ButtonInteraction): Promise<void> {
+    const code = parseSigninCodeApproveId(interaction.customId);
+    if (!code) return;
+    await interaction.deferUpdate();
+    try {
+      const approval = await approveSigninCode(
+        interaction,
+        code,
+        this.codeDeps(),
+      );
+      if (approval) {
+        this.logger.log(
+          `signin-code approved (${approval.kind}) by discord:${interaction.user.id}`,
+        );
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'unknown error';
+      this.logger.error(`Failed to approve a sign-in code: ${reason}`);
+      await interaction.editReply({
+        content: LOGIN_FAILED_COPY,
+        components: [],
+      });
+    }
+  }
+
+  private async eligibility(
+    user: SigninCodeUser,
+  ): Promise<SigninCodeEligibility> {
+    const [decision, communityName, caller] = await this.decide(user.id);
+    const displayName =
+      decision.kind === 'existing' && caller ? caller.username : user.username;
+    return { decision, communityName, displayName };
+  }
+
+  private async mintApproval(
+    grant: LoginGrant,
+    user: SigninCodeUser,
+    displayName: string,
+  ): Promise<SigninCodeApproval | null> {
+    if (grant.kind === 'existing') {
+      const token = await this.magicLinkService.generateToken(grant.userId, {
+        src: COMMAND_LINK_SRC,
+      });
+      return token ? { kind: 'existing', token, displayName } : null;
+    }
+    const token = this.discordSigninLinkService.mintToken(
+      firstTimeMintInput(grant, user),
+    );
+    return { kind: 'first-time', token, displayName };
+  }
+
   private async decide(
     discordId: string,
-  ): Promise<[LoginDecision, string | null]> {
+  ): Promise<[LoginDecision, string | null, { username: string } | null]> {
     const [clientUrl, communityName, caller, isGuildMember] = await Promise.all(
       [
         this.settingsService.getTrustedClientUrl(),
@@ -124,7 +218,7 @@ export class LoginCommand
       ],
     );
     const decision = decideLogin({ clientUrl, caller, isGuildMember });
-    return [decision, communityName];
+    return [decision, communityName, caller ?? null];
   }
 
   private async mint(
@@ -141,17 +235,10 @@ export class LoginCommand
       );
       return url ? { url, logId: String(decision.userId) } : null;
     }
-    const { id, username, avatar } = interaction.user;
     const url = this.discordSigninLinkService.mint(
-      {
-        discordId: id,
-        username,
-        avatar: avatar ?? null,
-        src: COMMAND_LINK_SRC,
-        ...(decision.rebind ? { rebind: decision.rebind } : {}),
-      },
+      firstTimeMintInput(decision, interaction.user),
       clientUrl,
     );
-    return { url, logId: `discord:${id}` };
+    return { url, logId: `discord:${interaction.user.id}` };
   }
 }
