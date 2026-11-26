@@ -10,6 +10,7 @@ import {
   readOpenGroupHorizon,
 } from '../../lfg/lfg-group-horizon.helpers';
 import { findOpenLfgNowEventId } from '../../lfg/lfg-playing.helpers';
+import { readGroupSessionEventId } from '../lfm/lfm-embed.provenance.helpers';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { LfgUrgencyRequest } from '../../lfg/lfg-write.helpers';
 import { LFG_DEFAULT_NOW_TTL_MINUTES } from '../../lfg/lfg.constants';
@@ -57,10 +58,25 @@ export async function resolveLfgCommandUrgency(
   if (raw !== null) return parseUrgencyChoice(raw);
   const open = await readOpenGroupHorizon(db, gameId, new Date(), scope);
   if (open) return horizonJoinRequest(open);
-  if ((await findOpenLfgNowEventId(db, gameId)) !== null) {
+  if ((await openSessionId(db, gameId, scope)) !== null) {
     return { urgency: 'now', ttlMinutes: LFG_DEFAULT_NOW_TTL_MINUTES };
   }
   return parseUrgencyChoice(null);
+}
+
+/**
+ * ROK-2352 (delta MINOR 1): a scoped hand looks for ITS group's open session
+ * only, so a keyed session never defaults a bare Any `/lfg` to `now` (or the
+ * reverse). The fold keeps the game-level read.
+ */
+function openSessionId(
+  db: LfgDb,
+  gameId: number,
+  scope: LfgGroupScope,
+): Promise<number | null> {
+  return scope === null
+    ? findOpenLfgNowEventId(db, gameId)
+    : readGroupSessionEventId(db, gameId, scope);
 }
 
 /**

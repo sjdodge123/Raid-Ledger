@@ -45,7 +45,11 @@ import {
 } from '../lfm/lfm-embed.db-helpers';
 import { currentView, endedView, liveFloorFor } from '../lfm/lfm-embed.views';
 import { anyGroupScope } from '../lfm/lfm-embed.any-group.helpers';
-import type { LfgGroupingRegistry } from '../../lfg/lfg-grouping.helpers';
+import {
+  resolveLfgGrouping,
+  type LfgGroupingRegistry,
+} from '../../lfg/lfg-grouping.helpers';
+import { keyedGroupTitle } from '../lfm/lfm-embed.groups.helpers';
 import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
 
 /**
@@ -203,9 +207,7 @@ export async function retireOpenRow(
   if (!live || live.id !== row.id) return 0;
   if (await deps.isBoardEnabled()) return 0;
   const game = await loadLfmGame(deps.db, live.gameId);
-  const view = game
-    ? await farewellView(deps.db, game, live, rowScope(deps, game, live))
-    : null;
+  const view = game ? await rowFarewell(deps, game, live) : null;
   if (view && !(await edited(deps, live, view, context))) return 0;
   await closeLfmMessage(
     deps.db,
@@ -214,6 +216,26 @@ export async function retireOpenRow(
     view?.memberCount ?? live.lastMemberCount,
   );
   return view ? 1 : 0;
+}
+
+/**
+ * ROK-2352 — a keyed row's farewell keeps its instance title and key, the way
+ * `syncKeyedGroups` renders it while live; the `''` row is unchanged.
+ */
+async function rowFarewell(
+  deps: RetireRowDeps,
+  game: LfmGameRow,
+  row: LfmMessageRow,
+): Promise<LfmGroupView> {
+  const view = await farewellView(deps.db, game, row, rowScope(deps, game, row));
+  if (row.groupKey === '') return view;
+  const adapter = deps.registry
+    ? resolveLfgGrouping(deps.registry, game.slug)
+    : null;
+  const gameName = adapter
+    ? await keyedGroupTitle(adapter, game, row.groupKey)
+    : game.name;
+  return { ...view, gameName, groupKey: row.groupKey };
 }
 
 /**

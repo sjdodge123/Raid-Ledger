@@ -8,6 +8,7 @@
 import type { LfgGroupHorizon } from '../../lfg/lfg-group-horizon.helpers';
 import { readOpenGroupHorizon } from '../../lfg/lfg-group-horizon.helpers';
 import { findOpenLfgNowEventId } from '../../lfg/lfg-playing.helpers';
+import { readGroupSessionEventId } from '../lfm/lfm-embed.provenance.helpers';
 import {
   horizonReplyLine,
   resolveLfgCommandUrgency,
@@ -23,6 +24,14 @@ jest.mock('../../lfg/lfg-playing.helpers', () => ({
   findOpenLfgNowEventId: jest.fn(),
 }));
 
+jest.mock('../lfm/lfm-embed.provenance.helpers', () => ({
+  ...jest.requireActual<object>('../lfm/lfm-embed.provenance.helpers'),
+  readGroupSessionEventId: jest.fn(),
+}));
+
+const groupPlaying = readGroupSessionEventId as jest.MockedFunction<
+  typeof readGroupSessionEventId
+>;
 const playing = findOpenLfgNowEventId as jest.MockedFunction<
   typeof findOpenLfgNowEventId
 >;
@@ -39,6 +48,7 @@ function open(horizon: LfgGroupHorizon | null): void {
 beforeEach(() => {
   readOpen.mockReset();
   playing.mockReset().mockResolvedValue(null);
+  groupPlaying.mockReset().mockResolvedValue(null);
 });
 
 describe('resolveLfgCommandUrgency (ROK-1656)', () => {
@@ -61,6 +71,18 @@ describe('resolveLfgCommandUrgency (ROK-1656)', () => {
       expect.any(Date),
       'raid:409',
     );
+  });
+
+  // ROK-2352 delta MINOR 1: a scoped hand asks only for ITS group's session,
+  // so another group's open session never defaults it to `now`.
+  it('a scoped hand reads its own group session, never the whole game', async () => {
+    open(null);
+    playing.mockResolvedValue(99);
+    await expect(resolveLfgCommandUrgency(db, GAME, null, '')).resolves.toEqual(
+      { urgency: 'tonight' },
+    );
+    expect(groupPlaying).toHaveBeenCalledWith(db, GAME, '');
+    expect(playing).not.toHaveBeenCalled();
   });
 
   // Review MAJOR (Lead ruling, option A): a spawn converts every hand, so a

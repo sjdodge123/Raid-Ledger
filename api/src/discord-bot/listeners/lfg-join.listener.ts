@@ -38,7 +38,7 @@
  * So the two sources no longer differ at all, which is the point: one
  * resolution, not two that drift.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { MessageFlags } from 'discord.js';
 import type { ButtonInteraction } from 'discord.js';
@@ -51,6 +51,10 @@ import {
 } from '../../lfg/lfg-group-horizon.helpers';
 import { LfgService, type CreateIntentResult } from '../../lfg/lfg.service';
 import { SettingsService } from '../../settings/settings.service';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
+import { anyGroupScope } from '../lfm/lfm-embed.any-group.helpers';
+import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
+import { loadLfmGame } from '../lfm/lfm-embed.db-helpers';
 import { DISCORD_BOT_EVENTS, LFG_BUTTON_IDS } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
@@ -128,7 +132,18 @@ export class LfgJoinListener {
     private readonly clientService: DiscordBotClientService,
     private readonly lfgService: LfgService,
     private readonly settingsService: SettingsService,
+    @Optional() private readonly pluginRegistry?: PluginRegistryService,
   ) {}
+
+  /** ROK-2352: the press's group — its key, else the Any scope. */
+  private async scope({
+    gameId,
+    groupKey,
+  }: LfgJoinPress): Promise<LfgGroupScope> {
+    if (groupKey || !this.pluginRegistry) return groupKey || null;
+    const game = await loadLfmGame(this.db, gameId);
+    return game ? anyGroupScope(this.pluginRegistry, game) : null;
+  }
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   onBotConnected(): void {
@@ -191,7 +206,9 @@ export class LfgJoinListener {
     // joiner inheriting a clock that has already run out.
     const [horizon, timezone] = await Promise.all([
       // ROK-2352 P2-4 — a keyed button inherits ITS group's horizon.
-      readGroupHorizon(this.db, gameId, new Date(), groupKey || null),
+      // A v1/Any press reads the Any group (`''`) while the adapter is
+      // active, never the whole game (delta MINOR 1).
+      readGroupHorizon(this.db, gameId, new Date(), await this.scope(press)),
       this.settingsService.getDiscordBotTimezone(),
     ]);
     // ROK-2352 — a v2 id raises the hand in its group; v1 omits the key
