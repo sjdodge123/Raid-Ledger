@@ -41,7 +41,7 @@ export function LfgHubPicker(props: LfgGroupingContext): JSX.Element | null {
 function FromHub({ hub }: { hub: WowHubOption }): JSX.Element {
     return (
         <>
-            <StatusChip tone="neutral">from {hub.hubName}</StatusChip>
+            <StatusChip tone="neutral" title={`LFG opened from ${hub.hubName}`}>from {hub.hubName}</StatusChip>
             <Link to={guildHref(hub.hubId)} className={BACK_LINK_CLASS}>Back to {hub.hubName}</Link>
         </>
     );
