@@ -187,8 +187,9 @@ export async function sessionView(
 export async function currentView(
   db: LfgDb,
   game: LfmGameRow,
+  scope: LfgGroupScope = null,
 ): Promise<LfmGroupView> {
-  return (await sessionView(db, game)) ?? liveView(db, game);
+  return (await sessionView(db, game)) ?? liveView(db, game, scope);
 }
 
 /**
@@ -365,8 +366,9 @@ async function expiredBranch(
   game: LfmGameRow,
   lastMemberCount: number,
   liveFloor: number,
+  scope: LfgGroupScope,
 ): Promise<LfmGroupView> {
-  const live = await liveView(db, game);
+  const live = await liveView(db, game, scope);
   if (live.memberCount < liveFloor) return expiredView(game, lastMemberCount);
   return (await sessionView(db, game)) ?? live;
 }
@@ -397,6 +399,7 @@ export async function viewForChange(
   payload: LfgGroupChangedPayload,
   logger: ViewLogger,
   liveFloor: number,
+  scope: LfgGroupScope = null,
 ): Promise<LfmGroupView | null> {
   // ROK-1494 AC7 — the live session outranks every non-terminal read. A
   // `converted` / `expired` change genuinely ends the group and must still be
@@ -406,7 +409,7 @@ export async function viewForChange(
     if (session) return session;
   }
   if (payload.reason === 'expired') {
-    return expiredBranch(db, game, lastMemberCount, liveFloor);
+    return expiredBranch(db, game, lastMemberCount, liveFloor, scope);
   }
   if (payload.reason === 'converted') {
     return convertedBranch(db, game, payload, logger);
@@ -416,7 +419,7 @@ export async function viewForChange(
   if (payload.reason === 'playing') {
     return playingBranch(db, game, payload, logger);
   }
-  const view = await liveView(db, game);
+  const view = await liveView(db, game, scope);
   // E12: 3 -> 2 is still LFM. Only dropping below the floor is terminal —
   // and ROK-1505 D4 makes that floor ONE hand on the board: a 2 -> 1
   // withdrawal retitles the forum post back to LOOKING instead of archiving it.

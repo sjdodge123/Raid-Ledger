@@ -57,7 +57,13 @@ import {
   TERMINAL_STATE,
   type LfmGroupView,
 } from './lfm-embed.helpers';
-import { currentView, liveFloorFor, viewForChange } from './lfm-embed.views';
+import { liveFloorFor, viewForChange } from './lfm-embed.views';
+import {
+  anyGroupScope,
+  nothingToPost,
+  readAnyGroup,
+} from './lfm-embed.any-group.helpers';
+import { createKeyedPostBudget } from './lfm-embed.groups.helpers';
 import {
   reconcileKeyedGroups,
   runKeyedPass,
@@ -66,13 +72,13 @@ import {
 import {
   closeLfmMessage,
   findOpenLfmMessage,
-  listUntrackedLfmGames,
   loadLfmGame,
   recordLfmRender,
   type LfmMessageRow,
 } from './lfm-embed.db-helpers';
 import {
   reconcileOpenRows,
+  reconcileUntrackedGroups,
   type LfmReconcileDeps,
 } from './lfm-embed.reconcile.helpers';
 
@@ -80,6 +86,8 @@ import {
 @Injectable()
 export class LfmEmbedService {
   private readonly logger = new Logger(LfmEmbedService.name);
+  /** ROK-2352 Q11 — new keyed posts per game, the rename budget's ration. */
+  private readonly keyedPostBudget = createKeyedPostBudget();
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: LfgDb,
@@ -177,8 +185,7 @@ export class LfmEmbedService {
     try {
       const game = await loadLfmGame(this.db, payload.gameId);
       if (!game) return;
-      // Plug-in point (later lane): while the WoW adapter is active the `''`
-      // post below is still game-wide — scope this read and `currentView`.
+      // ROK-2352: the `''` row; with an adapter active its read is `''` only.
       const existing = await findOpenLfmMessage(this.db, game.id);
       // A hidden or banned game never gets a NEW public post (the rule
       // `requireVisibleGame` applies to every LFG write); an open one is still
@@ -187,9 +194,11 @@ export class LfmEmbedService {
       // ROK-1494 AC7 — `currentView`, never a bare `liveView`: a game whose
       // session has already spawned has an empty live group, and a second
       // LFM_REACHED would otherwise paint `0 looking` over `PLAYING NOW`.
-      const view = await currentView(this.db, game);
-      if (existing) await this.editRow(existing, view);
-      else await this.postNew(game.id, view);
+      const read = await readAnyGroup(this.db, this.pluginRegistry, game);
+      if (nothingToPost(read)) {
+        // Only keyed hands are up — the keyed pass below owns them.
+      } else if (existing) await this.editRow(existing, read.view);
+      else await this.postNew(game.id, read.view);
     } catch (err) {
       this.warn(`post the LFM message for game ${payload.gameId}`, err);
     }
@@ -206,6 +215,7 @@ export class LfmEmbedService {
     return {
       ...this.reconcileDeps(),
       registry: this.pluginRegistry,
+      postBudget: this.keyedPostBudget,
       postNew: (gameId, view) => this.postNew(gameId, view),
     };
   }
@@ -248,6 +258,7 @@ export class LfmEmbedService {
       payload,
       this.logger,
       liveFloorFor(row.postKind),
+      anyGroupScope(this.pluginRegistry, game),
     );
     if (view) await this.editRow(row, view);
   }
@@ -289,33 +300,16 @@ export class LfmEmbedService {
   private reconcileDeps(): LfmReconcileDeps {
     return {
       db: this.db,
+      registry: this.pluginRegistry,
       serialized: (gameId, work) => this.serialized(gameId, work),
       editRow: (row, view) => this.editRow(row, view),
       warn: (action, err) => this.warn(action, err),
     };
   }
 
-  /**
-   * E1's other half. A group that crossed the floor while the bot was down has
-   * NO row at all — `onLfmReached` returned before writing one — so the walk
-   * above cannot see it. Post it now, exactly as the dropped `LFM_REACHED`
-   * would have.
-   */
-  private async reconcileUntrackedGroups(): Promise<void> {
-    for (const gameId of await listUntrackedLfmGames(this.db)) {
-      try {
-        await this.serialized(gameId, async () => {
-          const game = await loadLfmGame(this.db, gameId);
-          if (!game || !isVisibleGame(game)) return;
-          await this.postNew(game.id, await currentView(this.db, game));
-        });
-      } catch (err) {
-        this.warn(
-          `post the LFM message missed offline for game ${gameId}`,
-          err,
-        );
-      }
-    }
+  /** E1's other half — `reconcileUntrackedGroups` in the reconcile module. */
+  private reconcileUntrackedGroups(): Promise<void> {
+    return reconcileUntrackedGroups(this.keyedDeps());
   }
 
   /**

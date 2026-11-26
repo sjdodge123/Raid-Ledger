@@ -7,7 +7,15 @@
  * edit / heal / close write and the warn sink, and hands them in as
  * {@link LfmReconcileDeps}.
  */
+import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
+import type { LfgGroupingRegistry } from '../../lfg/lfg-grouping.helpers';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
+import { isVisibleGame } from '../../igdb/igdb-visibility.helpers';
+import {
+  anyGroupScope,
+  nothingToPost,
+  readAnyGroup,
+} from './lfm-embed.any-group.helpers';
 import type { LfmGroupView } from './lfm-embed.helpers';
 import {
   convertedView,
@@ -19,6 +27,7 @@ import {
 import {
   conversionSincePosted,
   listOpenLfmMessages,
+  listUntrackedLfmGames,
   loadLfmGame,
   type LfmGameRow,
   type LfmMessageRow,
@@ -27,6 +36,8 @@ import {
 /** The service collaborators the reconcile walk needs. */
 export interface LfmReconcileDeps {
   db: LfgDb;
+  /** ROK-2352: scopes the `''` row to `''` while an adapter is active. */
+  registry?: LfgGroupingRegistry | undefined;
   /** Queue `work` on the game's chain (`LfgGameChainService`). */
   serialized: (gameId: number, work: () => Promise<void>) => Promise<void>;
   /** The service's edit-then-persist write (heal + close rules included). */
@@ -72,7 +83,8 @@ export async function reconcileRow(
 ): Promise<void> {
   const game = await loadLfmGame(deps.db, row.gameId);
   if (!game) return;
-  await deps.editRow(row, await reconcileView(deps.db, row, game));
+  const scope = anyGroupScope(deps.registry, game);
+  await deps.editRow(row, await reconcileView(deps.db, row, game, scope));
 }
 
 /**
@@ -108,6 +120,7 @@ export async function reconcileView(
   db: LfgDb,
   row: LfmMessageRow,
   game: LfmGameRow,
+  scope: LfgGroupScope = null,
 ): Promise<LfmGroupView> {
   // ROK-1494 AC7 — `sessionView` is the SHARED answer; `viewForChange` asks
   // the same helper, so the hot path and the reconcile cannot disagree.
@@ -115,7 +128,38 @@ export async function reconcileView(
   if (session) return session;
   const converted = await conversionSincePosted(db, row);
   if (converted) return convertedView(db, game, converted);
-  const liveGroup = await liveView(db, game);
+  const liveGroup = await liveView(db, game, scope);
   if (liveGroup.memberCount >= liveFloorFor(row.postKind)) return liveGroup;
   return endedView(db, game, row);
+}
+
+/** {@link reconcileUntrackedGroups}'s collaborators: the walk's plus a post. */
+export interface LfmUntrackedDeps extends LfmReconcileDeps {
+  postNew: (gameId: number, view: LfmGroupView) => Promise<void>;
+}
+
+/**
+ * E1's other half. A group that crossed the floor while the bot was down has
+ * NO row at all — `onLfmReached` returned before writing one — so the walk
+ * above cannot see it. Post it now, exactly as the dropped `LFM_REACHED`
+ * would have. ROK-2352: with an adapter active only the `''` group's hands
+ * count here; keyed-only hands are the keyed pass's (`reconcileKeyedGroups`).
+ *
+ * @param deps - The service's collaborators.
+ */
+export async function reconcileUntrackedGroups(
+  deps: LfmUntrackedDeps,
+): Promise<void> {
+  for (const gameId of await listUntrackedLfmGames(deps.db)) {
+    try {
+      await deps.serialized(gameId, async () => {
+        const game = await loadLfmGame(deps.db, gameId);
+        if (!game || !isVisibleGame(game)) return;
+        const read = await readAnyGroup(deps.db, deps.registry, game);
+        if (!nothingToPost(read)) await deps.postNew(game.id, read.view);
+      });
+    } catch (err) {
+      deps.warn(`post the LFM message missed offline for game ${gameId}`, err);
+    }
+  }
 }

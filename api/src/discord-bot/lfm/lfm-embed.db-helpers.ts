@@ -15,7 +15,7 @@
  * compose the live predicate family (that is the defect round 1 shipped).
  */
 import { and, count, eq, gte, isNull, notExists, sql } from 'drizzle-orm';
-import type { LfgMemberDto } from '@raid-ledger/contract';
+import { LFG_ANY_GROUP_KEY, type LfgMemberDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
 import {
@@ -342,6 +342,9 @@ export async function listUntrackedLfmGames(
       and(
         eq(schema.lfgGroupMessages.gameId, schema.lfgIntents.gameId),
         eq(schema.lfgGroupMessages.state, 'open'),
+        // ROK-2352: only the `''` row tracks the game-wide post; a keyed
+        // row must not hide a `''` group missed offline.
+        eq(schema.lfgGroupMessages.groupKey, LFG_ANY_GROUP_KEY),
       ),
     );
   const rows = await db

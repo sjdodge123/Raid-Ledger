@@ -27,6 +27,7 @@ import {
   liveIntent,
   type LfgDb,
 } from '../../lfg/lfg-query.helpers';
+import { ThreadRenameBudget } from '../lfg-board/lfg-board-thread.helpers';
 import type { LfgGroupingAdapter } from '../../plugins/plugin-host/lfg-grouping.adapter';
 import type { LfmGroupView } from './lfm-embed.helpers';
 import {
@@ -38,6 +39,29 @@ import { expiredView, liveFloorFor, liveView } from './lfm-embed.views';
 
 /** Spec Q11: at most this many open keyed posts per game. */
 export const LFG_BOARD_MAX_GROUP_POSTS_PER_GAME = 4;
+
+/** Spec Q11: at most this many NEW keyed posts per game per window. */
+export const LFG_BOARD_NEW_GROUP_POSTS_PER_WINDOW = 3;
+
+/** The window {@link LFG_BOARD_NEW_GROUP_POSTS_PER_WINDOW} is counted over. */
+export const LFG_BOARD_NEW_GROUP_POSTS_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * The new-post ration, keyed by game id — the board's `ThreadRenameBudget`
+ * (a sliding-window ration) built with the limits above. Over budget, the
+ * group simply waits for the next render pass.
+ */
+export interface LfmKeyedPostBudget {
+  trySpend(key: string, now?: number): boolean;
+}
+
+/** One process-wide ration, held by `LfmEmbedService`. */
+export function createKeyedPostBudget(): LfmKeyedPostBudget {
+  return new ThreadRenameBudget(
+    LFG_BOARD_NEW_GROUP_POSTS_PER_WINDOW,
+    LFG_BOARD_NEW_GROUP_POSTS_WINDOW_MS,
+  );
+}
 
 /** The reads one keyed pass makes — a seam so the pass is unit-testable. */
 export interface LfmKeyedReads {
@@ -60,6 +84,8 @@ export interface LfmKeyedSyncDeps {
   post(view: LfmGroupView): Promise<void>;
   /** Defaults to {@link LFM_KEYED_READS}; specs inject fakes. */
   reads?: LfmKeyedReads;
+  /** The ≤3-new-posts-per-10-min ration; absent = unrationed (specs only). */
+  postBudget?: LfmKeyedPostBudget;
 }
 
 /** Open rows of the game's keyed groups (never the `''` row). */
@@ -184,14 +210,13 @@ export async function syncKeyedGroups(
     );
   }
   if (!allowPost) return;
-  await postNewKeyedGroups(deps, adapter, game, open, counts);
+  await postNewKeyedGroups(deps, adapter, game, open, counts, now);
 }
 
 /**
- * Post every keyed group at LFM that has no row yet, inside the cap.
- *
- * Plug-in point (later lane): the ≤3-new-posts-per-10-min token bucket
- * gates each `deps.post` here.
+ * Post every keyed group at LFM that has no row yet, inside the open-post cap
+ * and the new-post ration (Q11). A group refused either waits for the next
+ * render pass — its hands are untouched.
  */
 async function postNewKeyedGroups(
   deps: LfmKeyedSyncDeps,
@@ -199,12 +224,15 @@ async function postNewKeyedGroups(
   game: LfmGameRow,
   open: LfmMessageRow[],
   counts: Map<string, number>,
+  now: Date,
 ): Promise<void> {
   const tracked = new Set(open.map((r) => r.groupKey));
   let slots = LFG_BOARD_MAX_GROUP_POSTS_PER_GAME - tracked.size;
   for (const [groupKey, n] of counts) {
     if (slots <= 0) return;
     if (tracked.has(groupKey) || n < LFM_FLOOR) continue;
+    if (deps.postBudget?.trySpend(String(game.id), now.getTime()) === false)
+      return;
     const title = await keyedGroupTitle(adapter, game, groupKey);
     await deps.post(await keyedLiveView(deps, game, groupKey, title));
     slots -= 1;
