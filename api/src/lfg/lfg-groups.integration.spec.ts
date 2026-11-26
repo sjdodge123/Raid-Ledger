@@ -29,7 +29,7 @@ import type {
   LfgGroupingAdapter,
 } from '../plugins/plugin-host/lfg-grouping.adapter';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
-import { LFG_MAX_HANDS_PER_GAME } from './lfg.constants';
+import { LFG_HAND_CAP_CODE, LFG_MAX_HANDS_PER_GAME } from './lfg.constants';
 import {
   createGame,
   createMembers,
@@ -184,7 +184,7 @@ function sortedIds(rows: { userId: number }[]): number[] {
 // ─── AC3 — the write path ───────────────────────────────────────────────────
 
 describe('POST /lfg with an active grouping adapter (AC3)', () => {
-  it(`refuses the user's ${LFG_MAX_HANDS_PER_GAME + 1}th live hand with 409, '' counting as a group`, async () => {
+  it(`refuses the user's ${LFG_MAX_HANDS_PER_GAME + 1}th live hand with 400, '' counting as a group`, async () => {
     const [alice] = await createMembers(testApp, 'alice');
     const game = await groupsGame();
     await postOk(alice, game.id);
@@ -192,11 +192,11 @@ describe('POST /lfg with an active grouping adapter (AC3)', () => {
       await postOk(alice, game.id, key);
     }
 
-    // NOTE: spec AC3 says 400; the implementation (L3) chose 409 Conflict
-    // (`assertHandCap` → ConflictException). Pinned as 409 — flagged to Lead.
+    // Spec AC3: 400 with a stable code (review MINOR-6; was 409).
     const sixth = await post(alice, game.id, 'dungeon:5');
 
-    expect(sixth.status).toBe(409);
+    expect(sixth.status).toBe(400);
+    expect(sixth.body).toMatchObject({ code: LFG_HAND_CAP_CODE });
     expect(await activeKeys(alice.userId, game.id)).toEqual([
       '',
       'dungeon:1',

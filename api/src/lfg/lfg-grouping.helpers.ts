@@ -6,7 +6,7 @@
  *
  * Also the per-user live-hand cap (Q2), checked under the per-game lock.
  */
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { and, eq, gt, ne, sql } from 'drizzle-orm';
 import { LFG_ANY_GROUP_KEY } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
@@ -17,7 +17,10 @@ import type {
 } from '../plugins/plugin-host/lfg-grouping.adapter';
 import type { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import type { LfgDb } from './lfg-query.helpers';
-import { LFG_MAX_HANDS_PER_GAME } from './lfg.constants';
+import {
+  LFG_HAND_CAP_CODE,
+  LFG_MAX_HANDS_PER_GAME,
+} from './lfg.constants';
 
 /** The slice of the registry the fold needs. */
 export type LfgGroupingRegistry = Pick<PluginRegistryService, 'getAdapter'>;
@@ -94,8 +97,11 @@ export async function assertHandCap(
       ),
     );
   if ((row?.n ?? 0) >= LFG_MAX_HANDS_PER_GAME) {
-    throw new ConflictException(
-      `You can have at most ${LFG_MAX_HANDS_PER_GAME} LFG hands up for one game`,
-    );
+    // Spec AC3: 400, with a stable `code` so clients need not key on status.
+    throw new BadRequestException({
+      statusCode: 400,
+      message: `You can be in up to ${LFG_MAX_HANDS_PER_GAME} groups for this game`,
+      code: LFG_HAND_CAP_CODE,
+    });
   }
 }

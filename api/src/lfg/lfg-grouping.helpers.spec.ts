@@ -1,7 +1,7 @@
 /**
  * ROK-2352 §3.7 / Q2 — the fold rule and the per-user hand cap.
  */
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import { EXTENSION_POINTS } from '../plugins/plugin-host/extension-points';
 import type { LfgGroupingAdapter } from '../plugins/plugin-host/lfg-grouping.adapter';
@@ -12,7 +12,7 @@ import {
   type LfgGroupingRegistry,
 } from './lfg-grouping.helpers';
 import type { LfgDb } from './lfg-query.helpers';
-import { LFG_MAX_HANDS_PER_GAME } from './lfg.constants';
+import { LFG_HAND_CAP_CODE, LFG_MAX_HANDS_PER_GAME } from './lfg.constants';
 
 const CTX = { gameId: 3, gameSlug: 'world-of-warcraft-classic' };
 
@@ -95,11 +95,19 @@ describe('assertHandCap (Q2)', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('refuses the 6th live hand with a 409', async () => {
+  it('refuses the 6th live hand with a 400 carrying the cap code (spec AC3)', async () => {
     const db = createDrizzleMock();
     db.where.mockResolvedValueOnce([{ n: 5 }]);
-    await expect(
-      assertHandCap(db as unknown as LfgDb, 1, 3, 'dungeon:42'),
-    ).rejects.toBeInstanceOf(ConflictException);
+    const err: unknown = await assertHandCap(
+      db as unknown as LfgDb,
+      1,
+      3,
+      'dungeon:42',
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getStatus()).toBe(400);
+    expect((err as BadRequestException).getResponse()).toMatchObject({
+      code: LFG_HAND_CAP_CODE,
+    });
   });
 });
