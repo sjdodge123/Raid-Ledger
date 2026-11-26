@@ -19,16 +19,13 @@ import {
   type ChatInputCommandInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
-import { and, eq, ilike, type SQL } from 'drizzle-orm';
 import type { LfgGroupSummaryDto } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { escapeLikePattern } from '../../common/search.util';
+import { eq } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { VISIBILITY_FILTER } from '../../igdb/igdb-visibility.helpers';
 import * as schema from '../../drizzle/schema';
 import { listGroupMembers } from '../../lfg/lfg-query.helpers';
 import { LfgService } from '../../lfg/lfg.service';
-import { resolveLfgGrouping } from '../../lfg/lfg-grouping.helpers';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { SettingsService } from '../../settings/settings.service';
 import { autocompleteGameIds } from './bind.autocomplete';
@@ -52,49 +49,24 @@ import {
 } from './lfg-command-urgency.helpers';
 import {
   LFG_DUNGEON_OPTION,
-  buildDungeonChoices,
   buildUnknownDungeonReply,
-  resolveDungeonGroup,
-  type LfgDungeonChoice,
+  dungeonOption,
   type LfgDungeonGroup,
 } from './lfg-dungeon.helpers';
+import {
+  catalogueChoices,
+  findVisibleLfgGame,
+  joinRequest,
+  resolveGameDungeon,
+  type LfgGamePick,
+  type LfgJoinOptions,
+} from './lfg-command-join.helpers';
 import { listLfmThreadsForGames } from '../lfg-board/lfg-board.db-helpers';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 
 /** Discord accepts at most 25 autocomplete choices, and one is the sentinel. */
 const MAX_GAME_CHOICES = 24;
-/** `games.id` is an int4; anything larger is not a pick, it is noise. */
-const PG_INT4_MAX = 2147483647;
-
-/** A resolved, visible game: its id and the slug the grouping keys on. */
-interface LfgGamePick {
-  id: number;
-  slug: string;
-}
-
-/** What the caller typed into `/lfg`'s three options. */
-interface LfgJoinOptions {
-  game: string;
-  urgency: string | null;
-  dungeon: string | null;
-}
-
-/**
- * The `createIntent` request: urgency, the community zone (ROK-1616), and —
- * ROK-2352 — the group key only for a keyed pick (`''` and fold send none).
- */
-function joinRequest(
-  opts: Awaited<ReturnType<typeof resolveLfgCommandUrgency>>,
-  ctx: LfgReplyContext,
-  group: LfgDungeonGroup,
-): Parameters<LfgService['createIntent']>[2] {
-  return {
-    ...opts,
-    ...(ctx.timezone !== undefined ? { timezone: ctx.timezone } : {}),
-    ...(group.groupKey ? { groupKey: group.groupKey } : {}),
-  };
-}
 
 /** The caller as the `/lfg` surface needs to see them. */
 export interface LfgCaller {
@@ -210,15 +182,7 @@ export class LfgCommand
         )
         // ROK-2352 §4.2 — lists raids too, hence "Dungeon or raid". No
         // `role` option (Q8): the hand copies the last web pick.
-        .addStringOption((opt) =>
-          opt
-            .setName(LFG_DUNGEON_OPTION)
-            .setDescription(
-              'Dungeon or raid (WoW) — leave empty for Any dungeon',
-            )
-            .setAutocomplete(true)
-            .setMaxLength(100),
-        )
+        .addStringOption(dungeonOption('leave empty for Any dungeon'))
         .toJSON()
     );
   }
@@ -230,7 +194,13 @@ export class LfgCommand
     const focused = interaction.options.getFocused(true);
     if (focused.name === LFG_DUNGEON_OPTION) {
       const game = interaction.options.getString('game');
-      await interaction.respond(await this.dungeonChoices(game, focused.value));
+      const choices = await catalogueChoices(
+        this.db,
+        this.pluginRegistry,
+        game,
+        focused.value,
+      );
+      await interaction.respond(choices);
       return;
     }
     if (focused.name !== 'game') return;
@@ -273,26 +243,37 @@ export class LfgCommand
     options: LfgJoinOptions,
     ctx: LfgReplyContext,
   ): Promise<void> {
-    const game = await this.resolveGame(options.game);
+    const game = await findVisibleLfgGame(this.db, options.game);
     if (game === null) {
       await interaction.editReply({
         embeds: [buildUnknownGameReply(options.game, ctx)],
       });
       return;
     }
-    const group = await this.dungeonGroup(game, options.dungeon);
+    const group = await resolveGameDungeon(
+      this.pluginRegistry,
+      game,
+      options.dungeon,
+    );
     if (group === null) {
       await interaction.editReply(
         buildUnknownDungeonReply(options.dungeon ?? ''),
       );
       return;
     }
-    // ROK-1616 — `tonight` expires at 04:00 on the COMMUNITY's wall clock, so
-    // the write needs the zone. `ctx` already carries it (one
-    // `getDiscordBotTimezone()` in `loadLfgReplyContext`); never add a second
-    // settings lookup here.
-    // ROK-1656 — no `urgency:` joins an open group on its horizon (as the
-    // board `+1` does) and otherwise raises a tonight hand.
+    await this.raiseHand(interaction, userId, { game, group }, options, ctx);
+  }
+
+  /** The one write path, then the join reply. */
+  private async raiseHand(
+    interaction: ChatInputCommandInteraction,
+    userId: number,
+    { game, group }: { game: LfgGamePick; group: LfgDungeonGroup },
+    options: LfgJoinOptions,
+    ctx: LfgReplyContext,
+  ): Promise<void> {
+    // ROK-1616 / ROK-1656 — see `joinRequest` (zone from `ctx`, never a
+    // second settings lookup; no `urgency:` joins an open group's horizon).
     const opts = await resolveLfgCommandUrgency(
       this.db,
       game.id,
@@ -315,33 +296,6 @@ export class LfgCommand
       group,
     );
     await interaction.editReply({ embeds: [buildJoinReply(input, ctx)] });
-  }
-
-  /** ROK-2352 — the `dungeon` option for this game; null = unknown pick. */
-  private dungeonGroup(
-    game: LfgGamePick,
-    typed: string | null,
-  ): Promise<LfgDungeonGroup | null> {
-    const adapter = resolveLfgGrouping(this.pluginRegistry, game.slug);
-    const ctx = { gameId: game.id, gameSlug: game.slug };
-    return resolveDungeonGroup(adapter, ctx, typed);
-  }
-
-  /** ROK-2352 — the typed game's catalogue; none when it folds. */
-  private async dungeonChoices(
-    gameTyped: string | null,
-    typed: string,
-  ): Promise<LfgDungeonChoice[]> {
-    const game = gameTyped ? await this.resolveGame(gameTyped) : null;
-    const adapter = game
-      ? resolveLfgGrouping(this.pluginRegistry, game.slug)
-      : null;
-    if (game === null || adapter === null) return [];
-    const groups = await adapter.listGroups({
-      gameId: game.id,
-      gameSlug: game.slug,
-    });
-    return buildDungeonChoices(groups, typed);
   }
 
   /** Everything the join reply renders beyond the write result itself. */
@@ -410,42 +364,6 @@ export class LfgCommand
         ? await listGroupMembers(this.db, gameId)
         : await listGroupMembers(this.db, gameId, scope);
     return members.map((m) => m.displayName ?? m.username);
-  }
-
-  /**
-   * Free-typed text first: one exact (case-insensitive) title match, with LIKE
-   * metacharacters escaped so `%` cannot select an arbitrary game and then
-   * WRITE an intent for it. Only when no title matches is an all-digit value
-   * read as an autocomplete pick (`autocompleteGameIds` values are
-   * `String(games.id)`): a game titled `1942` must win over the game whose id
-   * happens to be 1942.
-   */
-  private async resolveGame(typed: string): Promise<LfgGamePick | null> {
-    const byName = await this.findGame(
-      ilike(schema.games.name, escapeLikePattern(typed)),
-    );
-    if (byName !== null) return byName;
-    const id = Number(typed);
-    const isPick =
-      /^\d+$/.test(typed) &&
-      Number.isSafeInteger(id) &&
-      id > 0 &&
-      id <= PG_INT4_MAX;
-    return isPick ? this.findGame(eq(schema.games.id, id)) : null;
-  }
-
-  /**
-   * The first VISIBLE game satisfying `where`, or null. A hidden or banned game
-   * falls through to the unknown-game reply rather than reaching
-   * `createIntent`'s 404 (which would surface as "Something went wrong").
-   */
-  private async findGame(where: SQL): Promise<LfgGamePick | null> {
-    const [match] = await this.db
-      .select({ id: schema.games.id, slug: schema.games.slug })
-      .from(schema.games)
-      .where(and(where, VISIBILITY_FILTER()))
-      .limit(1);
-    return match ?? null;
   }
 
   /** Delegates so the button listener resolves identity the identical way. */

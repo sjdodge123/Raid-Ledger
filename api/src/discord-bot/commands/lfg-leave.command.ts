@@ -57,6 +57,7 @@ import {
   LFG_DUNGEON_OPTION,
   buildDungeonChoices,
   buildUnknownDungeonReply,
+  dungeonOption,
   listOwnHandKeys,
   resolveDungeonGroup,
   type LfgDungeonChoice,
@@ -104,15 +105,7 @@ export class LfgLeaveCommand
             .setMaxLength(100),
         )
         // ROK-2352 — omitted = every hand in the game (`withdraw` with no group).
-        .addStringOption((opt) =>
-          opt
-            .setName(LFG_DUNGEON_OPTION)
-            .setDescription(
-              'Dungeon or raid (WoW) — leave empty to leave them all',
-            )
-            .setAutocomplete(true)
-            .setMaxLength(100),
-        )
+        .addStringOption(dungeonOption('leave empty to leave them all'))
         .toJSON()
     );
   }
@@ -185,6 +178,16 @@ export class LfgLeaveCommand
       await interaction.editReply(buildUnknownDungeonReply(dungeon ?? ''));
       return;
     }
+    await this.leaveAndReply(interaction, userId, game, group);
+  }
+
+  /** The write (every hand when `group` is undefined), worded. */
+  private async leaveAndReply(
+    interaction: ChatInputCommandInteraction,
+    userId: number,
+    game: LfgLeaveGame,
+    group: LfgDungeonGroup | undefined,
+  ): Promise<void> {
     const outcome = await leaveOneGroup(
       this.lfgService,
       userId,

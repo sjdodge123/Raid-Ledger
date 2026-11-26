@@ -10,6 +10,7 @@
  * Pure apart from the adapter call and one read of the caller's own hands.
  */
 import { and, eq, gt } from 'drizzle-orm';
+import type { SlashCommandStringOption } from 'discord.js';
 import { LFG_ANY_GROUP_KEY } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
@@ -28,6 +29,23 @@ export const LFG_ANY_DUNGEON_LABEL = 'Any dungeon';
 /** Discord's cap on autocomplete choices and on a choice's label. */
 const MAX_CHOICES = 25;
 const MAX_CHOICE_NAME = 100;
+
+/**
+ * The `dungeon` option builder both commands add (label "Dungeon or raid",
+ * spec §4.2 APPLY), autocompleted, optional.
+ *
+ * @param hint - What leaving it empty does on this command.
+ */
+export function dungeonOption(
+  hint: string,
+): (opt: SlashCommandStringOption) => SlashCommandStringOption {
+  return (opt) =>
+    opt
+      .setName(LFG_DUNGEON_OPTION)
+      .setDescription(`Dungeon or raid (WoW) — ${hint}`)
+      .setAutocomplete(true)
+      .setMaxLength(100);
+}
 
 /** One autocomplete choice. */
 export interface LfgDungeonChoice {

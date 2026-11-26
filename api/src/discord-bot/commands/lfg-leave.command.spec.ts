@@ -146,6 +146,8 @@ describe('LfgLeaveCommand — definition (ROK-1660)', () => {
         required: false,
         max_length: 100,
       }),
+      // ROK-2352 — the second option: which group of the game to leave.
+      expect.objectContaining({ name: 'dungeon', required: false }),
     ]);
   });
 });
