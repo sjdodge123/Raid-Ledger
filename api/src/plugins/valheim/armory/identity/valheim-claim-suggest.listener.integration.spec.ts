@@ -9,19 +9,21 @@
  */
 import { and, eq } from 'drizzle-orm';
 import { ValheimCharacterMessageSchema } from '@raid-ledger/contract';
-import { getTestApp, type TestApp } from '../../common/testing/test-app';
-import { truncateAllTables } from '../../common/testing/integration-helpers';
-import { nonEmpty } from '../../common/testing/narrow';
-import * as schema from '../../drizzle/schema';
-import { NotificationDedupService } from '../../notifications/notification-dedup.service';
-import { fakeServer } from '../../plugins/pelican/testing/pelican-fixtures';
-import { loadValheimFixture } from '../../plugins/valheim/link/ingest/valheim-link-ingest.testing';
+import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
+import { truncateAllTables } from '../../../../common/testing/integration-helpers';
+import { nonEmpty } from '../../../../common/testing/narrow';
+import * as schema from '../../../../drizzle/schema';
+import { NotificationDedupService } from '../../../../notifications/notification-dedup.service';
+import { fakeServer } from '../../../pelican/testing/pelican-fixtures';
+import { loadValheimFixture } from '../../link/ingest/valheim-link-ingest.testing';
 import {
   CLAIM_REPLY_COPY,
   CLAIM_SUGGEST_THROTTLE_TTL_SECONDS,
   claimSuggestKeys,
-} from '../../plugins/valheim/armory/identity/valheim-claim-suggest.copy';
+} from './valheim-claim-suggest.copy';
 import { ValheimClaimSuggestListener } from './valheim-claim-suggest.listener';
+import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
+import { VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 
 const NAME = 'Quillavar';
 let testApp: TestApp;
@@ -35,6 +37,12 @@ beforeAll(async () => {
   testApp = await getTestApp();
   listener = testApp.app.get(ValheimClaimSuggestListener);
   dedup = testApp.app.get(NotificationDedupService);
+  // ROK-2356: the buttons only act while Valheim is on (boot leaves it off).
+  await testApp.app.get(PluginRegistryService).activate(VALHEIM_PLUGIN_ID);
+});
+
+afterAll(async () => {
+  await testApp.app.get(PluginRegistryService).deactivate(VALHEIM_PLUGIN_ID);
 });
 
 afterEach(async () => {
