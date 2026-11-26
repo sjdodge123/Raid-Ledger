@@ -6,11 +6,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPollSharePreview, joinPollShare, resetPollShareToken } from '../lib/api-client';
 import { toast } from '../lib/toast';
+import { VIEWER_INDEPENDENT_META } from './viewer-private-caches';
 
 /** Public preview for `/p/poll/:token`. A 404 (unknown / reset token) is not retried. */
 export function usePollSharePreview(token: string | undefined) {
     return useQuery({
         queryKey: ['poll-share', 'preview', token],
+        meta: VIEWER_INDEPENDENT_META, // un-authed route, same card for every viewer (ROK-2334)
         queryFn: () => getPollSharePreview(token ?? ''),
         enabled: !!token,
         retry: false,
