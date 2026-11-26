@@ -101,4 +101,11 @@ describe('CharactersPanel — ROK-2342: a failed characters query is an error, n
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         expect(charactersQuery.refetch).toHaveBeenCalledTimes(1);
     });
+
+    it('a failed background refetch keeps the cached list instead of the error state', () => {
+        charactersQuery.data = { data: [] };
+        charactersQuery.error = new Error('HTTP 500');
+        renderPanel(null);
+        expect(screen.queryByTestId('characters-error')).not.toBeInTheDocument();
+    });
 });

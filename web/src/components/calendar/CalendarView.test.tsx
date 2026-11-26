@@ -21,7 +21,7 @@ vi.mock('react-router-dom', async () => {
 // ─── useEvents mock with configurable return ──────────────────────────────────
 
 const mockUseEventsReturn = {
-    data: { data: [] as ReturnType<typeof createMockEvent>[] },
+    data: { data: [] as ReturnType<typeof createMockEvent>[] } as { data: ReturnType<typeof createMockEvent>[] } | undefined,
     isLoading: false,
     isFetching: false,
     error: null as Error | null,
@@ -342,12 +342,21 @@ describe('CalendarView — ROK-2342: a failed events fetch is an error, not an e
         useCalendarViewStore.setState({ viewPref: 'week' });
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-02-10T12:00:00Z'));
+        mockUseEventsReturn.data = undefined;
         mockUseEventsReturn.error = new Error('HTTP 500');
         mockUseEventsReturn.refetch = vi.fn();
     });
     afterEach(() => {
         vi.useRealTimers();
+        mockUseEventsReturn.data = { data: [] };
         mockUseEventsReturn.error = null;
+    });
+
+    it('a failed background refetch keeps the range already shown (no error over cached data)', () => {
+        mockUseEventsReturn.data = { data: [] };
+        renderWithProviders(<CalendarView />);
+        expect(screen.queryByTestId('calendar-error')).not.toBeInTheDocument();
+        expect(screen.getByText('No events this week')).toBeInTheDocument();
     });
 
     it('grid: shows the retryable error instead of "No events this week", and Try again refetches', () => {
