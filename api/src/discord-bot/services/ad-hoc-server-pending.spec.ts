@@ -58,3 +58,16 @@ describe('PendingServerPlayers — platform id kinds (ROK-2232)', () => {
     expect(pending.all(1)).toEqual([xuidHold]);
   });
 });
+
+describe('PendingServerPlayers.clearAll (ROK-2355)', () => {
+  it('forgets every hold on every server and game', () => {
+    const pending = new PendingServerPlayers();
+    pending.hold(OLD, A);
+    pending.hold({ gameId: 30, pelicanServerId: 2 }, B);
+    pending.clearAll();
+    expect(pending.hasGame(OLD.gameId)).toBe(false);
+    expect(pending.hasGame(30)).toBe(false);
+    expect(pending.all(1)).toEqual([]);
+    expect(pending.all(2)).toEqual([]);
+  });
+});

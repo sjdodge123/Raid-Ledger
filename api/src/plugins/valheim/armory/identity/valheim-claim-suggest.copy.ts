@@ -106,6 +106,8 @@ export const CLAIM_REPLY_COPY = {
     `Got it — we won't ask you about ${name} again.`,
   /** Ephemeral: the clicker is not the user this DM asked. */
   notForYou: "This question wasn't for you, so nothing changed.",
+  /** Ephemeral: the Valheim plugin is turned off (ROK-2356). */
+  off: 'Valheim is turned off, so nothing changed.',
   /** The character is gone or its hub is hidden. */
   unavailable: "That character isn't available any more.",
   fallbackName: 'that character',
