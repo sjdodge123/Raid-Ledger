@@ -20,13 +20,15 @@
  *      `contentInstances` (spec §3.4 / §6.2).
  * W7 — a non-WoW `/lfg/<slug>` renders no WoW grouping UI (regression).
  *
- * Isolation (review r1): the spawn/attach guard is per GROUP, but the
- * `playingNow` read on every group page is per GAME
- * (`lfg-query.helpers.ts` → `readPlayingNow(db, game.id)`), so one live
- * Start-now session puts EVERY Forever group page into the playing state.
- * W3 therefore runs on desktop only and last, its event id comes from the
- * start-now response (not `playingNow`), and every page-opening test first
- * waits until the game has no live session (`openAs`).
+ * Isolation: since b9b7422e6 both the spawn/attach guard and the group
+ * page's `playingNow` read are per GROUP (`readPlayingNow` takes the group
+ * scope), so W3's Start-now session only draws the playing state on its own
+ * dungeon's page. The seeded Forever game is still shared by both projects,
+ * though, and a Start now spawns/attaches under the per-GAME lock and mints a
+ * Discord voice session, so W3 still runs once per suite (desktop only, last).
+ * Its event id comes from the start-now response (not `playingNow`), and every
+ * page-opening test still waits until its group has no live session
+ * (`openAs`) — a cheap guard that now only bites on W3's own group.
  *
  * Fixture: `POST /admin/test/wow/seed-guild` (Forever, per project × worker ×
  * run name) → gm / officer / member, each onboarded with a character. Hands
@@ -164,9 +166,9 @@ async function readGroup(w: World, groupKey: string): Promise<{ activeCount?: nu
 }
 
 /**
- * Barrier: no live session on the game. `playingNow` is read per game, so the
- * desktop W3's Start-now session would draw the playing state (no hero, no
- * join row) on this page until W3 deletes its event.
+ * Barrier: no live session on this group. `playingNow` is read per group, so
+ * only W3's own dungeon page would draw the playing state (no hero, no join
+ * row) until W3 deletes its event; on every other group this passes at once.
  */
 async function noLiveSession(w: World, groupKey: string): Promise<void> {
     await pollForCondition(
@@ -174,7 +176,7 @@ async function noLiveSession(w: World, groupKey: string): Promise<void> {
             const g = await readGroup(w, groupKey);
             return g !== null && g.playingNow == null ? true : null;
         },
-        { timeoutMs: 120_000, intervalMs: 1_000, description: `no live Forever session before opening group "${groupKey}"` },
+        { timeoutMs: 120_000, intervalMs: 1_000, description: `no live session on Forever group "${groupKey}"` },
     );
 }
 
@@ -392,10 +394,10 @@ test('W7: a non-WoW LFG page renders no WoW grouping UI', async ({ page }) => {
 });
 
 test('W3: Start now on a dungeon group is group-scoped and titles the event with the instance', async ({ page, browser }, testInfo) => {
-    // Desktop only and last: `playingNow` is read per GAME, so a second
-    // project's session would leak into this one's title/playing asserts and
-    // into every other Forever page (see the header).
-    test.skip(testInfo.project.name !== 'desktop', 'Start now runs once per suite (playingNow is per game)');
+    // Desktop only and last: `playingNow` is per group now, but both projects
+    // share the seeded game, and a Start now spawns/attaches under the
+    // per-game lock and mints a Discord voice session (see the header).
+    test.skip(testInfo.project.name !== 'desktop', 'Start now runs once per suite (the spawn serialises on the shared game and mints voice)');
     test.setTimeout(120_000);
     await withWowLfg(browser, testInfo, async (w) => {
         const { gameId, users } = w.seeded;
