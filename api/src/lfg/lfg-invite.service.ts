@@ -113,6 +113,12 @@ export interface LfgPlayerInvitePayload {
   reasons: LfgSuggestionReason[];
   /** Masked link to the group page; absent when no client URL is configured. */
   url?: string;
+  /**
+   * ROK-2352 — the group invited into. Absent for the whole-game group, so a
+   * non-WoW payload is byte-for-byte what it was; the DM's Join and Decline
+   * buttons carry it (v2 custom ids) and `url` already points at its page.
+   */
+  groupKey?: string;
   /** Steam lifetime playtime in MINUTES (`steam_library` row); absent when unknown (AC6). */
   playtimeMinutes?: number;
   /**
@@ -189,11 +195,15 @@ async function findRecipientRefusal(
   if (await recipientOptedOut(tx, recipientUserId)) return 'opted_out';
   if (await holdsLiveIntent(tx, recipientUserId, gameId, now, scope))
     return 'in_group';
+  // ROK-2352 (spec Q2): the repeat block is per group — the same person
+  // invited to THIS group inside the horizon is refused; another group's
+  // invite does not count. The fold (null) keeps the whole-game read.
   const live = await findLiveInviteFor(
     tx,
     recipientUserId,
     gameId,
     noRepeatHorizonStart(now),
+    scope,
   );
   if (live) return 'repeat';
   const received = await countRecipientInvitesSince(
@@ -290,14 +300,22 @@ export class LfgInviteService {
    * The decline effect (D12): stamp the caller's newest live invite for the
    * game. Idempotent — a second click finds nothing un-declined and is a no-op.
    *
+   * @param groupKey - ROK-2352: the v2 button's group; omitted = newest in the game.
    * @returns True when a row was stamped.
    */
   async decline(
     recipientUserId: number,
     gameId: number,
     now: Date = new Date(),
+    groupKey: string | null = null,
   ): Promise<boolean> {
-    const row = await declineLiveInvite(this.db, recipientUserId, gameId, now);
+    const row = await declineLiveInvite(
+      this.db,
+      recipientUserId,
+      gameId,
+      now,
+      groupKey,
+    );
     return row !== null;
   }
 
@@ -346,7 +364,12 @@ export class LfgInviteService {
     // suggestion list: that list stops at LFG_SUGGESTIONS_LIMIT, so a
     // recipient outside the cut used to get `reasons: []` (ROK-1455 smoke S1).
     const reasons = await reasonsForUser(this.db, game.id, recipientUserId);
-    const url = buildLfgInviteUrl(await getClientUrl(this.settings), game.slug);
+    const groupKey = ids.scope ?? LFG_ANY_GROUP_KEY;
+    const url = buildLfgInviteUrl(
+      await getClientUrl(this.settings),
+      game.slug,
+      groupKey,
+    );
     const minutes = await steamPlaytimeMinutes(
       this.db,
       recipientUserId,
@@ -360,6 +383,7 @@ export class LfgInviteService {
       inviterName,
       reasons,
       urgency: horizon.urgency,
+      ...(groupKey !== LFG_ANY_GROUP_KEY ? { groupKey } : {}),
       ...(url ? { url } : {}),
       ...(minutes !== null ? { playtimeMinutes: minutes } : {}),
       ...(horizon.nowExpiresAt

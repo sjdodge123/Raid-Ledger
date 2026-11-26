@@ -55,23 +55,31 @@ export async function countGroupInvitesSince(
       and(
         eq(schema.lfgInvites.gameId, gameId),
         gt(schema.lfgInvites.sentAt, since),
-        groupKey === null
-          ? undefined
-          : eq(schema.lfgInvites.groupKey, groupKey),
+        inviteGroupFilter(groupKey),
       ),
     );
   return Number(row?.n ?? 0);
 }
 
+/** ROK-2352: `eq(group_key)` for a keyed scope; nothing for the fold (null). */
+function inviteGroupFilter(groupKey: LfgGroupScope) {
+  return groupKey === null
+    ? undefined
+    : eq(schema.lfgInvites.groupKey, groupKey);
+}
+
 /**
  * The most recent invite for `(recipient, game)` inside the horizon, declined
- * or not — either one blocks a repeat (AC4).
+ * or not — either one blocks a repeat (AC4). ROK-2352: a keyed `groupKey`
+ * narrows it to that group, so an invite to one dungeon does not block an
+ * invite to another; null (the fold) reads the whole game as before.
  */
 export async function findLiveInviteFor(
   db: LfgDb,
   recipientUserId: number,
   gameId: number,
   horizonStart: Date,
+  groupKey: LfgGroupScope = null,
 ): Promise<LfgInviteRow | null> {
   const [row] = await db
     .select()
@@ -81,6 +89,7 @@ export async function findLiveInviteFor(
         eq(schema.lfgInvites.recipientUserId, recipientUserId),
         eq(schema.lfgInvites.gameId, gameId),
         gt(schema.lfgInvites.sentAt, horizonStart),
+        inviteGroupFilter(groupKey),
       ),
     )
     .orderBy(sql`${schema.lfgInvites.sentAt} DESC`)
@@ -190,13 +199,15 @@ export async function insertInvite(
 /**
  * Of `userIds`, those the group for `gameId` invited inside the horizon —
  * the `inviteState` projection for the suggestions read (D7). Declined rows
- * count: the wire never distinguishes them from `sent`.
+ * count: the wire never distinguishes them from `sent`. ROK-2352: a keyed
+ * `groupKey` reads only that group's invites; null reads the whole game.
  */
 export async function findInvitedUserIds(
   db: LfgDb,
   gameId: number,
   userIds: number[],
   horizonStart: Date,
+  groupKey: LfgGroupScope = null,
 ): Promise<Set<number>> {
   if (userIds.length === 0) return new Set();
   const rows = await db
@@ -207,17 +218,23 @@ export async function findInvitedUserIds(
         eq(schema.lfgInvites.gameId, gameId),
         inArray(schema.lfgInvites.recipientUserId, userIds),
         gt(schema.lfgInvites.sentAt, horizonStart),
+        inviteGroupFilter(groupKey),
       ),
     );
   return new Set(rows.map((r) => r.userId));
 }
 
-/** The decline effect (D12): stamp the clicker's newest un-declined live row. */
+/**
+ * The decline effect (D12): stamp the clicker's newest un-declined live row.
+ * ROK-2352: a keyed `groupKey` (a v2 DM button) declines only that group's
+ * invite; null (a v1 button) takes the newest in the game, as before.
+ */
 export async function declineLiveInvite(
   db: LfgDb,
   recipientUserId: number,
   gameId: number,
   now: Date,
+  groupKey: LfgGroupScope = null,
 ): Promise<LfgInviteRow | null> {
   const target = await db
     .select({ id: schema.lfgInvites.id })
@@ -227,6 +244,7 @@ export async function declineLiveInvite(
         eq(schema.lfgInvites.recipientUserId, recipientUserId),
         eq(schema.lfgInvites.gameId, gameId),
         isNull(schema.lfgInvites.declinedAt),
+        inviteGroupFilter(groupKey),
       ),
     )
     .orderBy(sql`${schema.lfgInvites.sentAt} DESC`)

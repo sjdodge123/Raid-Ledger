@@ -14,8 +14,14 @@
  * the design warns about is a compile error, not a runtime one.
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import type { LfgSuggestionReason, LfgUrgency } from '@raid-ledger/contract';
+import {
+  LFG_ANY_GROUP_KEY,
+  LFG_GROUP_KEY_PATTERN,
+  type LfgSuggestionReason,
+  type LfgUrgency,
+} from '@raid-ledger/contract';
 import { LFG_BUTTON_IDS } from '../discord-bot/discord-bot.constants';
+import { buildLfgBoardCustomId } from '../discord-bot/lfg-board/lfg-board-custom-id.helpers';
 import type { DmEmbed } from '../discord-bot/embeds/embed-chrome.helpers';
 import {
   addPersonalizedFields,
@@ -221,9 +227,10 @@ export function buildLfgPlayerInviteRow(
   const gameId = Number(payload?.gameId);
   if (!Number.isInteger(gameId) || gameId <= 0) return undefined;
   const url = typeof payload?.url === 'string' ? payload.url : null;
+  const groupKey = readInviteGroupKey(payload?.groupKey);
   const buttons = [
     buildInviteJoinButton(
-      gameId,
+      buildLfgBoardCustomId(LFG_BUTTON_IDS.INVITE_JOIN, gameId, groupKey),
       payload?.spawnsNow === true,
       typeof payload?.spawnEmoji === 'string' ? payload.spawnEmoji : null,
     ),
@@ -233,11 +240,24 @@ export function buildLfgPlayerInviteRow(
   if (url) buttons.push(lfgViewGroupButton(url));
   buttons.push(
     new ButtonBuilder()
-      .setCustomId(`${LFG_BUTTON_IDS.INVITE_DECLINE}:${gameId}`)
+      .setCustomId(
+        buildLfgBoardCustomId(LFG_BUTTON_IDS.INVITE_DECLINE, gameId, groupKey),
+      )
       .setLabel(LFG_INVITE_DECLINE_LABEL)
       .setStyle(ButtonStyle.Secondary),
   );
   return new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons);
+}
+
+/**
+ * ROK-2352 — the payload's group key, or `''` (the v1 ids, byte for byte)
+ * when it is absent or not a well-formed key: a malformed stored value must
+ * degrade to the whole-game buttons, never to an id the parser refuses.
+ */
+function readInviteGroupKey(raw: unknown): string {
+  return typeof raw === 'string' && LFG_GROUP_KEY_PATTERN.test(raw)
+    ? raw
+    : LFG_ANY_GROUP_KEY;
 }
 
 /**
@@ -252,12 +272,12 @@ export function buildLfgPlayerInviteRow(
  * what it writes.
  */
 function buildInviteJoinButton(
-  gameId: number,
+  customId: string,
   spawnsNow: boolean,
   configuredEmoji: string | null,
 ): ButtonBuilder {
   const join = new ButtonBuilder()
-    .setCustomId(`${LFG_BUTTON_IDS.INVITE_JOIN}:${gameId}`)
+    .setCustomId(customId)
     .setLabel(spawnsNow ? LFG_INVITE_JOIN_SPAWN_LABEL : LFG_INVITE_JOIN_LABEL)
     .setStyle(ButtonStyle.Success);
   if (spawnsNow) join.setEmoji(resolveNowIndicatorEmoji(configuredEmoji));

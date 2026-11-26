@@ -21,6 +21,7 @@ import {
 } from '../lfg-now/lfg-now-indicator.helpers';
 import type { LfmRenderState } from '../lfm/lfm-embed.helpers';
 import { leaveCustomId } from '../listeners/lfg-leave.helpers';
+import { lfgGroupUrl } from '../../notifications/lfg-affinity-dm.helpers';
 import { buildLfgBoardCustomId } from './lfg-board-custom-id.helpers';
 import {
   LFG_JOIN_BUTTON_LABEL,
@@ -106,7 +107,9 @@ export function buildLfgPostComponents(
       new ButtonBuilder()
         .setStyle(ButtonStyle.Link)
         .setLabel(LFG_OPEN_GROUP_LABEL)
-        .setURL(`${inputs.clientUrl}/lfg/${inputs.gameSlug}`),
+        .setURL(
+          lfgGroupUrl(inputs.clientUrl, inputs.gameSlug, inputs.groupKey),
+        ),
     );
   }
   return [new ActionRowBuilder<ButtonBuilder>().addComponents(buttons)];
