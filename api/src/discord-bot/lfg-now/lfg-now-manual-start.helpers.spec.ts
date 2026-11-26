@@ -112,6 +112,7 @@ describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
       GAME_ID,
       STARTER_ID,
       NOW,
+      { patch: undefined }, // ROK-2352: no group → no adapter lock-in patch
     );
   });
 
@@ -173,6 +174,7 @@ describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
       STARTER_ID,
       { eventId: 900 },
       NOW,
+      null, // ROK-2352: no group → the starter's hand in any group
     );
     expect(convert).not.toHaveBeenCalled();
   });
@@ -227,9 +229,12 @@ describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
 
     expect(result).toEqual({ eventId: 900, spawned: true, invitedUserIds: [] });
     expect(groupHands).not.toHaveBeenCalled();
-    expect(convert).toHaveBeenCalledWith(expect.anything(), GAME_ID, {
-      eventId: 900,
-    });
+    expect(convert).toHaveBeenCalledWith(
+      expect.anything(),
+      GAME_ID,
+      { eventId: 900 },
+      null, // ROK-2352: no group → the whole game converts
+    );
   });
 });
 

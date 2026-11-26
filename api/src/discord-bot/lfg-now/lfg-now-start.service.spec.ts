@@ -96,7 +96,11 @@ describe('LfgNowSpawnService.startNow', () => {
       expect.anything(),
       GAME_ID,
       expect.any(Date),
-      { manual: { starterUserId: STARTER_ID } },
+      {
+        manual: { starterUserId: STARTER_ID },
+        // No ?group → the fold: the whole game, no adapter (ROK-2352).
+        group: { adapter: null, scope: null },
+      },
     );
   });
 
