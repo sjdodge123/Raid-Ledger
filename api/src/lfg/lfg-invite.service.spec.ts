@@ -554,3 +554,58 @@ describe('LfgInviteService.invite — ROK-2352 group scope', () => {
     );
   });
 });
+
+describe('LfgInviteService.invite — ROK-2352 per-group repeat block', () => {
+  const repeatRow = { id: 9 } as unknown as helpers.LfgInviteRow;
+
+  it('grouped game: the repeat read is scoped to the invited group', async () => {
+    adapter = { describeGroup: jest.fn() };
+    await expect(
+      service.invite(INVITER, GAME.id, RECIPIENT, 'dungeon:36'),
+    ).resolves.toEqual(LFG_INVITE_SENT);
+    expect(mocked.findLiveInviteFor).toHaveBeenCalledWith(
+      db,
+      RECIPIENT,
+      GAME.id,
+      expect.any(Date),
+      'dungeon:36',
+    );
+  });
+
+  it('grouped game: a live invite to THIS group is the opaque skip, nothing written', async () => {
+    adapter = { describeGroup: jest.fn() };
+    mocked.findLiveInviteFor.mockImplementation((_db, _r, _g, _h, scope) =>
+      Promise.resolve(scope === 'dungeon:36' ? repeatRow : null),
+    );
+    await expect(
+      service.invite(INVITER, GAME.id, RECIPIENT, 'dungeon:36'),
+    ).resolves.toEqual(LFG_INVITE_SKIPPED);
+    expect(mocked.insertInvite).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('grouped game: a live invite to ANOTHER group does not block this one', async () => {
+    adapter = { describeGroup: jest.fn() };
+    mocked.findLiveInviteFor.mockImplementation((_db, _r, _g, _h, scope) =>
+      Promise.resolve(scope === 'dungeon:36' ? repeatRow : null),
+    );
+    await expect(
+      service.invite(INVITER, GAME.id, RECIPIENT, 'dungeon:389'),
+    ).resolves.toEqual(LFG_INVITE_SENT);
+    expect(mocked.insertInvite).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ groupKey: 'dungeon:389' }),
+    );
+  });
+
+  it('folded game: the repeat read covers the whole game (null scope)', async () => {
+    await service.invite(INVITER, GAME.id, RECIPIENT, 'dungeon:36');
+    expect(mocked.findLiveInviteFor).toHaveBeenCalledWith(
+      db,
+      RECIPIENT,
+      GAME.id,
+      expect.any(Date),
+      null,
+    );
+  });
+});

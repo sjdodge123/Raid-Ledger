@@ -2,6 +2,7 @@ import * as helpers from './lfg-affinity-dm.helpers';
 import {
   buildLfgInviteLines,
   buildLfgInviteUrl,
+  lfgGroupUrl,
 } from './lfg-affinity-dm.helpers';
 
 describe('lfg-affinity-dm.helpers (ROK-1471 D11)', () => {
@@ -66,6 +67,29 @@ describe('lfg-affinity-dm.helpers (ROK-1471 D11)', () => {
     );
     expect(Object.keys(helpers)).toEqual(
       expect.arrayContaining(['applyLfgInviteEmbed']),
+    );
+  });
+});
+
+describe('ROK-2352 — the group link', () => {
+  it('appends the URL-encoded key for a keyed group', () => {
+    expect(
+      buildLfgInviteUrl('https://raid.example.net/', 'wow', 'dungeon:36'),
+    ).toBe('https://raid.example.net/lfg/wow/dungeon%3A36');
+  });
+
+  it('keeps the whole-game link byte for byte for the empty key', () => {
+    expect(buildLfgInviteUrl('https://raid.example.net', 'wow', '')).toBe(
+      'https://raid.example.net/lfg/wow',
+    );
+    expect(lfgGroupUrl('https://raid.example.net', 'wow')).toBe(
+      'https://raid.example.net/lfg/wow',
+    );
+  });
+
+  it('encodes every reserved character in the key, never the slug', () => {
+    expect(lfgGroupUrl('https://r.test', 'wow-classic', 'raid:a/b?c#d')).toBe(
+      'https://r.test/lfg/wow-classic/raid%3Aa%2Fb%3Fc%23d',
     );
   });
 });

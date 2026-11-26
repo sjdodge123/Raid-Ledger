@@ -24,6 +24,7 @@ import {
   LFG_PLAYER_INVITE_WEEK_HORIZON,
   applyLfgPlayerInviteEmbed,
   buildLfgPlayerInviteLines,
+  buildLfgPlayerInviteRow,
   lfgPlayerInviteAuthorLine,
   pickLfgPlayerInviteFields,
 } from './notification-embed.lfg-player-invite';
@@ -228,5 +229,35 @@ describe('buildExtraRows for lfg_player_invite (ROK-1455 T-B3 / AC8)', () => {
     expect(buildExtraRows(LFG_INVITE_NOTIFICATION_TYPE, undefined, '')).toBe(
       undefined,
     );
+  });
+});
+
+describe('buildLfgPlayerInviteRow — group ids (ROK-2352)', () => {
+  const J = LFG_BUTTON_IDS.INVITE_JOIN;
+  const D = LFG_BUTTON_IDS.INVITE_DECLINE;
+  const ids = (groupKey?: unknown) =>
+    customIds(
+      [
+        buildLfgPlayerInviteRow({
+          ...PAYLOAD,
+          ...(groupKey === undefined ? {} : { groupKey }),
+        }),
+      ].filter((r) => r !== undefined),
+    ).filter((id) => id !== '<no custom id>');
+
+  it('a keyed invite carries v2 Join and Decline ids', () => {
+    expect(ids('dungeon:36')).toEqual([
+      `${J}:7:dungeon:36`,
+      `${D}:7:dungeon:36`,
+    ]);
+  });
+
+  it('a whole-game invite (no key) keeps the v1 ids byte for byte', () => {
+    expect(ids()).toEqual([`${J}:7`, `${D}:7`]);
+  });
+
+  it('a malformed or non-string key falls back to v1, never a broken id', () => {
+    expect(ids('Not A Key')).toEqual([`${J}:7`, `${D}:7`]);
+    expect(ids(36)).toEqual([`${J}:7`, `${D}:7`]);
   });
 });
