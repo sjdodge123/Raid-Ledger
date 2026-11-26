@@ -338,9 +338,11 @@ describe('ROK-1843 ITAD search never returns or rewrites a moderated row', () =>
         appId,
       );
 
-      const res = await testApp.request.get(
-        `/games/search?q=rok1843 zq ${label}`,
-      );
+      // ROK-2325: only signed-in searches reach ITAD discovery.
+      const token = await loginAsAdmin(testApp.request, testApp.seed);
+      const res = await testApp.request
+        .get(`/games/search?q=rok1843 zq ${label}`)
+        .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
       // The ITAD layer swallows errors and falls back — prove it really ran.
