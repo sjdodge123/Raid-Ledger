@@ -10,6 +10,7 @@
  * up right after COMMIT. A member whose role-aware signup fails falls back to
  * the generic Discord roster row, so nobody converted is left off the event.
  */
+import type { CreateSignupDto } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import type { SignupsService } from '../../events/signups.service';
@@ -56,6 +57,38 @@ export function deferKeyedSignup(
   };
 }
 
+/** Every MMO role: a member the adapter names no role for signs up flex. */
+const FLEX_ROLES: NonNullable<CreateSignupDto['preferredRoles']> = [
+  'tank',
+  'healer',
+  'dps',
+];
+
+/**
+ * ROK-2352 P1-4 (ruled: a late keyed `now` hand attaches like the Any group's):
+ * a keyed session is an MMO event, where a signup with no roles lands in the
+ * unassigned pool with NO roster slot. So a member the carryover gives no
+ * roles signs up flex — auto-allocation slots them wherever the instance has
+ * room (bench when full) and can still rebalance them for a real tank later.
+ * Their carried character, if any, is kept.
+ */
+export function withFlexRoles(
+  hands: LfgNowHand[],
+  carryover: LfgSignupCarryover,
+): Map<number, CreateSignupDto> {
+  const out = new Map<number, CreateSignupDto>();
+  for (const { userId } of hands) {
+    const carried = carryover.get(userId);
+    out.set(
+      userId,
+      carried?.preferredRoles?.length
+        ? carried
+        : { ...carried, preferredRoles: [...FLEX_ROLES] },
+    );
+  }
+  return out;
+}
+
 /** What the post-COMMIT signup needs. */
 export interface KeyedSignupDeps {
   db: Db;
@@ -83,7 +116,7 @@ export async function signupKeyedMembers(
           creatorId: null,
           voters: signup.hands,
           signupsService: deps.signupsService,
-          carryover: signup.carryover,
+          carryover: withFlexRoles(signup.hands, signup.carryover),
         })
       ).failedUserIds
     : signup.hands.map((h) => h.userId);
