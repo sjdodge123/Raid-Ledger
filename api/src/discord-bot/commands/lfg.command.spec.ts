@@ -635,7 +635,13 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
       await command.handleInteraction(interaction);
 
-      expect(readOpen).toHaveBeenLastCalledWith(expect.anything(), 42);
+      // ROK-2352 P2-4: clocked, and folded (no grouping adapter in this spec).
+      expect(readOpen).toHaveBeenLastCalledWith(
+        expect.anything(),
+        42,
+        expect.any(Date),
+        null,
+      );
       expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
         urgency: 'now',
         ttlMinutes: 60,

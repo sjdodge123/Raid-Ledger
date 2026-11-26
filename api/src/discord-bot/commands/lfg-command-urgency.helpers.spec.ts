@@ -47,7 +47,20 @@ describe('resolveLfgCommandUrgency (ROK-1656)', () => {
     await expect(resolveLfgCommandUrgency(db, GAME, null)).resolves.toEqual({
       urgency: 'tonight',
     });
-    expect(readOpen).toHaveBeenCalledWith(db, GAME);
+    // ROK-2352 P2-4: the read is clocked and folded (scope null) by default.
+    expect(readOpen).toHaveBeenCalledWith(db, GAME, expect.any(Date), null);
+  });
+
+  // ROK-2352 P2-4: a bare `/lfg` scoped to a group reads THAT group's horizon.
+  it('passes the group scope through to the open-group read', async () => {
+    open(null);
+    await resolveLfgCommandUrgency(db, GAME, null, 'raid:409');
+    expect(readOpen).toHaveBeenCalledWith(
+      db,
+      GAME,
+      expect.any(Date),
+      'raid:409',
+    );
   });
 
   // Review MAJOR (Lead ruling, option A): a spawn converts every hand, so a
