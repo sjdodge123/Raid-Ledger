@@ -17,10 +17,7 @@ import type {
 } from '../plugins/plugin-host/lfg-grouping.adapter';
 import type { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import type { LfgDb } from './lfg-query.helpers';
-import {
-  LFG_HAND_CAP_CODE,
-  LFG_MAX_HANDS_PER_GAME,
-} from './lfg.constants';
+import { LFG_HAND_CAP_CODE, LFG_MAX_HANDS_PER_GAME } from './lfg.constants';
 
 /** The slice of the registry the fold needs. */
 export type LfgGroupingRegistry = Pick<PluginRegistryService, 'getAdapter'>;

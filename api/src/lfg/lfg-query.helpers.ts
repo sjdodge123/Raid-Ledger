@@ -450,4 +450,3 @@ async function loadGameOr404(
   if (!game) throw new NotFoundException('Game not found');
   return game;
 }
-

@@ -271,7 +271,6 @@ export async function reviveIntent(
   return defined(row, 'revived intent row');
 }
 
-
 /**
  * Conversion (AC8): flip every LIVE intent on the game to `converted` and
  * record the provenance. Idempotent — a second call converts zero rows.
