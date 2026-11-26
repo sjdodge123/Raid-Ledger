@@ -12,7 +12,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { LfgNowTtl, LfgUrgency } from '@raid-ledger/contract';
 import { createIntent } from '../lib/api/lfg-api';
 import { toast } from '../lib/toast';
-import { httpStatusOf } from '../lib/api/api-error';
+import { errorBodyOf, httpStatusOf } from '../lib/api/api-error';
 
 /**
  * What a caller hands the mutation (ROK-1479 D13).
@@ -40,8 +40,11 @@ export interface JoinGroupVars {
 /** Live hands one person may hold per game (Q2) — the server's cap, mirrored for the picker. */
 export const LFG_HAND_CAP = 5;
 
-/** Shown when the server refuses a hand over the per-game cap (409, Q2). */
+/** Shown when the server refuses a hand over the per-game cap (400 + {@link LFG_HAND_CAP_CODE}, Q2). */
 export const LFG_HAND_CAP_COPY = 'You can be in up to 5 groups for this game';
+
+/** The machine `code` on the server's cap refusal (`api/src/lfg/lfg.constants.ts`). */
+export const LFG_HAND_CAP_CODE = 'LFG_HAND_CAP';
 
 /**
  * One `POST /lfg` per group key, sequential, stopping at the first error so a
@@ -60,8 +63,13 @@ export async function raiseHands(vars: JoinGroupVars): Promise<void> {
     }
 }
 
+/** The cap refusal is a 400 carrying its own code; any other 400 is a plain failure. */
+export function isHandCapError(error: unknown): boolean {
+    return httpStatusOf(error) === 400 && errorBodyOf(error)?.code === LFG_HAND_CAP_CODE;
+}
+
 function joinErrorCopy(error: Error): string {
-    return httpStatusOf(error) === 409 ? LFG_HAND_CAP_COPY : 'Failed to join the group';
+    return isHandCapError(error) ? LFG_HAND_CAP_COPY : 'Failed to join the group';
 }
 
 /**
