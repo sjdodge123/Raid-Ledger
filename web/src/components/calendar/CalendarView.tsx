@@ -22,6 +22,7 @@ import { CalendarToolbar } from './CalendarToolbar';
 import { MonthEventComponent } from './MonthEventComponent';
 import { VIEW_MAP, viewToStr, computeDateRange, shouldRenderInCalendar, isShownOnCalendar } from './calendar-view.utils';
 import type { CalendarViewMode } from './calendar-mobile-toolbar';
+import { QueryErrorState } from '../common/query-error-state';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import { isLayerEvent, type LayerWindowEvent } from './layers/calendar-layer-events';
 import { useCalendarLayerData, type CalendarLayerData } from './layers/use-calendar-layer-data';
@@ -185,6 +186,11 @@ function CalendarEmptyState({ view }: { view: View }) {
     );
 }
 
+/** A failed events fetch is never "No events this week" (ROK-2342): say so and offer a retry. */
+function CalendarLoadError({ s }: { s: Pick<ReturnType<typeof useCalendarViewState>, 'loadError' | 'refetch'> }) {
+    return <QueryErrorState title="Couldn't load events" error={s.loadError} onRetry={s.refetch} testId="calendar-error" className="py-6" />;
+}
+
 function useCalendarViewState(
     controlledDate: Date | undefined, onDateChange: ((d: Date) => void) | undefined, calendarView: CalendarViewMode | undefined,
     selectedGames: Set<string> | undefined, onCalendarViewChange: ((view: CalendarViewMode) => void) | undefined,
@@ -196,13 +202,15 @@ function useCalendarViewState(
     const { view, setView } = useCalendarViewSync(searchParams, writeSearchParams, calendarView, onCalendarViewChange);
     const isScheduleView = calendarView === 'schedule';
     const { startAfter, endBefore } = useMemo(() => computeDateRange(currentDate, view, isScheduleView), [currentDate, view, isScheduleView]);
-    const { data: eventsData, isLoading, isFetching } = useEvents({ startAfter, endBefore, includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY, limit: 100 });
+    const { data: eventsData, isLoading, isFetching, error, refetch } = useEvents({ startAfter, endBefore, includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY, limit: 100 });
     const calendarEvents = useHubFilteredEvents(useCalendarEvents(eventsData, selectedGames, resolved), eventsData?.data);
     useCalendarImageHints(calendarEvents);
     const { handlePrev, handleNext, handleToday } = useCalendarNavigation(currentDate, setCurrentDate, view);
     const isGridLoading = isLoading || (isFetching && calendarEvents.length === 0);
     useDayViewScrollRestore(format(currentDate, 'yyyy-MM-dd'), view === Views.DAY && !isScheduleView, !isGridLoading);
-    return { navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, isGridLoading, calendarEvents, handlePrev, handleNext, handleToday };
+    // ROK-2342: a failed background refetch keeps the events already shown.
+    const loadError = !isFetching && eventsData === undefined ? error : null;
+    return { loadError, refetch, navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, isGridLoading, calendarEvents, handlePrev, handleNext, handleToday };
 }
 
 function useEventWrappers(eventOverlapsGameTime: (s: Date, e: Date) => boolean, handleMonthChipClick: (e: React.MouseEvent, d: Date) => void, onOpenEvent: (e: GridEvent) => void) {
@@ -222,7 +230,7 @@ function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handl
         <div className={`calendar-container calendar-view-${s.view} ${className}`}>
             <CalendarToolbar view={s.view} currentDate={s.currentDate} tzAbbr={s.tzAbbr} isHeaderHidden={isHeaderHidden} calendarView={calendarView} onPrev={s.handlePrev} onNext={s.handleNext} onToday={s.handleToday} onViewChange={s.setView} action={toolbarAction} />
             {belowToolbar}
-            {s.isGridLoading && <div className="calendar-loading"><div className="loading-spinner" /><span>Loading events...</span></div>}
+            {s.loadError ? <CalendarLoadError s={s} /> : s.isGridLoading && <div className="calendar-loading"><div className="loading-spinner" /><span>Loading events...</span></div>}
             <CalendarLayerGrid markers={layer.markers} dayEntries={layer.dayEntries}>
                 <Calendar<GridEvent> key={s.view} localizer={localizer} events={s.calendarEvents} backgroundEvents={layer.backgroundEvents} date={s.currentDate} view={s.view}
                     views={[Views.MONTH, Views.WEEK, Views.DAY]} onNavigate={(date: Date) => s.setCurrentDate(date)} onView={s.setView}
@@ -238,7 +246,7 @@ function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handl
                     }} />
             </CalendarLayerGrid>
             {/* ROK-1775: a range whose only content is layer items (server schedules) isn't empty — the overlay would sit on their glyphs. */}
-            {!s.isLoading && !s.isFetching && s.calendarEvents.length === 0 && layer.dayEntries.size === 0 && <CalendarEmptyState view={s.view} />}
+            {!s.loadError && !s.isLoading && !s.isFetching && s.calendarEvents.length === 0 && layer.dayEntries.size === 0 && <CalendarEmptyState view={s.view} />}
         </div>
     );
 }
@@ -305,7 +313,8 @@ export function CalendarView({
             <div className={`min-w-0 ${className}`}>
                 <ScheduleFilterSlots toolbarAction={toolbarAction} belowToolbar={belowToolbar} />
                 {s.isLoading && <div className="flex items-center justify-center py-16 gap-2 text-muted"><div className="loading-spinner" /><span>Loading events...</span></div>}
-                {!s.isLoading && <ScheduleView events={s.calendarEvents} currentDate={s.currentDate} onDateChange={s.setCurrentDate} onSelectEvent={handleSelectEvent} eventOverlapsGameTime={eventOverlapsGameTime} isFetching={s.isFetching} layerDays={layer.dayEntries} />}
+                {s.loadError && <CalendarLoadError s={s} />}
+                {!s.isLoading && !s.loadError && <ScheduleView events={s.calendarEvents} currentDate={s.currentDate} onDateChange={s.setCurrentDate} onSelectEvent={handleSelectEvent} eventOverlapsGameTime={eventOverlapsGameTime} isFetching={s.isFetching} layerDays={layer.dayEntries} />}
             </div>
         );
     }

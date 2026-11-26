@@ -1,5 +1,5 @@
 {
-  "__total": 605,
+  "__total": 603,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingRow.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -131,7 +131,7 @@
   "pages/cron-jobs/cron-utils.ts": 6,
   "pages/edit-event-page.tsx": 1,
   "pages/event-detail/EventDetailSubComponents.tsx": 2,
-  "pages/event-metrics-page.tsx": 6,
+  "pages/event-metrics-page.tsx": 4,
   "pages/events-page.tsx": 1,
   "pages/events/EventsPageHeader.tsx": 3,
   "pages/game-detail-page.tsx": 10,

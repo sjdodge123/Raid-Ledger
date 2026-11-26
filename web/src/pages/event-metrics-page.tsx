@@ -2,15 +2,17 @@ import { Link, useParams } from 'react-router-dom';
 import { useEventMetrics } from '../hooks/use-analytics';
 import { EventAttendanceDonut } from '../components/analytics/event-attendance-donut';
 import { VoiceTimeline } from '../components/analytics/voice-timeline';
+import { buttonClass } from '../components/ui/button-classes';
+import { QueryErrorState } from '../components/common/query-error-state';
 import { RosterBreakdownTable } from '../components/analytics/roster-breakdown-table';
 
 export function EventMetricsPage() {
     const { id } = useParams<{ id: string }>();
     const eventId = Number(id);
-    const { data: metrics, isLoading, error } = useEventMetrics(eventId);
+    const { data: metrics, isLoading, error, refetch } = useEventMetrics(eventId);
 
     if (isLoading) return <MetricsLoadingSkeleton />;
-    if (error) return <MetricsError eventId={eventId} message={error.message} />;
+    if (error && !metrics) return <MetricsError eventId={eventId} error={error} onRetry={refetch} />;
     if (!metrics) return null;
 
     return (
@@ -44,14 +46,11 @@ function MetricsLoadingSkeleton() {
     );
 }
 
-function MetricsError({ eventId, message }: { eventId: number; message: string }) {
+function MetricsError({ eventId, error, onRetry }: { eventId: number; error: unknown; onRetry: () => unknown }) {
     return (
-        <div className="min-h-[50vh] flex items-center justify-center">
-            <div className="text-center">
-                <h2 className="text-xl font-semibold text-danger mb-2">Failed to load event metrics</h2>
-                <p className="text-muted">{message}</p>
-                <Link to={`/events/${eventId}`} className="mt-4 inline-block text-emerald-400 hover:text-emerald-300">Back to event</Link>
-            </div>
+        <div className="min-h-[50vh] flex flex-col items-center justify-center px-4">
+            <QueryErrorState title="Couldn't load event metrics" error={error} onRetry={onRetry} testId="event-metrics-error" className="py-0" />
+            <Link to={`/events/${eventId}`} className={buttonClass({ variant: 'secondary', className: 'mt-4' })}>Back to event</Link>
         </div>
     );
 }
