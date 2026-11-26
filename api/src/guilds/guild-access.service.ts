@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { asc, inArray } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   GuildKind,
@@ -221,11 +221,17 @@ export class GuildAccessService {
   async myGuilds(userId: number): Promise<GuildSummary[]> {
     const ids = await this.memberHubIds(userId);
     if (ids.length === 0) return [];
-    const guilds = await this.db
-      .select()
+    // ROK-2352: join the game slug (as `hubSummaryFor` does) so the LFG hub
+    // picker can match a hub to its WoW variant without a registry lookup.
+    const rows = await this.db
+      .select({ guild: schema.guilds, gameSlug: schema.games.slug })
       .from(schema.guilds)
+      .leftJoin(schema.games, eq(schema.games.id, schema.guilds.gameId))
       .where(inArray(schema.guilds.id, ids))
       .orderBy(asc(schema.guilds.name));
-    return guilds.map(toGuildSummary);
+    return rows.map(({ guild, gameSlug }) => ({
+      ...toGuildSummary(guild),
+      ...(gameSlug === null ? {} : { gameSlug }),
+    }));
   }
 }
