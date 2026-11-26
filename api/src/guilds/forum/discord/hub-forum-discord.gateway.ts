@@ -18,6 +18,10 @@ import {
   failureOutcome,
   shouldSetDefaultReaction,
 } from './hub-forum-discord-decor';
+import {
+  createWebhookBounded,
+  type PendingWebhookCreates,
+} from './hub-forum-discord-webhook.create';
 
 /** A Discord forum as the binding service sees it (no discord.js objects). */
 export interface ForumInfo {
@@ -49,6 +53,8 @@ function describe(err: unknown): string {
 @Injectable()
 export class HubForumDiscordGateway {
   private readonly logger = new Logger(HubForumDiscordGateway.name);
+  /** ROK-2337 — one in-flight createWebhook per channel, shared by retries. */
+  private readonly pendingCreates: PendingWebhookCreates = new Map();
 
   constructor(private readonly client: DiscordBotClientService) {}
 
@@ -109,7 +115,7 @@ export class HubForumDiscordGateway {
    * R9: the forum's one webhook — the stored one if live, else (ROK-2296) a
    * "Raid Ledger" hook this bot already owns on the channel, else a new one.
    * Reusing stops a fresh forum row from stacking duplicates toward the
-   * guild's 1000-webhook cap.
+   * guild's 1000-webhook cap. ROK-2337: the create is time-bounded.
    */
   async ensureWebhook(
     channelId: string,
@@ -123,11 +129,13 @@ export class HubForumDiscordGateway {
         h.name === FORUM_WEBHOOK_NAME && this.ownsHook(h) && Boolean(h.token),
     );
     if (own) return own.id;
-    const hook = await forum.createWebhook({
-      name: FORUM_WEBHOOK_NAME,
-      reason: REASON,
-    });
-    return hook.id;
+    return createWebhookBounded(
+      this.pendingCreates,
+      channelId,
+      () => forum.createWebhook({ name: FORUM_WEBHOOK_NAME, reason: REASON }),
+      this.client.getClient()?.rest ?? null,
+      this.logger,
+    );
   }
 
   /**
@@ -228,6 +236,24 @@ export class HubForumDiscordGateway {
       await forum.delete(REASON);
     } catch (err) {
       this.logger.warn(`Could not delete forum ${channelId}: ${describe(err)}`);
+    }
+  }
+
+  /**
+   * ROK-2337 — drop a forum THIS bind just created once its webhook create
+   * timed out: Discord deletes the channel's webhooks with it (a late one
+   * included), and the channel's pending-create entry goes too, so a retry
+   * starts clean. Best-effort; never throws.
+   */
+  async discardCreatedForum(channelId: string): Promise<void> {
+    this.pendingCreates.delete(channelId);
+    try {
+      const forum = await this.requireForum(channelId);
+      await forum.delete(REASON);
+    } catch (err) {
+      this.logger.warn(
+        `Could not delete new forum ${channelId}: ${describe(err)}`,
+      );
     }
   }
 

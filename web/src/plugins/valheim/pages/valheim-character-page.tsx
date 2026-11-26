@@ -1,6 +1,6 @@
 /**
  * ROK-1836 — `/valheim/characters/:id` (D2): a core lazy route mounts this
- * plugin page (no plugin route seam exists). Shell only: crumb, header,
+ * plugin page behind `PluginRoute` (ROK-2358: not found while `valheim` is off). Shell only: crumb, header,
  * section grid; L3 fills the sections, L4 adds claim / owner actions.
  */
 import { Link, useLocation, useParams } from 'react-router-dom';

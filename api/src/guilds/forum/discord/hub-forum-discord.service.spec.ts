@@ -21,6 +21,7 @@ import { HubForumDiscordService } from './hub-forum-discord.service';
 import type { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import * as share from './hub-forum-discord.share';
+import { WebhookCreateTimeoutError } from './hub-forum-discord-webhook.create';
 
 jest.mock('./hub-forum-discord.queries');
 jest.mock('./hub-forum-discord.share');
@@ -101,6 +102,7 @@ function fakeGateway(store: ReturnType<typeof fakeStore>) {
     cachedForum: jest.fn(() => null),
     deleteForum: jest.fn(() => Promise.resolve()),
     deleteOwnWebhooks: jest.fn(() => Promise.resolve()),
+    discardCreatedForum: jest.fn(() => Promise.resolve()),
   };
   return { gw, created, gateway: gw as unknown as HubForumDiscordGateway };
 }
@@ -217,5 +219,60 @@ describe('ROK-2296 unbind — the last hub out frees the bot webhooks', () => {
     await svc.unbind(101, true);
     expect(gw.deleteForum).toHaveBeenCalledWith('chan-1');
     expect(gw.deleteOwnWebhooks).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2337 bind — a webhook timeout discards a forum this bind made', () => {
+  const OWN = { ack: true, mode: 'create', target: 'own', name: 'Raiders' };
+  const OLD = '123456789012345678';
+  const EXISTING = { ack: true, mode: 'existing', channelId: OLD };
+
+  function timedOut() {
+    const store = fakeStore();
+    const t = fakeGateway(store);
+    t.gw.ensureWebhook.mockRejectedValue(new WebhookCreateTimeoutError());
+    q.deleteForumRow.mockResolvedValue();
+    return { store, ...t, svc: makeService(t.gateway) };
+  }
+
+  it('create mode: deletes the new channel and its row, then 503s', async () => {
+    const { store, gw, created, svc } = timedOut();
+    created.resolve(forumInfo('chan-new', 'raiders'));
+    await expect(svc.bind(actor, 101, OWN)).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(gw.discardCreatedForum).toHaveBeenCalledTimes(1);
+    expect(gw.discardCreatedForum).toHaveBeenCalledWith('chan-new');
+    expect(q.deleteForumRow).toHaveBeenCalledWith(db, 1);
+    expect(store.binds).toEqual([]);
+  });
+
+  it('existing channel: 503s and never deletes the channel', async () => {
+    const { gw, svc } = timedOut();
+    await expect(svc.bind(actor, 101, EXISTING)).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(gw.discardCreatedForum).not.toHaveBeenCalled();
+    expect(q.deleteForumRow).not.toHaveBeenCalled();
+  });
+
+  it('still 503s when dropping the forum row fails', async () => {
+    const { gw, created, svc } = timedOut();
+    q.deleteForumRow.mockRejectedValue(new Error('db down'));
+    created.resolve(forumInfo('chan-new', 'raiders'));
+    await expect(svc.bind(actor, 101, OWN)).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(gw.discardCreatedForum).toHaveBeenCalledWith('chan-new');
+  });
+
+  it('create mode success: binds and deletes nothing', async () => {
+    const store = fakeStore();
+    const { gw, created, gateway } = fakeGateway(store);
+    created.resolve(forumInfo('chan-new', 'raiders'));
+    await makeService(gateway).bind(actor, 101, OWN);
+    expect(gw.discardCreatedForum).not.toHaveBeenCalled();
+    expect(q.deleteForumRow).not.toHaveBeenCalled();
+    expect(store.binds.map((b) => b.guildId)).toEqual([101]);
   });
 });

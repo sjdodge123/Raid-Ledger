@@ -85,3 +85,19 @@ describe('NominationGrid — per-card confirmation pill (ROK-1209 AC-5)', () => 
         expect(screen.queryByTestId('confirmation-pill')).not.toBeInTheDocument();
     });
 });
+
+describe('NominationGrid — read-only (ROK-2349)', () => {
+    const mine = () => [
+        createMockEntry({ id: 1, gameId: 1, gameName: 'Mine', nominatedBy: { id: 99, displayName: 'Me' } }),
+    ];
+
+    it('offers Remove on the nominator\'s own card when editable', () => {
+        renderWithProviders(<NominationGrid entries={mine()} lineupId={1} />);
+        expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+    });
+
+    it('offers no Remove on an archived / aborted lineup grid', () => {
+        renderWithProviders(<NominationGrid entries={mine()} lineupId={1} readOnly />);
+        expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+    });
+});
