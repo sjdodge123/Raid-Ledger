@@ -70,6 +70,14 @@ export interface LfgLockInPatch {
   carryover: LfgSignupCarryover;
 }
 
+/** One live group whose coverage core asks for (§3.4). */
+export interface LfgCoverageGroup {
+  key: string;
+  rosterShape: LfgRosterShape;
+  /** The group's live hands, one per distinct member. */
+  intentIds: number[];
+}
+
 /** The adapter a plugin registers under `EXTENSION_POINTS.LFG_GROUPING`. */
 export interface LfgGroupingAdapter {
   /** Declared behaviour id in the owner plugin's manifest. */
@@ -101,4 +109,17 @@ export interface LfgGroupingAdapter {
   ): Promise<LfgLockInPatch>;
   /** userId → {characterId?, preferredRoles?} for converted hands (poll exit). */
   buildCarryover(ctx: { intentIds: number[] }): Promise<LfgSignupCarryover>;
+  /**
+   * groupKey → how much of `rosterShape` the group's members fill (§3.4,
+   * `LfgGroupListItemDto.coverage`). Optional: absent → no coverage on the wire.
+   */
+  readCoverage?(ctx: {
+    groups: LfgCoverageGroup[];
+  }): Promise<Map<string, LfgRosterShape>>;
+  /**
+   * §3.3 / Q8: give a NEW keyed hand raised without a detail (Discord) the
+   * user's last detail on this game, inside core's transaction. No last
+   * detail → nothing ("role not set"). Never overwrites a stored detail.
+   */
+  copyLastDetail?(tx: LfgGroupingTx, ctx: LfgHandDetailContext): Promise<void>;
 }

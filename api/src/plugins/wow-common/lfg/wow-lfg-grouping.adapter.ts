@@ -9,6 +9,7 @@ import type { CreateSignupDto, WowGameVariant } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import type {
+  LfgCoverageGroup,
   LfgGroupDescriptor,
   LfgGroupingAdapter,
   LfgGroupingGameContext,
@@ -16,7 +17,9 @@ import type {
   LfgHandDetailContext,
   LfgLockInContext,
   LfgLockInPatch,
+  LfgRosterShape,
 } from '../../plugin-host/lfg-grouping.adapter';
+import { assignRoleCoverage } from './wow-lfg-coverage.helpers';
 import { BlizzardService } from '../blizzard.service';
 import {
   catalogueInstancesFor,
@@ -30,6 +33,7 @@ import {
   assertOwnCharacter,
   parseWowHandDetail,
   readWowCarryover,
+  readWowLastDetail,
   readWowMemberDetails,
   upsertWowHandDetail,
   type WowLfgDb,
@@ -104,6 +108,40 @@ export class WowLfgGroupingAdapter implements LfgGroupingAdapter {
     intentIds: number[];
   }): Promise<Map<number, CreateSignupDto>> {
     return readWowCarryover(this.db, ctx.intentIds);
+  }
+
+  /** groupKey → roles-filled coverage of each group's shape (§3.4). */
+  async readCoverage(ctx: {
+    groups: LfgCoverageGroup[];
+  }): Promise<Map<string, LfgRosterShape>> {
+    const details = await readWowMemberDetails(
+      this.db,
+      ctx.groups.flatMap((g) => g.intentIds),
+    );
+    return new Map(
+      ctx.groups.map((g) => [
+        g.key,
+        assignRoleCoverage(
+          g.rosterShape,
+          g.intentIds.map((id) => details.get(id)?.roles ?? []),
+        ),
+      ]),
+    );
+  }
+
+  /** Q8: a Discord-raised keyed hand copies the user's last web pick. */
+  async copyLastDetail(
+    tx: LfgGroupingTx,
+    ctx: LfgHandDetailContext,
+  ): Promise<void> {
+    const own = await readWowMemberDetails(tx, [ctx.intentId]);
+    if (own.has(ctx.intentId)) return;
+    const last = await readWowLastDetail(tx, ctx);
+    if (last === null || last.roles.length === 0) return;
+    await upsertWowHandDetail(tx, ctx.intentId, {
+      roles: last.roles,
+      ...(last.characterId !== null ? { characterId: last.characterId } : {}),
+    });
   }
 
   private async findInstance(

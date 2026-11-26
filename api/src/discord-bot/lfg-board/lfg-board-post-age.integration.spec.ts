@@ -187,9 +187,13 @@ describe('LFG board post-age cap (ROK-1691, integration)', () => {
   // must not lapse a hand in ANOTHER group of the game (§3.1: each hand keeps
   // its own expiry). Mutation: match the sweep on `game_id` alone and the
   // raid hand below comes back `expired`.
-  it('expires only the aged post\'s own group, not a keyed hand of the game', async () => {
+  it("expires only the aged post's own group, not a keyed hand of the game", async () => {
     const { gameId } = await freshGroupOnPostAged('keyed', 8);
-    const c = await createMemberAndLogin(testApp, 'keyed-c', 'keyed-c@test.dev');
+    const c = await createMemberAndLogin(
+      testApp,
+      'keyed-c',
+      'keyed-c@test.dev',
+    );
     const [anyHand] = nonEmpty(await hands(gameId), 'any hand');
     const [raid] = await testApp.db
       .insert(schema.lfgIntents)

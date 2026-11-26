@@ -69,7 +69,61 @@ export async function readGroupList(
     return [toListItem(summary ?? emptySummary(game), d)];
   });
   items.sort((a, b) => b.activeCount - a.activeCount);
-  return { gameId: game.id, groups: [anyItem, ...items] };
+  const covered = await attachCoverage(db, game.id, adapter, items);
+  return { gameId: game.id, groups: [anyItem, ...covered] };
+}
+
+/**
+ * ROK-2352 P2-2 / §3.4: each live shaped group's `coverage`, from the
+ * adapter (core never reads roles). Catalogue-only groups carry none.
+ */
+async function attachCoverage(
+  db: LfgDb,
+  gameId: number,
+  adapter: LfgGroupingAdapter,
+  items: LfgGroupListItemDto[],
+): Promise<LfgGroupListItemDto[]> {
+  const groups = items.flatMap((i) => {
+    const { groupKey: key, rosterShape } = i;
+    if (key === undefined || !rosterShape || i.activeCount === 0) return [];
+    return [{ key, rosterShape, intentIds: [] as number[] }];
+  });
+  if (!adapter.readCoverage || groups.length === 0) return items;
+  const hands = await liveHandsByGroup(
+    db,
+    gameId,
+    groups.map((g) => g.key),
+  );
+  for (const g of groups) g.intentIds = hands.get(g.key) ?? [];
+  const coverage = await adapter.readCoverage({ groups });
+  return items.map((i) => {
+    const c = i.groupKey === undefined ? undefined : coverage.get(i.groupKey);
+    return c ? { ...i, coverage: c } : i;
+  });
+}
+
+/** groupKey → the live hand ids of those groups (one per distinct member). */
+async function liveHandsByGroup(
+  db: LfgDb,
+  gameId: number,
+  keys: string[],
+): Promise<Map<string, number[]>> {
+  const t = schema.lfgIntents;
+  const rows = await db
+    .select({ id: t.id, groupKey: t.groupKey })
+    .from(t)
+    .innerJoin(schema.users, eq(schema.users.id, t.userId))
+    .where(
+      and(
+        eq(t.gameId, gameId),
+        inArray(t.groupKey, keys),
+        liveIntent(new Date()),
+      ),
+    );
+  const out = new Map<string, number[]>();
+  for (const r of rows)
+    out.set(r.groupKey, [...(out.get(r.groupKey) ?? []), r.id]);
+  return out;
 }
 
 /** Live keyed groups of one game, by key (unknown-to-adapter keys dropped later). */

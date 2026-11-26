@@ -97,7 +97,8 @@ export async function assertHandDetailIfNew(
 
 /**
  * Store the hand's plugin detail on the locked tx; skipped on fold (no
- * adapter) or when the client sent none.
+ * adapter). A keyed hand sent without one (Discord, Q8) gets the user's last
+ * detail through the adapter's `copyLastDetail`, which never overwrites.
  *
  * @param tx - The transaction holding the per-game lock.
  * @param post - From {@link resolvePostGroup}.
@@ -108,6 +109,12 @@ export async function saveHandDetailIfAny(
   post: ResolvedLfgPost,
   hand: { intentId: number; userId: number; gameId: number },
 ): Promise<void> {
-  if (post.grouping === null || post.opts.handDetail === undefined) return;
-  await post.grouping.saveHandDetail(tx, hand, post.opts.handDetail);
+  if (post.grouping === null) return;
+  if (post.opts.handDetail !== undefined) {
+    await post.grouping.saveHandDetail(tx, hand, post.opts.handDetail);
+    return;
+  }
+  // ROK-2352 P2-3 / AC10: `/lfg dungeon:` copies the last web roles.
+  if (post.opts.groupKey === LFG_ANY_GROUP_KEY) return;
+  await post.grouping.copyLastDetail?.(tx, hand);
 }

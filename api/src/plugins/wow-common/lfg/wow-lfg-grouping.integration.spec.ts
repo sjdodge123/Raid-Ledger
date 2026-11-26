@@ -14,6 +14,7 @@ import {
   truncateAllTables,
 } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
+import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { WowLfgGroupingAdapter } from './wow-lfg-grouping.adapter';
 import { catalogueInstancesFor, wowGroupKey } from './wow-lfg-catalogue';
 
@@ -213,5 +214,80 @@ describe('buildLockInPatch / buildCarryover', () => {
     });
     expect(carry.get(other)).toEqual({ preferredRoles: ['healer'] });
     expect(carry.size).toBe(2);
+  });
+
+  // ROK-2352 P2-3 / AC10: `/lfg dungeon:` raises a keyed hand with no detail;
+  // it copies the user's last web pick. Mutation: drop the copyLastDetail
+  // call in `saveHandDetailIfAny` and the hand reads back with no roles.
+  it('copies the last web detail onto a detail-less keyed hand, never overwriting', async () => {
+    const g = await game(ERA);
+    const u = await user('discord-copier');
+    const char = await character(u, g);
+    const webHand = await hand(u, g, keyOf('dungeon'));
+    await testApp.db.transaction((tx) =>
+      adapter.saveHandDetail(
+        tx,
+        { intentId: webHand, userId: u, gameId: g },
+        {
+          roles: ['healer'],
+          characterId: char,
+        },
+      ),
+    );
+    const discordHand = await hand(u, g, keyOf('raid'));
+    await testApp.db.transaction((tx) =>
+      adapter.copyLastDetail(tx, {
+        intentId: discordHand,
+        userId: u,
+        gameId: g,
+      }),
+    );
+    const read = await adapter.readMemberDetails({ intentIds: [discordHand] });
+    expect(read.get(discordHand)).toMatchObject({
+      roles: ['healer'],
+      characterId: char,
+    });
+    // A hand that already has its own detail keeps it.
+    await testApp.db.transaction((tx) =>
+      adapter.copyLastDetail(tx, { intentId: webHand, userId: u, gameId: g }),
+    );
+    const own = await adapter.readMemberDetails({ intentIds: [webHand] });
+    expect(own.get(webHand)?.roles).toEqual(['healer']);
+  });
+
+  // ROK-2352 P2-2 / AC4: the group list carries coverage so the web can mark
+  // a group Full. Mutation: drop `attachCoverage` and `coverage` is absent.
+  it("GET /lfg/:gameId/groups reports coverage from the members' roles", async () => {
+    // The route resolves the adapter through the registry: the owner must be on.
+    const plugins = testApp.app.get(PluginRegistryService);
+    await plugins.ensureInstalled('blizzard');
+    await plugins.activate('blizzard');
+    const g = await game(ERA);
+    const key = keyOf('dungeon');
+    const picks: Array<'tank' | 'healer' | 'dps'> = ['tank', 'healer', 'dps'];
+    for (const [i, role] of picks.entries()) {
+      const u = await user(`cov-${i}`);
+      const id = await hand(u, g, key);
+      await testApp.db.transaction((tx) =>
+        adapter.saveHandDetail(
+          tx,
+          { intentId: id, userId: u, gameId: g },
+          {
+            roles: [role],
+          },
+        ),
+      );
+    }
+    const res = await testApp.request
+      .get(`/lfg/${g}/groups`)
+      .set(
+        'Authorization',
+        `Bearer ${await loginAsAdmin(testApp.request, testApp.seed)}`,
+      );
+    expect(res.status).toBe(200);
+    const group = (
+      res.body as { groups: Array<{ groupKey: string }> }
+    ).groups.find((x) => x.groupKey === key);
+    expect(group).toMatchObject({ coverage: { tank: 1, healer: 1, dps: 1 } });
   });
 });
