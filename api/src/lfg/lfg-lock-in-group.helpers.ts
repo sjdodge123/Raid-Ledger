@@ -17,6 +17,7 @@ import {
   groupScopeFilter,
   type LfgGroupScope,
 } from './lfg-group-scope.helpers';
+import { LFG_ANY_GROUP_KEY } from '@raid-ledger/contract';
 import {
   resolveLfgGrouping,
   resolveWriteGroupKey,
@@ -31,6 +32,8 @@ export interface LfgLockInGroup {
   scope: LfgGroupScope;
   /** The game's active grouping adapter; null when folded. */
   adapter: LfgGroupingAdapter | null;
+  /** ROK-2352: the instance picked when locking in the Any (`''`) group. */
+  chosenGroupKey?: string;
 }
 
 /** No adapter: today's behaviour — the whole game is one group. */
@@ -45,6 +48,8 @@ export const LFG_FOLD_LOCK_IN: LfgLockInGroup = { scope: null, adapter: null };
  * @param registry - Plugin registry (suspended adapters are not returned).
  * @param gameId - The `lfgGameId`.
  * @param requested - The `lfgGroupKey` from the body.
+ * @param chosen - The `lfgChosenGroupKey` from the body: only read when the
+ *   Lock-in is the Any (`''`) group; a keyed group IS its instance.
  * @throws BadRequestException on a key the active adapter does not know.
  */
 export async function resolveLockInGroup(
@@ -52,6 +57,7 @@ export async function resolveLockInGroup(
   registry: LfgGroupingRegistry,
   gameId: number,
   requested: string | undefined,
+  chosen?: string,
 ): Promise<LfgLockInGroup> {
   const [game] = await db
     .select({ slug: schema.games.slug })
@@ -63,7 +69,9 @@ export async function resolveLockInGroup(
   if (adapter === null) return LFG_FOLD_LOCK_IN;
   const ctx = { gameId, gameSlug: game.slug };
   const scope = await resolveWriteGroupKey(adapter, ctx, requested);
-  return { scope, adapter };
+  if (scope !== LFG_ANY_GROUP_KEY || !chosen) return { scope, adapter };
+  const chosenGroupKey = await resolveWriteGroupKey(adapter, ctx, chosen);
+  return { scope, adapter, chosenGroupKey };
 }
 
 /**
@@ -111,6 +119,7 @@ export async function buildGroupLockInPatch(
     gameId,
     groupKey: group.scope,
     memberIntentIds,
+    ...(group.chosenGroupKey ? { chosenGroupKey: group.chosenGroupKey } : {}),
   });
 }
 

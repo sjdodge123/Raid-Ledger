@@ -77,7 +77,9 @@ async function signupCreator(
       carried
         ? deps.signupsService
             .signup(id, userId, carried, opts)
-            .catch(() => deps.signupsService.signup(id, userId, undefined, opts))
+            .catch(() =>
+              deps.signupsService.signup(id, userId, undefined, opts),
+            )
         : deps.signupsService.signup(id, userId, undefined, opts),
     ),
   );
@@ -113,7 +115,7 @@ async function signupMembers(
  * occurrence, as before. Everyone signs up through `SignupsService.signup`, so
  * roster placement is the normal one — the event just needs player slots
  * (`withLfgRosterSlots`). ROK-2352: with `lfgGroupKey` only that group
- * converts; a grouped game's adapter shapes the event (`withLfgLockInPatch`)
+ * converts (locking in the Any group, `lfgChosenGroupKey` names the instance); a grouped game's adapter shapes the event (`withLfgLockInPatch`)
  * and everyone signs up with their hand's character/roles (ROK-2320's
  * `carryover` seam — no new signup path).
  *
@@ -137,6 +139,7 @@ export async function createEventWithSignups(
         dto.lfgGameId,
         create,
         dto.lfgGroupKey,
+        dto.lfgChosenGroupKey,
       )
     : { event: await create(), memberIds: [] as number[] };
   const { event: result, memberIds } = converted;

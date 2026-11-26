@@ -37,6 +37,8 @@ export class LfgEventConvertService {
    *   grouping adapter's roster / instance / title for a grouped game.
    * @param groupKey - ROK-2352 `lfgGroupKey` (absent = `''`; folded games
    *   ignore it and convert every live hand).
+   * @param chosenGroupKey - ROK-2352 `lfgChosenGroupKey`: the instance the
+   *   creator picked when locking in the Any group (ignored otherwise).
    * @returns The event, the converted members' user ids and (grouped game)
    *   their carried character/roles.
    * @throws ConflictException (409) when the caller holds no live hand in the
@@ -48,12 +50,14 @@ export class LfgEventConvertService {
     gameId: number,
     createEvent: (patch?: LfgEventPatch) => Promise<T>,
     groupKey?: string,
+    chosenGroupKey?: string,
   ): Promise<LfgGroupCreateResult<T>> {
     const group = await resolveLockInGroup(
       this.db,
       this.registry,
       gameId,
       groupKey,
+      chosenGroupKey,
     );
     let created: T | undefined;
     const create = async (patch?: LfgEventPatch) =>
@@ -94,7 +98,11 @@ export class LfgEventConvertService {
     gameId: number,
     result: LfgGroupCreateResult<T>,
   ): void {
-    this.emitConverted({ gameId, reason: 'converted', eventId: result.event.id });
+    this.emitConverted({
+      gameId,
+      reason: 'converted',
+      eventId: result.event.id,
+    });
     const cleared = result.clearedSiblingUserIds ?? [];
     if (cleared.length > 0) {
       this.emitConverted({ gameId, reason: 'withdrawn', userIds: cleared });

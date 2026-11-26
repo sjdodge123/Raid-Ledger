@@ -77,6 +77,7 @@ describe('createEventWithSignups', () => {
       5,
       expect.any(Function),
       undefined,
+      undefined,
     );
     expect(deps.eventsService.create).toHaveBeenCalledWith(CREATOR, {
       ...LFG_DTO,
@@ -163,7 +164,10 @@ describe('withLfgRosterSlots', () => {
 describe('ROK-2352 grouped Lock-in', () => {
   const SHAPE = { type: 'mmo' as const, tank: 1, healer: 1, dps: 3 };
   const INSTANCE = { id: 36, name: 'Deadmines' };
-  const CARRY_CREATOR = { characterId: 'c-7', preferredRoles: ['tank' as const] };
+  const CARRY_CREATOR = {
+    characterId: 'c-7',
+    preferredRoles: ['tank' as const],
+  };
   const CARRY_MEMBER = { preferredRoles: ['healer' as const] };
 
   function convertsWithPatch(deps: ReturnType<typeof buildDeps>['deps']) {
@@ -199,6 +203,7 @@ describe('ROK-2352 grouped Lock-in', () => {
       5,
       expect.any(Function),
       'dungeon:36',
+      undefined,
     );
     expect(deps.eventsService.create).toHaveBeenCalledWith(CREATOR, {
       ...dto,
@@ -206,6 +211,26 @@ describe('ROK-2352 grouped Lock-in', () => {
       slotConfig: SHAPE,
       contentInstances: [INSTANCE],
     });
+  });
+
+  it("passes lfgChosenGroupKey (the Any group's picked instance) to the convert", async () => {
+    const { deps, typed } = buildDeps();
+    convertsWithPatch(deps);
+    const dto = {
+      ...LFG_DTO,
+      lfgGroupKey: '',
+      lfgChosenGroupKey: 'dungeon:36',
+    };
+
+    await createEventWithSignups(typed, CREATOR, dto);
+
+    expect(deps.lfgEventConvert.createForGroup).toHaveBeenCalledWith(
+      CREATOR,
+      5,
+      expect.any(Function),
+      '',
+      'dungeon:36',
+    );
   });
 
   it('signs the creator and the members up with their carried character/roles', async () => {
