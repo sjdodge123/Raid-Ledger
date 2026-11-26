@@ -40,6 +40,8 @@ import { useLfgGrouping, type LfgGroupingContext } from '../../plugins/lfg-group
 import { LfgGroupingHeader, LfgGroupingList } from './lfg-grouping-slots';
 import type { LfgJoinPick } from './LfgJoinControl';
 import { useLfgHubParam } from './lfg-hub-param';
+import { useGroupingSlots } from './use-grouping-slots';
+import { LfgYourHandCard } from './lfg-your-hand-card';
 
 /** ROK-2352: the join vars for the page's group — none for the whole-game group. */
 function groupKeysFor(groupKey: string): { groupKeys?: string[] } {
@@ -145,10 +147,11 @@ function LfgPanels({ threadId, ...overlap }: PanelProps): JSX.Element {
     );
 }
 
-/** The loaded page: top bar → banner → hero → recovery card → panels → dialogs. */
+/** The loaded page: top bar → banner → hero → your hand → recovery card → panels → dialogs. */
 function LfgGroupLoaded({ context, fallbackName, group }: { context: LfgGroupingContext; fallbackName: string; group: LfgGroupDetailDto }): JSX.Element {
     const { gameId, groupKey } = context;
     const grouping = useLfgGrouping(context.gameSlug);
+    const slots = useGroupingSlots(grouping, context);
     const detail = useGameDetail(gameId);
     const actions = useGroupActions(gameId, group, groupKey);
     const overlays = useLfgOverlay();
@@ -157,28 +160,16 @@ function LfgGroupLoaded({ context, fallbackName, group }: { context: LfgGrouping
             <LfgTopBar onManage={() => overlays.open('manage')} canManage={group.playingNow == null} />
             <LfgGroupingHeader grouping={grouping} context={context} />
             <LfgHeader gameId={gameId} game={detail.data} fallbackName={fallbackName} />
-            <LfgGroupTop
-                group={group}
-                onJoin={actions.join}
-                raiseHand={grouping?.RaiseHandFields ? { Fields: grouping.RaiseHandFields, context } : undefined}
-                onStartPoll={() => overlays.open('poll')}
-                onStartNow={() => overlays.open('startnow')}
-                onParticipants={() => overlays.open('participants')}
-                isBusy={actions.isBusy}
-            />
+            <LfgGroupTop group={group} onJoin={actions.join} raiseHand={slots.raiseHand} isBusy={actions.isBusy}
+                onStartPoll={() => overlays.open('poll')} onStartNow={() => overlays.open('startnow')}
+                onParticipants={() => overlays.open('participants')} />
+            <LfgYourHandCard group={group} context={context} grouping={grouping} />
             <LfgGroupingList grouping={grouping} context={context} />
             <PendingPollCard pending={actions.pendingConvert} onRetry={actions.retryConvert} />
-            <LfgPanels
-                gameId={gameId}
-                groupKey={groupKey}
-                threadId={group.threadId}
-                onLockIn={overlays.openLockIn}
-                isBusy={actions.isBusy}
-                lockInHint={group.ownIntent == null ? LFG_COPY.findATimeNeedsIntent : undefined}
-            />
+            <LfgPanels gameId={gameId} groupKey={groupKey} threadId={group.threadId} onLockIn={overlays.openLockIn} isBusy={actions.isBusy}
+                lockInHint={group.ownIntent == null ? LFG_COPY.findATimeNeedsIntent : undefined} />
             <LfgGroupOverlays group={group} overlay={overlays.overlay} actions={actions.dialogs} onClose={overlays.close}
-                lockInFields={grouping?.LockInFields ? { Fields: grouping.LockInFields, context } : undefined}
-                memberBadges={grouping?.MemberBadges ? { Badges: grouping.MemberBadges, context } : undefined} />
+                lockInFields={slots.lockInFields} memberBadges={slots.memberBadges} />
         </div>
     );
 }

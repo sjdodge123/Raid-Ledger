@@ -13,6 +13,7 @@ import type { ComponentType } from 'react';
 import type {
     LfgGroupDetailDto,
     LfgGroupListItemDto,
+    LfgGroupRefDto,
     LfgMemberDto,
 } from '@raid-ledger/contract';
 import { usePluginStore } from '../stores/plugin-store';
@@ -85,6 +86,8 @@ export interface LfgGrouping {
     MemberBadges?: ComponentType<LfgMemberBadgesProps>;
     /** Extra fields inside the lock-in confirm. */
     LockInFields?: ComponentType<LfgLockInFieldsProps>;
+    /** A group's display name in core UI ("Your hand"), e.g. WoW's "Any dungeon" for `''`. */
+    groupLabel?: (ref: LfgGroupRefDto) => string;
 }
 
 /** A grouping and the plugin that owns it. */
