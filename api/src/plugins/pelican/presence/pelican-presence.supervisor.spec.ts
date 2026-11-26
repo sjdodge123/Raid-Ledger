@@ -329,6 +329,19 @@ describe('ROK-1801 read port', () => {
     expect(h.events.emit.mock.calls).toEqual([changed(1), changed(3, 43)]);
   });
 
+  // ROK-2355: a session a reconcile opened mid-deactivation reads as empty.
+  it('reads nothing while Pelican is off, even with a session open', async () => {
+    const h = harness({ open: [ALICE] });
+    await h.reconcile();
+    const alice = { pelicanServerId: 1, gameId: 42, ...steamPlayer('A') };
+    expect(h.supervisor.playersOnGames()).toEqual([
+      { ...alice, name: 'Alice' },
+    ]);
+    h.deps.registry.isActive.mockReturnValue(false);
+    expect(h.supervisor.playersOnGames()).toEqual([]);
+    expect(h.supervisor.playersForGame(42)).toEqual([]);
+  });
+
   it('deactivation empties the read roster and emits CHANGED', async () => {
     const h = harness({ open: [ALICE] });
     await h.reconcile();
