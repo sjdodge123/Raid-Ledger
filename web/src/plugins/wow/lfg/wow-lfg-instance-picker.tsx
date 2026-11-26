@@ -7,23 +7,15 @@
 import type { JSX } from 'react';
 import type { LfgGroupListItemDto } from '@raid-ledger/contract';
 import { Checkbox } from '../../../components/ui/checkbox';
-import { LFG_HAND_CAP, LFG_HAND_CAP_COPY } from '../../../hooks/use-lfg-join';
+import { LFG_HAND_CAP_COPY } from '../../../hooks/use-lfg-join';
 import { orderWowLfgGroups } from './wow-lfg-group-order';
+import { wowLfgPickCap } from './wow-lfg-pick-cap';
 import { WOW_LFG_COPY, wowLfgGroupLabel } from './wow-lfg-copy';
 
 interface PickerProps {
     groups: readonly LfgGroupListItemDto[];
     picked: readonly string[];
     onChange: (keys: string[]) => void;
-}
-
-/** New hands the picks would raise, and whether no more fit under the cap. */
-function wowLfgPickCap(groups: readonly LfgGroupListItemDto[], picked: readonly string[]): {
-    held: ReadonlySet<string>; atCap: boolean;
-} {
-    const held = new Set(groups.filter((g) => g.hasOwnIntent).map((g) => g.groupKey ?? ''));
-    const fresh = picked.filter((k) => !held.has(k)).length;
-    return { held, atCap: held.size + fresh >= LFG_HAND_CAP };
 }
 
 function PickGroup({ title, testId, groups, picked, disabledFor, toggle }: {

@@ -4,6 +4,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { LfgGroupListItemDto } from '@raid-ledger/contract';
 import { LFG_HAND_CAP_COPY } from '../../../hooks/use-lfg-join';
 import { WowLfgInstancePicker } from './wow-lfg-instance-picker';
+import { wowLfgPickBlocked } from './wow-lfg-pick-cap';
 
 function item(over: Partial<LfgGroupListItemDto>): LfgGroupListItemDto {
     return {
@@ -52,5 +53,24 @@ describe('WowLfgInstancePicker', () => {
         expect(screen.getByLabelText('Dungeon 6')).toBeDisabled();
         expect(screen.getByLabelText('Dungeon 1')).not.toBeDisabled();
         expect(screen.getByTestId('wow-lfg-instances-cap')).toBeInTheDocument();
+    });
+});
+
+describe('wowLfgPickBlocked — the submit is held back at the cap (review r2)', () => {
+    const five = [1, 2, 3, 4, 5].map((i) => dungeon(i, true));
+
+    it('blocks a no-pick submit (raises Any) when 5 keyed hands are held', () => {
+        expect(wowLfgPickBlocked([...five, dungeon(6)], [])).toBe(true);
+    });
+
+    it('blocks a pick of a sixth group, allows re-raising a held one', () => {
+        expect(wowLfgPickBlocked([...five, dungeon(6)], ['dungeon:6'])).toBe(true);
+        expect(wowLfgPickBlocked([...five, dungeon(6)], ['dungeon:1'])).toBe(false);
+    });
+
+    it('allows the fifth hand and a no-pick submit when the Any hand is held', () => {
+        expect(wowLfgPickBlocked([...five.slice(0, 4), dungeon(5)], ['dungeon:5'])).toBe(false);
+        const anyHeld = item({ groupKey: '', groupLabel: 'Any', kind: 'dungeon', hasOwnIntent: true });
+        expect(wowLfgPickBlocked([anyHeld, ...five.slice(0, 4)], [])).toBe(false);
     });
 });
