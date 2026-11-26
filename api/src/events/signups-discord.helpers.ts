@@ -13,6 +13,7 @@ import type { Tx, EventRow } from './signups.service.types';
 import * as cancelH from './signups-cancel.helpers';
 import * as rosterH from './signups-roster.helpers';
 import { unclaimedOrOwnedBy } from './signups-ownership.helpers';
+import { assignmentOfSignupInEvent } from './roster-assignment-scope.helpers';
 import {
   resolveGenericSlotRole,
   findNextPosition,
@@ -252,7 +253,7 @@ export async function cancelByDiscordUserFlow(
   const cancelInfo = await cancelH.resolveCancelStatus(db, eventId);
   await db
     .delete(schema.rosterAssignments)
-    .where(eq(schema.rosterAssignments.signupId, signup.id));
+    .where(assignmentOfSignupInEvent(eventId, signup.id));
   await db
     .update(schema.eventSignups)
     .set({

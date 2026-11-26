@@ -12,6 +12,7 @@ import {
 import { resolveEventCapacity } from '../../events/signups-signup.helpers';
 import { isSlotVacatedRelevant } from '../../notifications/slot-vacated-relevance.helpers';
 import { defined } from '../../common/defined.helpers';
+import { assignmentOfSignupInEvent } from '../../events/roster-assignment-scope.helpers';
 import { isDiscordDmMuted } from '../../notifications/discord-dm-mute.helpers';
 
 /** Bundled dependencies passed from the processor. */
@@ -160,7 +161,7 @@ export async function moveToBench(
   const [assignment] = await db
     .select()
     .from(schema.rosterAssignments)
-    .where(eq(schema.rosterAssignments.signupId, signupId))
+    .where(assignmentOfSignupInEvent(eventId, signupId))
     .limit(1);
 
   if (!assignment || assignment.role === 'bench') return assignment ?? null;

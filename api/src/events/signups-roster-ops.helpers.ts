@@ -12,6 +12,7 @@ import * as cancelH from './signups-cancel.helpers';
 import * as notifH from './signups-notification.helpers';
 import type { NotificationService } from '../notifications/notification.service';
 import { appendVoiceAccessLine } from '../notifications/voice-access-lost.helpers';
+import { assignmentOfSignupInEvent } from './roster-assignment-scope.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
 type Logger = {
@@ -41,7 +42,7 @@ export async function findUserAssignment(
   const [assignment] = await db
     .select()
     .from(schema.rosterAssignments)
-    .where(eq(schema.rosterAssignments.signupId, signup.id))
+    .where(assignmentOfSignupInEvent(eventId, signup.id))
     .limit(1);
   if (!assignment)
     throw new NotFoundException(

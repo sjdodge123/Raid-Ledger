@@ -8,6 +8,7 @@ import { NotificationService } from '../../notifications/notification.service';
 import { SIGNUP_EVENTS } from '../discord-bot.constants';
 import type { SignupEventPayload } from '../discord-bot.constants';
 import { findFirstAvailableSlot } from '../../events/roster-slot.utils';
+import { assignmentOfSignupInEvent } from '../../events/roster-assignment-scope.helpers';
 import {
   DepartureGraceQueueService,
   DEPARTURE_GRACE_DELAY_MS,
@@ -174,7 +175,7 @@ export class DepartureGraceService {
     eventId: number,
     signupId: number,
   ): Promise<{ role: string; position: number } | null> {
-    const benchAssignment = await this.findBenchAssignment(signupId);
+    const benchAssignment = await this.findBenchAssignment(eventId, signupId);
     if (!benchAssignment) return null;
 
     const availableSlot = await this.findAvailableSlot(
@@ -188,6 +189,7 @@ export class DepartureGraceService {
   }
 
   private async findBenchAssignment(
+    eventId: number,
     signupId: number,
   ): Promise<{ id: number } | null> {
     const [row] = await this.db
@@ -195,7 +197,7 @@ export class DepartureGraceService {
       .from(schema.rosterAssignments)
       .where(
         and(
-          eq(schema.rosterAssignments.signupId, signupId),
+          assignmentOfSignupInEvent(eventId, signupId),
           eq(schema.rosterAssignments.role, 'bench'),
         ),
       )
