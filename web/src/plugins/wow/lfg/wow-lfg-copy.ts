@@ -28,7 +28,11 @@ export function wowLfgGroupLabel(group: Pick<LfgGroupSummaryDto, 'groupKey' | 'g
     return (group.groupKey ?? '') === '' ? WOW_LFG_COPY.anyLabel : (group.groupLabel ?? group.groupKey ?? '');
 }
 
-/** `/lfg/<slug>` for the Any group, `/lfg/<slug>/<encoded key>` otherwise. */
-export function wowLfgGroupHref(gameSlug: string, groupKey: string): string {
-    return groupKey === '' ? `/lfg/${gameSlug}` : `/lfg/${gameSlug}/${encodeURIComponent(groupKey)}`;
+/**
+ * `/lfg/<slug>` for the Any group, `/lfg/<slug>/<encoded key>` otherwise, plus
+ * `?hub=<id>` when the page came from a hub, so the hub survives the hop.
+ */
+export function wowLfgGroupHref(gameSlug: string, groupKey: string, hubId: number | null = null): string {
+    const path = groupKey === '' ? `/lfg/${gameSlug}` : `/lfg/${gameSlug}/${encodeURIComponent(groupKey)}`;
+    return hubId === null ? path : `${path}?hub=${hubId}`;
 }

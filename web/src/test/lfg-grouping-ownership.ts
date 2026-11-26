@@ -2,9 +2,8 @@
  * ROK-2352 — the ownership check for `registerLfgGrouping`: every web grouping
  * is declared as an `lfg-grouping` behaviour of ITS OWN plugin's manifest and
  * lists at least one game. The manifest's `gameSlugs` is hub-widget scope only
- * (blizzard: Forever), so it is NOT a bound on a grouping's games. (Declared-but-
- * unregistered is not checked yet: the WoW web registration lands with L9 — add
- * that direction there.)
+ * (blizzard: Forever), so it is NOT a bound on a grouping's games. Both
+ * directions: a declaration no web registration answers is drift too (AC12).
  */
 import type { PluginHubManifest } from '@raid-ledger/contract';
 import { getLfgGroupingRegistrations } from '../plugins/lfg-grouping';
@@ -39,5 +38,9 @@ function problemsFor(r: LfgGroupingOwnership, manifest: PluginHubManifest | unde
 
 /** Every problem across the registrations; empty = no drift. */
 export function lfgGroupingDrift(regs: readonly LfgGroupingOwnership[], manifests: Manifests): string[] {
-    return regs.flatMap((r) => problemsFor(r, manifests[r.owner]));
+    const unregistered = Object.entries(manifests).flatMap(([owner, manifest]) =>
+        declaredIds(manifest)
+            .filter((id) => !regs.some((r) => r.owner === owner && r.id === id))
+            .map((id) => `HUB_PLUGIN_MANIFESTS.${owner} declares lfg-grouping "${id}" but no web grouping registers it`));
+    return [...regs.flatMap((r) => problemsFor(r, manifests[r.owner])), ...unregistered];
 }

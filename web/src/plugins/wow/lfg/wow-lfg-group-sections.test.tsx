@@ -44,4 +44,12 @@ describe('WowLfgGroupSections', () => {
         expect(screen.queryByTestId('wow-lfg-raids')).toBeNull();
         expect(screen.queryByTestId('wow-lfg-dungeons')).toBeNull();
     });
+
+    it('keeps the hub on every group link (review r1)', () => {
+        render(<MemoryRouter><WowLfgGroupSections context={{ ...context, hubId: 12 }} groups={[
+            item({}), item({ groupKey: 'dungeon:36', groupLabel: 'Deadmines', kind: 'dungeon' }),
+        ]} isLoading={false} /></MemoryRouter>);
+        const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
+        expect(hrefs).toEqual(['/lfg/world-of-warcraft-classic?hub=12', '/lfg/world-of-warcraft-classic/dungeon%3A36?hub=12']);
+    });
 });

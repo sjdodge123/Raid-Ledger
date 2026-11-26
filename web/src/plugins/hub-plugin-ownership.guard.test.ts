@@ -282,4 +282,11 @@ describe('ROK-2352 — every LFG grouping is declared under its owner, in its ga
             'LFG grouping blizzard:wow-instance-lfg lists no games',
         ]);
     });
+
+    it('names a declared grouping that no web registration answers (AC12 mutation check)', () => {
+        const regs = collectLfgGroupings().filter((r) => !(r.owner === 'blizzard' && r.id === 'wow-instance-lfg'));
+        expect(lfgGroupingDrift(regs, HUB_PLUGIN_MANIFESTS)).toEqual([
+            'HUB_PLUGIN_MANIFESTS.blizzard declares lfg-grouping "wow-instance-lfg" but no web grouping registers it',
+        ]);
+    });
 });
