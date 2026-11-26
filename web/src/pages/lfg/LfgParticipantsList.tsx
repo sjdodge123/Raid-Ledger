@@ -2,17 +2,25 @@
  * ROK-1571 (approved H5) — the participants list the chip opens: who is
  * looking and how soon each wants to play. Sheet below 768px, modal from 768px.
  */
-import type { JSX } from 'react';
+import type { ComponentType, JSX } from 'react';
 import type { LfgMemberDto } from '@raid-ledger/contract';
 import { useNowTick } from '../../hooks/use-now-tick';
 import { LFG_COPY, expiresIn } from './lfg-copy';
 import { participantsLabel } from './lfg-dialog-recipes';
 import { LfgMemberRow, LfgSheetOrModal } from './LfgSheetOrModal';
+import type { LfgGroupingContext, LfgMemberBadgesProps } from '../../plugins/lfg-grouping';
+
+/** ROK-2352: the active grouping's `MemberBadges` and the page context. */
+export interface LfgMemberBadgesSlot {
+    Badges: ComponentType<LfgMemberBadgesProps>;
+    context: LfgGroupingContext;
+}
 
 export interface LfgParticipantsListProps {
     isOpen: boolean;
     members: LfgMemberDto[];
     onClose: () => void;
+    badges?: LfgMemberBadgesSlot | undefined;
 }
 
 /** Urgency chip — amber for right now (the now-strip family), neutral for the week. */
@@ -32,14 +40,19 @@ function UrgencyChip({ member, now }: { member: LfgMemberDto; now: number }): JS
     );
 }
 
-export function LfgParticipantsList({ isOpen, members, onClose }: LfgParticipantsListProps): JSX.Element | null {
+export function LfgParticipantsList({ isOpen, members, onClose, badges }: LfgParticipantsListProps): JSX.Element | null {
     // The same shared countdown `LfgNowStrip` runs on.
     const now = useNowTick(members.filter((m) => m.urgency === 'now').map((m) => m.expiresAt));
     return (
         <LfgSheetOrModal isOpen={isOpen} onClose={onClose} title={participantsLabel(members.length)}>
             <ul data-testid="lfg-participants-list" className="space-y-2">
                 {members.map((m) => (
-                    <LfgMemberRow key={m.userId} member={m} trailing={<UrgencyChip member={m} now={now} />} />
+                    <LfgMemberRow key={m.userId} member={m} trailing={(
+                        <span className="flex min-w-0 items-center gap-2">
+                            {badges ? <badges.Badges context={badges.context} member={m} /> : null}
+                            <UrgencyChip member={m} now={now} />
+                        </span>
+                    )} />
                 ))}
             </ul>
         </LfgSheetOrModal>

@@ -21,6 +21,13 @@ describe('LfgParticipantsList', () => {
         expect(screen.getByText('Participants · 2')).toBeInTheDocument();
     });
 
+    it('ROK-2352: renders the grouping plugin\'s badges beside each member', () => {
+        const Badges = ({ member }: { member: { userId: number } }) => <span data-testid="badge">{`b${member.userId}`}</span>;
+        const context = { gameId: 1, gameSlug: 'g', groupKey: 'k', hubId: null };
+        renderWithProviders(<LfgParticipantsList isOpen members={MEMBERS} onClose={vi.fn()} badges={{ Badges, context }} />);
+        expect(screen.getAllByTestId('badge').map((b) => b.textContent)).toEqual(['b1', 'b2']);
+    });
+
     it('renders nothing while closed', () => {
         renderWithProviders(<LfgParticipantsList isOpen={false} members={MEMBERS} onClose={vi.fn()} />);
         expect(screen.queryByTestId('lfg-participants-list')).not.toBeInTheDocument();

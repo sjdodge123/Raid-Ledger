@@ -177,7 +177,8 @@ function LfgGroupLoaded({ context, fallbackName, group }: { context: LfgGrouping
                 lockInHint={group.ownIntent == null ? LFG_COPY.findATimeNeedsIntent : undefined}
             />
             <LfgGroupOverlays group={group} overlay={overlays.overlay} actions={actions.dialogs} onClose={overlays.close}
-                lockInFields={grouping?.LockInFields ? { Fields: grouping.LockInFields, context } : undefined} />
+                lockInFields={grouping?.LockInFields ? { Fields: grouping.LockInFields, context } : undefined}
+                memberBadges={grouping?.MemberBadges ? { Badges: grouping.MemberBadges, context } : undefined} />
         </div>
     );
 }

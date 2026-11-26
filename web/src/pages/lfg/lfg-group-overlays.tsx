@@ -8,7 +8,7 @@ import type { LfgGroupDetailDto, LfgMemberDto, LfgOverlapWindowDto } from '@raid
 import type { LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
 import { LfgLockInConfirm } from './LfgLockInConfirm';
 import { LfgManageDialog } from './LfgManageDialog';
-import { LfgParticipantsList } from './LfgParticipantsList';
+import { LfgParticipantsList, type LfgMemberBadgesSlot } from './LfgParticipantsList';
 import { LfgPollConfirm } from './LfgPollConfirm';
 import { LfgStartNowConfirm } from './LfgStartNowConfirm';
 import type { LfgOverlay } from './use-lfg-overlay';
@@ -34,6 +34,8 @@ export interface LfgGroupOverlaysProps {
     onClose: () => void;
     /** ROK-2352: the grouping plugin's lock-in fields, when one is active. */
     lockInFields?: LfgLockInSlot | undefined;
+    /** ROK-2352: the grouping plugin's per-member badges, when one is active. */
+    memberBadges?: LfgMemberBadgesSlot | undefined;
 }
 
 /** The active grouping's `LockInFields` and the page context. */
@@ -121,7 +123,7 @@ export function LfgGroupOverlays(props: LfgGroupOverlaysProps): JSX.Element {
                 spawnsNow={group.pressWouldSpawnNow === true}
                 spawnEmoji={group.spawnIndicatorEmoji}
             />
-            <LfgParticipantsList isOpen={kind === 'participants'} members={group.members} onClose={onClose} />
+            <LfgParticipantsList isOpen={kind === 'participants'} members={group.members} onClose={onClose} badges={props.memberBadges} />
         </>
     );
 }

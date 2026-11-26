@@ -18,6 +18,7 @@ export const WOW_LFG_COPY = {
     rosterPreview: 'Roster',
     lockInInstance: 'Dungeon or raid',
     lockInNoInstance: 'No instance (generic roster)',
+    roleNotSet: 'Role not set',
 } as const;
 
 /** A group's display name: the adapter label, "Any dungeon" for `''`. */
