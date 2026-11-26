@@ -83,7 +83,12 @@ export async function assertHandDetailIfNew(
   post: ResolvedLfgPost,
 ): Promise<void> {
   if (!post.detailRequired) return;
-  const existing = await findActiveIntent(tx, userId, gameId, post.opts.groupKey);
+  const existing = await findActiveIntent(
+    tx,
+    userId,
+    gameId,
+    post.opts.groupKey,
+  );
   if (existing !== null) return;
   throw new BadRequestException({
     handDetail: ['Required when raising a hand in this group'],
