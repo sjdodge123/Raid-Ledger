@@ -5,10 +5,12 @@ import { RESTEvents, type RateLimitData, type REST } from 'discord.js';
  * ROK-2337 — the longest a bind waits for Discord to create the forum's
  * webhook. discord.js bounds each HTTP attempt at 15s, but NOT the time a
  * request sits in its rate-limit queue, so a throttled `createWebhook` could
- * hold the bind (and its per-guild lock) indefinitely. 30s leaves room for
- * one full attempt plus a short rate-limit wait.
+ * hold the bind (and its per-guild lock) indefinitely. 90s: on the shared
+ * test guild Discord routinely takes ~60-78s to answer a createWebhook
+ * (main's discord-smoke binds), so a 30s bound turned normal slowness into
+ * 503s (#2351 discord-smoke, 9 forum flows). The smoke itself allows 90s.
  */
-export const FORUM_WEBHOOK_CREATE_TIMEOUT_MS = 30_000;
+export const FORUM_WEBHOOK_CREATE_TIMEOUT_MS = 90_000;
 
 /**
  * ROK-2337 — the bind's `createWebhook` ran past its bound. A 503; the bind

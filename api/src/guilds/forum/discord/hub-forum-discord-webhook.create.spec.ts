@@ -98,6 +98,16 @@ describe('ROK-2337 ensureWebhook — bounded createWebhook', () => {
     expect(out.value).toBe('h-new');
   });
 
+  it('still returns the hook when Discord takes a slow-but-normal 60s', async () => {
+    const t = setup();
+    const out = track(t.gw.ensureWebhook('c1', null));
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(out.value).toBe('pending');
+    t.land(hook('h-slow'));
+    await jest.advanceTimersByTimeAsync(0);
+    expect(out.value).toBe('h-slow');
+  });
+
   it('fails with a 503 once the create outlives the time bound', async () => {
     const t = setup();
     const out = track(t.gw.ensureWebhook('c1', null));
