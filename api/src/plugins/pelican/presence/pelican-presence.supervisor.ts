@@ -137,6 +137,7 @@ export class PelicanPresenceSupervisor
    */
   @OnEvent(PLUGIN_EVENTS.DEACTIVATED)
   async handlePluginDeactivated(payload: { slug: string }): Promise<void> {
+    // plugin-scope: cleanup
     if (payload.slug !== PELICAN_PLUGIN_ID) return;
     await this.stopAll();
   }
