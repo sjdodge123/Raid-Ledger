@@ -27,9 +27,11 @@ export function SigninCodePanel({ onSignedIn }: { onSignedIn: (user: User) => vo
     const { state, start, cancel } = useSigninCode(adopt);
     const autoStarted = useRef(false);
     useEffect(() => {
-        if (autoStarted.current || state.phase !== 'idle') return;
+        // Only on mount, and only with no code to resume: a later return to
+        // 'idle' (cancel, "Not you?") waits for "Get a code".
+        if (autoStarted.current) return;
         autoStarted.current = true;
-        void start();
+        if (state.phase === 'idle') void start();
     }, [state.phase, start]);
 
     if (signIn.phase === 'held') {
