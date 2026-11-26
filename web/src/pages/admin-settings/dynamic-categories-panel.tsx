@@ -6,10 +6,12 @@
  * candidateGameIds list — that's the heuristic used by the weekly cron
  * to indicate the pipeline ran before game_taste_vectors was populated.
  *
- * Mounted inside the Admin Settings > General panel so the route
- * `/admin/settings/general` surfaces it alongside Site Settings.
+ * Mounted by the AI plugin's admin content (`plugins/ai/slots/ai-plugin-content.tsx`).
+ * ROK-2363: the `ai` plugin owns it — while that plugin is off it renders
+ * nothing and fires none of its `/admin/ai/*` or discovery-category queries.
  */
 import { useState, type JSX } from 'react';
+import { isSlugActive, usePluginStore } from '../../stores/plugin-store';
 import type {
     AdminCategoryListSuggestionDto,
     DiscoveryCategorySuggestionDto,
@@ -191,7 +193,16 @@ function usePanelState() {
     };
 }
 
-export function DynamicCategoriesPanel(): JSX.Element {
+/** The owning plugin (ROK-2363). */
+export const DYNAMIC_CATEGORIES_PLUGIN = 'ai';
+
+/** Mounts the panel (and its queries) only while the AI plugin is active (ROK-2363). */
+export function DynamicCategoriesPanel(): JSX.Element | null {
+    const active = usePluginStore((s) => isSlugActive(s.activeSlugs, DYNAMIC_CATEGORIES_PLUGIN));
+    return active ? <ActiveDynamicCategoriesPanel /> : null;
+}
+
+function ActiveDynamicCategoriesPanel(): JSX.Element {
     const panel = usePanelState();
     const { actions, setEditing } = panel;
 
