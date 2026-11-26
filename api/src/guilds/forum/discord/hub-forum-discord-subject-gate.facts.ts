@@ -26,6 +26,7 @@ import {
 import { findPollForSync } from '../subject-discussion/poll-discussion.queries';
 import { pollSubjectTitle } from '../subject-discussion/poll-discussion.sync';
 import { SUBJECT_FALLBACK_TITLE } from './hub-forum-discord-subject-gate.copy';
+import { resolveDiscordAccount } from '../../../users/discord-account-status.helpers';
 import { userIdForDiscord } from './hub-forum-discord-inbound.writes';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -132,6 +133,9 @@ async function isParticipant(
   s: GateSubject,
   authorId: string,
 ): Promise<boolean> {
+  // ROK-2328: a banned / deactivated account stays linked but earns no credit.
+  const account = await resolveDiscordAccount(db, authorId);
+  if (account.kind === 'blocked') return false;
   if (s.kind === 'event') return isSignedUp(db, s.id, authorId);
   const userId = await userIdForDiscord(db, authorId);
   if (userId === null) return false;
