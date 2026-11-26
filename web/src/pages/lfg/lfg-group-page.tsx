@@ -39,6 +39,7 @@ import { LfgGroupTop } from './lfg-group-top';
 import { LfgLoading, LfgNotFound, PendingPollCard } from './lfg-group-states';
 import { useLfgGrouping, type LfgGroupingContext } from '../../plugins/lfg-grouping';
 import { LfgGroupingHeader, LfgGroupingList } from './lfg-grouping-slots';
+import type { LfgJoinPick } from './LfgJoinControl';
 import { useLfgHubParam } from './lfg-hub-param';
 
 /** ROK-2352: the join vars for the page's group — none for the whole-game group. */
@@ -89,7 +90,8 @@ function useGroupActions(gameId: number, group: LfgGroupDetailDto | undefined, g
     };
     return {
         dialogs,
-        join: (pick: LfgUrgencyPick) => join.mutate({ gameId, ...pick, ...groupKeysFor(groupKey) }),
+        // ROK-2352: the plugin's picks (if any) win over the page's own group.
+        join: (pick: LfgJoinPick) => join.mutate({ gameId, ...groupKeysFor(groupKey), ...pick }),
         isBusy: join.isPending || withdraw.isPending || find.isPending || lock.isPending || start.isPending,
         pendingConvert: find.pendingConvert,
         retryConvert: () => void find.retryConvert(),
@@ -135,6 +137,7 @@ function LfgPanels({ threadId, ...overlap }: PanelProps): JSX.Element {
             <LfgConversationPanel gameId={overlap.gameId} threadId={threadId} />
             <LfgSuggestionsPanel
                 gameId={overlap.gameId}
+                groupKey={overlap.groupKey}
                 suggestions={suggestions.data}
                 isLoading={suggestions.isLoading}
                 isError={suggestions.isError}
@@ -158,6 +161,7 @@ function LfgGroupLoaded({ context, fallbackName, group }: { context: LfgGrouping
             <LfgGroupTop
                 group={group}
                 onJoin={actions.join}
+                raiseHand={grouping?.RaiseHandFields ? { Fields: grouping.RaiseHandFields, context } : undefined}
                 onStartPoll={() => overlays.open('poll')}
                 onStartNow={() => overlays.open('startnow')}
                 onParticipants={() => overlays.open('participants')}

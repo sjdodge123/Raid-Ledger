@@ -14,18 +14,47 @@
  *
  * `Withdraw` is deliberately untouched — there is only one way to leave.
  */
-import { useState, type JSX } from 'react';
+import { useState, type ComponentType, type JSX } from 'react';
 import {
     LfgUrgencyChoice,
     type LfgUrgencyPick,
 } from '../../components/lfg/lfg-urgency-choice';
+import type {
+    LfgGroupingContext,
+    LfgRaiseHandFieldsProps,
+    LfgRaiseHandSelection,
+} from '../../plugins/lfg-grouping';
 import { LFG_COPY } from './lfg-copy';
+
+/** The urgency pick plus, with a grouping plugin, its groups and hand detail. */
+export type LfgJoinPick = LfgUrgencyPick & {
+    groupKeys?: readonly string[];
+    handDetail?: Record<string, unknown>;
+};
+
+/** ROK-2352: the active grouping's raise-hand fields and the page context. */
+export interface LfgRaiseHandSlot {
+    Fields: ComponentType<LfgRaiseHandFieldsProps>;
+    context: LfgGroupingContext;
+}
+
+/** Folds the plugin's selection into the pick — empty keys = the page's group. */
+function withSelection(pick: LfgUrgencyPick, sel: LfgRaiseHandSelection | null): LfgJoinPick {
+    if (!sel) return pick;
+    return {
+        ...pick,
+        ...(sel.groupKeys.length > 0 ? { groupKeys: sel.groupKeys } : {}),
+        ...(sel.handDetail ? { handDetail: sel.handDetail } : {}),
+    };
+}
 
 export interface LfgJoinControlProps {
     /** What is being joined (the game's name) — names the choice group. */
     label: string;
     /** Receives the pick, ready to spread into the join mutation (A2). */
-    onJoin: (pick: LfgUrgencyPick) => void;
+    onJoin: (pick: LfgJoinPick) => void;
+    /** ROK-2352: plugin fields shown with the urgency choice; the pick waits for `ready`. */
+    raiseHand?: LfgRaiseHandSlot | undefined;
     /** The caller's button styling, so the bar keeps one button vocabulary. */
     className: string;
     /** Disables the button and the three choices while a write is in flight. */
@@ -87,19 +116,23 @@ export function LfgJoinControl({
     isBusy,
     spawnsNow,
     spawnEmoji,
+    raiseHand,
 }: LfgJoinControlProps): JSX.Element {
     const [choosing, setChoosing] = useState(false);
+    const [selection, setSelection] = useState<LfgRaiseHandSelection | null>(null);
     const pick = (chosen: LfgUrgencyPick): void => {
         setChoosing(false);
-        onJoin(chosen);
+        onJoin(withSelection(chosen, selection));
     };
+    const waiting = raiseHand !== undefined && selection?.ready !== true;
     const spawnGlyph = spawnsNow ? spawnEmoji : undefined;
     return (
         <div className="flex flex-wrap items-center gap-2">
             <JoinOpener className={className} isBusy={isBusy} open={choosing}
                 onToggle={() => setChoosing((open) => !open)} spawnGlyph={spawnGlyph} />
+            {choosing && raiseHand ? <raiseHand.Fields context={raiseHand.context} onChange={setSelection} /> : null}
             {choosing ? (
-                <LfgUrgencyChoice label={label} disabled={isBusy} onPick={pick}
+                <LfgUrgencyChoice label={label} disabled={isBusy || waiting} onPick={pick}
                     spawnGlyph={spawnGlyph} />
             ) : null}
         </div>
