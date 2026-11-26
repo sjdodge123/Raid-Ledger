@@ -8,6 +8,7 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import type * as schema from '../drizzle/schema';
+import * as lockInGroup from './lfg-lock-in-group.helpers';
 import { LfgSignupListener } from './lfg-signup.listener';
 
 describe('LfgSignupListener', () => {
@@ -45,8 +46,11 @@ describe('LfgSignupListener', () => {
     expect(db.update).not.toHaveBeenCalled();
   });
 
+  afterEach(() => jest.restoreAllMocks());
+
   it('clears the signer intent for the event game', async () => {
-    db.limit.mockResolvedValueOnce([{ gameId: 99 }]);
+    const siblings = jest.spyOn(lockInGroup, 'clearNowSiblings');
+    db.limit.mockResolvedValueOnce([{ gameId: 99 }]).mockResolvedValueOnce([]);
     db.returning.mockResolvedValueOnce([{ id: 1 }]);
 
     await listener.onSignupCreated({
@@ -55,8 +59,27 @@ describe('LfgSignupListener', () => {
       action: 'signup',
     });
 
+    expect(siblings).not.toHaveBeenCalled();
     expect(db.update).toHaveBeenCalled();
     expect(db.set).toHaveBeenCalledWith({ status: 'cleared' });
+  });
+
+  it('ROK-2352 Q1: a signup from an LFG conversion clears only the signer now hands', async () => {
+    const siblings = jest
+      .spyOn(lockInGroup, 'clearNowSiblings')
+      .mockResolvedValue([7]);
+    db.limit
+      .mockResolvedValueOnce([{ gameId: 99 }])
+      .mockResolvedValueOnce([{ id: 5 }]);
+
+    await listener.onSignupCreated({
+      eventId: 42,
+      userId: 7,
+      action: 'signup',
+    });
+
+    expect(siblings).toHaveBeenCalledWith(db, 99, [7]);
+    expect(db.update).not.toHaveBeenCalled();
   });
 
   it('swallows a DB failure instead of throwing into the emitter', async () => {
