@@ -68,6 +68,7 @@ import { clearIntent, resolveWithdrawScope } from './lfg-group-scope.helpers';
 import { resolveLockInGroup } from './lfg-lock-in-group.helpers';
 import { toConversionTarget } from './lfg-provenance.helpers';
 import {
+  assertHandDetailIfNew,
   resolvePostGroup,
   saveHandDetailIfAny,
   type LfgPostRequest,
@@ -152,6 +153,7 @@ export class LfgService {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${lfgGroupLockKey(gameId)}))`,
       );
+      await assertHandDetailIfNew(tx, userId, gameId, post);
       await assertHandCap(tx, userId, gameId, opts.groupKey);
       const inserted = await insertIntent(tx, userId, gameId, opts);
       const settled: ResolvedExisting = inserted

@@ -259,6 +259,33 @@ describe('POST /lfg with an active grouping adapter (AC3)', () => {
     expect(await activeKeys(alice.userId, game.id)).toEqual(['']);
   });
 
+  it('lets an urgency-only re-post into a held keyed group through and keeps its detail (r2 MAJOR-A)', async () => {
+    const [alice] = await createMembers(testApp, 'alice');
+    const game = await groupsGame();
+    await postOk(alice, game.id, 'dungeon:1');
+    const save = jest.spyOn(stubAdapter, 'saveHandDetail');
+
+    try {
+      // The Manage dialog's urgency change: no handDetail on the re-post.
+      const res = await testApp.request
+        .post('/lfg')
+        .set('Authorization', `Bearer ${alice.token}`)
+        .send({ gameId: game.id, groupKey: 'dungeon:1', urgency: 'now' });
+
+      expect(res.status).toBe(200);
+      // No detail sent → the stored one is never overwritten.
+      expect(save).not.toHaveBeenCalled();
+    } finally {
+      save.mockRestore();
+    }
+    const t = schema.lfgIntents;
+    const rows = await testApp.db
+      .select({ groupKey: t.groupKey, urgency: t.urgency })
+      .from(t)
+      .where(and(eq(t.userId, alice.userId), eq(t.status, 'active')));
+    expect(rows).toEqual([{ groupKey: 'dungeon:1', urgency: 'now' }]);
+  });
+
   it('rejects a key the adapter does not know with 400 and writes nothing', async () => {
     const [alice] = await createMembers(testApp, 'alice');
     const game = await groupsGame();

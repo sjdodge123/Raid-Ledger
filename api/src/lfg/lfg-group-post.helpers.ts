@@ -7,7 +7,7 @@ import { LFG_ANY_GROUP_KEY } from '@raid-ledger/contract';
 import type * as schema from '../drizzle/schema';
 import type { LfgGroupingAdapter } from '../plugins/plugin-host/lfg-grouping.adapter';
 import type { LfgDb } from './lfg-query.helpers';
-import type { LfgUrgencyRequest } from './lfg-write.helpers';
+import { findActiveIntent, type LfgUrgencyRequest } from './lfg-write.helpers';
 import {
   resolveLfgGrouping,
   resolveWriteGroupKey,
@@ -24,6 +24,11 @@ export interface LfgPostRequest extends LfgUrgencyRequest {
 export interface ResolvedLfgPost {
   grouping: LfgGroupingAdapter | null;
   opts: LfgPostRequest & { groupKey: string };
+  /**
+   * The write must carry `handDetail` unless the user already holds a live
+   * hand in this group — checked under the lock by {@link assertHandDetailIfNew}.
+   */
+  detailRequired: boolean;
 }
 
 /** How strict a write is about the hand's plugin detail. */
@@ -43,7 +48,6 @@ export interface LfgPostWriteOptions {
  * @param game - The (visible) game being posted to.
  * @param opts - The parsed request.
  * @param write - {@link LfgPostWriteOptions}.
- * @throws BadRequestException when a required `handDetail` is missing.
  */
 export async function resolvePostGroup(
   registry: LfgGroupingRegistry,
@@ -55,12 +59,35 @@ export async function resolvePostGroup(
   const ctx = { gameId: game.id, gameSlug: game.slug };
   const groupKey = await resolveWriteGroupKey(grouping, ctx, opts.groupKey);
   const keyed = grouping !== null && groupKey !== LFG_ANY_GROUP_KEY;
-  if (write.requireHandDetail && keyed && opts.handDetail === undefined) {
-    throw new BadRequestException({
-      handDetail: ['Required when raising a hand in this group'],
-    });
-  }
-  return { grouping, opts: { ...opts, groupKey } };
+  const detailRequired =
+    write.requireHandDetail === true && keyed && opts.handDetail === undefined;
+  return { grouping, opts: { ...opts, groupKey }, detailRequired };
+}
+
+/**
+ * §3.3 on the locked tx: a NEW keyed HTTP hand must carry `handDetail`. A
+ * re-post into a group the user already holds a live hand in (the Manage
+ * dialog's urgency change) keeps the stored detail, so it needs none — and a
+ * Discord-raised hand never had one to resend (review r2 MAJOR-A).
+ *
+ * @param tx - The transaction holding the per-game lock.
+ * @param userId - Caller.
+ * @param gameId - Game being posted to.
+ * @param post - From {@link resolvePostGroup}.
+ * @throws BadRequestException when the detail is required and missing.
+ */
+export async function assertHandDetailIfNew(
+  tx: LfgDb,
+  userId: number,
+  gameId: number,
+  post: ResolvedLfgPost,
+): Promise<void> {
+  if (!post.detailRequired) return;
+  const existing = await findActiveIntent(tx, userId, gameId, post.opts.groupKey);
+  if (existing !== null) return;
+  throw new BadRequestException({
+    handDetail: ['Required when raising a hand in this group'],
+  });
 }
 
 /**
