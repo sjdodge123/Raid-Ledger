@@ -10,6 +10,11 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { AiChatService, AiChatResponse } from './ai-chat.service';
 import { AI_CHAT_PREFIX, parseAiCustomId } from './ai-chat.constants';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
+import { AI_MANIFEST } from '../../ai/ai-manifest';
+
+/** Ephemeral answer to an `ai:*` button while chat or the AI plugin is off. */
+export const AI_CHAT_DISABLED_COPY = 'AI chat is currently disabled.';
 
 /**
  * Listens for Discord DMs and AI chat button interactions.
@@ -25,6 +30,7 @@ export class AiChatListener {
   constructor(
     private readonly clientService: DiscordBotClientService,
     private readonly aiChatService: AiChatService,
+    private readonly plugins: PluginRegistryService,
   ) {}
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
@@ -73,7 +79,14 @@ export class AiChatListener {
     return interaction.customId.startsWith(`${AI_CHAT_PREFIX}:`);
   }
 
-  private async handleDm(msg: Message): Promise<void> {
+  /** True while the AI plugin is active (ROK-2354 entry-point gate). */
+  private isPluginActive(): boolean {
+    return this.plugins.isActive(AI_MANIFEST.id);
+  }
+
+  /** Answer one DM. Silent while the AI plugin is off (ROK-2354). */
+  async handleDm(msg: Message): Promise<void> {
+    if (!this.isPluginActive()) return;
     try {
       const res = await this.aiChatService.handleInteraction(
         msg.author.id,
@@ -86,20 +99,23 @@ export class AiChatListener {
     }
   }
 
-  private async handleButton(interaction: ButtonInteraction): Promise<void> {
+  /** Answer one `ai:*` press; refuses ephemerally while the plugin is off. */
+  async handleButton(interaction: ButtonInteraction): Promise<void> {
     try {
       const path = parseAiCustomId(interaction.customId);
       if (!path) return;
       await interaction.deferReply({ ephemeral: true });
+      if (!this.isPluginActive()) {
+        await interaction.editReply({ content: AI_CHAT_DISABLED_COPY });
+        return;
+      }
       const res = await this.aiChatService.handleInteraction(
         interaction.user.id,
         undefined,
         interaction.customId,
       );
       if (!res) {
-        await interaction.editReply({
-          content: 'AI chat is currently disabled.',
-        });
+        await interaction.editReply({ content: AI_CHAT_DISABLED_COPY });
         return;
       }
       await interaction.editReply(this.buildReplyPayload(res));
