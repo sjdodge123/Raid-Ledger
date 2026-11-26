@@ -21,9 +21,10 @@
  * other direction. The one exception is a TRANSIENT Discord failure: see
  * `lfg-board-retire.helpers.ts`, which is where that judgement lives.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SettingsService } from '../../settings/settings.service';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { getLfgBoardEnabled } from '../../settings/settings-lfg-board.helpers';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { EmbedContext } from '../services/discord-embed.factory';
@@ -48,6 +49,8 @@ export class LfgBoardRetireService {
     private readonly board: LfgBoardService,
     private readonly settingsService: SettingsService,
     private readonly chain: LfgGameChainService,
+    // ROK-2352 — scopes each row's farewell to its own group.
+    @Optional() private readonly pluginRegistry?: PluginRegistryService,
   ) {}
 
   /**
@@ -143,6 +146,7 @@ export class LfgBoardRetireService {
         this.logger.warn(message);
       },
       isBoardEnabled: () => getLfgBoardEnabled(this.settingsService),
+      registry: this.pluginRegistry,
     };
   }
 

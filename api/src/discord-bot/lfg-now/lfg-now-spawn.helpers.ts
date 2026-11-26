@@ -48,6 +48,7 @@ import {
 } from './lfg-now-keyed-signup.helpers';
 import type { LfgSignupCarryover } from '../../plugins/plugin-host/lfg-grouping.adapter';
 import type { LfgNowHand, LfgNowSpawnResult } from './lfg-now-spawn.types';
+import { findAnyGroupQuickPlay } from './lfg-now-any-session.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -161,6 +162,8 @@ async function findOpenSession(
   const lfgBorn = await findOpenLfgNowEvent(tx, gameId, scope);
   if (lfgBorn !== null) return lfgBorn;
   if (scope !== null && scope !== '') return null;
+  // ROK-2352 — the Any group never falls back onto a keyed group's session.
+  if (scope === '') return findAnyGroupQuickPlay(tx, gameId);
   return (await findVoiceSpawnTarget(tx, gameId))?.id ?? null;
 }
 

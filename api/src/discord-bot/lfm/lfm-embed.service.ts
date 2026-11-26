@@ -327,6 +327,7 @@ export class LfmEmbedService {
         this.logger.warn(message);
       },
       isBoardEnabled: () => getLfgBoardEnabled(this.settingsService),
+      registry: this.pluginRegistry,
     };
   }
 
