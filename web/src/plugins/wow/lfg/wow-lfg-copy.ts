@@ -14,6 +14,8 @@ export const WOW_LFG_COPY = {
     looking: (n: number): string => (n === 1 ? '1 looking' : `${n} looking`),
     rolesLegend: 'Your roles',
     rolesRequired: 'Pick at least one role',
+    characterLabel: 'Character',
+    noCharacter: 'No character',
     instancesLegend: 'Groups to join',
     rosterPreview: 'Roster',
     lockInInstance: 'Dungeon or raid',
