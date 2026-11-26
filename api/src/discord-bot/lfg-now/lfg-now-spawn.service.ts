@@ -354,10 +354,6 @@ export class LfgNowSpawnService {
     }
   }
 
-  /**
-   * D4: `playing`, never `converted`. `converted` renders a terminal view that
-   * closes the LFM row, after which the head-count could never update again.
-   */
   /** Post-COMMIT (Q1): the members' other `now` hands the spawn cleared. */
   private emitClearedSiblings(
     gameId: number,
@@ -372,6 +368,10 @@ export class LfgNowSpawnService {
     } satisfies LfgGroupChangedPayload);
   }
 
+  /**
+   * D4: `playing`, never `converted`. `converted` renders a terminal view that
+   * closes the LFM row, after which the head-count could never update again.
+   */
   private emitPlaying(gameId: number, eventId: number): void {
     this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, {
       gameId,
