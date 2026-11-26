@@ -7,7 +7,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
 import { clearAccessToken, setAccessToken } from '../lib/api/access-token-store';
-import { dropViewerPrivateCaches, installViewerPrivateCacheGuard, tokenIdentity } from './viewer-private-caches';
+import {
+    VIEWER_INDEPENDENT_META,
+    dropViewerPrivateCaches,
+    installViewerPrivateCacheGuard,
+    tokenIdentity,
+} from './viewer-private-caches';
 
 const OVERVIEW = ['calendars', 'overview'];
 const FEED = { feed: { url: 'https://raid.example.test/api/cal/u/viewer-a-feed.ics' } };
@@ -102,25 +107,38 @@ describe('ROK-1811: dropViewerPrivateCaches', () => {
         expect(qc.getQueryData(OVERVIEW)).toBeUndefined();
     });
 
-    it('ROK-1811 Codex r3 P2: a token-less public lineup survives a drop; a private lineup key does not', () => {
-        qc.setQueryData(['lineups', 'public', 'abc'], { title: 'shared' });
-        qc.setQueryData(['lineups', 'detail', 5], { ownedBy: 1 });
+    /** Loads `data` under `key` the way a `useQuery` with these options would. */
+    async function load(key: readonly unknown[], data: unknown, tagged: boolean): Promise<void> {
+        await qc.fetchQuery({ queryKey: key, queryFn: () => data, ...(tagged ? { meta: VIEWER_INDEPENDENT_META } : {}) });
+    }
+
+    it('ROK-1811 Codex r3 P2: a tagged public lineup survives a drop; a private lineup key does not', async () => {
+        await load(['lineups', 'public', 'abc'], { title: 'shared' }, true);
+        await load(['lineups', 'detail', 5], { ownedBy: 1 }, false);
         dropViewerPrivateCaches(qc);
         expect(qc.getQueryData(['lineups', 'public', 'abc'])).toEqual({ title: 'shared' });
         expect(qc.getQueryData(['lineups', 'detail', 5])).toBeUndefined();
     });
 
-    it('ROK-1811 Codex r5 P2: a public poll-share preview survives a drop', () => {
-        qc.setQueryData(['poll-share', 'preview', 'tok'], { title: 'poll' });
+    it('ROK-1811 Codex r5 P2: a tagged public poll-share preview survives a drop', async () => {
+        await load(['poll-share', 'preview', 'tok'], { title: 'poll' }, true);
         dropViewerPrivateCaches(qc);
         expect(qc.getQueryData(['poll-share', 'preview', 'tok'])).toEqual({ title: 'poll' });
     });
 
-    it('ROK-1813 Codex P2: the token-less public guild card survives a drop', () => {
-        qc.setQueryData(['wow', 'public-guild-card', 'AbCdEfGhIjKlMnOp'], { name: 'shared' });
-        qc.setQueryData(['wow', 'guild', 5], { ownedBy: 1 });
+    it('ROK-1813 Codex P2: the tagged public guild card survives a drop', async () => {
+        await load(['wow', 'public-guild-card', 'AbCdEfGhIjKlMnOp'], { name: 'shared' }, true);
+        await load(['wow', 'guild', 5], { ownedBy: 1 }, false);
         dropViewerPrivateCaches(qc);
         expect(qc.getQueryData(['wow', 'public-guild-card', 'AbCdEfGhIjKlMnOp'])).toEqual({ name: 'shared' });
         expect(qc.getQueryData(['wow', 'guild', 5])).toBeUndefined();
+    });
+
+    it('ROK-2334: the tag decides, not the key — no prefix allowlist', async () => {
+        await load(['brand-new', 'public', 1], { shared: true }, true);
+        await load(['system', 'status', 'untagged-copy'], { leaked: false }, false);
+        dropViewerPrivateCaches(qc);
+        expect(qc.getQueryData(['brand-new', 'public', 1]), 'a tagged key outside any old prefix survives').toEqual({ shared: true });
+        expect(qc.getQueryData(['system', 'status', 'untagged-copy']), 'an untagged key under an old prefix is dropped').toBeUndefined();
     });
 });

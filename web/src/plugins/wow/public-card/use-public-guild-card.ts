@@ -12,6 +12,7 @@ import {
 } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../../../lib/config';
 import { encodePathSegment } from '../../../lib/api/path-segment';
+import { VIEWER_INDEPENDENT_META } from '../../../hooks/viewer-private-caches';
 
 /** True when `slug` has the public card shape (16 base62 characters). */
 export function isPublicGuildCardSlug(slug: string | undefined): slug is string {
@@ -20,8 +21,8 @@ export function isPublicGuildCardSlug(slug: string | undefined): slug is string 
 
 /**
  * Token-less read: no bearer and `credentials: 'omit'`, so the answer is the
- * same for every viewer. That is what lets the key sit in
- * `VIEWER_INDEPENDENT_PREFIXES` and survive a cross-tab logout (Codex P2) —
+ * same for every viewer. That is what lets the query carry
+ * `VIEWER_INDEPENDENT_META` and survive a cross-tab logout (Codex P2) —
  * the `getPublicLineup` pattern.
  */
 export async function fetchPublicGuildCard(slug: string): Promise<PublicGuildCard> {
@@ -37,6 +38,7 @@ export async function fetchPublicGuildCard(slug: string): Promise<PublicGuildCar
 export function usePublicGuildCard(slug: string | undefined): UseQueryResult<PublicGuildCard> {
     return useQuery({
         queryKey: ['wow', 'public-guild-card', slug],
+        meta: VIEWER_INDEPENDENT_META,
         queryFn: () => fetchPublicGuildCard(slug ?? ''),
         enabled: isPublicGuildCardSlug(slug),
         staleTime: 0,
