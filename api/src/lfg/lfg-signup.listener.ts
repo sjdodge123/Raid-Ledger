@@ -55,8 +55,9 @@ export class LfgSignupListener {
         .where(eq(schema.events.id, payload.eventId))
         .limit(1);
       if (!event?.gameId) return;
-      if (await this.convertedInto(userId, payload.eventId)) {
-        await clearNowSiblings(this.db, event.gameId, [userId]);
+      const intoKey = await this.convertedInto(userId, payload.eventId);
+      if (intoKey !== null) {
+        await clearNowSiblings(this.db, event.gameId, [userId], intoKey);
         return;
       }
       await clearIntent(this.db, userId, event.gameId);
@@ -68,13 +69,13 @@ export class LfgSignupListener {
     }
   }
 
-  /** True when one of the signer's hands converted into this event. */
+  /** The group of the signer's hand that converted into this event, or null. */
   private async convertedInto(
     userId: number,
     eventId: number,
-  ): Promise<boolean> {
+  ): Promise<string | null> {
     const rows = await this.db
-      .select({ id: schema.lfgIntents.id })
+      .select({ groupKey: schema.lfgIntents.groupKey })
       .from(schema.lfgIntents)
       .where(
         and(
@@ -83,6 +84,6 @@ export class LfgSignupListener {
         ),
       )
       .limit(1);
-    return rows.length > 0;
+    return rows[0]?.groupKey ?? null;
   }
 }

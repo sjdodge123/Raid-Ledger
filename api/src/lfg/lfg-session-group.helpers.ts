@@ -111,7 +111,7 @@ export function convertJoinerHand(
       )
       .returning({ id: schema.lfgIntents.id });
     if (rows.length === 0) return { converted: 0, clearedSiblingUserIds: [] };
-    const cleared = await clearNowSiblings(tx, gameId, [userId]);
+    const cleared = await clearNowSiblings(tx, gameId, [userId], groupKey);
     return { converted: rows.length, clearedSiblingUserIds: cleared };
   });
 }

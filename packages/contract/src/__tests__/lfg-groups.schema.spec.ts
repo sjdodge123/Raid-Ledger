@@ -12,7 +12,10 @@ import {
   LfgGroupQuerySchema,
   LfgGroupRefSchema,
 } from '../lfg-groups.schema.js';
-import { LfgGroupListResponseSchema } from '../lfg-group-list.schema.js';
+import {
+  LfgAckHandNoticesSchema,
+  LfgGroupListResponseSchema,
+} from '../lfg-group-list.schema.js';
 import {
   CreateLfgIntentSchema,
   LfgClearOfferSchema,
@@ -126,5 +129,29 @@ describe('LfgGroupListResponseSchema — GET /lfg/:gameId/groups', () => {
     expect(LfgGroupListResponseSchema.safeParse({ gameId: 1, groups: [g] }).success).toBe(false);
     const neg = { ...summary, groupKey: 'raid:1', rosterShape: { tank: -1, healer: 1, dps: 1 } };
     expect(LfgGroupListResponseSchema.safeParse({ gameId: 1, groups: [neg] }).success).toBe(false);
+  });
+});
+
+describe('ROK-2352 §3.2 hand-withdrawn notices (additive)', () => {
+  const notice = {
+    intentId: 9,
+    fromGroupKey: 'dungeon:2',
+    fromLabel: 'Deadmines',
+    toGroupKey: 'dungeon:1',
+    toLabel: null,
+  };
+
+  it('a groups response parses with and without notices', () => {
+    expect(LfgGroupListResponseSchema.parse({ gameId: 1, groups: [] })).toEqual({ gameId: 1, groups: [] });
+    const body = { gameId: 1, groups: [], notices: [notice] };
+    expect(LfgGroupListResponseSchema.parse(body)).toEqual(body);
+  });
+
+  it('the ack body needs 1..50 positive intent ids', () => {
+    expect(LfgAckHandNoticesSchema.safeParse({ intentIds: [9] }).success).toBe(true);
+    expect(LfgAckHandNoticesSchema.safeParse({ intentIds: [] }).success).toBe(false);
+    expect(LfgAckHandNoticesSchema.safeParse({ intentIds: [0] }).success).toBe(false);
+    const many = Array.from({ length: 51 }, (_, i) => i + 1);
+    expect(LfgAckHandNoticesSchema.safeParse({ intentIds: many }).success).toBe(false);
   });
 });

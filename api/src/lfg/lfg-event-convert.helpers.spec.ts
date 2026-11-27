@@ -214,10 +214,12 @@ describe('createAndConvertGroup — ROK-2352 grouped game', () => {
       carryover,
       clearedSiblingUserIds: [44],
     });
-    expect(lockInGroup.clearNowSiblings).toHaveBeenCalledWith(db, GAME, [
-      USER,
-      44,
-    ]);
+    expect(lockInGroup.clearNowSiblings).toHaveBeenCalledWith(
+      db,
+      GAME,
+      [USER, 44],
+      GROUP.scope,
+    );
   });
 
   it('never clears siblings or builds a patch when the caller is not in the group (409)', async () => {

@@ -70,7 +70,7 @@ describe('LfgSignupListener', () => {
       .mockResolvedValue([7]);
     db.limit
       .mockResolvedValueOnce([{ gameId: 99 }])
-      .mockResolvedValueOnce([{ id: 5 }]);
+      .mockResolvedValueOnce([{ groupKey: 'dungeon:36' }]);
 
     await listener.onSignupCreated({
       eventId: 42,
@@ -78,7 +78,7 @@ describe('LfgSignupListener', () => {
       action: 'signup',
     });
 
-    expect(siblings).toHaveBeenCalledWith(db, 99, [7]);
+    expect(siblings).toHaveBeenCalledWith(db, 99, [7], 'dungeon:36');
     expect(db.update).not.toHaveBeenCalled();
   });
 

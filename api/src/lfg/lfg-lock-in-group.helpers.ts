@@ -39,6 +39,17 @@ export interface LfgLockInGroup {
 /** No adapter: today's behaviour — the whole game is one group. */
 export const LFG_FOLD_LOCK_IN: LfgLockInGroup = { scope: null, adapter: null };
 
+/** `lfg_intents.cleared_reason` for a `now` hand consumed by a lock-in (§3.2). */
+export const LFG_CLEARED_SIBLING_LOCKED_IN = 'sibling_locked_in';
+
+/**
+ * The group a Lock-in's members end up in: the picked instance when the Any
+ * group locks in with one, else the group itself (`''` when folded).
+ */
+export function lockInIntoGroupKey(group: LfgLockInGroup): string {
+  return group.chosenGroupKey || group.scope || LFG_ANY_GROUP_KEY;
+}
+
 /**
  * Resolve the group a Lock-in names. No active adapter (or no such game) →
  * the fold, whatever was asked (§3.7). With an adapter, absent / `''` → the
@@ -131,18 +142,29 @@ export async function buildGroupLockInPatch(
  *
  * @param tx - The locked transaction.
  * @param gameId - Game locking in.
+ * Each cleared row records `cleared_reason = 'sibling_locked_in'` and the
+ * group the user went into, so the web can show the once-only "your hand for
+ * X was withdrawn because you're in Y now" notice (§3.2). A user's own
+ * Withdraw never goes through here, so it writes no reason and no notice.
+ *
  * @param userIds - The converted members.
+ * @param intoGroupKey - The group the members went into.
  * @returns The users whose sibling hand was cleared.
  */
 export async function clearNowSiblings(
   tx: LfgDb,
   gameId: number,
   userIds: readonly number[],
+  intoGroupKey: string,
 ): Promise<number[]> {
   if (userIds.length === 0) return [];
   const rows = await tx
     .update(schema.lfgIntents)
-    .set({ status: 'cleared' })
+    .set({
+      status: 'cleared',
+      clearedReason: LFG_CLEARED_SIBLING_LOCKED_IN,
+      clearedIntoGroupKey: intoGroupKey,
+    })
     .where(
       and(
         eq(schema.lfgIntents.gameId, gameId),

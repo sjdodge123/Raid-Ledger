@@ -10,6 +10,7 @@ import { LfgController } from './lfg.controller';
 import { LfgBridgeController } from './lfg-bridge.controller';
 import { LfgService } from './lfg.service';
 import { LfgReadsService } from './lfg-reads.service';
+import { LfgHandNoticesService } from './lfg-hand-notices.service';
 import { LfgSignupListener } from './lfg-signup.listener';
 import { LfgExpiryService } from './lfg-expiry.service';
 import { LfgQuickPlayListener } from './lfg-quickplay.listener';
@@ -33,6 +34,7 @@ import { LfgInviteService } from './lfg-invite.service';
     LfgQuickPlayListener,
     LfgExpiryService,
     LfgInviteService,
+    LfgHandNoticesService,
   ],
   exports: [LfgService, LfgReadsService, LfgInviteService],
 })

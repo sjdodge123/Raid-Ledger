@@ -190,6 +190,6 @@ export async function withClearedNowSiblings(
   scope: LfgGroupScope,
 ): Promise<{ clearedSiblingUserIds?: number[] }> {
   if (scope === null) return {};
-  const cleared = await clearNowSiblings(tx, gameId, userIds);
+  const cleared = await clearNowSiblings(tx, gameId, userIds, scope);
   return cleared.length > 0 ? { clearedSiblingUserIds: cleared } : {};
 }

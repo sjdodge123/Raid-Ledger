@@ -24,6 +24,7 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Response } from 'express';
 import {
   ConvertLfgIntentsSchema,
+  LfgAckHandNoticesSchema,
   CreateLfgIntentSchema,
   LfgDeleteGroupQuerySchema,
   LfgGroupListQuerySchema,
@@ -46,6 +47,7 @@ import type { AuthenticatedRequest } from '../auth/types';
 import { LfgService } from './lfg.service';
 import { LfgReadsService } from './lfg-reads.service';
 import { LfgInviteService } from './lfg-invite.service';
+import { LfgHandNoticesService } from './lfg-hand-notices.service';
 import { parseQuery } from './lfg-query-parse.helpers';
 
 @Controller('lfg')
@@ -55,6 +57,7 @@ export class LfgController {
     private readonly service: LfgService,
     private readonly reads: LfgReadsService,
     private readonly invites: LfgInviteService,
+    private readonly notices: LfgHandNoticesService,
   ) {}
 
   /**
@@ -121,6 +124,20 @@ export class LfgController {
   @Get('offers')
   listOffers(@Req() req: AuthenticatedRequest): Promise<LfgClearOfferDto[]> {
     return this.service.listOffers(req.user.id);
+  }
+
+  /**
+   * ROK-2352 §3.2: mark "hand withdrawn" notices seen (show-once). 204;
+   * ids that are not the caller's are skipped, never an error.
+   */
+  @Post('hands/notices/ack')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async ackHandNotices(
+    @Body() body: unknown,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<void> {
+    const { intentIds } = parseQuery(LfgAckHandNoticesSchema, body);
+    await this.notices.ack(req.user.id, intentIds);
   }
 
   /** Group detail (`?group=`, default `''`). 200 with a zero-count group when nobody is looking. */

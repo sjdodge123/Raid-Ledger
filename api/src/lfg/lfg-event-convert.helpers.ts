@@ -17,6 +17,7 @@ import type { LfgGroupScope } from './lfg-group-scope.helpers';
 import {
   buildGroupLockInPatch,
   clearNowSiblings,
+  lockInIntoGroupKey,
   LFG_FOLD_LOCK_IN,
   liveLockInRows,
   type LfgLockInGroup,
@@ -135,7 +136,12 @@ export function createAndConvertGroup<T extends { id: number }>(
     const { carryover, ...eventPatch } = patch;
     const event = await createEvent(eventPatch);
     const memberIds = await convertLiveRows(tx, gameId, event.id, group.scope);
-    const clearedSiblingUserIds = await clearNowSiblings(tx, gameId, memberIds);
+    const clearedSiblingUserIds = await clearNowSiblings(
+      tx,
+      gameId,
+      memberIds,
+      lockInIntoGroupKey(group),
+    );
     return { event, memberIds, carryover, clearedSiblingUserIds };
   });
 }

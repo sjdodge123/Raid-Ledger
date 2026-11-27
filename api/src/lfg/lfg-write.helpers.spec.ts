@@ -51,6 +51,9 @@ function intentRow(overrides: Partial<LfgIntentRow> = {}): LfgIntentRow {
     convertedToPollId: null,
     convertedToEventId: null,
     convertedAt: null,
+    clearedReason: null,
+    clearedIntoGroupKey: null,
+    clearedNoticeSeenAt: null,
     ...overrides,
   };
 }

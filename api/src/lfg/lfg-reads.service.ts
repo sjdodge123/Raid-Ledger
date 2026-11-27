@@ -22,6 +22,7 @@ import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import { requireGame, requireVisibleGame } from './lfg-query.helpers';
 import { readGroupList } from './lfg-group-list.helpers';
+import { listClearedHandNotices } from './lfg-hand-notices.helpers';
 import { resolveLfgGrouping } from './lfg-grouping.helpers';
 import { resolveGameReadScope } from './lfg-group-scope.helpers';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
@@ -93,7 +94,8 @@ export class LfgReadsService {
 
   /**
    * ROK-2352 `GET /lfg/:gameId/groups` — the game's groups, `''` first. A
-   * game with no active `lfg-grouping` adapter is one folded group.
+   * game with no active `lfg-grouping` adapter is one folded group. Carries
+   * the caller's unseen "hand withdrawn" `notices` (§3.2) when there are any.
    *
    * @param userId - Caller, for `hasOwnIntent`.
    * @param gameId - The (visible) game.
@@ -106,6 +108,10 @@ export class LfgReadsService {
   ): Promise<LfgGroupListResponseDto> {
     const game = await requireVisibleGame(this.db, gameId);
     const adapter = resolveLfgGrouping(this.pluginRegistry, game.slug);
-    return readGroupList(this.db, game, userId, adapter, includeCatalogue);
+    const [list, notices] = await Promise.all([
+      readGroupList(this.db, game, userId, adapter, includeCatalogue),
+      listClearedHandNotices(this.db, game, userId, adapter),
+    ]);
+    return notices.length > 0 ? { ...list, notices } : list;
   }
 }
