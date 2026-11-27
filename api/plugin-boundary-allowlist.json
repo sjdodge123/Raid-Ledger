@@ -148,6 +148,7 @@
     "../plugins/wow-common/manifest"
   ],
   "src/games-lookup/seed-games.data.ts": [
+    "../plugins/minecraft/minecraft-bedrock-game",
     "../plugins/wow-common/blizzard.constants"
   ],
   "src/guilds/community/community-directory.matrix.test-fixtures.ts": [
