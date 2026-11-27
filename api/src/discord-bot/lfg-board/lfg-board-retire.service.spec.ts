@@ -55,6 +55,7 @@ function row(over: Partial<LfmMessageRow> = {}): LfmMessageRow {
     postKind: 'forum',
     lastMemberCount: 3,
     postedAt: new Date(),
+    groupKey: '',
     ...over,
   } as LfmMessageRow;
 }
@@ -76,12 +77,13 @@ const chain = {
   serialized: jest.fn((_gameId: number, work: () => Promise<void>) => work()),
 };
 
-function service(): LfgBoardRetireService {
+function service(registry?: unknown): LfgBoardRetireService {
   return new LfgBoardRetireService(
     {} as never,
     board as unknown as LfgBoardService,
     settings as unknown as SettingsService,
     chain as unknown as LfgGameChainService,
+    registry as never,
   );
 }
 
@@ -256,7 +258,8 @@ describe('LfgBoardRetireService — the row is re-read inside the chain', () => 
     findOpen.mockResolvedValue(row({ gameId: 11, id: 'row-11' }));
 
     expect(await service().retireOpenPosts()).toBe(1);
-    expect(findOpen).toHaveBeenCalledWith({}, 11);
+    // ROK-2352 — the re-read is scoped to the row's own group (`''` here).
+    expect(findOpen).toHaveBeenCalledWith({}, 11, '');
   });
 });
 
@@ -353,5 +356,84 @@ describe('LfgBoardRetireService — an ended group keeps its terminal render', (
       boardRetired: true,
     });
     expect(close).toHaveBeenCalledWith({}, 'row-1', 'closed', 2);
+  });
+});
+
+/**
+ * ROK-2352 — each row's farewell reads ONLY its own group. Unscoped, a live
+ * keyed group kept the Any farewell "live", and a keyed row (never the `''`
+ * row `findOpenLfmMessage` defaulted to) was skipped by the re-read and never
+ * retired at all.
+ */
+describe('LfgBoardRetireService — per-group farewell (ROK-2352)', () => {
+  /**
+   * WoW with its grouping plugin active: the `''` row is the Any group. The
+   * adapter answers `describeGroup` (required by `LfgGroupingAdapter`) so a
+   * keyed farewell can keep its instance title.
+   */
+  const adapter = {
+    describeGroup: jest.fn(() => Promise.resolve({ label: 'Molten Core' })),
+  };
+  const activeRegistry = { getAdapter: jest.fn(() => adapter) };
+
+  beforeEach(() => {
+    findOpen.mockImplementation((_db, gameId, groupKey = '') =>
+      Promise.resolve(
+        row({
+          id: groupKey === '' ? 'row-1' : `row-${groupKey}`,
+          gameId,
+          groupKey,
+        }),
+      ),
+    );
+  });
+
+  it('retires a keyed row, reading only that group', async () => {
+    listOpen.mockResolvedValue([
+      row({ id: 'row-raid:409', groupKey: 'raid:409' }),
+    ]);
+
+    const retired = await service(activeRegistry).retireOpenPosts();
+
+    expect(findOpen).toHaveBeenCalledWith({}, 7, 'raid:409');
+    expect(currentView).toHaveBeenCalledWith({}, expect.anything(), 'raid:409');
+    expect(close).toHaveBeenCalledWith({}, 'row-raid:409', 'closed', 4);
+    expect(retired).toBe(1);
+    expect(board.editThread.mock.calls[0]?.[1]).toMatchObject({
+      gameName: 'DRG — Molten Core',
+      groupKey: 'raid:409',
+      boardRetired: true,
+    });
+  });
+
+  it('scopes the Any row to `` while the adapter is active', async () => {
+    listOpen.mockResolvedValue([row()]);
+
+    await service(activeRegistry).retireOpenPosts();
+
+    expect(currentView).toHaveBeenCalledWith({}, expect.anything(), '');
+  });
+
+  it('reads the ending of the Any group only, below its floor', async () => {
+    listOpen.mockResolvedValue([row()]);
+    currentView.mockResolvedValue({ state: 'open', memberCount: 0 } as never);
+    endedView.mockResolvedValue({ state: 'expired', memberCount: 0 } as never);
+
+    await service(activeRegistry).retireOpenPosts();
+
+    expect(endedView).toHaveBeenCalledWith(
+      {},
+      expect.anything(),
+      expect.objectContaining({ id: 'row-1' }),
+      '',
+    );
+  });
+
+  it('reads the whole game when no adapter is active (the fold)', async () => {
+    listOpen.mockResolvedValue([row()]);
+
+    await service().retireOpenPosts();
+
+    expect(currentView).toHaveBeenCalledWith({}, expect.anything(), null);
   });
 });

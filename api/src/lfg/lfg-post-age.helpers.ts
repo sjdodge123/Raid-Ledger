@@ -2,7 +2,7 @@
  * ROK-1691 — the board post-age cap's selection.
  *
  * A pure query builder, not a query: the expiry sweep embeds it as the
- * `game_id IN (...)` arm of its ONE existing UPDATE, so an aged post's hands
+ * `(game_id, group_key) IN (...)` arm of its ONE existing UPDATE, so an aged post's hands
  * lapse in the same statement, come back through the same RETURNING, and reach
  * the board through the same per-game `expired` emit as a natural lapse.
  */
@@ -14,7 +14,14 @@ import { computePostAgeCutoff } from './lfg.constants';
 const posts = schema.lfgGroupMessages;
 
 /**
- * Games whose OPEN forum post opened on or before the post-age cutoff.
+ * The `(game, group)` pairs whose OPEN forum post opened on or before the
+ * post-age cutoff.
+ *
+ * ROK-2352 P2-7: one post per `(game_id, group_key)` (§4.2), so an aged post
+ * retires only its OWN group's hands — the Any post turning 7 days old must
+ * not lapse a raid hand raised an hour ago (§3.1: each hand its own expiry).
+ * A folded game writes every hand as `''`, so its one `''` post still covers
+ * all of its hands.
  *
  * Only `open` rows: a closed row's thread is already archived. Only `forum`
  * rows: the cap is a board rule, and the legacy text surface keeps its own
@@ -33,11 +40,11 @@ const posts = schema.lfgGroupMessages;
  * zone's offset there.
  *
  * @param now - The sweep's clock.
- * @returns A subquery selecting `game_id`.
+ * @returns A subquery selecting `game_id, group_key`.
  */
-export function agedBoardPostGameIds(now: Date) {
+export function agedBoardPostGroups(now: Date) {
   return new QueryBuilder()
-    .select({ gameId: posts.gameId })
+    .select({ gameId: posts.gameId, groupKey: posts.groupKey })
     .from(posts)
     .where(
       and(

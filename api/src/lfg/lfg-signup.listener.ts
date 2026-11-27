@@ -6,10 +6,16 @@
  * editing `signups.service.ts`: the seam already exists (see
  * `discord-sync.listener.ts`), it fires after the signup transaction commits,
  * and it keeps the signup path untouched.
+ *
+ * ROK-2352 Q1: when the signup comes from an LFG conversion (the signer's own
+ * hand converted into this very event — a Lock-in or a now-spawn), only the
+ * signer's other `now` hands in the game clear; their `tonight` / `week`
+ * hands stay up ("tonight could still mean later"). Any other signup still
+ * clears every hand the signer holds in the game.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -17,7 +23,8 @@ import {
   SIGNUP_EVENTS,
   type SignupEventPayload,
 } from '../discord-bot/discord-bot.constants';
-import { clearIntent } from './lfg-write.helpers';
+import { clearNowSiblings } from './lfg-lock-in-group.helpers';
+import { clearIntent } from './lfg-group-scope.helpers';
 
 @Injectable()
 export class LfgSignupListener {
@@ -48,6 +55,11 @@ export class LfgSignupListener {
         .where(eq(schema.events.id, payload.eventId))
         .limit(1);
       if (!event?.gameId) return;
+      const intoKey = await this.convertedInto(userId, payload.eventId);
+      if (intoKey !== null) {
+        await clearNowSiblings(this.db, event.gameId, [userId], intoKey);
+        return;
+      }
       await clearIntent(this.db, userId, event.gameId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -55,5 +67,23 @@ export class LfgSignupListener {
         `Failed to clear LFG intent for event ${payload?.eventId}: ${msg}`,
       );
     }
+  }
+
+  /** The group of the signer's hand that converted into this event, or null. */
+  private async convertedInto(
+    userId: number,
+    eventId: number,
+  ): Promise<string | null> {
+    const rows = await this.db
+      .select({ groupKey: schema.lfgIntents.groupKey })
+      .from(schema.lfgIntents)
+      .where(
+        and(
+          eq(schema.lfgIntents.userId, userId),
+          eq(schema.lfgIntents.convertedToEventId, eventId),
+        ),
+      )
+      .limit(1);
+    return rows[0]?.groupKey ?? null;
   }
 }

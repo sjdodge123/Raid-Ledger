@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LfgGroupKeySchema, LfgGroupRefSchema } from './lfg-groups.schema.js';
 
 // ============================================================
 // LFG Intents (ROK-1451)
@@ -72,6 +73,10 @@ export const CreateLfgIntentSchema = z
         urgency: LfgUrgencySchema.default('week'),
         /** Lifetime of a `now` intent. Absent means 30. */
         ttlMinutes: LfgNowTtlSchema.optional(),
+        /** ROK-2352: the group this hand is for. Absent = `''` (whole game). */
+        groupKey: LfgGroupKeySchema.optional(),
+        /** ROK-2352: plugin detail (WoW roles/character) — validated by the grouping adapter. */
+        handDetail: z.record(z.string(), z.unknown()).optional(),
     })
     .superRefine((v, ctx) => {
         // ROK-1616: the guard is `!== 'now'`, NOT `=== 'week'`. `ttl_minutes`
@@ -149,6 +154,8 @@ export const LfgIntentSchema = z.object({
     convertedToPollId: z.number().nullable(),
     /** Provenance — set when the group converted into an event. */
     convertedToEventId: z.number().nullable(),
+    /** ROK-2352: the group this hand is in. Optional so an older API reads as `''`. */
+    groupKey: LfgGroupKeySchema.optional(),
 });
 export type LfgIntentDto = z.infer<typeof LfgIntentSchema>;
 
@@ -205,6 +212,12 @@ export const LfgGroupSummarySchema = z.object({
      * Additive: every existing field keeps its exact ROK-1451/1479 meaning.
      */
     playingNow: LfgPlayingNowSchema.nullable(),
+    /** ROK-2352: the group this summary describes. Absent = `''` (whole game). */
+    groupKey: LfgGroupKeySchema.optional(),
+    /** ROK-2352: adapter label ("Deadmines"); null for the whole-game group. */
+    groupLabel: z.string().nullable().optional(),
+    /** ROK-2352 (Q7): live groups in the game — `GET /lfg` game-level rows only. */
+    groupCount: z.number().int().nonnegative().optional(),
 });
 export type LfgGroupSummaryDto = z.infer<typeof LfgGroupSummarySchema>;
 
@@ -218,6 +231,13 @@ export const LfgMemberSchema = z.object({
     joinedAt: z.string(),
     /** `week` or `now` — the group page orders `now` members first. */
     urgency: LfgUrgencySchema,
+    /**
+     * ROK-2352: the active `lfg-grouping` plugin's detail for this member's
+     * hand in the viewed group (WoW: `WowLfgMemberDetailDto`). Absent without
+     * an active adapter, on the folded whole-game read, or with no stored
+     * detail. Core never interprets it; the plugin's `MemberBadges` does.
+     */
+    pluginDetail: z.record(z.string(), z.unknown()).optional(),
 });
 export type LfgMemberDto = z.infer<typeof LfgMemberSchema>;
 
@@ -263,6 +283,8 @@ export const LfgGroupDetailSchema = LfgGroupSummarySchema.extend({
      * when `pressWouldSpawnNow` is true; always Unicode, never `<:name:id>`.
      */
     spawnIndicatorEmoji: z.string().optional(),
+    /** ROK-2352: the caller's other live groups in this game. */
+    ownOtherGroups: z.array(LfgGroupRefSchema).optional(),
 });
 export type LfgGroupDetailDto = z.infer<typeof LfgGroupDetailSchema>;
 
@@ -282,6 +304,8 @@ export const LfgHeartedGameSchema = z.object({
     heartedAt: z.string(),
     /** How many other people are already looking for this game. */
     activeCount: z.number(),
+    /** ROK-2352: the group the suggestion points at. Absent = `''`. */
+    groupKey: LfgGroupKeySchema.optional(),
 });
 export type LfgHeartedGameDto = z.infer<typeof LfgHeartedGameSchema>;
 
@@ -303,6 +327,8 @@ export const LfgClearOfferSchema = z.object({
     eventId: z.number(),
     /** When the caller was recorded as a participant in that session. */
     playedAt: z.string(),
+    /** ROK-2352: the group of the intent this offer would clear. Absent = `''`. */
+    groupKey: LfgGroupKeySchema.optional(),
 });
 export type LfgClearOfferDto = z.infer<typeof LfgClearOfferSchema>;
 

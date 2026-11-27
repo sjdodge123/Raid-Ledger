@@ -11,11 +11,9 @@ import { NotFoundException } from '@nestjs/common';
 import {
   and,
   asc,
-  count,
   desc,
   eq,
   gt,
-  isNotNull,
   isNull,
   min,
   notInArray,
@@ -36,6 +34,13 @@ import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
 import { MEMBER_COLUMNS, toMemberDto } from './lfg-member-projection.helpers';
 import { readPlayingNow } from './lfg-playing.helpers';
 import { LFG_LIST_LIMIT } from './lfg.constants';
+import {
+  distinctUsers,
+  membersForScope,
+  groupScopeFilter,
+  type LfgGroupScope,
+  type LfgGameRef,
+} from './lfg-group-scope.helpers';
 
 export type LfgDb = PostgresJsDatabase<typeof schema>;
 
@@ -128,11 +133,13 @@ export function eligibleUser() {
  *
  * @param now - Instant to measure expiry against.
  */
-export function liveIntent(now: Date) {
+export function liveIntent(now: Date, scope: LfgGroupScope = null) {
   return and(
     eq(schema.lfgIntents.status, 'active'),
     gt(schema.lfgIntents.expiresAt, now),
     eligibleUser(),
+    // ROK-2352: one group, or null = every hand of the game.
+    groupScopeFilter(scope),
   );
 }
 
@@ -167,7 +174,10 @@ export function groupColumns(viewerId: number | null) {
     gameSlug: schema.games.slug,
     gameCoverUrl: schema.games.coverUrl,
     viabilityThreshold: schema.games.cooptimusOnlineMax,
-    activeCount: count(),
+    // ROK-2352: DISTINCT users — one user may hold a hand in several groups
+    // of a game, and the fold (§3.7) / game-level row counts people.
+    activeCount:
+      sql<number>`count(distinct ${schema.lfgIntents.userId})`.mapWith(Number),
     soonestExpiresAt: min(schema.lfgIntents.expiresAt),
     hasOwnIntent:
       viewerId === null
@@ -178,7 +188,7 @@ export function groupColumns(viewerId: number | null) {
     // `.mapWith` reuses the columns' own decoders, so these two agree with
     // `count()` / `min()` on types instead of leaking raw driver values.
     nowCount:
-      sql<number>`count(*) FILTER (WHERE ${schema.lfgIntents.urgency} = 'now')`.mapWith(
+      sql<number>`count(distinct ${schema.lfgIntents.userId}) FILTER (WHERE ${schema.lfgIntents.urgency} = 'now')`.mapWith(
         Number,
       ),
     soonestNowExpiresAt:
@@ -235,7 +245,7 @@ async function queryActiveGroups(
       // (`igdb-discover-deals.helpers.ts` and siblings); this read was the gap.
       .where(and(liveIntent(new Date()), VISIBILITY_FILTER()))
       .groupBy(schema.games.id)
-      .orderBy(desc(count()), asc(min(schema.lfgIntents.expiresAt)))
+      .orderBy(desc(distinctUsers()), asc(min(schema.lfgIntents.expiresAt)))
       .limit(LFG_LIST_LIMIT)
   );
 }
@@ -247,23 +257,28 @@ async function queryActiveGroups(
  * @param db - Drizzle handle.
  * @param game - The already-loaded game row.
  * @param viewerId - Caller, used to compute `hasOwnIntent`.
+ * @param scope - ROK-2352: one group, or null = every hand of the game (fold).
  */
 export async function getGroupSummary(
   db: LfgDb,
-  game: typeof schema.games.$inferSelect,
+  game: LfgGameRef,
   viewerId: number,
+  scope: LfgGroupScope = null,
 ): Promise<LfgGroupSummaryDto> {
   const [row] = await db
     .select(groupColumns(viewerId))
     .from(schema.lfgIntents)
     .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
     .innerJoin(schema.games, eq(schema.games.id, schema.lfgIntents.gameId))
-    .where(and(eq(schema.lfgIntents.gameId, game.id), liveIntent(new Date())))
+    .where(
+      and(eq(schema.lfgIntents.gameId, game.id), liveIntent(new Date(), scope)),
+    )
     .groupBy(schema.games.id);
   // Read the session on BOTH branches: once the spawn converts every intent
   // the aggregate row disappears entirely, and that zero-count branch is
-  // exactly AC3's state (D9).
-  const playingNow = await readPlayingNow(db, game.id);
+  // exactly AC3's state (D9). Scoped to the group (ROK-2352): another group's
+  // live session is not this group's.
+  const playingNow = await readPlayingNow(db, game.id, scope);
   if (!row) {
     return toGroupSummary({
       gameId: game.id,
@@ -287,18 +302,23 @@ export async function getGroupSummary(
  *
  * @param db - Drizzle handle.
  * @param gameId - Game whose group to read.
+ * @param scope - ROK-2352: one group, or null = the fold (one row per user,
+ *   the soonest-expiring hand wins).
  */
 export async function listGroupMembers(
   db: LfgDb,
   gameId: number,
+  scope: LfgGroupScope = null,
 ): Promise<LfgMemberDto[]> {
   const rows = await db
     .select(MEMBER_COLUMNS)
     .from(schema.lfgIntents)
     .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
-    .where(and(eq(schema.lfgIntents.gameId, gameId), liveIntent(new Date())))
+    .where(
+      and(eq(schema.lfgIntents.gameId, gameId), liveIntent(new Date(), scope)),
+    )
     .orderBy(asc(schema.lfgIntents.createdAt), asc(schema.lfgIntents.id));
-  return rows.map(toMemberDto);
+  return membersForScope(rows.map(toMemberDto), scope);
 }
 
 /** Correlated count of eligible active intents for the joined `games` row.
@@ -430,39 +450,4 @@ async function loadGameOr404(
   const [game] = await db.select().from(schema.games).where(where).limit(1);
   if (!game) throw new NotFoundException('Game not found');
   return game;
-}
-
-/**
- * The live forum thread of a game's LFG group, or null.
- *
- * ROK-1483 A10: `LfgGroupDetailDto.threadId` is how the web learns which
- * thread the conversation panel should read — the alternative was a second
- * endpoint and a second round trip on every group-page load.
- *
- * Scoped to the `open` row on purpose: the group PAGE shows the live group, so
- * a closed group's old thread must not surface under a new one. The read
- * endpoint's own resolver is deliberately broader, because history stays
- * readable after a group closes (D12).
- *
- * @param db - Drizzle handle.
- * @param gameId - The game whose group is being read.
- * @returns The Discord thread id, or null when the group has no forum post.
- */
-export async function findOpenForumThreadId(
-  db: LfgDb,
-  gameId: number,
-): Promise<string | null> {
-  const [row] = await db
-    .select({ threadId: schema.lfgGroupMessages.threadId })
-    .from(schema.lfgGroupMessages)
-    .where(
-      and(
-        eq(schema.lfgGroupMessages.gameId, gameId),
-        eq(schema.lfgGroupMessages.state, 'open'),
-        eq(schema.lfgGroupMessages.postKind, 'forum'),
-        isNotNull(schema.lfgGroupMessages.threadId),
-      ),
-    )
-    .limit(1);
-  return row?.threadId ?? null;
 }

@@ -27,6 +27,12 @@ export const LFG_LIST_LIMIT = 200;
  */
 export const LFG_EXPIRY_DAYS = 7;
 
+/** ROK-2352 Q2 — live hands one user may hold across one game's groups. */
+export const LFG_MAX_HANDS_PER_GAME = 5;
+
+/** Error `code` on the 400 a hand over {@link LFG_MAX_HANDS_PER_GAME} gets. */
+export const LFG_HAND_CAP_CODE = 'LFG_HAND_CAP' as const;
+
 /**
  * ROK-1691 — the most a board post can age, in days, measured from when it
  * OPENED (`lfg_group_messages.posted_at`), whatever the group's activity.
@@ -189,6 +195,12 @@ export interface LfgLfmReachedPayload {
    * board uses it to add exactly that user to the group's forum thread.
    */
   userId?: number;
+  /**
+   * ROK-2352 — the group (`lfg_intents.group_key`) whose hand made this
+   * transition. Set only for a non-empty key; absent means the Any (`''`)
+   * group or a folded game. The affinity DM links the group that triggered it.
+   */
+  groupKey?: string;
 }
 
 /**
@@ -240,6 +252,13 @@ export interface LfgGroupChangedPayload {
    * MUST filter against a roster read taken after the change.
    */
   userIds?: readonly number[];
+  /**
+   * ROK-2352 — the group this change is about, set only for a non-empty key
+   * (a WoW instance group). Absent means the Any (`''`) group or a folded game.
+   * The board renders a keyed `converted`/`playing` change on that group's
+   * post only; the Any post re-reads its live view and stays open.
+   */
+  groupKey?: string;
 }
 
 /** Payload emitted with {@link LFG_EVENTS.QUICK_PLAY_MATCH}. */

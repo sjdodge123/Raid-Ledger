@@ -16,6 +16,7 @@ import { isDiscordSnowflake } from '../notifications/discord-notification.consta
 import { resolveChannelPrefs } from '../notifications/notification-mapping.helpers';
 import { eligibleUser, liveIntent, type LfgDb } from './lfg-query.helpers';
 import { LFG_INVITE_NOTIFICATION_TYPE } from './lfg-invite.constants';
+import type { LfgGroupScope } from './lfg-group-scope.helpers';
 
 export type LfgInviteRow = typeof schema.lfgInvites.$inferSelect;
 
@@ -37,11 +38,15 @@ export async function countRecipientInvitesSince(
   return Number(row?.n ?? 0);
 }
 
-/** Invites the group for `gameId` sent since `since` (AC3). */
+/**
+ * Invites the group sent since `since` (AC3). ROK-2352: the cap is per
+ * `(game, group_key)`; a null scope (the fold) counts the whole game.
+ */
 export async function countGroupInvitesSince(
   db: LfgDb,
   gameId: number,
   since: Date,
+  groupKey: LfgGroupScope = null,
 ): Promise<number> {
   const [row] = await db
     .select({ n: count() })
@@ -50,20 +55,31 @@ export async function countGroupInvitesSince(
       and(
         eq(schema.lfgInvites.gameId, gameId),
         gt(schema.lfgInvites.sentAt, since),
+        inviteGroupFilter(groupKey),
       ),
     );
   return Number(row?.n ?? 0);
 }
 
+/** ROK-2352: `eq(group_key)` for a keyed scope; nothing for the fold (null). */
+function inviteGroupFilter(groupKey: LfgGroupScope) {
+  return groupKey === null
+    ? undefined
+    : eq(schema.lfgInvites.groupKey, groupKey);
+}
+
 /**
  * The most recent invite for `(recipient, game)` inside the horizon, declined
- * or not — either one blocks a repeat (AC4).
+ * or not — either one blocks a repeat (AC4). ROK-2352: a keyed `groupKey`
+ * narrows it to that group, so an invite to one dungeon does not block an
+ * invite to another; null (the fold) reads the whole game as before.
  */
 export async function findLiveInviteFor(
   db: LfgDb,
   recipientUserId: number,
   gameId: number,
   horizonStart: Date,
+  groupKey: LfgGroupScope = null,
 ): Promise<LfgInviteRow | null> {
   const [row] = await db
     .select()
@@ -73,6 +89,7 @@ export async function findLiveInviteFor(
         eq(schema.lfgInvites.recipientUserId, recipientUserId),
         eq(schema.lfgInvites.gameId, gameId),
         gt(schema.lfgInvites.sentAt, horizonStart),
+        inviteGroupFilter(groupKey),
       ),
     )
     .orderBy(sql`${schema.lfgInvites.sentAt} DESC`)
@@ -138,12 +155,16 @@ export async function recipientOptedOut(
   return typePrefs.discord === false;
 }
 
-/** Already in the group — the same read the affinity DM uses (§10). */
+/**
+ * Already in the group — the same read the affinity DM uses (§10).
+ * ROK-2352: `scope` narrows to one group; null = any hand in the game.
+ */
 export async function holdsLiveIntent(
   db: LfgDb,
   userId: number,
   gameId: number,
   now: Date,
+  scope: LfgGroupScope = null,
 ): Promise<boolean> {
   const [row] = await db
     .select({ id: schema.lfgIntents.id })
@@ -153,7 +174,7 @@ export async function holdsLiveIntent(
       and(
         eq(schema.lfgIntents.userId, userId),
         eq(schema.lfgIntents.gameId, gameId),
-        liveIntent(now),
+        liveIntent(now, scope),
       ),
     )
     .limit(1);
@@ -163,7 +184,13 @@ export async function holdsLiveIntent(
 /** Write the durable record — the same transaction that counted (D4). */
 export async function insertInvite(
   db: LfgDb,
-  input: { recipientUserId: number; inviterUserId: number; gameId: number },
+  input: {
+    recipientUserId: number;
+    inviterUserId: number;
+    gameId: number;
+    /** ROK-2352: the group invited into; omitted = `''`. */
+    groupKey?: string;
+  },
 ): Promise<LfgInviteRow> {
   const [row] = await db.insert(schema.lfgInvites).values(input).returning();
   return defined(row, 'inserted invite row');
@@ -172,13 +199,15 @@ export async function insertInvite(
 /**
  * Of `userIds`, those the group for `gameId` invited inside the horizon —
  * the `inviteState` projection for the suggestions read (D7). Declined rows
- * count: the wire never distinguishes them from `sent`.
+ * count: the wire never distinguishes them from `sent`. ROK-2352: a keyed
+ * `groupKey` reads only that group's invites; null reads the whole game.
  */
 export async function findInvitedUserIds(
   db: LfgDb,
   gameId: number,
   userIds: number[],
   horizonStart: Date,
+  groupKey: LfgGroupScope = null,
 ): Promise<Set<number>> {
   if (userIds.length === 0) return new Set();
   const rows = await db
@@ -189,17 +218,23 @@ export async function findInvitedUserIds(
         eq(schema.lfgInvites.gameId, gameId),
         inArray(schema.lfgInvites.recipientUserId, userIds),
         gt(schema.lfgInvites.sentAt, horizonStart),
+        inviteGroupFilter(groupKey),
       ),
     );
   return new Set(rows.map((r) => r.userId));
 }
 
-/** The decline effect (D12): stamp the clicker's newest un-declined live row. */
+/**
+ * The decline effect (D12): stamp the clicker's newest un-declined live row.
+ * ROK-2352: a keyed `groupKey` (a v2 DM button) declines only that group's
+ * invite; null (a v1 button) takes the newest in the game, as before.
+ */
 export async function declineLiveInvite(
   db: LfgDb,
   recipientUserId: number,
   gameId: number,
   now: Date,
+  groupKey: LfgGroupScope = null,
 ): Promise<LfgInviteRow | null> {
   const target = await db
     .select({ id: schema.lfgInvites.id })
@@ -209,6 +244,7 @@ export async function declineLiveInvite(
         eq(schema.lfgInvites.recipientUserId, recipientUserId),
         eq(schema.lfgInvites.gameId, gameId),
         isNull(schema.lfgInvites.declinedAt),
+        inviteGroupFilter(groupKey),
       ),
     )
     .orderBy(sql`${schema.lfgInvites.sentAt} DESC`)

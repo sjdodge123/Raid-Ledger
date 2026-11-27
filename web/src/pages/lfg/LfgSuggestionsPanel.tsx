@@ -25,6 +25,8 @@ import { LFG_COPY, REASON_CHIP, REASON_SUBTITLE } from './lfg-copy';
 
 export interface LfgSuggestionsPanelProps {
     gameId: number;
+    /** ROK-2352: invites go into this group (`''` = the whole game). */
+    groupKey?: string;
     suggestions: LfgSuggestionsResponseDto | undefined;
     isLoading?: boolean;
     /** The read failed (ROK-1535). Never rendered as an empty list. */
@@ -203,12 +205,13 @@ function SuggestionList({
 /** Suggestions panel — who else might want in on this group. */
 export function LfgSuggestionsPanel({
     gameId,
+    groupKey = '',
     suggestions,
     isLoading,
     isError,
 }: LfgSuggestionsPanelProps): JSX.Element {
     const rows = suggestions?.suggestions ?? [];
-    const invite = useInviteToGroup(gameId);
+    const invite = useInviteToGroup(gameId, groupKey);
     return (
         <section
             data-testid="lfg-suggestions-panel"

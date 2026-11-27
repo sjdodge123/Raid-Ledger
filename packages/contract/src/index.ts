@@ -198,6 +198,10 @@ export * from './games-lookup-by-name.schema.js';
 
 // LFG Intents (ROK-1451)
 export * from './lfg.schema.js';
+// ROK-2352 — LFG group keys, the group list and the WoW instance-LFG detail.
+export * from './lfg-groups.schema.js';
+export * from './lfg-group-list.schema.js';
+export * from './wow-lfg.schema.js';
 
 // Channel-binding copy shared by the /bind reply and the admin form (ROK-1462)
 export * from './binding-copy.js';

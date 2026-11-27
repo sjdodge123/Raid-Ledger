@@ -193,6 +193,7 @@ export function AppRoutes() {
         <Route path="/games/:id" element={<GameDetailPage />} />
         <Route path="/hubs" element={<HubsDirectoryPage />} />
         <Route path="/lfg/:gameSlug" element={<LfgGroupPage />} />
+        <Route path="/lfg/:gameSlug/:groupKey" element={<LfgGroupPage />} />
         <Route path="/community-lineup/:id" element={<LineupDetailPage />} />
         <Route path="/community-lineup/:lineupId/schedule/:matchId" element={<SchedulingPollPage />} />
         <Route path="/characters/:id" element={<CharacterDetailPage />} />

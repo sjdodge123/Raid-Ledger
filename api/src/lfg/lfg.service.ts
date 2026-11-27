@@ -18,8 +18,6 @@ import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   ConvertLfgIntentsDto,
-  LfgNowTtl,
-  LfgUrgency,
   LfgGroupDetailDto,
   LfgGroupSummaryDto,
   LfgClearOfferDto,
@@ -32,7 +30,6 @@ import {
   LFG_EVENTS,
   lfgGroupLockKey,
   type LfgGroupChangedPayload,
-  type LfgLfmReachedPayload,
 } from './lfg.constants';
 import {
   getGroupSummary,
@@ -51,9 +48,8 @@ import { readGroupDetail } from './lfg-group-detail.helpers';
 import { SettingsService } from '../settings/settings.service';
 import { getLfgNowIndicatorEmoji } from '../settings/settings-lfg-board.helpers';
 import { resolveTargetGameId } from './lfg-convert.helpers';
+import { convertGroupLocked } from './lfg-convert-scoped.helpers';
 import {
-  clearIntent,
-  convertGroup,
   findActiveIntent,
   insertIntent,
   resolveConvertRole,
@@ -64,9 +60,22 @@ import {
   type LfgUrgencyRequest,
 } from './lfg-write.helpers';
 import { bumpIntentUrgency, refreshGroupExpiry } from './lfg-urgency.helpers';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { assertHandCap, resolveLfgGrouping } from './lfg-grouping.helpers';
+import { attachGroupCounts } from './lfg-group-list.helpers';
+import { announceLfgPost } from './lfg-post-announce.helpers';
+import { clearIntent, resolveWithdrawScope } from './lfg-group-scope.helpers';
+import { resolveLockInGroup } from './lfg-lock-in-group.helpers';
+import { convertedPayload, toConversionTarget } from './lfg-provenance.helpers';
 import {
-  isFirstHand,
-  joinsOpenSession,
+  assertHandDetailIfNew,
+  resolvePostGroup,
+  saveHandDetailIfAny,
+  type LfgPostRequest,
+  type LfgPostWriteOptions,
+  type ResolvedLfgPost,
+} from './lfg-group-post.helpers';
+import {
   type GroupPostOutcome,
   type ResolvedExisting,
 } from './lfg-post-outcome.helpers';
@@ -80,30 +89,6 @@ export interface CreateIntentResult {
   body: LfgIntentResponseDto;
 }
 
-/**
- * The payload both hand-count transitions carry (ROK-1479 D7 / ROK-1505 D1).
- *
- * `urgency` is read off the row that actually landed, not off the request —
- * the request's `ttlMinutes` may be absent and the row is what the DB
- * committed, so the payload can never advertise a class the stored intent
- * does not hold. Same row, same reason for `ttlMinutes`: the DM quotes this
- * horizon, so it has to be the one that committed. A `week` row stores no
- * TTL and reports null.
- */
-function handPayload(
-  gameId: number,
-  activeCount: number,
-  inserted: LfgIntentRow,
-): LfgLfmReachedPayload {
-  return {
-    gameId,
-    activeCount,
-    urgency: inserted.urgency as LfgUrgency,
-    ttlMinutes: (inserted.ttlMinutes as LfgNowTtl | null) ?? null,
-    userId: inserted.userId,
-  };
-}
-
 @Injectable()
 export class LfgService {
   constructor(
@@ -111,6 +96,7 @@ export class LfgService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly eventEmitter: EventEmitter2,
     private readonly settingsService: SettingsService,
+    private readonly pluginRegistry: PluginRegistryService,
   ) {}
 
   /**
@@ -122,15 +108,19 @@ export class LfgService {
    * @param opts - Requested urgency class (ROK-1479). Defaults to the
    *   pre-1479 `week`, so the Discord `/lfg` command and the join listener
    *   keep their exact behaviour until Lane C threads a class through.
+   * @param write - ROK-2352: the HTTP route requires `handDetail` on a keyed hand.
    */
   async createIntent(
     userId: number,
     gameId: number,
-    opts: LfgUrgencyRequest = WEEK_REQUEST,
+    opts: LfgPostRequest = WEEK_REQUEST,
+    write: LfgPostWriteOptions = {},
   ): Promise<CreateIntentResult> {
     const game = await requireVisibleGame(this.db, gameId);
-    const outcome = await this.postUnderGroupLock(userId, gameId, game, opts);
-    this.announcePost(gameId, outcome);
+    // ROK-2352 §3.7: no active adapter → the hand lands in '' (fold).
+    const post = await resolvePostGroup(this.pluginRegistry, game, opts, write);
+    const outcome = await this.postUnderGroupLock(userId, game, post);
+    announceLfgPost(this.eventEmitter, gameId, outcome);
     if (outcome.refreshed) {
       return {
         created: true,
@@ -144,52 +134,6 @@ export class LfgService {
   }
 
   /**
-   * Announce what `POST /lfg` just did. Post-COMMIT by construction: the
-   * transaction has landed before this runs, so a consumer reacting to any of
-   * these events can never read a group that rolled back.
-   *
-   * The four branches are SIBLINGS, deliberately not chained. The first three
-   * are disjoint by arithmetic (`=== 1` vs `=== 2` vs `>= 3`) and that
-   * disjointness is what the "never both" test guards (ROK-1454 AC11) —
-   * chaining them would make the boundary unreachable, so a later widening of
-   * `>= 3` would ship silently past a green suite. The fourth is disjoint from
-   * all of them because a bump only happens on the `inserted === null` path.
-   *
-   * @param gameId - Game whose group was posted to.
-   * @param outcome - What the advisory-lock transaction settled on.
-   */
-  private announcePost(gameId: number, outcome: GroupPostOutcome): void {
-    if (isFirstHand(outcome) && outcome.inserted) {
-      // ROK-1505 D1: the board's LOOKING post. Same payload as LFM_REACHED.
-      this.eventEmitter.emit(
-        LFG_EVENTS.HAND_RAISED,
-        handPayload(gameId, outcome.group.activeCount, outcome.inserted),
-      );
-    }
-    if (outcome.inserted && outcome.group.activeCount === 2) {
-      this.eventEmitter.emit(
-        LFG_EVENTS.LFM_REACHED,
-        handPayload(gameId, outcome.group.activeCount, outcome.inserted),
-      );
-    }
-    if (
-      outcome.inserted &&
-      (outcome.group.activeCount >= 3 || joinsOpenSession(outcome))
-    ) {
-      this.emitGroupChanged({
-        gameId,
-        reason: 'joined',
-        userIds: [outcome.inserted.userId],
-      });
-    }
-    // D8: gated on `>= 2` to match `emitGroupChanged`'s contract — a group
-    // nobody else has joined has no Discord post to re-render.
-    if (outcome.bumped && outcome.group.activeCount >= 2) {
-      this.emitGroupChanged({ gameId, reason: 'bumped' });
-    }
-  }
-
-  /**
    * Insert, count and (on a +1) refresh the group inside ONE transaction that
    * holds an advisory lock on the game. Serialising per game is what makes the
    * post-insert `activeCount` exact, so the 1 -> 2 transition is observed
@@ -200,28 +144,54 @@ export class LfgService {
    */
   private postUnderGroupLock(
     userId: number,
-    gameId: number,
     game: typeof schema.games.$inferSelect,
-    opts: LfgUrgencyRequest,
+    post: ResolvedLfgPost,
   ): Promise<GroupPostOutcome> {
+    const { id: gameId } = game;
+    const { opts } = post;
     return this.db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${lfgGroupLockKey(gameId)}))`,
       );
+      await assertHandDetailIfNew(tx, userId, gameId, post);
+      await assertHandCap(tx, userId, gameId, opts.groupKey);
       const inserted = await insertIntent(tx, userId, gameId, opts);
       const settled: ResolvedExisting = inserted
         ? { row: inserted, bumped: false }
         : await this.resolveExisting(tx, userId, gameId, opts);
-      const group = await getGroupSummary(tx, game, userId);
+      const hand = { intentId: settled.row.id, userId, gameId };
+      await saveHandDetailIfAny(tx, post, hand);
+      // ROK-2352: count and refresh the group the hand landed in (fold → all).
+      const scope = post.grouping ? opts.groupKey : null;
+      const group = await getGroupSummary(tx, game, userId, scope);
       const refreshed = inserted !== null && group.activeCount >= 2;
-      if (refreshed) await refreshGroupExpiry(tx, gameId, opts.timezone);
+      if (refreshed) await refreshGroupExpiry(tx, gameId, opts.timezone, scope);
       return { inserted, group, refreshed, ...settled };
     });
   }
 
-  /** `DELETE /lfg/:gameId` — withdraw the caller's own intent. */
-  async withdraw(userId: number, gameId: number): Promise<void> {
-    const cleared = await clearIntent(this.db, userId, gameId);
+  /**
+   * `DELETE /lfg/:gameId?group=` — withdraw the caller's hand in one group
+   * (default `''`), every hand (`*`), or every hand of a folded game.
+   */
+  async withdraw(
+    userId: number,
+    gameId: number,
+    group?: string,
+  ): Promise<void> {
+    // No `group` (Discord `/lfg-leave`, internal callers) = every hand, with
+    // no game read; the HTTP route always passes one (schema default `''`).
+    const scope =
+      group === undefined
+        ? null
+        : resolveWithdrawScope(
+            resolveLfgGrouping(
+              this.pluginRegistry,
+              (await this.requireGame(gameId)).slug,
+            ),
+            group,
+          );
+    const cleared = await clearIntent(this.db, userId, gameId, scope);
     if (!cleared) {
       throw new NotFoundException('No active LFG intent for this game');
     }
@@ -229,8 +199,9 @@ export class LfgService {
   }
 
   /** `GET /lfg` — every game somebody is actively looking for. */
-  listGroups(userId: number): Promise<LfgGroupSummaryDto[]> {
-    return listActiveGroups(this.db, userId);
+  async listGroups(userId: number): Promise<LfgGroupSummaryDto[]> {
+    const rows = await listActiveGroups(this.db, userId);
+    return attachGroupCounts(this.db, rows, this.pluginRegistry);
   }
 
   /** The caller's own live groups — uncapped, unlike {@link listGroups}. */
@@ -252,12 +223,14 @@ export class LfgService {
   async getGroupDetail(
     userId: number,
     gameId: number,
+    groupKey?: string,
   ): Promise<LfgGroupDetailDto> {
     const [game, emoji] = await Promise.all([
       this.requireGame(gameId),
       getLfgNowIndicatorEmoji(this.settingsService),
     ]);
-    return readGroupDetail(this.db, game, userId, emoji);
+    const grouping = { registry: this.pluginRegistry, groupKey };
+    return readGroupDetail(this.db, game, userId, emoji, grouping);
   }
 
   /** `GET /lfg/hearted` — cold-start suggestions. Read-only by construction. */
@@ -280,15 +253,28 @@ export class LfgService {
    * @param userId - Caller, who must have taken part in the group.
    * @param gameId - Game whose group converted.
    * @param dto - Exactly one of `pollId` / `eventId`.
+   * @param group - ROK-2352 `?group`: only that group's hands convert
+   *   (unknown key → 400; folded game → every hand). Absent (internal
+   *   callers) = every live hand of the game, as before groups.
    */
   async convert(
     userId: number,
     gameId: number,
     dto: ConvertLfgIntentsDto,
+    group?: string,
   ): Promise<{ converted: number }> {
     await requireVisibleGame(this.db, gameId);
     const target = toConversionTarget(dto);
-    const role = await resolveConvertRole(this.db, userId, gameId, target);
+    // ROK-2352 review MAJOR-1: authorise against the GROUP being converted —
+    // a hand in another group of the game grants nothing over this one.
+    const scope = await this.convertScope(gameId, group);
+    const role = await resolveConvertRole(
+      this.db,
+      userId,
+      gameId,
+      target,
+      scope,
+    );
     if (role === null) {
       throw new ForbiddenException(
         'Only a member of this LFG group can convert it',
@@ -299,14 +285,30 @@ export class LfgService {
     // live intent now) gets the idempotent answer and touches nobody: the
     // live rows belong to a LATER group they are not part of.
     if (role === 'retry') return { converted: 0 };
-    const converted = await convertGroup(this.db, gameId, target);
+    const converted = await convertGroupLocked(this.db, gameId, target, scope);
     // Zero rows means this is a retry of an already-converted group (E5): the
     // target message is terminal, so re-announcing it would re-render a card
     // nobody changed.
     if (converted > 0) {
-      this.emitGroupChanged({ gameId, reason: 'converted', ...target });
+      // ROK-2352: a keyed convert re-renders only its own group's post.
+      this.emitGroupChanged(convertedPayload(gameId, target, scope));
     }
     return { converted };
+  }
+
+  /** ROK-2352: the group a convert flips; absent = the whole game. */
+  private async convertScope(
+    gameId: number,
+    group: string | undefined,
+  ): Promise<string | null> {
+    if (group === undefined) return null;
+    const lockIn = await resolveLockInGroup(
+      this.db,
+      this.pluginRegistry,
+      gameId,
+      group,
+    );
+    return lockIn.scope;
   }
 
   /**
@@ -365,7 +367,7 @@ export class LfgService {
     gameId: number,
     opts: LfgUrgencyRequest,
   ): Promise<ResolvedExisting> {
-    const existing = await findActiveIntent(db, userId, gameId);
+    const existing = await findActiveIntent(db, userId, gameId, opts.groupKey);
     if (!existing) {
       return {
         row: await this.insertOrSettle(db, userId, gameId, opts),
@@ -401,7 +403,7 @@ export class LfgService {
   ): Promise<LfgIntentRow> {
     const retry = await insertIntent(db, userId, gameId, opts);
     if (retry) return retry;
-    const settled = await findActiveIntent(db, userId, gameId);
+    const settled = await findActiveIntent(db, userId, gameId, opts.groupKey);
     if (!settled) {
       throw new InternalServerErrorException(
         'LFG intent vanished between conflict and re-read',
@@ -424,12 +426,4 @@ export class LfgService {
     const group = await getGroupSummary(this.db, game, userId);
     return { ...toIntentDto(fresh ?? row), group };
   }
-}
-
-/** The DTO's one supplied provenance id, without the absent one's key. */
-function toConversionTarget(dto: ConvertLfgIntentsDto): LfgConversionTarget {
-  return {
-    ...(dto.pollId !== undefined ? { pollId: dto.pollId } : {}),
-    ...(dto.eventId !== undefined ? { eventId: dto.eventId } : {}),
-  };
 }

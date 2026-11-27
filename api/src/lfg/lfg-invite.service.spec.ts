@@ -18,6 +18,7 @@ import { LfgInviteResponseSchema } from '@raid-ledger/contract';
 import type * as schema from '../drizzle/schema';
 import type { NotificationService } from '../notifications/notification.service';
 import type { SettingsService } from '../settings/settings.service';
+import type { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import {
   LfgInviteService,
   LFG_INVITE_SENT,
@@ -96,6 +97,8 @@ function buildDb(): FakeDb {
 let db: FakeDb;
 let create: jest.Mock;
 let service: LfgInviteService;
+/** ROK-2352: the active `lfg-grouping` adapter; null = the fold. */
+let adapter: { describeGroup: jest.Mock } | null;
 
 /** Every recipient-scoped check passes; the inviter is in the group. */
 function allClear() {
@@ -132,7 +135,11 @@ beforeEach(() => {
       get: jest.fn().mockResolvedValue('https://rl.test/'),
     } as unknown as SettingsService,
     { create } as unknown as NotificationService,
+    {
+      getAdapter: jest.fn(() => adapter ?? undefined),
+    } as unknown as PluginRegistryService,
   );
+  adapter = null;
   allClear();
 });
 
@@ -183,6 +190,7 @@ describe('LfgInviteService.invite — the transaction (D4/D5)', () => {
       recipientUserId: RECIPIENT,
       inviterUserId: INVITER,
       gameId: GAME.id,
+      groupKey: '',
     });
   });
 
@@ -490,5 +498,114 @@ describe('recipientOptedOut — every preference that silences the invite (M1, R
       false,
     );
     await expect(optedOut(undefined)).resolves.toBe(false);
+  });
+});
+
+describe('LfgInviteService.invite — ROK-2352 group scope', () => {
+  it('folded game: membership, cap and row cover the whole game, row keyed ""', async () => {
+    await service.invite(INVITER, GAME.id, RECIPIENT, 'dungeon:36');
+    expect(mocked.holdsLiveIntent).toHaveBeenCalledWith(
+      db,
+      INVITER,
+      GAME.id,
+      expect.any(Date),
+      null,
+    );
+    expect(mocked.countGroupInvitesSince).toHaveBeenCalledWith(
+      db,
+      GAME.id,
+      expect.any(Date),
+      null,
+    );
+    expect(mocked.insertInvite).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ groupKey: '' }),
+    );
+  });
+
+  it('grouped game: ?group scopes membership, the recipient check, the cap and the row', async () => {
+    adapter = { describeGroup: jest.fn() };
+    await service.invite(INVITER, GAME.id, RECIPIENT, 'dungeon:36');
+    const scopes = mocked.holdsLiveIntent.mock.calls.map((c) => [c[1], c[4]]);
+    expect(scopes).toEqual([
+      [INVITER, 'dungeon:36'],
+      [RECIPIENT, 'dungeon:36'],
+    ]);
+    expect(mocked.countGroupInvitesSince).toHaveBeenCalledWith(
+      db,
+      GAME.id,
+      expect.any(Date),
+      'dungeon:36',
+    );
+    expect(mocked.insertInvite).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ groupKey: 'dungeon:36' }),
+    );
+  });
+
+  it('grouped game with no ?group: the "any" group ""', async () => {
+    adapter = { describeGroup: jest.fn() };
+    await service.invite(INVITER, GAME.id, RECIPIENT);
+    expect(mocked.countGroupInvitesSince).toHaveBeenCalledWith(
+      db,
+      GAME.id,
+      expect.any(Date),
+      '',
+    );
+  });
+});
+
+describe('LfgInviteService.invite — ROK-2352 per-group repeat block', () => {
+  const repeatRow = { id: 9 } as unknown as helpers.LfgInviteRow;
+
+  it('grouped game: the repeat read is scoped to the invited group', async () => {
+    adapter = { describeGroup: jest.fn() };
+    await expect(
+      service.invite(INVITER, GAME.id, RECIPIENT, 'dungeon:36'),
+    ).resolves.toEqual(LFG_INVITE_SENT);
+    expect(mocked.findLiveInviteFor).toHaveBeenCalledWith(
+      db,
+      RECIPIENT,
+      GAME.id,
+      expect.any(Date),
+      'dungeon:36',
+    );
+  });
+
+  it('grouped game: a live invite to THIS group is the opaque skip, nothing written', async () => {
+    adapter = { describeGroup: jest.fn() };
+    mocked.findLiveInviteFor.mockImplementation((_db, _r, _g, _h, scope) =>
+      Promise.resolve(scope === 'dungeon:36' ? repeatRow : null),
+    );
+    await expect(
+      service.invite(INVITER, GAME.id, RECIPIENT, 'dungeon:36'),
+    ).resolves.toEqual(LFG_INVITE_SKIPPED);
+    expect(mocked.insertInvite).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('grouped game: a live invite to ANOTHER group does not block this one', async () => {
+    adapter = { describeGroup: jest.fn() };
+    mocked.findLiveInviteFor.mockImplementation((_db, _r, _g, _h, scope) =>
+      Promise.resolve(scope === 'dungeon:36' ? repeatRow : null),
+    );
+    await expect(
+      service.invite(INVITER, GAME.id, RECIPIENT, 'dungeon:389'),
+    ).resolves.toEqual(LFG_INVITE_SENT);
+    expect(mocked.insertInvite).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ groupKey: 'dungeon:389' }),
+    );
+  });
+
+  it('folded game: the repeat read covers the whole game (null scope)', async () => {
+    await service.invite(INVITER, GAME.id, RECIPIENT, 'dungeon:36');
+    expect(mocked.findLiveInviteFor).toHaveBeenCalledWith(
+      db,
+      RECIPIENT,
+      GAME.id,
+      expect.any(Date),
+      null,
+    );
   });
 });

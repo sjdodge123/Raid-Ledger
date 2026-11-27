@@ -24,6 +24,7 @@ import {
   LFG_UNLINKED_REPLY,
 } from '../commands/lfg.command.helpers';
 import { resolveLfgCaller } from '../commands/lfg.command';
+import type { LfgBoardButtonRef } from '../lfg-board/lfg-board-custom-id.helpers';
 import {
   DiscordListenerBinding,
   gatewayBinding,
@@ -34,7 +35,7 @@ import {
   buildNotInGroupReply,
   leaveOneGroup,
   lookupLfgGameName,
-  parseLeaveCustomId,
+  parseLeavePress,
 } from './lfg-leave.helpers';
 
 @Injectable()
@@ -74,11 +75,12 @@ export class LfgLeaveListener {
    * @param interaction - The button interaction discord.js dispatched.
    */
   async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
-    const gameId = parseLeaveCustomId(interaction.customId);
-    if (gameId === null) return;
+    const press = parseLeavePress(interaction.customId);
+    if (press === null) return;
+    const { gameId } = press;
     try {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      await this.reply(interaction, await this.leave(interaction, gameId));
+      await this.reply(interaction, await this.leave(interaction, press));
     } catch (error) {
       this.logger.error(`Failed to leave the LFG for game ${gameId}:`, error);
       await this.reply(interaction, LFG_LEAVE_ERROR_REPLY);
@@ -88,7 +90,7 @@ export class LfgLeaveListener {
   /** The guarded write, worded. */
   private async leave(
     interaction: ButtonInteraction,
-    gameId: number,
+    { gameId, groupKey }: LfgBoardButtonRef,
   ): Promise<string> {
     const caller = await resolveLfgCaller(this.db, interaction.user.id);
     if (!caller) return LFG_UNLINKED_REPLY;
@@ -96,7 +98,14 @@ export class LfgLeaveListener {
     // refused here or not at all.
     if (caller.deactivatedAt || caller.bannedAt) return LFG_BLOCKED_REPLY;
     const gameName = await lookupLfgGameName(this.db, gameId);
-    const outcome = await leaveOneGroup(this.lfgService, caller.id, gameId);
+    // ROK-2352 — the press leaves the post's own group (v1 id = `''`; with
+    // no active grouping adapter `''` still clears every hand, as before).
+    const outcome = await leaveOneGroup(
+      this.lfgService,
+      caller.id,
+      gameId,
+      groupKey,
+    );
     return outcome.left
       ? buildLeftReply(gameName, outcome.stillLooking)
       : buildNotInGroupReply(gameName);

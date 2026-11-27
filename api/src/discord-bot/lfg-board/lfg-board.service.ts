@@ -270,6 +270,7 @@ export class LfgBoardService {
     });
     const components = buildLfgPostComponents({
       gameId: view.gameId,
+      ...(view.groupKey ? { groupKey: view.groupKey } : {}),
       gameSlug: view.gameSlug,
       // `EmbedContext.clientUrl` is nullable; the row builder drops the Link
       // button on a falsy value rather than sending Discord an empty URL.

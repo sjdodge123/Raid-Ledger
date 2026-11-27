@@ -145,6 +145,7 @@ export function CardLfgChip({ game }: { game: GameProps }): JSX.Element | null {
                 state={lfgGroup.state}
                 nowCount={lfgGroup.nowCount}
                 gameSlug={game.slug}
+                groupCount={lfgGroup.groupCount ?? null}
             />
         </div>
     );

@@ -111,10 +111,21 @@ describe('useFindATime', () => {
             55,
             '2026-09-02T19:00:00.000+02:00',
         );
-        expect(convertIntents).toHaveBeenCalledWith(7, { pollId: 55 });
+        expect(convertIntents).toHaveBeenCalledWith(7, { pollId: 55 }, '');
         expect(navigate).toHaveBeenCalledWith(
             '/community-lineup/9/schedule/55',
         );
+    });
+
+    it('ROK-2352: converts only the picked group (?group) for a keyed group', async () => {
+        const { result } = renderHook(() => useFindATime(), { wrapper });
+
+        act(() => {
+            result.current.findATime({ gameId: 7, memberUserIds: [1, 2], groupKey: 'dungeon:36' });
+        });
+
+        await waitFor(() => expect(navigate).toHaveBeenCalled());
+        expect(convertIntents).toHaveBeenCalledWith(7, { pollId: 55 }, 'dungeon:36');
     });
 
     it('skips the slot seed when no window was picked', async () => {

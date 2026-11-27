@@ -83,6 +83,19 @@ describe('buildLfgPostComponents — the open-state row (AC5 iii)', () => {
     });
   });
 
+  it('links a keyed post at its group page, the key URL-encoded (ROK-2352)', () => {
+    const [, , link] = buttons({ groupKey: 'dungeon:36' });
+    expect(link).toMatchObject({
+      style: ButtonStyle.Link,
+      url: `${CLIENT_URL}/lfg/${GAME_SLUG}/dungeon%3A36`,
+    });
+  });
+
+  it("keeps the bare game URL for the '' group (ROK-2352)", () => {
+    const [, , link] = buttons({ groupKey: '' });
+    expect(link).toMatchObject({ url: `${CLIENT_URL}/lfg/${GAME_SLUG}` });
+  });
+
   it("drops the link button — but keeps +1 and I'm out — with no client URL", () => {
     const rows = render({ clientUrl: '' });
     expect(rows).toHaveLength(1);
@@ -95,6 +108,31 @@ describe('buildLfgPostComponents — the open-state row (AC5 iii)', () => {
       style: ButtonStyle.Secondary,
       custom_id: `${LFG_BUTTON_IDS.LEAVE}:${String(GAME_ID)}`,
     });
+  });
+});
+
+describe('buildLfgPostComponents — ROK-2352, keyed group ids', () => {
+  it('carries the group key on +1 and I’m out, read back by the parsers', () => {
+    const [join, leave] = buttons({ groupKey: 'dungeon:1234' });
+    const joinId = (join as { custom_id: string }).custom_id;
+    const leaveId = (leave as { custom_id: string }).custom_id;
+    expect(joinId).toBe(
+      `${LFG_BUTTON_IDS.JOIN}:${String(GAME_ID)}:dungeon:1234`,
+    );
+    expect(leaveId).toBe(
+      `${LFG_BUTTON_IDS.LEAVE}:${String(GAME_ID)}:dungeon:1234`,
+    );
+    expect(parseJoinCustomId(joinId)).toBe(GAME_ID);
+  });
+
+  it("keeps the v1 ids byte for byte for the '' group", () => {
+    const [join, leave] = buttons({ groupKey: '' });
+    expect((join as { custom_id: string }).custom_id).toBe(
+      `${LFG_BUTTON_IDS.JOIN}:${String(GAME_ID)}`,
+    );
+    expect((leave as { custom_id: string }).custom_id).toBe(
+      `${LFG_BUTTON_IDS.LEAVE}:${String(GAME_ID)}`,
+    );
   });
 });
 

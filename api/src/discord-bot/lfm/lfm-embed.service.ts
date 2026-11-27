@@ -18,7 +18,8 @@
  *     at all so it renders from the stored count. Unifying them is exactly the
  *     defect that got round 1 of this story rejected.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SettingsService } from '../../settings/settings.service';
@@ -56,17 +57,29 @@ import {
   TERMINAL_STATE,
   type LfmGroupView,
 } from './lfm-embed.helpers';
-import { currentView, liveFloorFor, viewForChange } from './lfm-embed.views';
+import { forAnyRow, liveFloorFor, viewForChange } from './lfm-embed.views';
+import * as lfmOverflow from './lfm-embed.overflow.helpers';
+import {
+  anyGroupScope,
+  nothingToPost,
+  readAnyGroup,
+} from './lfm-embed.any-group.helpers';
+import { createKeyedPostBudget } from './lfm-embed.groups.helpers';
+import {
+  reconcileKeyedGroups,
+  runKeyedPass,
+  type LfmKeyedPassDeps,
+} from './lfm-embed.keyed-pass.helpers';
 import {
   closeLfmMessage,
   findOpenLfmMessage,
-  listUntrackedLfmGames,
   loadLfmGame,
   recordLfmRender,
   type LfmMessageRow,
 } from './lfm-embed.db-helpers';
 import {
   reconcileOpenRows,
+  reconcileUntrackedGroups,
   type LfmReconcileDeps,
 } from './lfm-embed.reconcile.helpers';
 
@@ -74,6 +87,10 @@ import {
 @Injectable()
 export class LfmEmbedService {
   private readonly logger = new Logger(LfmEmbedService.name);
+  /** ROK-2352 Q11 — new keyed posts per game, the rename budget's ration. */
+  private readonly keyedPostBudget = createKeyedPostBudget();
+  /** ROK-2352 Q11 — the `''` post's overflow line, per game. */
+  private readonly overflow = new lfmOverflow.LfmOverflowCache();
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: LfgDb,
@@ -83,6 +100,9 @@ export class LfmEmbedService {
     private readonly board: LfgBoardService,
     private readonly events: EventEmitter2,
     private readonly chain: LfgGameChainService,
+    // ROK-2352: global in production; optional so unit specs that predate
+    // groups construct the service unchanged (keyed pass then skipped).
+    @Optional() private readonly pluginRegistry?: PluginRegistryService,
   ) {}
 
   /**
@@ -127,7 +147,9 @@ export class LfmEmbedService {
   async onBoardEnabled(): Promise<void> {
     if (!this.clientService.isConnected()) return; // E1
     try {
-      await this.reconcileUntrackedGroups();
+      await reconcileUntrackedGroups(this.keyedDeps());
+      // ROK-2352 P2-6 — the keyed groups at LFM come back too, as on reconnect.
+      await reconcileKeyedGroups(this.keyedDeps());
     } catch (err) {
       this.warn('re-post the LFM messages after the board was enabled', err);
     }
@@ -168,6 +190,7 @@ export class LfmEmbedService {
     try {
       const game = await loadLfmGame(this.db, payload.gameId);
       if (!game) return;
+      // ROK-2352: the `''` row; with an adapter active its read is `''` only.
       const existing = await findOpenLfmMessage(this.db, game.id);
       // A hidden or banned game never gets a NEW public post (the rule
       // `requireVisibleGame` applies to every LFG write); an open one is still
@@ -176,12 +199,37 @@ export class LfmEmbedService {
       // ROK-1494 AC7 — `currentView`, never a bare `liveView`: a game whose
       // session has already spawned has an empty live group, and a second
       // LFM_REACHED would otherwise paint `0 looking` over `PLAYING NOW`.
-      const view = await currentView(this.db, game);
-      if (existing) await this.editRow(existing, view);
-      else await this.postNew(game.id, view);
+      const read = await readAnyGroup(this.db, this.pluginRegistry, game);
+      if (nothingToPost(read)) {
+        // Only keyed hands are up — the keyed pass below owns them.
+      } else if (existing) await this.editRow(existing, read.view);
+      else await this.postNew(game.id, read.view);
     } catch (err) {
       this.warn(`post the LFM message for game ${payload.gameId}`, err);
     }
+    await this.syncKeyed(payload.gameId);
+  }
+
+  /** ROK-2352 — the keyed pass (`lfm-embed.keyed-pass.helpers.ts`). */
+  private syncKeyed(
+    gameId: number,
+    change?: LfgGroupChangedPayload,
+  ): Promise<void> {
+    return runKeyedPass(this.keyedDeps(), gameId, change);
+  }
+
+  /** {@link reconcileDeps} plus the registry and the post seam. */
+  private keyedDeps(): LfmKeyedPassDeps {
+    return {
+      ...this.reconcileDeps(),
+      registry: this.pluginRegistry,
+      postBudget: this.keyedPostBudget,
+      postNew: (gameId, view) => this.postNew(gameId, view),
+      onOverflow: lfmOverflow.overflowRefresher({
+        ...this.reconcileDeps(),
+        cache: this.overflow,
+      }),
+    };
   }
 
   /**
@@ -201,21 +249,31 @@ export class LfmEmbedService {
   private async editForChange(payload: LfgGroupChangedPayload): Promise<void> {
     try {
       const row = await findOpenLfmMessage(this.db, payload.gameId);
-      if (!row) return; // E4
-      const game = await loadLfmGame(this.db, payload.gameId);
-      if (!game) return;
-      const view = await viewForChange(
-        this.db,
-        game,
-        row.lastMemberCount,
-        payload,
-        this.logger,
-        liveFloorFor(row.postKind),
-      );
-      if (view) await this.editRow(row, view);
+      // ROK-2352 P1-5 — a keyed change never ends the Any post.
+      if (row) await this.editOpenRow(row, forAnyRow(payload)); // else E4
     } catch (err) {
       this.warn(`edit the LFM message for game ${payload.gameId}`, err);
     }
+    await this.syncKeyed(payload.gameId, payload);
+  }
+
+  /** The `''` row's edit for one change (the pre-ROK-2352 body). */
+  private async editOpenRow(
+    row: LfmMessageRow,
+    payload: LfgGroupChangedPayload,
+  ): Promise<void> {
+    const game = await loadLfmGame(this.db, payload.gameId);
+    if (!game) return;
+    const view = await viewForChange(
+      this.db,
+      game,
+      row.lastMemberCount,
+      payload,
+      this.logger,
+      liveFloorFor(row.postKind),
+      anyGroupScope(this.pluginRegistry, game),
+    );
+    if (view) await this.editRow(row, view);
   }
 
   /**
@@ -229,8 +287,10 @@ export class LfmEmbedService {
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   async onConnected(): Promise<void> {
     try {
-      await this.reconcileOpenRows();
-      await this.reconcileUntrackedGroups();
+      // D9 worklist + E1 untracked groups (`lfm-embed.reconcile.helpers.ts`).
+      await reconcileOpenRows(this.reconcileDeps());
+      await reconcileUntrackedGroups(this.keyedDeps());
+      await reconcileKeyedGroups(this.keyedDeps());
     } catch (err) {
       this.warn('reconcile open LFM messages', err);
     }
@@ -242,45 +302,15 @@ export class LfmEmbedService {
     this.logger.debug('LFM message state is persisted; nothing to drop.');
   }
 
-  /**
-   * D9's worklist pass, in `lfm-embed.reconcile.helpers.ts`. Delegates to the
-   * module function of the same name with this service's collaborators.
-   */
-  private reconcileOpenRows(): Promise<void> {
-    return reconcileOpenRows(this.reconcileDeps());
-  }
-
   /** The collaborators the reconcile walk needs, bound to this service. */
   private reconcileDeps(): LfmReconcileDeps {
     return {
       db: this.db,
+      registry: this.pluginRegistry,
       serialized: (gameId, work) => this.serialized(gameId, work),
       editRow: (row, view) => this.editRow(row, view),
       warn: (action, err) => this.warn(action, err),
     };
-  }
-
-  /**
-   * E1's other half. A group that crossed the floor while the bot was down has
-   * NO row at all — `onLfmReached` returned before writing one — so the walk
-   * above cannot see it. Post it now, exactly as the dropped `LFM_REACHED`
-   * would have.
-   */
-  private async reconcileUntrackedGroups(): Promise<void> {
-    for (const gameId of await listUntrackedLfmGames(this.db)) {
-      try {
-        await this.serialized(gameId, async () => {
-          const game = await loadLfmGame(this.db, gameId);
-          if (!game || !isVisibleGame(game)) return;
-          await this.postNew(game.id, await currentView(this.db, game));
-        });
-      } catch (err) {
-        this.warn(
-          `post the LFM message missed offline for game ${gameId}`,
-          err,
-        );
-      }
-    }
   }
 
   /**
@@ -297,6 +327,7 @@ export class LfmEmbedService {
         this.logger.warn(message);
       },
       isBoardEnabled: () => getLfgBoardEnabled(this.settingsService),
+      registry: this.pluginRegistry,
     };
   }
 
@@ -308,7 +339,8 @@ export class LfmEmbedService {
    * (E4/E5). The forum adapter deliberately lets Discord's errors through, so
    * the heal + close-anyway rules below apply identically to both surfaces.
    */
-  private async editRow(row: LfmMessageRow, view: LfmGroupView): Promise<void> {
+  private async editRow(row: LfmMessageRow, raw: LfmGroupView): Promise<void> {
+    const view = this.overflow.decorate(raw); // ROK-2352 Q11 overflow line
     const context = await this.context();
     if (await this.retiresInstead(row, view)) {
       await retireOpenRow(this.retireDeps(), row, context);
@@ -402,7 +434,8 @@ export class LfmEmbedService {
    * via `replaceDeletedPost`, handing over the same `postDeps` bag.
    */
   private async postNew(gameId: number, view: LfmGroupView): Promise<void> {
-    await postNew(this.postDeps(await this.context()), gameId, view);
+    const shown = this.overflow.decorate(view);
+    await postNew(this.postDeps(await this.context()), gameId, shown);
   }
 
   /** The bag `postNew` reads — the service's collaborators plus the chrome. */

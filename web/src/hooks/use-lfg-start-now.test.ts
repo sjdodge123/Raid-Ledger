@@ -21,14 +21,14 @@ import { useStartNow } from './use-lfg-start-now';
 const mockStartNow = vi.mocked(startNowSession);
 const GAME_ID = 7;
 
-function harness() {
+function harness(groupKey?: string) {
     const client = new QueryClient({
         defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
     const invalidate = vi.spyOn(client, 'invalidateQueries');
     const wrapper = ({ children }: { children: ReactNode }) =>
         createElement(QueryClientProvider, { client }, children);
-    const { result } = renderHook(() => useStartNow(GAME_ID), { wrapper });
+    const { result } = renderHook(() => useStartNow(GAME_ID, groupKey), { wrapper });
     return { result, invalidate };
 }
 
@@ -43,7 +43,7 @@ describe('useStartNow', () => {
 
         result.current.startNow();
 
-        await waitFor(() => expect(mockStartNow).toHaveBeenCalledWith(GAME_ID));
+        await waitFor(() => expect(mockStartNow).toHaveBeenCalledWith(GAME_ID, ''));
     });
 
     /**
@@ -114,5 +114,29 @@ describe('useStartNow', () => {
         await waitFor(() =>
             expect(toast.error).toHaveBeenCalledWith('Could not start the session'),
         );
+    });
+});
+
+describe('useStartNow — ROK-2352 group scope', () => {
+    it('ROK-2352: starts only the picked group (?group) for a keyed group', async () => {
+        mockStartNow.mockResolvedValue({ eventId: 42, spawned: true, invited: 1 });
+        const { result } = harness('dungeon:36');
+
+        result.current.startNow();
+
+        await waitFor(() => expect(mockStartNow).toHaveBeenCalledWith(GAME_ID, 'dungeon:36'));
+    });
+
+    it('ROK-2352: a second press after a refusal keeps the group', async () => {
+        mockStartNow.mockRejectedValueOnce(new Error('nope'));
+        mockStartNow.mockResolvedValueOnce({ eventId: 42, spawned: true, invited: 0 });
+        const { result } = harness('dungeon:36');
+
+        result.current.startNow();
+        await waitFor(() => expect(toast.error).toHaveBeenCalled());
+        result.current.startNow();
+
+        await waitFor(() => expect(mockStartNow).toHaveBeenCalledTimes(2));
+        expect(mockStartNow).toHaveBeenNthCalledWith(2, GAME_ID, 'dungeon:36');
     });
 });

@@ -13,7 +13,7 @@
  * `lfg-board-post-age.integration.spec.ts`.
  */
 import { computePostAgeCutoff } from './lfg.constants';
-import { agedBoardPostGameIds } from './lfg-post-age.helpers';
+import { agedBoardPostGroups } from './lfg-post-age.helpers';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW = new Date('2026-09-26T12:00:00.000Z');
@@ -31,13 +31,15 @@ describe('computePostAgeCutoff (ROK-1691)', () => {
   });
 });
 
-describe('agedBoardPostGameIds — which groups the sweep retires by age', () => {
+describe('agedBoardPostGroups — which groups the sweep retires by age', () => {
   const rendered = (): { sql: string; params: unknown[] } =>
-    agedBoardPostGameIds(NOW).toSQL();
+    agedBoardPostGroups(NOW).toSQL();
 
-  it('selects the game of each post from lfg_group_messages', () => {
+  // ROK-2352 P2-7: the pair, so the sweep matches a hand to its OWN group's
+  // post. Selecting `game_id` alone retired every group of the game.
+  it('selects the (game, group) of each post from lfg_group_messages', () => {
     expect(rendered().sql).toMatch(
-      /^select "game_id" from "lfg_group_messages"/,
+      /^select "game_id", "group_key" from "lfg_group_messages"/,
     );
   });
 

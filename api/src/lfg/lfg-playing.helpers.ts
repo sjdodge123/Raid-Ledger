@@ -15,6 +15,10 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { LfgPlayingNowDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { LfgDb } from './lfg-query.helpers';
+import {
+  groupScopeFilter,
+  type LfgGroupScope,
+} from './lfg-group-scope.helpers';
 
 /**
  * SQL predicate: the game's OPEN, LFG-born ad-hoc event.
@@ -98,7 +102,7 @@ function guildIdSql() {
 }
 
 /** The single round trip behind {@link readPlayingNow}. */
-function selectOpenSession(db: LfgDb, gameId: number) {
+function selectOpenSession(db: LfgDb, gameId: number, scope: LfgGroupScope) {
   return db
     .select({
       eventId: schema.events.id,
@@ -112,22 +116,29 @@ function selectOpenSession(db: LfgDb, gameId: number) {
       schema.lfgIntents,
       eq(schema.lfgIntents.convertedToEventId, schema.events.id),
     )
-    .where(openLfgNowEventWhere(gameId))
+    .where(and(openLfgNowEventWhere(gameId), groupScopeFilter(scope)))
     .limit(1);
 }
 
 /**
  * `GET /lfg/:gameId` — the group's open session, or null.
  *
+ * ROK-2352: scoped like the spawn's guard (`findOpenLfgNowEvent`). A group
+ * (keyed or the Any `''` group) sees only the event ITS hands converted into,
+ * because Start now joins only that group's own event (spec §3.8); null (the
+ * fold: no active adapter) = any group of the game, as before groups existed.
+ *
  * @param db - Drizzle handle.
  * @param gameId - Game whose group is being read.
+ * @param scope - The group being read, or null for the whole game.
  * @returns The playing-now projection, or null for weekly / unspawned groups.
  */
 export async function readPlayingNow(
   db: LfgDb,
   gameId: number,
+  scope: LfgGroupScope = null,
 ): Promise<LfgPlayingNowDto | null> {
-  const [row] = await selectOpenSession(db, gameId);
+  const [row] = await selectOpenSession(db, gameId, scope);
   if (!row) return null;
   return {
     eventId: row.eventId,

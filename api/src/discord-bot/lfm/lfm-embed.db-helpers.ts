@@ -15,8 +15,9 @@
  * compose the live predicate family (that is the defect round 1 shipped).
  */
 import { and, count, eq, gte, isNull, notExists, sql } from 'drizzle-orm';
-import type { LfgMemberDto } from '@raid-ledger/contract';
+import { LFG_ANY_GROUP_KEY, type LfgMemberDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
 import {
   getGroupSummary,
   listGroupMembers,
@@ -68,6 +69,8 @@ export interface LfmMessageInsert {
   threadId?: string | null;
   /** ROK-1471: which surface the row was posted to. Column defaults to text. */
   postKind?: LfgPostKind;
+  /** ROK-2352: the group the row tracks. Column defaults to `''`. */
+  groupKey?: string;
 }
 
 /** The live group as an open-state render reads it. */
@@ -97,13 +100,17 @@ const NO_VIEWER = 0;
 export async function findOpenLfmMessage(
   db: LfgDb,
   gameId: number,
+  groupKey = '',
 ): Promise<LfmMessageRow | null> {
+  // ROK-2352: pinned to ONE group — with keyed rows open beside the `''` one,
+  // an unfiltered `LIMIT 1` would hand back an arbitrary group's row.
   const [row] = await db
     .select()
     .from(schema.lfgGroupMessages)
     .where(
       and(
         eq(schema.lfgGroupMessages.gameId, gameId),
+        eq(schema.lfgGroupMessages.groupKey, groupKey),
         eq(schema.lfgGroupMessages.state, 'open'),
       ),
     )
@@ -245,10 +252,11 @@ export async function loadLfmGame(
 export async function readLiveGroup(
   db: LfgDb,
   game: LfmGameRow,
+  scope: LfgGroupScope = null,
 ): Promise<LfmLiveGroup> {
   const [summary, members] = await Promise.all([
-    getGroupSummary(db, game, NO_VIEWER),
-    listGroupMembers(db, game.id),
+    getGroupSummary(db, game, NO_VIEWER, scope),
+    listGroupMembers(db, game.id, scope),
   ]);
   return {
     members,
@@ -284,6 +292,7 @@ export async function readConvertedGroup(
 export {
   conversionSincePosted,
   latestConversionTarget,
+  readGroupSessionEventId,
 } from './lfm-embed.provenance.helpers';
 
 /**
@@ -334,6 +343,9 @@ export async function listUntrackedLfmGames(
       and(
         eq(schema.lfgGroupMessages.gameId, schema.lfgIntents.gameId),
         eq(schema.lfgGroupMessages.state, 'open'),
+        // ROK-2352: only the `''` row tracks the game-wide post; a keyed
+        // row must not hide a `''` group missed offline.
+        eq(schema.lfgGroupMessages.groupKey, LFG_ANY_GROUP_KEY),
       ),
     );
   const rows = await db

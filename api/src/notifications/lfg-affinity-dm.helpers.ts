@@ -31,14 +31,34 @@ export interface LfgInviteDmInput {
  *
  * @param clientUrl - Base URL of the web app, or null/empty for "no link".
  * @param gameSlug - Slug of the game the group formed around.
+ * @param groupKey - ROK-2352: the group's key; `''` (default) keeps the
+ *   game-wide link byte for byte, a key appends `/<encoded key>`.
  * @returns The absolute group URL, or null when no client URL is configured.
  */
 export function buildLfgInviteUrl(
   clientUrl: string | null | undefined,
   gameSlug: string,
+  groupKey = '',
 ): string | null {
   if (!clientUrl) return null;
-  return `${clientUrl.replace(/\/+$/, '')}/lfg/${gameSlug}`;
+  return lfgGroupUrl(clientUrl.replace(/\/+$/, ''), gameSlug, groupKey);
+}
+
+/**
+ * ROK-2352 — the web group page for `(game, group)`: `/lfg/<slug>` for the
+ * whole-game group, `/lfg/<slug>/<encodeURIComponent(key)>` for a keyed one.
+ *
+ * @param base - Client URL with no trailing slash.
+ * @param gameSlug - `games.slug`.
+ * @param groupKey - The group's key (`''` = whole game).
+ */
+export function lfgGroupUrl(
+  base: string,
+  gameSlug: string,
+  groupKey = '',
+): string {
+  const game = `${base}/lfg/${gameSlug}`;
+  return groupKey === '' ? game : `${game}/${encodeURIComponent(groupKey)}`;
 }
 
 /**

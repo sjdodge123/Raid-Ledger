@@ -44,6 +44,13 @@ import {
   type LfmMessageRow,
 } from '../lfm/lfm-embed.db-helpers';
 import { currentView, endedView, liveFloorFor } from '../lfm/lfm-embed.views';
+import { anyGroupScope } from '../lfm/lfm-embed.any-group.helpers';
+import {
+  resolveLfgGrouping,
+  type LfgGroupingRegistry,
+} from '../../lfg/lfg-grouping.helpers';
+import { keyedGroupTitle } from '../lfm/lfm-embed.groups.helpers';
+import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
 
 /**
  * The farewell render: whatever the group actually is, ended and annotated.
@@ -144,6 +151,11 @@ export interface RetireRowDeps {
   warn: (message: string) => void;
   /** `getLfgBoardEnabled`, bound — re-read per row, see {@link retireOpenRow}. */
   isBoardEnabled: () => Promise<boolean>;
+  /**
+   * ROK-2352 — the plugin registry, so the `''` row's farewell reads only the
+   * Any group while the game's adapter is active. Absent → the whole game.
+   */
+  registry: LfgGroupingRegistry | undefined;
 }
 
 /**
@@ -190,11 +202,12 @@ export async function retireOpenRow(
   row: LfmMessageRow,
   context: EmbedContext,
 ): Promise<number> {
-  const live = await findOpenLfmMessage(deps.db, row.gameId);
+  // ROK-2352 — re-read the row's OWN group: a keyed row is never the `''` one.
+  const live = await findOpenLfmMessage(deps.db, row.gameId, row.groupKey);
   if (!live || live.id !== row.id) return 0;
   if (await deps.isBoardEnabled()) return 0;
   const game = await loadLfmGame(deps.db, live.gameId);
-  const view = game ? await farewellView(deps.db, game, live) : null;
+  const view = game ? await rowFarewell(deps, game, live) : null;
   if (view && !(await edited(deps, live, view, context))) return 0;
   await closeLfmMessage(
     deps.db,
@@ -203,6 +216,47 @@ export async function retireOpenRow(
     view?.memberCount ?? live.lastMemberCount,
   );
   return view ? 1 : 0;
+}
+
+/**
+ * ROK-2352 — a keyed row's farewell keeps its instance title and key, the way
+ * `syncKeyedGroups` renders it while live; the `''` row is unchanged.
+ */
+async function rowFarewell(
+  deps: RetireRowDeps,
+  game: LfmGameRow,
+  row: LfmMessageRow,
+): Promise<LfmGroupView> {
+  const view = await farewellView(
+    deps.db,
+    game,
+    row,
+    rowScope(deps, game, row),
+  );
+  if (row.groupKey === '') return view;
+  const adapter = deps.registry
+    ? resolveLfgGrouping(deps.registry, game.slug)
+    : null;
+  const gameName = adapter
+    ? await keyedGroupTitle(adapter, game, row.groupKey)
+    : game.name;
+  return { ...view, gameName, groupKey: row.groupKey };
+}
+
+/**
+ * ROK-2352 — the hands a row's farewell reads: a keyed row its own group, the
+ * `''` row the Any group while the game's adapter is active (else the game).
+ * Unscoped, a live keyed group would keep the Any farewell "live" and the Any
+ * ending could name another group's conversion.
+ */
+function rowScope(
+  deps: RetireRowDeps,
+  game: LfmGameRow,
+  row: LfmMessageRow,
+): LfgGroupScope {
+  return row.groupKey !== ''
+    ? row.groupKey
+    : anyGroupScope(deps.registry, game);
 }
 
 /**
@@ -218,19 +272,21 @@ export async function retireOpenRow(
  * @param db - The LFG datasource.
  * @param game - The row's game.
  * @param row - The open row, as re-read.
+ * @param scope - The row's group, per {@link rowScope}.
  * @returns A terminal view: the ending, or the farewell.
  */
 async function farewellView(
   db: LfgDb,
   game: LfmGameRow,
   row: LfmMessageRow,
+  scope: LfgGroupScope,
 ): Promise<LfmGroupView> {
-  const current = await currentView(db, game);
+  const current = await currentView(db, game, scope);
   const live =
     current.state === 'playing' ||
     current.memberCount >= liveFloorFor(row.postKind);
   if (live) return boardOffView(current);
-  const ended = await endedView(db, game, row);
+  const ended = await endedView(db, game, row, scope);
   return isTerminalRender(ended.state) ? ended : boardOffView(ended);
 }
 

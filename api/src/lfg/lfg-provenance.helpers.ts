@@ -28,7 +28,9 @@ import { MEMBER_COLUMNS, toMemberDto } from './lfg-member-projection.helpers';
 import { eligibleUser, type LfgDb } from './lfg-query.helpers';
 // Type-only: erased at compile time, so the `lfg-write.helpers` -> this-file
 // import of `convertedToTarget` cannot become a runtime require cycle.
+import type { ConvertLfgIntentsDto } from '@raid-ledger/contract';
 import type { LfgConversionTarget } from './lfg-write.helpers';
+import type { LfgGroupChangedPayload } from './lfg.constants';
 
 /**
  * SQL predicate: an intent whose conversion provenance points at `target`.
@@ -80,4 +82,35 @@ export async function listConvertedGroupMembers(
     )
     .orderBy(asc(schema.lfgIntents.createdAt), asc(schema.lfgIntents.id));
   return rows.map(toMemberDto);
+}
+
+/** The DTO's one supplied provenance id, without the absent one's key. */
+export function toConversionTarget(
+  dto: ConvertLfgIntentsDto,
+): LfgConversionTarget {
+  return {
+    ...(dto.pollId !== undefined ? { pollId: dto.pollId } : {}),
+    ...(dto.eventId !== undefined ? { eventId: dto.eventId } : {}),
+  };
+}
+
+/**
+ * ROK-2352 — the `converted` GROUP_CHANGED payload of a scoped convert: a
+ * keyed group names itself so only its own board post re-renders.
+ *
+ * @param gameId - The game.
+ * @param target - The poll/event the group converted into.
+ * @param scope - The group converted (null / `''` = the whole-game post).
+ */
+export function convertedPayload(
+  gameId: number,
+  target: LfgConversionTarget,
+  scope: string | null,
+): LfgGroupChangedPayload {
+  return {
+    gameId,
+    reason: 'converted',
+    ...target,
+    ...(scope ? { groupKey: scope } : {}),
+  };
 }

@@ -1,8 +1,9 @@
 /**
  * Write-side helpers for LFG intents (ROK-1451).
  *
- * The partial unique index `(user_id, game_id) WHERE status = 'active'` is the
- * concurrency guard. Creates go through `ON CONFLICT DO NOTHING` + re-select —
+ * The partial unique index `(user_id, game_id, group_key) WHERE status =
+ * 'active'` (ROK-2352: one live hand per user per GROUP) is the concurrency
+ * guard. Creates go through `ON CONFLICT DO NOTHING` + re-select —
  * NEVER catch a unique violation, because under postgres.js a failed statement
  * poisons the whole transaction, savepoints included (memory
  * `reference_postgres_savepoint_does_not_contain_violations`).
@@ -29,7 +30,11 @@ import { defined } from '../common/defined.helpers';
 import type { LfgDb } from './lfg-query.helpers';
 import { convertedToTarget } from './lfg-provenance.helpers';
 import { tonightExpiresAt } from './lfg-tonight.helpers';
-import { agedBoardPostGameIds } from './lfg-post-age.helpers';
+import { agedBoardPostGroups } from './lfg-post-age.helpers';
+import {
+  groupScopeFilter,
+  type LfgGroupScope,
+} from './lfg-group-scope.helpers';
 import {
   LFG_DEFAULT_NOW_TTL_MINUTES,
   LFG_DEFAULT_VISIBILITY,
@@ -61,6 +66,12 @@ export interface LfgUrgencyRequest {
    * runtime default — see `tonightExpiresAt`.
    */
   timezone?: string | null;
+  /**
+   * ROK-2352 — the group the hand is for, ALREADY folded by
+   * `resolveWriteGroupKey` (`''` = whole game). Rides on the request for the
+   * same reason as `timezone`. Absent means `''`.
+   */
+  groupKey?: string;
 }
 
 /** The default every pre-ROK-1479 caller gets: an unchanged week intent (`LFG_EXPIRY_DAYS`). */
@@ -157,6 +168,7 @@ export function toIntentDto(row: LfgIntentRow): LfgIntentDto {
     id: row.id,
     userId: row.userId,
     gameId: row.gameId,
+    groupKey: row.groupKey,
     status: row.status as LfgIntentStatus,
     visibility: row.visibility as LfgIntentDto['visibility'],
     createdAt: row.createdAt.toISOString(),
@@ -189,11 +201,17 @@ export async function insertIntent(
       userId,
       gameId,
       status: 'active',
+      groupKey: opts.groupKey ?? '',
       visibility: LFG_DEFAULT_VISIBILITY,
       ...resolveIntentHorizon(opts),
     })
     .onConflictDoNothing({
-      target: [schema.lfgIntents.userId, schema.lfgIntents.gameId],
+      // `uq_lfg_intents_user_game_group_active` (ROK-2352).
+      target: [
+        schema.lfgIntents.userId,
+        schema.lfgIntents.gameId,
+        schema.lfgIntents.groupKey,
+      ],
       where: sql`status = 'active'`,
     })
     .returning();
@@ -201,16 +219,19 @@ export async function insertIntent(
 }
 
 /**
- * Read the caller's `status = 'active'` row for a game, expired or not.
+ * Read the caller's `status = 'active'` row for one group of a game, expired
+ * or not.
  *
  * @param db - Drizzle handle.
  * @param userId - Intent holder.
  * @param gameId - Game to look up.
+ * @param groupKey - ROK-2352: the group (`''` = whole game, the default).
  */
 export async function findActiveIntent(
   db: LfgDb,
   userId: number,
   gameId: number,
+  groupKey = '',
 ): Promise<LfgIntentRow | null> {
   const [row] = await db
     .select()
@@ -219,6 +240,7 @@ export async function findActiveIntent(
       and(
         eq(schema.lfgIntents.userId, userId),
         eq(schema.lfgIntents.gameId, gameId),
+        eq(schema.lfgIntents.groupKey, groupKey),
         eq(schema.lfgIntents.status, 'active'),
       ),
     )
@@ -250,34 +272,6 @@ export async function reviveIntent(
 }
 
 /**
- * Withdraw: flip the caller's active row to `cleared`. Never touches anyone
- * else's row.
- *
- * @param db - Drizzle handle.
- * @param userId - Intent holder.
- * @param gameId - Game to withdraw from.
- * @returns True when a row was cleared, false when the caller held none.
- */
-export async function clearIntent(
-  db: LfgDb,
-  userId: number,
-  gameId: number,
-): Promise<boolean> {
-  const rows = await db
-    .update(schema.lfgIntents)
-    .set({ status: 'cleared' })
-    .where(
-      and(
-        eq(schema.lfgIntents.userId, userId),
-        eq(schema.lfgIntents.gameId, gameId),
-        eq(schema.lfgIntents.status, 'active'),
-      ),
-    )
-    .returning({ id: schema.lfgIntents.id });
-  return rows.length > 0;
-}
-
-/**
  * Conversion (AC8): flip every LIVE intent on the game to `converted` and
  * record the provenance. Idempotent — a second call converts zero rows.
  *
@@ -287,12 +281,15 @@ export async function clearIntent(
  * @param db - Drizzle handle.
  * @param gameId - Game whose group converted.
  * @param target - Exactly one of `pollId` / `eventId`.
+ * @param scope - ROK-2352: one group key, or null (default) = every live hand
+ *   of the game (the fold, and callers that predate groups).
  * @returns How many rows converted.
  */
 export async function convertGroup(
   db: LfgDb,
   gameId: number,
   target: LfgConversionTarget,
+  scope: LfgGroupScope = null,
 ): Promise<number> {
   const rows = await db
     .update(schema.lfgIntents)
@@ -302,7 +299,7 @@ export async function convertGroup(
       convertedToEventId: target.eventId ?? null,
       convertedAt: sql`statement_timestamp()`, // TDB:953 — DB clock at the UPDATE, not tx start
     })
-    .where(liveGroupRow(db, gameId, new Date()))
+    .where(and(liveGroupRow(db, gameId, new Date()), groupScopeFilter(scope)))
     .returning({ id: schema.lfgIntents.id });
   return rows.length;
 }
@@ -364,21 +361,26 @@ export async function convertHolderIntent(
  * @param userId - Caller.
  * @param gameId - Game to check.
  * @param target - The conversion target from the request.
+ * @param scope - ROK-2352: the group being converted; only a row IN it
+ *   counts (null = the whole game: the fold and pre-group callers).
  */
 export async function resolveConvertRole(
   db: LfgDb,
   userId: number,
   gameId: number,
   target: LfgConversionTarget,
+  scope: LfgGroupScope = null,
 ): Promise<LfgConvertRole> {
   const live = and(
     eq(schema.lfgIntents.status, 'active'),
     gt(schema.lfgIntents.expiresAt, new Date()),
+    groupScopeFilter(scope),
   );
   if (await hasIntentRow(db, userId, gameId, live)) return 'member';
   const retried = and(
     eq(schema.lfgIntents.status, 'converted'),
     convertedToTarget(target),
+    groupScopeFilter(scope),
   );
   return (await hasIntentRow(db, userId, gameId, retried)) ? 'retry' : null;
 }
@@ -440,8 +442,8 @@ export interface LfgExpirySweep {
  * consumer can only re-render the group, so a member who quietly lapsed stayed
  * in the board post's forum thread forever.
  *
- * ROK-1691 — a hand ALSO lapses when its game's open forum post opened more
- * than `LFG_POST_MAX_AGE_DAYS` ago, however recently it was refreshed. Same
+ * ROK-1691 — a hand ALSO lapses when its group's open forum post opened more
+ * than `LFG_POST_MAX_AGE_DAYS` ago (ROK-2352: matched on `(game, group_key)`), however recently it was refreshed. Same
  * UPDATE, same RETURNING, same per-game emit: the board retires that post
  * exactly as it retires one whose hands ran out, with no new path.
  *
@@ -461,7 +463,8 @@ export async function expireStaleIntents(
         eq(schema.lfgIntents.status, 'active'),
         or(
           lte(schema.lfgIntents.expiresAt, now),
-          inArray(schema.lfgIntents.gameId, agedBoardPostGameIds(now)),
+          // ROK-2352 P2-7: the hand's own group's post, not any post of the game.
+          sql`(${schema.lfgIntents.gameId}, ${schema.lfgIntents.groupKey}) in (${agedBoardPostGroups(now)})`,
         ),
       ),
     )

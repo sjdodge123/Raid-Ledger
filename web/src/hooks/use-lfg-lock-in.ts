@@ -33,11 +33,15 @@ export interface LockInOptions {
 }
 
 /** The create body — the group's game, its name as the title, the capped window. */
-function lockInBody(gameId: number, gameName: string, window: LockInWindow) {
+function lockInBody(gameId: number, gameName: string, window: LockInWindow, groupKey: string, chosenGroupKey?: string) {
     const { start, end } = capLockInWindow(window);
     return {
         gameId,
         lfgGameId: gameId,
+        // ROK-2352: only that group converts; the whole-game group sends no key.
+        ...(groupKey === '' ? {} : { lfgGroupKey: groupKey }),
+        // The Any group's picked instance (ROK-2352 §3.4); never sent for a keyed group.
+        ...(groupKey === '' && chosenGroupKey ? { lfgChosenGroupKey: chosenGroupKey } : {}),
         title: gameName.slice(0, TITLE_MAX),
         startTime: start,
         endTime: end,
@@ -45,11 +49,11 @@ function lockInBody(gameId: number, gameName: string, window: LockInWindow) {
 }
 
 /** Create an event from the LFG group for `gameId`, converting the group. */
-export function useLockInEvent(gameId: number, gameName: string) {
+export function useLockInEvent(gameId: number, gameName: string, groupKey = '') {
     const queryClient = useQueryClient();
     const mutation = useMutation({
-        mutationFn: (window: LockInWindow) =>
-            createEvent(lockInBody(gameId, gameName, window)),
+        mutationFn: ({ window, chosenGroupKey }: { window: LockInWindow; chosenGroupKey?: string | undefined }) =>
+            createEvent(lockInBody(gameId, gameName, window, groupKey, chosenGroupKey)),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['lfg'] });
             void queryClient.invalidateQueries({ queryKey: ['events'] });
@@ -59,8 +63,8 @@ export function useLockInEvent(gameId: number, gameName: string) {
     });
     const { mutate } = mutation;
     const lockIn = useCallback(
-        (window: LockInWindow, options?: LockInOptions): void =>
-            mutate(window, options),
+        (window: LockInWindow, options?: LockInOptions, chosenGroupKey?: string): void =>
+            mutate({ window, chosenGroupKey }, options),
         [mutate],
     );
     return { lockIn, isPending: mutation.isPending };

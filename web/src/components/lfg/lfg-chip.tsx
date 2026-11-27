@@ -26,7 +26,7 @@
 import type { JSX, MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { LfgState } from '@raid-ledger/contract';
-import { chipLabel, effectiveLfgState } from './lfg-chip-copy';
+import { chipLabel, effectiveLfgState, groupsLine } from './lfg-chip-copy';
 
 const CHIP_CLS =
     'px-2 py-0.5 text-xs font-bold rounded transition-opacity hover:opacity-90';
@@ -51,6 +51,8 @@ export interface LfgChipProps {
     nowCount?: number | null;
     /** `games.slug` — the chip navigates to `/lfg/{gameSlug}`. */
     gameSlug: string;
+    /** ROK-2352 Q7: groups the game's LFG is split into; >1 adds "in N groups". */
+    groupCount?: number | null;
 }
 
 /**
@@ -88,7 +90,9 @@ function LfgChipButton({
     state,
     nowCount,
     gameSlug,
+    groupCount,
 }: LfgChipProps & { activeCount: number }): JSX.Element {
+    const groups = groupsLine(groupCount);
     const effectiveState = effectiveLfgState(activeCount, state);
     const label = chipLabel(
         activeCount,
@@ -103,11 +107,14 @@ function LfgChipButton({
             data-testid="lfg-chip"
             data-lfg-state={effectiveState}
             data-lfg-now={nowAttr(nowCount)}
-            aria-label={label}
+            aria-label={groups ? `${label} · ${groups}` : label}
             onClick={handleClick}
             className={`${CHIP_CLS} ${STATE_CLS[effectiveState]}`}
         >
             {label}
+            {groups ? (
+                <span data-testid="lfg-chip-groups" className="block text-[10px] font-medium">{groups}</span>
+            ) : null}
         </Link>
     );
 }

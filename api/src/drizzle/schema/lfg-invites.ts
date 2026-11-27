@@ -2,6 +2,7 @@ import {
   pgTable,
   serial,
   integer,
+  text,
   timestamp,
   index,
 } from 'drizzle-orm/pg-core';
@@ -34,7 +35,7 @@ export const lfgInvites = pgTable(
     inviterUserId: integer('inviter_user_id')
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
-    /** The group IS the game — ROK-1451 has no group id. */
+    /** The game half of the group `(game_id, group_key)` (ROK-2352). */
     gameId: integer('game_id')
       .references(() => games.id, { onDelete: 'cascade' })
       .notNull(),
@@ -42,6 +43,8 @@ export const lfgInvites = pgTable(
     sentAt: timestamp('sent_at').defaultNow().notNull(),
     /** Set by the DM decline button (D12); a full-horizon block. */
     declinedAt: timestamp('declined_at'),
+    /** ROK-2352: the group half; `''` = the whole-game group. */
+    groupKey: text('group_key').default('').notNull(),
   },
   (table) => [
     /** The per-recipient budget. */
@@ -50,11 +53,16 @@ export const lfgInvites = pgTable(
       table.sentAt,
     ),
     /** The per-group cap. */
-    index('idx_lfg_invites_game_sent_at').on(table.gameId, table.sentAt),
+    index('idx_lfg_invites_game_group_sent_at').on(
+      table.gameId,
+      table.groupKey,
+      table.sentAt,
+    ),
     /** The no-repeat read. */
-    index('idx_lfg_invites_recipient_game_sent_at').on(
+    index('idx_lfg_invites_recipient_game_group_sent_at').on(
       table.recipientUserId,
       table.gameId,
+      table.groupKey,
       table.sentAt,
     ),
   ],

@@ -14,11 +14,16 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import type { LfgStartNowResponseDto } from '@raid-ledger/contract';
+import {
+  LfgGroupQuerySchema,
+  type LfgStartNowResponseDto,
+} from '@raid-ledger/contract';
+import { parseQuery } from '../../lfg/lfg-query-parse.helpers';
 import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { LfgNowSpawnService } from './lfg-now-spawn.service';
@@ -34,6 +39,7 @@ export class LfgNowStartController {
    *
    * @param gameId - The group's game.
    * @param req - Authenticated request; the caller is the starter.
+   * @param query - ROK-2352 `?group` (default `''`): the group to start.
    * @throws 403 when the caller holds no live intent on the game (AC6).
    */
   @Post(':gameId/start-now')
@@ -42,7 +48,9 @@ export class LfgNowStartController {
   startNow(
     @Param('gameId', ParseIntPipe) gameId: number,
     @Req() req: AuthenticatedRequest,
+    @Query() query: unknown,
   ): Promise<LfgStartNowResponseDto> {
-    return this.spawner.startNow(req.user.id, gameId);
+    const { group } = parseQuery(LfgGroupQuerySchema, query);
+    return this.spawner.startNow(req.user.id, gameId, undefined, group);
   }
 }

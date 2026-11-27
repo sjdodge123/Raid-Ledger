@@ -84,20 +84,57 @@ async function seedInvitee(adminToken: string): Promise<string> {
 }
 
 /**
- * Catalogue games with usable slugs, in discover order. The page is
- * slug-addressed, so a game without one is not reachable.
+ * True when an `lfg-grouping` plugin keys this game's hands (ROK-2352: WoW
+ * with the Blizzard plugin on). Read from the catalogue the page itself lists,
+ * not from a slug list, so it follows the plugin's real state. Such a game's
+ * `+1` holds the urgency pick until a role is chosen (spec §3: roles are
+ * required on WoW instance hands) — `lfg-wow-instances.smoke.spec.ts` drives
+ * that flow; this spec proves the ungrouped page and must not land on it.
+ */
+/**
+ * The six WoW slugs the web's grouping claims (mirrors
+ * `web/src/plugins/wow/lfg/wow-lfg-grouping.ts::WOW_LFG_GAME_SLUGS`). The web
+ * picks its grouping by SLUG + active plugin, not by the API's catalogue: in
+ * GitHub CI a sibling spec activates `blizzard` but there are no Blizzard keys,
+ * so a WoW game's catalogue is empty (`isGroupedGame` says false) while the
+ * page still holds the urgency pick for a role. Skip these by slug as well.
+ */
+const WOW_GROUPED_SLUGS: ReadonlySet<string> = new Set([
+  "world-of-warcraft",
+  "world-of-warcraft-classic",
+  "world-of-warcraft-burning-crusade-classic-anniversary-edition",
+  "world-of-warcraft-burning-crusade-classic",
+  "world-of-warcraft-wrath-of-the-lich-king",
+  "world-of-warcraft-forever",
+]);
+
+async function isGroupedGame(token: string, gameId: number): Promise<boolean> {
+  const res = (await apiGet(token, `/lfg/${gameId}/groups?include=catalogue`)) as {
+    groups?: Array<{ groupKey?: string }>;
+  } | null;
+  return (res?.groups ?? []).some((g) => typeof g.groupKey === "string" && g.groupKey !== "");
+}
+
+/**
+ * Ungrouped catalogue games with usable slugs, in discover order. The page is
+ * slug-addressed, so a game without one is not reachable. Stops once every
+ * Playwright project has its game.
  */
 async function pickGames(
   token: string,
 ): Promise<Array<{ id: number; slug: string }>> {
   const discover = await apiGet(token, "/games/discover");
+  const wanted = Object.keys(PROJECT_GAME_INDEX).length;
   const seen = new Set<number>();
   const games: Array<{ id: number; slug: string }> = [];
   for (const row of discover?.rows ?? []) {
     for (const game of row.games ?? []) {
+      if (games.length >= wanted) return games;
       if (!game?.id || typeof game.slug !== "string" || !game.slug) continue;
       if (seen.has(game.id)) continue;
       seen.add(game.id);
+      if (WOW_GROUPED_SLUGS.has(game.slug)) continue;
+      if (await isGroupedGame(token, game.id)) continue;
       games.push({ id: game.id, slug: game.slug });
     }
   }

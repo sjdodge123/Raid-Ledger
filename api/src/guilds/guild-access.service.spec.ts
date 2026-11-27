@@ -260,18 +260,22 @@ describe('GuildAccessService.myGuilds', () => {
   it('maps each distinct guild id a hub kind reports to a summary with ISO timestamps', async () => {
     build(stubHub('member', [GUILD, GUILD]));
     const snap = new Date('2026-10-01T12:00:00.000Z');
+    // ROK-2352: rows carry the joined game slug.
     db.orderBy.mockResolvedValueOnce([
       {
-        id: GUILD,
-        gameId: 3,
-        kind: 'wow_guild',
-        name: 'Stormwind Guard',
-        region: 'us',
-        realmSlug: null,
-        rawRealm: 'Doomhowl',
-        faction: 'Alliance',
-        memberCount: 12,
-        lastSnapshotAt: snap,
+        guild: {
+          id: GUILD,
+          gameId: 3,
+          kind: 'wow_guild',
+          name: 'Stormwind Guard',
+          region: 'us',
+          realmSlug: null,
+          rawRealm: 'Doomhowl',
+          faction: 'Alliance',
+          memberCount: 12,
+          lastSnapshotAt: snap,
+        },
+        gameSlug: 'world-of-warcraft-classic',
       },
     ]);
     expect(await service.myGuilds(42)).toEqual([
@@ -288,7 +292,33 @@ describe('GuildAccessService.myGuilds', () => {
         lastSnapshotAt: '2026-10-01T12:00:00.000Z',
         // ROK-1814: no crest columns set → no crest.
         crest: null,
+        gameSlug: 'world-of-warcraft-classic',
       },
     ]);
+  });
+});
+
+describe('GuildAccessService.myGuilds — game slug (ROK-2352)', () => {
+  it('omits gameSlug when the hub has no game row', async () => {
+    build(stubHub('member', [GUILD]));
+    db.orderBy.mockResolvedValueOnce([
+      {
+        guild: {
+          id: GUILD,
+          gameId: 3,
+          kind: 'game_community',
+          name: 'No Game',
+          region: null,
+          realmSlug: null,
+          rawRealm: null,
+          faction: null,
+          memberCount: 0,
+          lastSnapshotAt: null,
+        },
+        gameSlug: null,
+      },
+    ]);
+    const [summary] = await service.myGuilds(42);
+    expect(summary).not.toHaveProperty('gameSlug');
   });
 });

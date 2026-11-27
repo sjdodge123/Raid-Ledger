@@ -38,7 +38,7 @@
  * So the two sources no longer differ at all, which is the point: one
  * resolution, not two that drift.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { MessageFlags } from 'discord.js';
 import type { ButtonInteraction } from 'discord.js';
@@ -51,6 +51,10 @@ import {
 } from '../../lfg/lfg-group-horizon.helpers';
 import { LfgService, type CreateIntentResult } from '../../lfg/lfg.service';
 import { SettingsService } from '../../settings/settings.service';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
+import { anyGroupScope } from '../lfm/lfm-embed.any-group.helpers';
+import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
+import { loadLfmGame } from '../lfm/lfm-embed.db-helpers';
 import { DISCORD_BOT_EVENTS, LFG_BUTTON_IDS } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
@@ -65,6 +69,7 @@ import {
 } from '../commands/lfg.command.helpers';
 import { resolveLfgCaller } from '../commands/lfg.command';
 import { findLfmMessageByIds } from '../lfg-board/lfg-board.db-helpers';
+import { parseLfgBoardCustomId } from '../lfg-board/lfg-board-custom-id.helpers';
 import {
   DiscordListenerBinding,
   gatewayBinding,
@@ -82,14 +87,8 @@ export interface LfgJoinPress {
   gameId: number;
   /** `board` keeps the ROK-1471 week default; `dm` matches the group. */
   source: 'board' | 'dm';
-}
-
-/** The game id trailing a `{prefix}:` custom id, or null. */
-function gameIdAfter(customId: string, prefix: string): number | null {
-  if (!customId.startsWith(`${prefix}:`)) return null;
-  const raw = customId.slice(prefix.length + 1);
-  if (!/^\d+$/.test(raw)) return null;
-  return Number(raw);
+  /** ROK-2352 — `''` for a v1 id (every pre-ROK-2352 button). */
+  groupKey: string;
 }
 
 /**
@@ -99,7 +98,7 @@ function gameIdAfter(customId: string, prefix: string): number | null {
  * @returns The game id, or null when this is not a board join button.
  */
 export function parseJoinCustomId(customId: string): number | null {
-  return gameIdAfter(customId, LFG_BUTTON_IDS.JOIN);
+  return parseLfgBoardCustomId(customId, LFG_BUTTON_IDS.JOIN)?.gameId ?? null;
 }
 
 /**
@@ -113,10 +112,10 @@ export function parseJoinCustomId(customId: string): number | null {
  * @returns What was pressed, or null when this is neither join button.
  */
 export function parseJoinPress(customId: string): LfgJoinPress | null {
-  const board = parseJoinCustomId(customId);
-  if (board !== null) return { gameId: board, source: 'board' };
-  const dm = gameIdAfter(customId, LFG_BUTTON_IDS.INVITE_JOIN);
-  return dm === null ? null : { gameId: dm, source: 'dm' };
+  const board = parseLfgBoardCustomId(customId, LFG_BUTTON_IDS.JOIN);
+  if (board !== null) return { ...board, source: 'board' };
+  const dm = parseLfgBoardCustomId(customId, LFG_BUTTON_IDS.INVITE_JOIN);
+  return dm === null ? null : { ...dm, source: 'dm' };
 }
 
 @Injectable()
@@ -133,7 +132,18 @@ export class LfgJoinListener {
     private readonly clientService: DiscordBotClientService,
     private readonly lfgService: LfgService,
     private readonly settingsService: SettingsService,
+    @Optional() private readonly pluginRegistry?: PluginRegistryService,
   ) {}
+
+  /** ROK-2352: the press's group — its key, else the Any scope. */
+  private async scope({
+    gameId,
+    groupKey,
+  }: LfgJoinPress): Promise<LfgGroupScope> {
+    if (groupKey || !this.pluginRegistry) return groupKey || null;
+    const game = await loadLfmGame(this.db, gameId);
+    return game ? anyGroupScope(this.pluginRegistry, game) : null;
+  }
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   onBotConnected(): void {
@@ -181,7 +191,7 @@ export class LfgJoinListener {
     interaction: ButtonInteraction,
     press: LfgJoinPress,
   ): Promise<LfgJoinReply> {
-    const { gameId } = press;
+    const { gameId, groupKey } = press;
     const caller = await resolveLfgCaller(this.db, interaction.user.id);
     if (!caller) return LFG_UNLINKED_REPLY; // E8
     // E9: `NotDeactivatedGuard` guards the HTTP routes only, so a gateway click
@@ -195,12 +205,18 @@ export class LfgJoinListener {
     // (rather than copying the group's `expires_at`) is what stops a late
     // joiner inheriting a clock that has already run out.
     const [horizon, timezone] = await Promise.all([
-      readGroupHorizon(this.db, gameId),
+      // ROK-2352 P2-4 — a keyed button inherits ITS group's horizon.
+      // A v1/Any press reads the Any group (`''`) while the adapter is
+      // active, never the whole game (delta MINOR 1).
+      readGroupHorizon(this.db, gameId, new Date(), await this.scope(press)),
       this.settingsService.getDiscordBotTimezone(),
     ]);
+    // ROK-2352 — a v2 id raises the hand in its group; v1 omits the key
+    // (`''`), so a pre-ROK-2352 press writes exactly what it always did.
     return this.write(caller.id, gameId, {
       ...horizonJoinRequest(horizon),
       timezone,
+      ...(groupKey ? { groupKey } : {}),
     });
   }
 

@@ -15,6 +15,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -23,12 +24,17 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Response } from 'express';
 import {
   ConvertLfgIntentsSchema,
+  LfgAckHandNoticesSchema,
   CreateLfgIntentSchema,
+  LfgDeleteGroupQuerySchema,
+  LfgGroupListQuerySchema,
+  LfgGroupQuerySchema,
   LfgInviteRequestSchema,
   type LfgInviteResponseDto,
   type LfgConvertResponseDto,
   type LfgClearOfferDto,
   type LfgGroupDetailDto,
+  type LfgGroupListResponseDto,
   type LfgGroupSummaryDto,
   type LfgHeartedGameDto,
   type LfgIntentResponseDto,
@@ -41,6 +47,8 @@ import type { AuthenticatedRequest } from '../auth/types';
 import { LfgService } from './lfg.service';
 import { LfgReadsService } from './lfg-reads.service';
 import { LfgInviteService } from './lfg-invite.service';
+import { LfgHandNoticesService } from './lfg-hand-notices.service';
+import { parseQuery } from './lfg-query-parse.helpers';
 
 @Controller('lfg')
 @UseGuards(AuthGuard('jwt'))
@@ -49,6 +57,7 @@ export class LfgController {
     private readonly service: LfgService,
     private readonly reads: LfgReadsService,
     private readonly invites: LfgInviteService,
+    private readonly notices: LfgHandNoticesService,
   ) {}
 
   /**
@@ -81,7 +90,16 @@ export class LfgController {
         ...(parsed.data.ttlMinutes !== undefined
           ? { ttlMinutes: parsed.data.ttlMinutes }
           : {}),
+        // ROK-2352: folded / adapter-checked by the service.
+        ...(parsed.data.groupKey !== undefined
+          ? { groupKey: parsed.data.groupKey }
+          : {}),
+        ...(parsed.data.handDetail !== undefined
+          ? { handDetail: parsed.data.handDetail }
+          : {}),
       },
+      // ROK-2352 §3.3: a web/API hand in a plugin group must carry roles.
+      { requireHandDetail: true },
     );
     res.status(result.created ? HttpStatus.CREATED : HttpStatus.OK);
     return result.body;
@@ -108,38 +126,75 @@ export class LfgController {
     return this.service.listOffers(req.user.id);
   }
 
-  /** Group detail. 200 with a zero-count group when nobody is looking. */
+  /**
+   * ROK-2352 §3.2: mark "hand withdrawn" notices seen (show-once). 204;
+   * ids that are not the caller's are skipped, never an error.
+   */
+  @Post('hands/notices/ack')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async ackHandNotices(
+    @Body() body: unknown,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<void> {
+    const { intentIds } = parseQuery(LfgAckHandNoticesSchema, body);
+    await this.notices.ack(req.user.id, intentIds);
+  }
+
+  /** Group detail (`?group=`, default `''`). 200 with a zero-count group when nobody is looking. */
   @Get(':gameId')
   getGroup(
     @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
     @Req() req: AuthenticatedRequest,
   ): Promise<LfgGroupDetailDto> {
-    return this.service.getGroupDetail(req.user.id, gameId);
+    const { group } = parseQuery(LfgGroupQuerySchema, query);
+    return this.service.getGroupDetail(req.user.id, gameId, group);
   }
 
-  /** Group-page read: the windows the live roster could all play in. */
+  /** ROK-2352: the game's groups, `''` first; `?include=catalogue` adds empty ones. */
+  @Get(':gameId/groups')
+  listGameGroups(
+    @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<LfgGroupListResponseDto> {
+    const { include } = parseQuery(LfgGroupListQuerySchema, query);
+    return this.reads.listGameGroups(
+      req.user.id,
+      gameId,
+      include === 'catalogue',
+    );
+  }
+
+  /** Group-page read (`?group=`): the windows the live roster could all play in. */
   @Get(':gameId/overlap')
   getOverlap(
     @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
   ): Promise<LfgOverlapResponseDto> {
-    return this.reads.getOverlap(gameId);
+    const { group } = parseQuery(LfgGroupQuerySchema, query);
+    return this.reads.getOverlap(gameId, group);
   }
 
-  /** Group-page read: past scheduled events and Quick Play sessions. */
+  /** Group-page read: past sessions. `?group` is validated; history is per game. */
   @Get(':gameId/history')
   getHistory(
     @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
   ): Promise<LfgHistoryResponseDto> {
+    parseQuery(LfgGroupQuerySchema, query);
     return this.reads.getHistory(gameId);
   }
 
-  /** Group-page read: players who might want in on this group. */
+  /** Group-page read (`?group=`): players who might want in on this group. */
   @Get(':gameId/suggestions')
   getSuggestions(
     @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
     @Req() req: AuthenticatedRequest,
   ): Promise<LfgSuggestionsResponseDto> {
-    return this.reads.getSuggestions(req.user.id, gameId);
+    const { group } = parseQuery(LfgGroupQuerySchema, query);
+    return this.reads.getSuggestions(req.user.id, gameId, group);
   }
 
   /** Withdraw the caller's own intent. */
@@ -148,9 +203,11 @@ export class LfgController {
   @HttpCode(HttpStatus.NO_CONTENT)
   withdraw(
     @Param('gameId', ParseIntPipe) gameId: number,
+    @Query() query: unknown,
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
-    return this.service.withdraw(req.user.id, gameId);
+    const { group } = parseQuery(LfgDeleteGroupQuerySchema, query);
+    return this.service.withdraw(req.user.id, gameId, group);
   }
 
   /**
@@ -164,13 +221,15 @@ export class LfgController {
   async invite(
     @Param('gameId', ParseIntPipe) gameId: number,
     @Body() body: unknown,
+    @Query() query: unknown,
     @Req() req: AuthenticatedRequest,
   ): Promise<LfgInviteResponseDto> {
     const parsed = LfgInviteRequestSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.invites.invite(req.user.id, gameId, parsed.data.userId);
+    const { group } = parseQuery(LfgGroupQuerySchema, query);
+    return this.invites.invite(req.user.id, gameId, parsed.data.userId, group);
   }
 
   /** Record that this group converted into a poll or an event. */
@@ -179,6 +238,7 @@ export class LfgController {
   async convert(
     @Param('gameId', ParseIntPipe) gameId: number,
     @Body() body: unknown,
+    @Query() query: unknown,
     @Req() req: AuthenticatedRequest,
   ): Promise<LfgConvertResponseDto> {
     const parsed = ConvertLfgIntentsSchema.safeParse(body);
@@ -193,6 +253,8 @@ export class LfgController {
         Object.keys(fieldErrors).length > 0 ? fieldErrors : formErrors,
       );
     }
-    return this.service.convert(req.user.id, gameId, parsed.data);
+    // ROK-2352: `?group` (default `''`) — only that group's hands convert.
+    const { group } = parseQuery(LfgGroupQuerySchema, query);
+    return this.service.convert(req.user.id, gameId, parsed.data, group);
   }
 }

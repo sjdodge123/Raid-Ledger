@@ -12,6 +12,7 @@ import {
   LFG_INVITE_NOTHING_TO_DECLINE_REPLY,
   LfgInviteDeclineListener,
   parseInviteDeclineCustomId,
+  parseInviteDeclinePress,
 } from './lfg-invite-decline.listener';
 
 type Row = Record<string, unknown>;
@@ -168,6 +169,50 @@ describe('LfgInviteDeclineListener (ROK-1455 D12 / AC8)', () => {
     expect(client.removeListener).toHaveBeenCalledWith(
       'interactionCreate',
       expect.any(Function),
+    );
+  });
+});
+
+describe('parseInviteDeclinePress (ROK-2352 v1 + v2)', () => {
+  const PREFIX = LFG_BUTTON_IDS.INVITE_DECLINE;
+
+  it('reads a v1 id as the game with no group (newest invite in the game)', () => {
+    expect(parseInviteDeclinePress(`${PREFIX}:42`)).toEqual({
+      gameId: 42,
+      groupKey: null,
+    });
+  });
+
+  it('reads a v2 id as the game plus its group key, colons included', () => {
+    expect(parseInviteDeclinePress(`${PREFIX}:42:dungeon:36`)).toEqual({
+      gameId: 42,
+      groupKey: 'dungeon:36',
+    });
+    expect(parseInviteDeclineCustomId(`${PREFIX}:42:dungeon:36`)).toBe(42);
+  });
+
+  it('rejects a malformed key, a non-numeric game and another prefix', () => {
+    expect(parseInviteDeclinePress(`${PREFIX}:42:Not A Key`)).toBeNull();
+    expect(parseInviteDeclinePress(`${PREFIX}:x:dungeon:36`)).toBeNull();
+    expect(parseInviteDeclinePress(`${PREFIX}:42:`)).toBeNull();
+    expect(
+      parseInviteDeclinePress(`${LFG_BUTTON_IDS.INVITE_JOIN}:42:dungeon:36`),
+    ).toBeNull();
+  });
+
+  it('a v2 press declines only that group, for the user who clicked', async () => {
+    const service = makeService();
+    const listener = build([LINKED], service);
+    const { interaction } = makeButton(`${PREFIX}:42:dungeon:36`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.decline).toHaveBeenCalledTimes(1);
+    expect(service.decline).toHaveBeenCalledWith(
+      7,
+      42,
+      expect.any(Date),
+      'dungeon:36',
     );
   });
 });

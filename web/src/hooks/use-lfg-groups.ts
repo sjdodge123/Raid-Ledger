@@ -42,14 +42,16 @@ export function useLfgGroups(): UseQueryResult<LfgGroupSummaryDto[]> {
  * and would gain nothing from the whole list.
  *
  * @param gameId - Game to read, or `undefined` while the route param resolves.
+ * @param groupKey - ROK-2352 group within the game; `''` = the whole-game group.
  */
 export function useLfgGroupDetail(
     gameId: number | undefined,
+    groupKey = '',
 ): UseQueryResult<LfgGroupDetailDto> {
     const token = getAuthToken();
     return useQuery<LfgGroupDetailDto>({
-        queryKey: ['lfg', 'group', gameId],
-        queryFn: () => getLfgGroup(gameId as number),
+        queryKey: ['lfg', 'group', gameId, groupKey],
+        queryFn: () => getLfgGroup(gameId as number, groupKey),
         enabled: !!token && !!gameId,
         staleTime: 1000 * 60,
     });

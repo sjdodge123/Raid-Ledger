@@ -86,11 +86,23 @@ describe("LfgLeaveListener — the board's I'm out (ROK-1660)", () => {
 
     await listener.handleButtonInteraction(interaction);
 
-    expect(service.withdraw).toHaveBeenCalledWith(7, 42);
+    // ROK-2352: an old (v1) id leaves the `''` group — with no grouping
+    // adapter that is every hand of the game, exactly as before.
+    expect(service.withdraw).toHaveBeenCalledWith(7, 42, '');
     expect(service.countStillLooking).toHaveBeenCalledWith(42);
     expect(content(editReply)).toBe(
       "You're out — **Deep Rock Galactic**. 2 still looking.",
     );
+  });
+
+  it('ROK-2352 — a v2 id leaves only the group the post is for', async () => {
+    const service = makeService(undefined, 1);
+    const listener = build([LINKED, GAME], service);
+    const { interaction } = makeButton('lfg:leave:42:dungeon:1234');
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.withdraw).toHaveBeenCalledWith(7, 42, 'dungeon:1234');
   });
 
   it('drops the count when the presser was the last hand', async () => {

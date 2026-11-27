@@ -26,8 +26,10 @@ import {
   type AdHocParticipantJoinedPayload,
 } from '../discord-bot/discord-bot.constants';
 import { LFG_EVENTS, type LfgGroupChangedPayload } from './lfg.constants';
-import { findOpenLfgNowEventId } from './lfg-playing.helpers';
-import { convertHolderIntent } from './lfg-write.helpers';
+import {
+  convertJoinerHand,
+  findOpenLfgBornSessionGroup,
+} from './lfg-session-group.helpers';
 
 @Injectable()
 export class LfgQuickPlayListener {
@@ -94,14 +96,36 @@ export class LfgQuickPlayListener {
     gameId: number,
     eventId: number,
   ): Promise<boolean> {
-    if ((await findOpenLfgNowEventId(this.db, gameId)) !== eventId) {
-      return false;
-    }
-    const converted = await convertHolderIntent(this.db, gameId, userId, {
+    // ROK-2352 P1-1: only the session's own group converts (voice "playing
+    // now" is the `''` group's; a keyed Start now session is its group's).
+    const groupKey = await findOpenLfgBornSessionGroup(
+      this.db,
+      gameId,
       eventId,
-    });
-    if (converted > 0) this.announceConversion(userId, gameId, eventId);
+    );
+    if (groupKey === null) return false;
+    const result = await convertJoinerHand(
+      this.db,
+      gameId,
+      userId,
+      eventId,
+      groupKey,
+    );
+    if (result.converted > 0) {
+      this.announceConversion(userId, gameId, eventId, groupKey);
+      this.announceCleared(gameId, result.clearedSiblingUserIds);
+    }
     return true;
+  }
+
+  /** Q1: the joiner's other `now` hands cleared in the conversion tx. */
+  private announceCleared(gameId: number, userIds: number[]): void {
+    if (userIds.length === 0) return;
+    this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, {
+      gameId,
+      reason: 'withdrawn',
+      userIds,
+    } satisfies LfgGroupChangedPayload);
   }
 
   /** Log the conversion, then repaint the group's surfaces off the new state. */
@@ -109,6 +133,7 @@ export class LfgQuickPlayListener {
     userId: number,
     gameId: number,
     eventId: number,
+    groupKey: string,
   ): void {
     this.logger.log(
       `Converted user ${userId}'s LFG hand on game ${gameId} into event ${eventId}`,
@@ -117,6 +142,7 @@ export class LfgQuickPlayListener {
       gameId,
       reason: 'playing',
       eventId,
+      ...(groupKey ? { groupKey } : {}),
     } satisfies LfgGroupChangedPayload);
   }
 

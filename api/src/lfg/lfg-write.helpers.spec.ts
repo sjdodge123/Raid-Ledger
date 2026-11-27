@@ -41,6 +41,7 @@ function intentRow(overrides: Partial<LfgIntentRow> = {}): LfgIntentRow {
     id: 7,
     userId: 11,
     gameId: 22,
+    groupKey: '',
     status: 'active',
     visibility: 'local',
     urgency: 'week',
@@ -50,6 +51,9 @@ function intentRow(overrides: Partial<LfgIntentRow> = {}): LfgIntentRow {
     convertedToPollId: null,
     convertedToEventId: null,
     convertedAt: null,
+    clearedReason: null,
+    clearedIntoGroupKey: null,
+    clearedNoticeSeenAt: null,
     ...overrides,
   };
 }
@@ -144,6 +148,41 @@ describe('insertIntent', () => {
     const [values] = nonEmpty(writtenPayloads(mockDb.values), 'values');
     expect(values.ttlMinutes).toBe(30);
     expect(horizonsFrom(mockDb.values)).toEqual([30 * MINUTE_MS]);
+  });
+});
+
+describe('insertIntent — group key (ROK-2352)', () => {
+  let mockDb: MockDb;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    mockDb.returning.mockResolvedValue([intentRow()]);
+  });
+
+  it('ROK-2352: writes the "" group when no group is asked for', async () => {
+    await insertIntent(mockDb as unknown as LfgDb, 11, 22);
+    const [values] = nonEmpty(writtenPayloads(mockDb.values), 'values');
+    expect(values.groupKey).toBe('');
+  });
+
+  it('ROK-2352: writes the requested (folded) group key', async () => {
+    await insertIntent(mockDb as unknown as LfgDb, 11, 22, {
+      urgency: 'week',
+      groupKey: 'dungeon:42',
+    });
+    const [values] = nonEmpty(writtenPayloads(mockDb.values), 'values');
+    expect(values.groupKey).toBe('dungeon:42');
+  });
+
+  it('ROK-2352: conflicts on (user_id, game_id, group_key) WHERE active', async () => {
+    await insertIntent(mockDb as unknown as LfgDb, 11, 22);
+    const [call] = nonEmpty(mockDb.onConflictDoNothing.mock.calls, 'conflict');
+    const conflict = call[0] as { target: { name: string }[]; where: SQL };
+    expect(conflict.target.map((c) => c.name)).toEqual([
+      'user_id',
+      'game_id',
+      'group_key',
+    ]);
   });
 });
 

@@ -11,7 +11,12 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { LfgNowHand } from './lfg-now-spawn.types';
 import { holdsLiveIntent } from '../../lfg/lfg-invite.helpers';
-import { convertHolderIntent } from '../../lfg/lfg-write.helpers';
+import { convertHolderIntent, liveGroupRow } from '../../lfg/lfg-write.helpers';
+import {
+  groupScopeFilter,
+  type LfgGroupScope,
+} from '../../lfg/lfg-group-scope.helpers';
+import { clearNowSiblings } from '../../lfg/lfg-lock-in-group.helpers';
 import { findOpenLfgNowEvent } from './lfg-now-spawn.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -40,6 +45,7 @@ export async function listLiveGroupHands(
   db: Db,
   gameId: number,
   now: Date = new Date(),
+  scope: LfgGroupScope = null,
 ): Promise<LfgNowHand[]> {
   return db
     .select({
@@ -58,6 +64,7 @@ export async function listLiveGroupHands(
         isNull(schema.users.deactivatedAt),
         isNull(schema.users.bannedAt),
         sql`${schema.lfgIntents.expiresAt} > ${now.toISOString()}::timestamptz`,
+        groupScopeFilter(scope),
       ),
     )
     .orderBy(asc(schema.lfgIntents.createdAt));
@@ -95,8 +102,29 @@ export async function convertStarterIntent(
   userId: number,
   target: { eventId: number },
   now: Date,
+  scope: LfgGroupScope = null,
 ): Promise<number> {
-  return convertHolderIntent(db, gameId, userId, target, now);
+  if (scope === null) {
+    return convertHolderIntent(db, gameId, userId, target, now);
+  }
+  // ROK-2352: only the starter's hand in THIS group; their other groups stay.
+  const rows = await db
+    .update(schema.lfgIntents)
+    .set({
+      status: 'converted',
+      convertedToPollId: null,
+      convertedToEventId: target.eventId,
+      convertedAt: sql`statement_timestamp()`,
+    })
+    .where(
+      and(
+        liveGroupRow(db, gameId, now),
+        eq(schema.lfgIntents.userId, userId),
+        groupScopeFilter(scope),
+      ),
+    )
+    .returning({ id: schema.lfgIntents.id });
+  return rows.length;
 }
 
 /**
@@ -123,9 +151,10 @@ export async function mayStartGroup(
   userId: number,
   gameId: number,
   now: Date,
+  scope: LfgGroupScope = null,
 ): Promise<boolean> {
-  if (await holdsLiveIntent(db, userId, gameId, now)) return true;
-  const openEventId = await findOpenLfgNowEvent(db, gameId);
+  if (await holdsLiveIntent(db, userId, gameId, now, scope)) return true;
+  const openEventId = await findOpenLfgNowEvent(db, gameId, scope);
   if (openEventId === null) return false;
   const [signup] = await db
     .select({ id: schema.eventSignups.id })
@@ -138,4 +167,29 @@ export async function mayStartGroup(
     )
     .limit(1);
   return signup !== undefined;
+}
+
+/**
+ * ROK-2352 review MAJOR-2 (Q1, spec §3.2): the members a scoped spawn just put
+ * on a session leave their OTHER `now` hands in the game, inside the same
+ * locked transaction — so a concurrent Start now / Lock-in of another group,
+ * which waits on the same lock, can never roster them a second time.
+ * `tonight` / `week` hands stay. The fold (null scope) already converted every
+ * live hand of the game, so there is nothing to clear.
+ *
+ * @param tx - The spawn transaction handle (holds the per-game lock).
+ * @param gameId - Game whose group started.
+ * @param userIds - Members whose hand in the group converted.
+ * @param scope - The group that started.
+ * @returns A spread for {@link LfgNowSpawnResult}: the cleared users, if any.
+ */
+export async function withClearedNowSiblings(
+  tx: Db,
+  gameId: number,
+  userIds: readonly number[],
+  scope: LfgGroupScope,
+): Promise<{ clearedSiblingUserIds?: number[] }> {
+  if (scope === null) return {};
+  const cleared = await clearNowSiblings(tx, gameId, userIds, scope);
+  return cleared.length > 0 ? { clearedSiblingUserIds: cleared } : {};
 }

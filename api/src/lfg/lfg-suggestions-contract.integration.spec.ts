@@ -40,6 +40,7 @@ import {
   HOUR_MS,
 } from './lfg-reads.integration.spec-helpers';
 import { at } from '../common/testing/narrow';
+import { listSuggestions } from './lfg-suggestions.helpers';
 
 let testApp: TestApp;
 
@@ -125,6 +126,31 @@ describe('GET /lfg/:gameId/suggestions — the web contract on real rows', () =>
     expect(byUser.get(at(owners, 2))!.lastPlayedAt).toBeNull();
     expect(byUser.get(hearter)!.reasons).toEqual(['hearted']);
     expect(byUser.get(caller.userId)).toBeUndefined();
+  });
+
+  // ROK-2352 P2-5: the no-repeat rule is per group (§4.2). An invite sent from
+  // the dungeon group must not grey the same player's Invite on the raid
+  // group. Mutation: drop `scope` from `fetchInvited` and the raid read below
+  // comes back `sent`.
+  it('reads invite state for the asked group only', async () => {
+    const game = await createGame(testApp, 'Scoped Invites');
+    const caller = await createPlainUser(testApp, 'scoped-caller');
+    const owner = await createPlainUser(testApp, 'scoped-owner');
+    await heartGame(testApp, owner, game.id, 'steam_library');
+    await testApp.db.insert(schema.lfgInvites).values({
+      gameId: game.id,
+      inviterUserId: caller,
+      recipientUserId: owner,
+      groupKey: 'dungeon:36',
+    });
+
+    const state = async (scope: string): Promise<string | undefined> =>
+      (await listSuggestions(testApp.db, game.id, caller, scope)).find(
+        (s) => s.userId === owner,
+      )?.inviteState;
+
+    expect(await state('dungeon:36')).toBe('sent');
+    expect(await state('raid:409')).toBe('none');
   });
 
   /**

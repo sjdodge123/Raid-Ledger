@@ -28,6 +28,14 @@ import {
 } from '@nestjs/common';
 import type { LfgGroupChangedPayload } from './lfg.constants';
 import { LfgService } from './lfg.service';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+
+// ROK-2352: the hand-cap count is covered in lfg-grouping.helpers.spec.ts and
+// the integration spec; the flat mock's `.where()` is not awaitable as rows.
+jest.mock('./lfg-grouping.helpers', () => ({
+  ...jest.requireActual<object>('./lfg-grouping.helpers'),
+  assertHandCap: jest.fn().mockResolvedValue(undefined),
+}));
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { LFG_EVENTS, LFG_EXPIRY_DAYS } from './lfg.constants';
@@ -215,6 +223,7 @@ describe('LfgService lifecycle events', () => {
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: EventEmitter2, useValue: emitter },
         { provide: SettingsService, useValue: { get: jest.fn(() => null) } },
+        { provide: PluginRegistryService, useValue: { getAdapter: jest.fn() } },
       ],
     }).compile();
     service = module.get(LfgService);

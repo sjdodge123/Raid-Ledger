@@ -70,7 +70,7 @@ export const discordChannelPresenceMessages = pgTable(
     /**
      * The concurrency guard: at most ONE open message per room (AC1). Partial
      * so the closed history rows for the same room never collide. Follows the
-     * `channel_bindings_nonseries_*` / `uq_lfg_intents_user_game_active`
+     * `channel_bindings_nonseries_*` / `uq_lfg_intents_user_game_group_active`
      * idiom. Writers must pre-check rather than catch a violation — a caught
      * unique violation poisons the whole transaction (see memory
      * `reference_postgres_savepoint_does_not_contain_violations`).

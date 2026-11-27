@@ -244,8 +244,9 @@ describe('LfgExpiryService.expireIntents', () => {
 
     it('also lapses every hand on a game whose open post is past the cap', async () => {
       const { sql, params } = await sweepWhere();
+      // ROK-2352 P2-7: the aged post expires only its OWN group's hands.
       expect(sql).toContain(
-        '"lfg_intents"."game_id" in (select "game_id" from "lfg_group_messages"',
+        '("lfg_intents"."game_id", "lfg_intents"."group_key") in ((select "game_id", "group_key" from "lfg_group_messages"',
       );
       expect(params).toContain(
         new Date(NOW.getTime() - 7 * DAY_MS).toISOString(),

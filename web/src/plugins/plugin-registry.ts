@@ -16,6 +16,7 @@ import {
 import {
     addHubClaimProvider, clearHubClaimProviders, type HubClaimProvider,
 } from '../components/hub/claim/hub-claim-providers';
+import { addLfgGrouping, clearLfgGroupings, type LfgGrouping } from './lfg-grouping';
 
 /** All plugin slot names — each corresponds to a page location */
 export type PluginSlotName =
@@ -122,6 +123,12 @@ export interface PluginHandle {
     registerGgCard<P>(card: GgCardRegistration<P>): void;
     /** Add rows to Admin → General (after Logs) for this plugin's pages, shown only while it is active (ROK-2099). */
     registerAdminGeneralNavItems(items: readonly NavItem[]): void;
+    /**
+     * Split the LFG of `grouping.gameSlugs` into several groups and render their extra UI, only
+     * while this plugin is active (ROK-2352). The manifest must declare an `lfg-grouping`
+     * behaviour with the same id (ownership guard); the api registers the matching adapter.
+     */
+    registerLfgGrouping(grouping: LfgGrouping): void;
 }
 
 /** A character-identity provider and the plugin that owns it — filtered by active plugin like a slot. */
@@ -206,6 +213,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
         registerHubClaimProvider: (provider) => addHubClaimProvider(slug, provider),
         registerGgCard: (card) => addGgCard(slug, card),
         registerAdminGeneralNavItems: (items) => addAdminGeneralNavItems(slug, items),
+        registerLfgGrouping: (grouping) => addLfgGrouping(slug, grouping),
     };
 }
 
@@ -270,6 +278,7 @@ export function clearRegistry(): void {
     clearEventReportLinkPredicates();
     clearEventPlanPrefillProviders();
     clearAdminGeneralNavItems();
+    clearLfgGroupings();
 }
 
 /** Returns true if the icon string represents an image URL (starts with "/" or "http") */

@@ -40,6 +40,8 @@ const eventGameId = lfgNowEventGameId as jest.MockedFunction<
 const mayStart = mayStartGroup as jest.MockedFunction<typeof mayStartGroup>;
 
 const GAME_ID = 42;
+/** No PluginRegistryService in these specs → the fold group (ROK-2352). */
+const NO_ADAPTER_GROUP = { adapter: null, scope: null };
 const EVENT_ROW = {
   id: 900,
   title: 'Deep Rock Galactic — Playing now',
@@ -110,19 +112,25 @@ describe('LfgNowSpawnService — the subscription filter', () => {
       urgency: 'now',
       ttlMinutes: 30,
     });
-    expect(spawn).toHaveBeenCalledWith(expect.anything(), GAME_ID);
+    expect(spawn).toHaveBeenCalledWith(expect.anything(), GAME_ID, undefined, {
+      group: NO_ADAPTER_GROUP,
+    });
   });
 
   it("spawns on GROUP_CHANGED{joined} — AC5's mixed group never re-fires LFM_REACHED", async () => {
     const { service } = build();
     await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
-    expect(spawn).toHaveBeenCalledWith(expect.anything(), GAME_ID);
+    expect(spawn).toHaveBeenCalledWith(expect.anything(), GAME_ID, undefined, {
+      group: NO_ADAPTER_GROUP,
+    });
   });
 
   it('spawns on GROUP_CHANGED{bumped} — a week hand flipped to now', async () => {
     const { service } = build();
     await service.onGroupChanged({ gameId: GAME_ID, reason: 'bumped' });
-    expect(spawn).toHaveBeenCalledWith(expect.anything(), GAME_ID);
+    expect(spawn).toHaveBeenCalledWith(expect.anything(), GAME_ID, undefined, {
+      group: NO_ADAPTER_GROUP,
+    });
   });
 
   it.each(['withdrawn', 'expired', 'converted', 'playing'] as const)(

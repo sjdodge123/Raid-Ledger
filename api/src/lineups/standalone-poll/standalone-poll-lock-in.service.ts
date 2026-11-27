@@ -32,6 +32,7 @@ import { assertSchedulingMatchUsable } from '../../events/event-poll-provenance.
 import { isOperatorOrAdmin } from '../../events/controller.helpers';
 import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
 import { SettingsService } from '../../settings/settings.service';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { runLockInFanout, type LockIn } from './standalone-poll-lockin.helpers';
 import {
   createLockedInPollEvent,
@@ -89,6 +90,8 @@ export class StandalonePollLockInService {
     @Optional() private readonly events?: EventEmitter2,
     /** ROK-2314: resolves the forum module's event-post reopen port lazily. */
     @Optional() private readonly moduleRef?: ModuleRef,
+    /** ROK-2352: LFG grouping adapters for the poll-exit carryover. */
+    @Optional() private readonly pluginRegistry?: PluginRegistryService,
   ) {}
 
   /**
@@ -209,6 +212,7 @@ export class StandalonePollLockInService {
       signupsService: this.signupsService,
       logger: this.logger,
       events: this.events,
+      lfgGrouping: this.pluginRegistry,
       assertCreate: async (dto: CreateEventDto): Promise<void> => {
         await this.guildTag.assertCreate(user, dto);
         await assertSchedulingMatchUsable(this.db, dto, {
@@ -256,6 +260,7 @@ export class StandalonePollLockInService {
         notifications: this.notifications,
         lineupNotifications: this.lineupNotifications,
         logger: this.logger,
+        lfgGrouping: this.pluginRegistry,
       },
       lockIn,
     );

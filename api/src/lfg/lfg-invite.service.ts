@@ -24,11 +24,11 @@ import {
 } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type {
-  LfgInviteResponseDto,
-  LfgSuggestionReason,
-  LfgUrgency,
+import {
+  LFG_ANY_GROUP_KEY,
+  type LfgInviteResponseDto,
 } from '@raid-ledger/contract';
+import type { LfgPlayerInvitePayload } from './lfg-invite-payload.types';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
@@ -37,6 +37,11 @@ import { buildLfgInviteUrl } from '../notifications/lfg-affinity-dm.helpers';
 import { SettingsService } from '../settings/settings.service';
 import { getClientUrl } from '../settings/settings-bot.helpers';
 import { getLfgNowIndicatorEmoji } from '../settings/settings-lfg-board.helpers';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import {
+  resolveGameReadScope,
+  type LfgGroupScope,
+} from './lfg-group-scope.helpers';
 import {
   readGroupHorizon,
   type LfgGroupHorizon,
@@ -95,39 +100,8 @@ export type LfgInviteRefusal =
   | 'repeat'
   | 'recipient_budget';
 
-/** `notifications.payload` for `lfg_player_invite` — what the DM builder reads. */
-export interface LfgPlayerInvitePayload {
-  gameId: number;
-  gameSlug: string;
-  gameName: string;
-  inviterUserId: number;
-  /** Display name, falling back to username — the `✉ Invited by …` line. */
-  inviterName: string;
-  /** Why the recipient was suggested (`played` → `owns` → `hearted`). */
-  reasons: LfgSuggestionReason[];
-  /** Masked link to the group page; absent when no client URL is configured. */
-  url?: string;
-  /** Steam lifetime playtime in MINUTES (`steam_library` row); absent when unknown (AC6). */
-  playtimeMinutes?: number;
-  /**
-   * The GROUP's horizon at send time — `now` while ANY live member holds a
-   * `now` hand, else `week`. Read off the group, NOT off the inviter: an
-   * inviter on a week hand can invite you into a group that is playing right
-   * now, and the DM has to say "right now" (walk feedback 2).
-   */
-  urgency: LfgUrgency;
-  /** ISO instant the group's longest live `now` hand lapses; absent on week. */
-  nowExpiresAt?: string;
-  /**
-   * ROK-1619 AC7: at send time, the recipient's Join would cross the spawn
-   * threshold and start the session — the DM's Join wears the indicator.
-   * Absent means no. A send-time snapshot: a DM is never re-rendered, so a
-   * stale mark degrades to AC4's graceful attach, never to an error.
-   */
-  spawnsNow?: boolean;
-  /** The admin indicator-emoji setting at send time, raw; only with spawnsNow. */
-  spawnEmoji?: string;
-}
+// Moved to its own module (max-lines); re-exported so importers are unchanged.
+export type { LfgPlayerInvitePayload } from './lfg-invite-payload.types';
 
 /** D5: recipient lock FIRST, then game — the order every caller must keep. */
 async function takeInviteLocks(
@@ -143,13 +117,22 @@ async function takeInviteLocks(
   );
 }
 
+/** The ids one send is about; `scope` is the group (null = the fold). */
+interface InviteIds {
+  inviterUserId: number;
+  recipientUserId: number;
+  gameId: number;
+  scope: LfgGroupScope;
+}
+
 /** AC3: the one HONEST refusal — the group's own budget, as a 429 (D13). */
 async function assertGroupCapNotSpent(
   tx: LfgDb,
-  gameId: number,
+  ids: InviteIds,
   now: Date,
 ): Promise<void> {
-  const sent = await countGroupInvitesSince(tx, gameId, groupWindowStart(now));
+  const since = groupWindowStart(now);
+  const sent = await countGroupInvitesSince(tx, ids.gameId, since, ids.scope);
   if (sent >= LFG_INVITE_GROUP_CAP) {
     throw new HttpException(
       {
@@ -165,21 +148,24 @@ async function assertGroupCapNotSpent(
 /** The recipient-scoped checks, cheapest first; the first hit wins. */
 async function findRecipientRefusal(
   tx: LfgDb,
-  recipientUserId: number,
-  gameId: number,
+  { recipientUserId, gameId, scope }: InviteIds,
   now: Date,
 ): Promise<LfgInviteRefusal | null> {
   if (!(await recipientIsEligible(tx, recipientUserId))) return 'ineligible';
   if (!(await recipientHasLinkedDiscord(tx, recipientUserId)))
     return 'unlinked';
   if (await recipientOptedOut(tx, recipientUserId)) return 'opted_out';
-  if (await holdsLiveIntent(tx, recipientUserId, gameId, now))
+  if (await holdsLiveIntent(tx, recipientUserId, gameId, now, scope))
     return 'in_group';
+  // ROK-2352 (spec Q2): the repeat block is per group — the same person
+  // invited to THIS group inside the horizon is refused; another group's
+  // invite does not count. The fold (null) keeps the whole-game read.
   const live = await findLiveInviteFor(
     tx,
     recipientUserId,
     gameId,
     noRepeatHorizonStart(now),
+    scope,
   );
   if (live) return 'repeat';
   const received = await countRecipientInvitesSince(
@@ -201,6 +187,7 @@ export class LfgInviteService {
     private readonly settings: SettingsService,
     @Inject(forwardRef(() => NotificationService))
     private readonly notifications: NotificationService,
+    private readonly pluginRegistry: PluginRegistryService,
   ) {}
 
   /**
@@ -209,6 +196,7 @@ export class LfgInviteService {
    * @param inviterUserId - The caller; must hold a live intent on the game.
    * @param gameId - The group.
    * @param recipientUserId - Who to invite.
+   * @param group - ROK-2352 `?group`; folded to the whole game without an adapter.
    * @param now - Injected clock so the windows are testable without timers.
    * @throws 400 self-invite · 403 not in the group · 404 game · 429 group cap.
    */
@@ -216,49 +204,36 @@ export class LfgInviteService {
     inviterUserId: number,
     gameId: number,
     recipientUserId: number,
+    group?: string,
     now: Date = new Date(),
   ): Promise<LfgInviteResponseDto> {
     if (inviterUserId === recipientUserId) {
       throw new BadRequestException('You cannot invite yourself');
     }
     const game = await requireVisibleGame(this.db, gameId);
-    if (!(await holdsLiveIntent(this.db, inviterUserId, gameId, now))) {
+    const scope = resolveGameReadScope(this.pluginRegistry, game.slug, group);
+    if (!(await holdsLiveIntent(this.db, inviterUserId, gameId, now, scope))) {
       throw new ForbiddenException('Only members of this group can invite');
     }
-    const body = await this.buildNotification(
-      game,
-      inviterUserId,
-      recipientUserId,
-      // Send-time snapshot only, for the copy. The Join button re-reads the
-      // horizon at PRESS time, so a DM opened later cannot raise a stale hand.
-      await readGroupHorizon(this.db, gameId, now),
-    );
-    return this.db.transaction((tx) =>
-      this.sendUnderLocks(
-        tx,
-        { inviterUserId, recipientUserId, gameId },
-        body,
-        now,
-      ),
-    );
+    const ids: InviteIds = { inviterUserId, recipientUserId, gameId, scope };
+    // Send-time horizon snapshot only, for the copy. The Join button re-reads
+    // it at PRESS time, so a DM opened later cannot raise a stale hand.
+    const horizon = await readGroupHorizon(this.db, gameId, now, scope);
+    const body = await this.buildNotification(game, ids, horizon);
+    return this.db.transaction((tx) => this.sendUnderLocks(tx, ids, body, now));
   }
 
   /** D4/D5: lock → group cap → recipient checks → insert → create, as ONE unit. */
   private async sendUnderLocks(
     tx: LfgDb,
-    ids: { inviterUserId: number; recipientUserId: number; gameId: number },
+    ids: InviteIds,
     body: Omit<CreateNotificationInput, 'userId'>,
     now: Date,
   ): Promise<LfgInviteResponseDto> {
     const { inviterUserId, recipientUserId, gameId } = ids;
     await takeInviteLocks(tx, recipientUserId, gameId);
-    await assertGroupCapNotSpent(tx, gameId, now);
-    const refusal = await findRecipientRefusal(
-      tx,
-      recipientUserId,
-      gameId,
-      now,
-    );
+    await assertGroupCapNotSpent(tx, ids, now);
+    const refusal = await findRecipientRefusal(tx, ids, now);
     if (refusal) {
       // `log`, not `debug`: the wire body is deliberately opaque (D13), so this
       // line is the ONLY place the reason exists — and `getLogLevels` drops
@@ -270,7 +245,13 @@ export class LfgInviteService {
       );
       return LFG_INVITE_SKIPPED;
     }
-    await insertInvite(tx, { recipientUserId, inviterUserId, gameId });
+    const groupKey = ids.scope ?? LFG_ANY_GROUP_KEY;
+    await insertInvite(tx, {
+      recipientUserId,
+      inviterUserId,
+      gameId,
+      groupKey,
+    });
     // Inside the transaction on purpose (A4): a throw here rolls the row
     // back, so a DM that never left never spends the budget.
     await this.notifications.create({ userId: recipientUserId, ...body });
@@ -281,14 +262,22 @@ export class LfgInviteService {
    * The decline effect (D12): stamp the caller's newest live invite for the
    * game. Idempotent — a second click finds nothing un-declined and is a no-op.
    *
+   * @param groupKey - ROK-2352: the v2 button's group; omitted = newest in the game.
    * @returns True when a row was stamped.
    */
   async decline(
     recipientUserId: number,
     gameId: number,
     now: Date = new Date(),
+    groupKey: string | null = null,
   ): Promise<boolean> {
-    const row = await declineLiveInvite(this.db, recipientUserId, gameId, now);
+    const row = await declineLiveInvite(
+      this.db,
+      recipientUserId,
+      gameId,
+      now,
+      groupKey,
+    );
     return row !== null;
   }
 
@@ -317,9 +306,9 @@ export class LfgInviteService {
    */
   private async spawnsNowField(
     game: typeof schema.games.$inferSelect,
-    recipientUserId: number,
+    { recipientUserId, scope }: InviteIds,
   ): Promise<{ spawnsNow?: true; spawnEmoji?: string }> {
-    const group = await getGroupSummary(this.db, game, recipientUserId);
+    const group = await getGroupSummary(this.db, game, recipientUserId, scope);
     if (!groupReadPressWouldSpawnNow(group, false)) return {};
     const emoji = await getLfgNowIndicatorEmoji(this.settings);
     return emoji ? { spawnsNow: true, spawnEmoji: emoji } : { spawnsNow: true };
@@ -328,16 +317,21 @@ export class LfgInviteService {
   /** The payload the DM renders from: reasons, link, Steam playtime (AC6/AC7). */
   private async buildPayload(
     game: typeof schema.games.$inferSelect,
-    inviterUserId: number,
+    ids: InviteIds,
     inviterName: string,
-    recipientUserId: number,
     horizon: LfgGroupHorizon,
   ): Promise<LfgPlayerInvitePayload> {
+    const { inviterUserId, recipientUserId } = ids;
     // The RECIPIENT's own reasons, not a lookup into the ranked, capped
     // suggestion list: that list stops at LFG_SUGGESTIONS_LIMIT, so a
     // recipient outside the cut used to get `reasons: []` (ROK-1455 smoke S1).
     const reasons = await reasonsForUser(this.db, game.id, recipientUserId);
-    const url = buildLfgInviteUrl(await getClientUrl(this.settings), game.slug);
+    const groupKey = ids.scope ?? LFG_ANY_GROUP_KEY;
+    const url = buildLfgInviteUrl(
+      await getClientUrl(this.settings),
+      game.slug,
+      groupKey,
+    );
     const minutes = await steamPlaytimeMinutes(
       this.db,
       recipientUserId,
@@ -351,30 +345,24 @@ export class LfgInviteService {
       inviterName,
       reasons,
       urgency: horizon.urgency,
+      ...(groupKey !== LFG_ANY_GROUP_KEY ? { groupKey } : {}),
       ...(url ? { url } : {}),
       ...(minutes !== null ? { playtimeMinutes: minutes } : {}),
       ...(horizon.nowExpiresAt
         ? { nowExpiresAt: horizon.nowExpiresAt.toISOString() }
         : {}),
-      ...(await this.spawnsNowField(game, recipientUserId)),
+      ...(await this.spawnsNowField(game, ids)),
     };
   }
 
   /** Title, message and the payload the DM renders from (AC7). */
   private async buildNotification(
     game: typeof schema.games.$inferSelect,
-    inviterUserId: number,
-    recipientUserId: number,
+    ids: InviteIds,
     horizon: LfgGroupHorizon,
   ): Promise<Omit<CreateNotificationInput, 'userId'>> {
-    const inviterName = await this.resolveInviterName(inviterUserId);
-    const payload = await this.buildPayload(
-      game,
-      inviterUserId,
-      inviterName,
-      recipientUserId,
-      horizon,
-    );
+    const inviterName = await this.resolveInviterName(ids.inviterUserId);
+    const payload = await this.buildPayload(game, ids, inviterName, horizon);
     return {
       type: LFG_INVITE_NOTIFICATION_TYPE,
       title: `${inviterName} invited you to play ${game.name}`,

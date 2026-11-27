@@ -38,6 +38,8 @@ export interface FindATimeArgs {
     memberUserIds: number[];
     /** `window.start` when the viewer started from an overlap row (D4). */
     proposedTime?: string;
+    /** ROK-2352: the group the poll is for (`?group` on convert); `''` = whole game. */
+    groupKey?: string;
 }
 
 /** A poll that exists but whose group was never marked as converted. */
@@ -45,13 +47,17 @@ export interface PendingConvert {
     gameId: number;
     lineupId: number;
     matchId: number;
+    /** ROK-2352: carried so a retry converts the same group. */
+    groupKey?: string;
 }
 
 /** Withdraw the viewer's own intent. */
 export function useWithdraw() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (gameId: number) => withdrawIntent(gameId),
+        // ROK-2352: a bare id withdraws the whole-game group, as before.
+        mutationFn: (target: number | { gameId: number; groupKey: string }) =>
+            typeof target === 'number' ? withdrawIntent(target) : withdrawIntent(target.gameId, target.groupKey),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['lfg'] });
         },
@@ -83,7 +89,12 @@ async function createPoll(args: FindATimeArgs): Promise<PendingConvert> {
         minVoteThreshold: args.memberUserIds.length,
     });
     if (args.proposedTime) await trySeedSlot(poll, args.proposedTime);
-    return { gameId: args.gameId, lineupId: poll.lineupId, matchId: poll.id };
+    return {
+        gameId: args.gameId,
+        lineupId: poll.lineupId,
+        matchId: poll.id,
+        ...(args.groupKey ? { groupKey: args.groupKey } : {}),
+    };
 }
 
 /**
@@ -98,7 +109,7 @@ function useFinishConvert(
     return useCallback(
         async (poll: PendingConvert): Promise<void> => {
             try {
-                await convertIntents(poll.gameId, { pollId: poll.matchId });
+                await convertIntents(poll.gameId, { pollId: poll.matchId }, poll.groupKey ?? '');
             } catch {
                 setPendingConvert(poll);
                 toast.error(LFG_COPY.convertFailed);

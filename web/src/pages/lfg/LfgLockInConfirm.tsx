@@ -6,7 +6,7 @@
  * is the event's — capped at 3 hours (`capLockInWindow`). Pure props in,
  * callbacks out: the caller creates the event on `onConfirm`.
  */
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import type { LfgMemberDto, LfgOverlapWindowDto } from '@raid-ledger/contract';
 import { LFG_DIALOG_COPY, lockInBody } from './lfg-dialog-recipes';
 import { capLockInWindow, formatWindowRange } from './overlap-strip.helpers';
@@ -20,6 +20,8 @@ export interface LfgLockInConfirmProps {
     isPending?: boolean;
     onCancel: () => void;
     onConfirm: () => void;
+    /** ROK-2352: the grouping plugin's lock-in fields (instance, roster preview). */
+    extra?: ReactNode;
 }
 
 /** Every member; the ones outside `window.members` read "not free then". */
@@ -42,7 +44,7 @@ function MemberRows({ members, freeIds }: { members: LfgMemberDto[]; freeIds: nu
     );
 }
 
-export function LfgLockInConfirm({ isOpen, window, members, isPending = false, onCancel, onConfirm }: LfgLockInConfirmProps): JSX.Element | null {
+export function LfgLockInConfirm({ isOpen, window, members, isPending = false, onCancel, onConfirm, extra }: LfgLockInConfirmProps): JSX.Element | null {
     return (
         <LfgSheetOrModal isOpen={isOpen} onClose={onCancel} title={LFG_DIALOG_COPY.lockInTitle}>
             <div data-testid="lfg-lockin-confirm" className="space-y-3">
@@ -51,6 +53,7 @@ export function LfgLockInConfirm({ isOpen, window, members, isPending = false, o
                     <span className="text-muted">{lockInBody(members.length)}</span>
                 </p>
                 <MemberRows members={members} freeIds={window.members} />
+                {extra}
                 <LfgConfirmActions
                     primary={LFG_DIALOG_COPY.lockInSubmit}
                     testIdPrefix="lfg-lockin-confirm"

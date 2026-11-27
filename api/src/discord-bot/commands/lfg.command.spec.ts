@@ -206,12 +206,43 @@ const settings = {
 
 const LINKED = [{ id: 7, deactivatedAt: null, bannedAt: null }];
 
+/** ROK-2352 — no adapter by default: every game folds, as before. */
+function registryWith(adapter?: unknown): never {
+  return { getAdapter: jest.fn().mockReturnValue(adapter) } as never;
+}
+
 function build(
   batches: Row[][],
   lfgService: Record<string, jest.Mock>,
+  registry: never = registryWith(),
 ): LfgCommand {
   const { db } = fakeDb(batches);
-  return new LfgCommand(db, lfgService as never, settings as never);
+  return new LfgCommand(db, lfgService as never, settings as never, registry);
+}
+
+/** An interaction whose options answer per NAME (ROK-2352 dungeon cases). */
+function makeOptionsInteraction(values: Record<string, string | null>): {
+  interaction: never;
+  editReply: jest.Mock;
+} {
+  const editReply = jest.fn().mockResolvedValue(undefined);
+  const interaction = {
+    user: { id: 'discord-1' },
+    options: { getString: (name: string) => values[name] ?? null },
+    deferReply: jest.fn().mockResolvedValue(undefined),
+    editReply,
+  };
+  return { interaction: interaction as never, editReply };
+}
+
+const WOW_GAME = [{ id: 42, slug: 'world-of-warcraft-classic' }];
+const CATALOGUE = [
+  { key: 'dungeon:1', label: 'Deadmines', kind: 'dungeon', size: 5 },
+  { key: 'raid:3', label: 'Molten Core', kind: 'raid', size: 40 },
+];
+
+function wowAdapter(): { listGroups: jest.Mock } {
+  return { listGroups: jest.fn().mockResolvedValue(CATALOGUE) };
 }
 
 describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
@@ -226,10 +257,11 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
   });
 
   // ROK-1479: the second option. Still no subcommands — the count is pinned so
-  // a third option is a decision someone has to make deliberately.
+  // another option is a decision someone has to make deliberately (ROK-2352
+  // made it: the third is `dungeon`).
   it('registers the optional urgency option with exactly three choices', () => {
     const definition = build([], makeLfgService()).getDefinition();
-    expect(definition.options).toHaveLength(2);
+    expect(definition.options).toHaveLength(3);
     expect(definition.options?.[1]).toMatchObject({
       name: 'urgency',
       required: false,
@@ -389,6 +421,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
         db,
         lfgService as never,
         settings as never,
+        registryWith(),
       );
       const { interaction, editReply } = makeInteraction('Valheim');
 
@@ -602,7 +635,13 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
       await command.handleInteraction(interaction);
 
-      expect(readOpen).toHaveBeenLastCalledWith(expect.anything(), 42);
+      // ROK-2352 P2-4: clocked, and folded (no grouping adapter in this spec).
+      expect(readOpen).toHaveBeenLastCalledWith(
+        expect.anything(),
+        42,
+        expect.any(Date),
+        null,
+      );
       expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
         urgency: 'now',
         ttlMinutes: 60,
@@ -628,5 +667,107 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
       if (line) expect(description).toContain(line);
       else expect(description).not.toContain('**When:**');
     });
+  });
+});
+
+describe('LfgCommand — ROK-2352 dungeon option', () => {
+  it('registers an optional, autocompleted dungeon option and no role option', () => {
+    const options = build([], makeLfgService()).getDefinition().options ?? [];
+    expect(options[2]).toMatchObject({
+      name: 'dungeon',
+      required: false,
+      autocomplete: true,
+    });
+    expect(options.map((o) => o.name)).not.toContain('role');
+  });
+
+  async function autocomplete(registry: never): Promise<jest.Mock> {
+    const command = build([[], WOW_GAME], makeLfgService(), registry);
+    const respond = jest.fn().mockResolvedValue(undefined);
+    await command.handleAutocomplete({
+      options: {
+        getFocused: () => ({ name: 'dungeon', value: 'core' }),
+        getString: () => '42',
+      },
+      respond,
+    } as never);
+    return respond;
+  }
+
+  it("autocompletes the entered game's catalogue, filtered by the text", async () => {
+    const adapter = wowAdapter();
+    const respond = await autocomplete(registryWith(adapter));
+    expect(respond).toHaveBeenCalledWith([
+      { name: 'Molten Core (raid)', value: 'raid:3' },
+    ]);
+    expect(adapter.listGroups).toHaveBeenCalledWith({
+      gameId: 42,
+      gameSlug: 'world-of-warcraft-classic',
+    });
+  });
+
+  it('offers no dungeon choices for a game that folds (non-WoW / plugin off)', async () => {
+    const respond = await autocomplete(registryWith());
+    expect(respond).toHaveBeenCalledWith([]);
+  });
+
+  it('raises the hand in the picked group', async () => {
+    const lfgService = makeLfgService();
+    const command = build(
+      [LINKED, [], WOW_GAME],
+      lfgService,
+      registryWith(wowAdapter()),
+    );
+    const { interaction } = makeOptionsInteraction({
+      game: '42',
+      urgency: 'week',
+      dungeon: 'dungeon:1',
+    });
+
+    await command.handleInteraction(interaction);
+
+    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+      timezone: 'UTC',
+      groupKey: 'dungeon:1',
+    });
+  });
+
+  it('ignores the option when the game folds — the write is unchanged', async () => {
+    const lfgService = makeLfgService();
+    const command = build([LINKED, [], WOW_GAME], lfgService);
+    const { interaction } = makeOptionsInteraction({
+      game: '42',
+      urgency: 'week',
+      dungeon: 'Deadmines',
+    });
+
+    await command.handleInteraction(interaction);
+
+    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+      timezone: 'UTC',
+    });
+  });
+
+  it('refuses a dungeon the active catalogue does not know, writing nothing', async () => {
+    const lfgService = makeLfgService();
+    const command = build(
+      [LINKED, [], WOW_GAME],
+      lfgService,
+      registryWith(wowAdapter()),
+    );
+    const { interaction, editReply } = makeOptionsInteraction({
+      game: '42',
+      urgency: 'week',
+      dungeon: 'Narnia',
+    });
+
+    await command.handleInteraction(interaction);
+
+    expect(lfgService.createIntent).not.toHaveBeenCalled();
+    expect(editReply).toHaveBeenCalledWith(
+      'No dungeon or raid called **Narnia** for this game — pick one from the list.',
+    );
   });
 });

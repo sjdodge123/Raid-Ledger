@@ -1,10 +1,5 @@
-import {
-  Inject,
-  Module,
-  OnModuleInit,
-  OnModuleDestroy,
-  Logger,
-} from '@nestjs/common';
+import { Inject, Logger, Module } from '@nestjs/common';
+import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import {
   runWowBootSeed,
   seedWowReferenceData,
@@ -84,6 +79,7 @@ import { InstanceCatalogueService } from './instance-catalogue/instance-catalogu
 import { LedgerlinkRulesetNoticeService } from './companion/ledgerlink-ruleset-notice.service';
 import { NotificationModule } from '../../notifications/notification.module';
 import { WowGgCardRegistration } from './gg/wow-gg.registration';
+import * as wowLfg from './lfg/wow-lfg.registration';
 
 @Module({
   imports: [
@@ -118,12 +114,16 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     // ROK-2099 S3: admin reads + export of uploaded addon errors.
     ...addonErrors.CONTROLLERS,
     ...guildHub.CONTROLLERS,
+    // ROK-2352: `plugins/wow/lfg` (last-detail pre-fill, hand detail edit).
+    ...wowLfg.CONTROLLERS,
   ],
   providers: [
     ClassicActivityAttributionService,
     InstanceCatalogueService,
     // ROK-2187: the WoW levels-dinged GG <year> card.
     WowGgCardRegistration,
+    // ROK-2352: one LFG group per WoW dungeon/raid.
+    ...wowLfg.PROVIDERS,
     BlizzardService,
     BlizzardAuthService,
     ForeverConfigService,

@@ -15,6 +15,7 @@ import { spawnUnderGroupLock, type LfgNowHand } from './lfg-now-spawn.helpers';
 import {
   listLiveGroupHands,
   convertStarterIntent,
+  withClearedNowSiblings,
 } from './lfg-now-manual-start.helpers';
 import { createLfgNowEventRow } from './lfg-now-event.helpers';
 import { convertGroup, convertHolderIntent } from '../../lfg/lfg-write.helpers';
@@ -38,6 +39,16 @@ jest.mock('../services/ad-hoc-event.helpers', () => ({
 jest.mock('./lfg-now-manual-start.helpers', () => ({
   listLiveGroupHands: jest.fn(),
   convertStarterIntent: jest.fn(),
+  // ROK-2352 Q1: echoes the ids for a keyed scope, as the real clear would
+  // when each held another `now` hand; the fold clears nothing.
+  withClearedNowSiblings: jest.fn(
+    (_tx: unknown, _g: number, ids: number[], scope: string | null) =>
+      Promise.resolve(
+        scope === null || ids.length === 0
+          ? {}
+          : { clearedSiblingUserIds: [...ids] },
+      ),
+  ),
 }));
 
 const createRow = createLfgNowEventRow as jest.MockedFunction<
@@ -55,6 +66,10 @@ const groupHands = listLiveGroupHands as jest.MockedFunction<
 >;
 const convertStarter = convertStarterIntent as jest.MockedFunction<
   typeof convertStarterIntent
+>;
+
+const withCleared = withClearedNowSiblings as jest.MockedFunction<
+  typeof withClearedNowSiblings
 >;
 
 const GAME_ID = 42;
@@ -92,6 +107,43 @@ beforeEach(() => {
 });
 
 describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
+  it("keyed Start now clears the starter's other now hands in the tx (ROK-2352 MAJOR-2)", async () => {
+    // MUTATION: drop the `withClearedNowSiblings` call from `manualStart` and
+    // the starter's `now` hand in another group stays live past the commit.
+    const db = mockDb([], []);
+    const group = { scope: 'dungeon:1', adapter: null };
+
+    const result = await spawnUnderGroupLock(asDb(db), GAME_ID, NOW, {
+      manual: { starterUserId: STARTER_ID },
+      group,
+    });
+
+    expect(withCleared).toHaveBeenCalledWith(
+      expect.anything(),
+      GAME_ID,
+      [STARTER_ID],
+      'dungeon:1',
+    );
+    expect(result?.clearedSiblingUserIds).toEqual([STARTER_ID]);
+  });
+
+  it('a re-press that converts nothing clears nobody (ROK-2352)', async () => {
+    convertStarter.mockResolvedValue(0);
+    const db = mockDb([], []);
+
+    await spawnUnderGroupLock(asDb(db), GAME_ID, NOW, {
+      manual: { starterUserId: STARTER_ID },
+      group: { scope: 'dungeon:1', adapter: null },
+    });
+
+    expect(withCleared).toHaveBeenCalledWith(
+      expect.anything(),
+      GAME_ID,
+      [],
+      'dungeon:1',
+    );
+  });
+
   it('starts with a WEEK-hand starter and zero now-hands (finding 2)', async () => {
     // MUTATION: drop `opts.manual`'s explicit creator and read `hands[0]`
     // instead and this throws `Cannot read properties of undefined`.
@@ -112,6 +164,7 @@ describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
       GAME_ID,
       STARTER_ID,
       NOW,
+      { patch: undefined }, // ROK-2352: no group → no adapter lock-in patch
     );
   });
 
@@ -173,6 +226,7 @@ describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
       STARTER_ID,
       { eventId: 900 },
       NOW,
+      null, // ROK-2352: no group → the starter's hand in any group
     );
     expect(convert).not.toHaveBeenCalled();
   });
@@ -227,9 +281,12 @@ describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
 
     expect(result).toEqual({ eventId: 900, spawned: true, invitedUserIds: [] });
     expect(groupHands).not.toHaveBeenCalled();
-    expect(convert).toHaveBeenCalledWith(expect.anything(), GAME_ID, {
-      eventId: 900,
-    });
+    expect(convert).toHaveBeenCalledWith(
+      expect.anything(),
+      GAME_ID,
+      { eventId: 900 },
+      null, // ROK-2352: no group → the whole game converts
+    );
   });
 });
 

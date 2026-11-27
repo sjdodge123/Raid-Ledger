@@ -29,6 +29,10 @@ import {
   computeExpiresAt,
   computeNowExpiresAt,
 } from './lfg.constants';
+import {
+  groupScopeFilter,
+  type LfgGroupScope,
+} from './lfg-group-scope.helpers';
 
 /**
  * Re-heart an intent the caller already holds onto a different clock (AC2).
@@ -120,10 +124,16 @@ export async function refreshGroupExpiry(
   db: LfgDb,
   gameId: number,
   timezone?: string | null,
+  scope: LfgGroupScope = null,
 ): Promise<void> {
   const now = new Date();
+  // ROK-2352: a +1 refreshes only the group it joined (null = whole game).
   const liveOn = (urgency: string) =>
-    and(liveGroupRow(db, gameId, now), eq(schema.lfgIntents.urgency, urgency));
+    and(
+      liveGroupRow(db, gameId, now),
+      eq(schema.lfgIntents.urgency, urgency),
+      groupScopeFilter(scope),
+    );
   await db
     .update(schema.lfgIntents)
     .set({ expiresAt: computeExpiresAt(now) })

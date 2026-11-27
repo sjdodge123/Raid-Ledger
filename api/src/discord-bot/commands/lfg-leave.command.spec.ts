@@ -28,6 +28,10 @@ jest.mock('./lfg.command', () => ({
 jest.mock('../lfg-board/lfg-board.db-helpers', () => ({
   listLfmThreadsForGames: jest.fn().mockResolvedValue([]),
 }));
+jest.mock('./lfg-dungeon.helpers', () => ({
+  ...jest.requireActual<object>('./lfg-dungeon.helpers'),
+  listOwnHandKeys: jest.fn().mockResolvedValue(['', 'raid:3']),
+}));
 const resolveCaller = resolveLfgCaller as jest.MockedFunction<
   typeof resolveLfgCaller
 >;
@@ -61,10 +65,23 @@ function fakeDb(batches: GameRow[][]) {
 
 type GameRow = { id: number; name: string };
 
+/** ROK-2352 — a registry whose grouping adapter (if any) lists a catalogue. */
+function registryWith(adapter?: unknown) {
+  return { getAdapter: jest.fn().mockReturnValue(adapter) };
+}
+
+const WOW_ADAPTER = {
+  listGroups: jest.fn().mockResolvedValue([
+    { key: 'dungeon:1', label: 'Deadmines', kind: 'dungeon', size: 5 },
+    { key: 'raid:3', label: 'Molten Core', kind: 'raid', size: 40 },
+  ]),
+};
+
 function setup(
   lists: LfgGroupSummaryDto[][],
   games: GameRow[][] = [],
   stillLooking = 0,
+  registry = registryWith(),
 ) {
   const listGroups = jest.fn();
   for (const list of lists) listGroups.mockResolvedValueOnce(list);
@@ -85,6 +102,7 @@ function setup(
     fakeDb(games) as never,
     service,
     {} as SettingsService,
+    registry as never,
   );
   return {
     command,
@@ -128,6 +146,8 @@ describe('LfgLeaveCommand — definition (ROK-1660)', () => {
         required: false,
         max_length: 100,
       }),
+      // ROK-2352 — the second option: which group of the game to leave.
+      expect.objectContaining({ name: 'dungeon', required: false }),
     ]);
   });
 });
@@ -302,5 +322,88 @@ describe('LfgLeaveCommand — bare list and guards (ROK-1660)', () => {
     await command.handleInteraction(interaction);
     expect(editReply).toHaveBeenCalledWith(LFG_BLOCKED_REPLY);
     expect(withdraw).not.toHaveBeenCalled();
+  });
+});
+
+describe('LfgLeaveCommand — ROK-2352 dungeon option', () => {
+  beforeEach(() => resolveCaller.mockResolvedValue(caller));
+
+  function slashWith(values: Record<string, string>) {
+    const editReply = jest.fn().mockResolvedValue(undefined);
+    const interaction = {
+      user: { id: 'discord-7' },
+      options: { getString: (name: string) => values[name] ?? null },
+      deferReply: jest.fn().mockResolvedValue(undefined),
+      editReply,
+    } as unknown as ChatInputCommandInteraction;
+    return { interaction, editReply };
+  }
+
+  it('registers an optional autocompleted dungeon option', () => {
+    const { command } = setup([[]]);
+    expect(command.getDefinition().options?.[1]).toMatchObject({
+      name: 'dungeon',
+      required: false,
+      autocomplete: true,
+    });
+  });
+
+  it("autocompletes only the caller's own hands in the game, Any first", async () => {
+    const { command } = setup(
+      [[group(42, 'WoW', true)]],
+      [],
+      0,
+      registryWith(WOW_ADAPTER),
+    );
+    const respond = jest.fn().mockResolvedValue(undefined);
+    await command.handleAutocomplete({
+      user: { id: 'discord-7' },
+      options: {
+        getFocused: () => ({ name: 'dungeon', value: '' }),
+        getString: () => '42',
+      },
+      respond,
+    } as unknown as AutocompleteInteraction);
+    expect(respond).toHaveBeenCalledWith([
+      { name: 'Any dungeon', value: 'any' },
+      { name: 'Molten Core (raid)', value: 'raid:3' },
+    ]);
+  });
+
+  it('leaves only the picked group, naming it', async () => {
+    const { command, withdraw } = setup(
+      [[group(42, 'WoW', true)]],
+      [],
+      0,
+      registryWith(WOW_ADAPTER),
+    );
+    const { interaction, editReply } = slashWith({
+      game: '42',
+      dungeon: 'raid:3',
+    });
+    await command.handleInteraction(interaction);
+    expect(withdraw).toHaveBeenCalledWith(7, 42, 'raid:3');
+    expect(editReply).toHaveBeenCalledWith(
+      "You're out — **WoW — Molten Core**.",
+    );
+  });
+
+  it('omitted dungeon leaves every hand in the game (no group passed)', async () => {
+    const { command, withdraw } = setup(
+      [[group(42, 'WoW', true)]],
+      [],
+      0,
+      registryWith(WOW_ADAPTER),
+    );
+    const { interaction } = slashWith({ game: '42' });
+    await command.handleInteraction(interaction);
+    expect(withdraw).toHaveBeenCalledWith(7, 42);
+  });
+
+  it('ignores the option when the game folds', async () => {
+    const { command, withdraw } = setup([[group(1, 'Valheim', true)]]);
+    const { interaction } = slashWith({ game: '1', dungeon: 'Deadmines' });
+    await command.handleInteraction(interaction);
+    expect(withdraw).toHaveBeenCalledWith(7, 1);
   });
 });

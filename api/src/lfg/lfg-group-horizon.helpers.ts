@@ -29,6 +29,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { LfgNowTtl, LfgUrgency } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { liveIntent, type LfgDb } from './lfg-query.helpers';
+import type { LfgGroupScope } from './lfg-group-scope.helpers';
 import type { LfgUrgencyRequest } from './lfg-write.helpers';
 import { LFG_DEFAULT_NOW_TTL_MINUTES } from './lfg.constants';
 
@@ -82,6 +83,7 @@ async function findLiveHand(
   gameId: number,
   urgency: LfgUrgency,
   now: Date,
+  scope: LfgGroupScope,
 ): Promise<LiveHand | undefined> {
   const [row] = await db
     .select({
@@ -94,7 +96,7 @@ async function findLiveHand(
       and(
         eq(schema.lfgIntents.gameId, gameId),
         eq(schema.lfgIntents.urgency, urgency),
-        liveIntent(now),
+        liveIntent(now, scope),
       ),
     )
     .orderBy(desc(schema.lfgIntents.expiresAt))
@@ -113,13 +115,16 @@ async function findLiveHand(
  * @param db - Drizzle handle (or a transaction).
  * @param gameId - Game whose group to read.
  * @param now - Instant to measure expiry against.
+ * @param scope - ROK-2352 P2-4: the group whose horizon a joiner inherits
+ *   (null = every hand of the game, the fold / pre-ROK-2352 read).
  */
 export async function readGroupHorizon(
   db: LfgDb,
   gameId: number,
   now: Date = new Date(),
+  scope: LfgGroupScope = null,
 ): Promise<LfgGroupHorizon> {
-  const nowHand = await findLiveHand(db, gameId, 'now', now);
+  const nowHand = await findLiveHand(db, gameId, 'now', now, scope);
   if (nowHand) {
     return {
       urgency: 'now',
@@ -130,7 +135,7 @@ export async function readGroupHorizon(
         (nowHand.ttlMinutes as LfgNowTtl | null) ?? LFG_DEFAULT_NOW_TTL_MINUTES,
     };
   }
-  const tonightHand = await findLiveHand(db, gameId, 'tonight', now);
+  const tonightHand = await findLiveHand(db, gameId, 'tonight', now, scope);
   if (!tonightHand) return WEEK_HORIZON;
   // `ttlMinutes` stays null even if the stored row somehow carries one: a
   // tonight group has no TTL bucket, and reporting one would hand a joiner a
@@ -159,19 +164,22 @@ export async function readGroupHorizon(
  * @param db - Drizzle handle (or a transaction).
  * @param gameId - Game whose group to read.
  * @param now - Instant to measure expiry against.
+ * @param scope - ROK-2352 P2-4: the group a bare `/lfg` joins (null = the
+ *   whole game, the fold).
  */
 export async function readOpenGroupHorizon(
   db: LfgDb,
   gameId: number,
   now: Date = new Date(),
+  scope: LfgGroupScope = null,
 ): Promise<LfgGroupHorizon | null> {
-  const horizon = await readGroupHorizon(db, gameId, now);
+  const horizon = await readGroupHorizon(db, gameId, now, scope);
   if (horizon.urgency !== 'week') return horizon;
   const [live] = await db
     .select({ id: schema.lfgIntents.id })
     .from(schema.lfgIntents)
     .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
-    .where(and(eq(schema.lfgIntents.gameId, gameId), liveIntent(now)))
+    .where(and(eq(schema.lfgIntents.gameId, gameId), liveIntent(now, scope)))
     .limit(1);
   return live ? horizon : null;
 }

@@ -42,6 +42,7 @@ import {
 } from '../scheduling/scheduling-lockin-claim.helpers';
 import { assertBenchPick } from './standalone-poll-bench-pick.helpers';
 import { signUpCreatorWithCarryover } from './followup-signup-carryover.helpers';
+import type { LfgGroupingRegistry } from '../../lfg/lfg-grouping.helpers';
 import { selectCompletionTarget } from './standalone-poll-complete.helpers';
 import {
   assertCanLockInPoll,
@@ -72,6 +73,8 @@ export interface LockInCreateDeps {
   assertCreate: (dto: CreateEventDto) => Promise<void>;
   /** ROK-2272 S6: carries the standalone carrier's `decided → archived`. */
   events?: EventEmitter2 | undefined;
+  /** ROK-2352: the creator's LFG hand character/roles (poll exit). */
+  lfgGrouping?: LfgGroupingRegistry | undefined;
 }
 
 /** One lock-in request: the path's match, the caller and the parsed body. */

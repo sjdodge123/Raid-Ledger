@@ -23,7 +23,9 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { LFG_INVITE_NO_REPEAT_DAYS } from '../../lfg/lfg-invite.constants';
 import { LfgInviteService } from '../../lfg/lfg-invite.service';
+import { LFG_ANY_GROUP_KEY } from '@raid-ledger/contract';
 import { DISCORD_BOT_EVENTS, LFG_BUTTON_IDS } from '../discord-bot.constants';
+import { parseLfgBoardCustomId } from '../lfg-board/lfg-board-custom-id.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { LFG_UNLINKED_REPLY } from '../commands/lfg.command.helpers';
 import { resolveLfgCaller } from '../commands/lfg.command';
@@ -46,11 +48,31 @@ export const LFG_INVITE_NOTHING_TO_DECLINE_REPLY =
  * @returns The game id, or null when this is not an invite-decline button.
  */
 export function parseInviteDeclineCustomId(customId: string): number | null {
-  const prefix = `${LFG_BUTTON_IDS.INVITE_DECLINE}:`;
-  if (!customId.startsWith(prefix)) return null;
-  const raw = customId.slice(prefix.length);
-  if (!/^\d+$/.test(raw)) return null;
-  return Number(raw);
+  return parseInviteDeclinePress(customId)?.gameId ?? null;
+}
+
+/** A parsed decline press; `groupKey` null = a v1 id (newest in the game). */
+export interface LfgInviteDeclinePress {
+  gameId: number;
+  groupKey: string | null;
+}
+
+/**
+ * ROK-2352 — parse either decline id: v1 `<prefix>:<gameId>` (every DM sent
+ * before groups, and every non-WoW DM) or v2 `<prefix>:<gameId>:<groupKey>`.
+ *
+ * @param customId - The interaction's custom id.
+ * @returns The press, or null when this is not an invite-decline button.
+ */
+export function parseInviteDeclinePress(
+  customId: string,
+): LfgInviteDeclinePress | null {
+  const parsed = parseLfgBoardCustomId(customId, LFG_BUTTON_IDS.INVITE_DECLINE);
+  if (parsed === null) return null;
+  return {
+    gameId: parsed.gameId,
+    groupKey: parsed.groupKey === LFG_ANY_GROUP_KEY ? null : parsed.groupKey,
+  };
 }
 
 @Injectable()
@@ -95,11 +117,12 @@ export class LfgInviteDeclineListener {
    * @param interaction - The button interaction discord.js dispatched.
    */
   async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
-    const gameId = parseInviteDeclineCustomId(interaction.customId);
-    if (gameId === null) return;
+    const press = parseInviteDeclinePress(interaction.customId);
+    if (press === null) return;
+    const { gameId } = press;
     try {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      await this.reply(interaction, await this.decline(interaction, gameId));
+      await this.reply(interaction, await this.decline(interaction, press));
     } catch (error) {
       this.logger.error(
         `Failed to decline the LFG invite for game ${gameId}:`,
@@ -112,11 +135,20 @@ export class LfgInviteDeclineListener {
   /** The one write path — for the user who CLICKED, resolved from Discord. */
   private async decline(
     interaction: ButtonInteraction,
-    gameId: number,
+    { gameId, groupKey }: LfgInviteDeclinePress,
   ): Promise<string> {
     const caller = await resolveLfgCaller(this.db, interaction.user.id);
     if (!caller) return LFG_UNLINKED_REPLY;
-    const declined = await this.lfgInviteService.decline(caller.id, gameId);
+    // v1 keeps the old 2-arg call byte for byte; v2 scopes to the group.
+    const declined =
+      groupKey === null
+        ? await this.lfgInviteService.decline(caller.id, gameId)
+        : await this.lfgInviteService.decline(
+            caller.id,
+            gameId,
+            new Date(),
+            groupKey,
+          );
     return declined
       ? LFG_INVITE_DECLINED_REPLY
       : LFG_INVITE_NOTHING_TO_DECLINE_REPLY;

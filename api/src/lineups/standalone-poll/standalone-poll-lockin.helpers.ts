@@ -7,6 +7,7 @@
  * announces EVENT CREATED, so the announcement's roster sees the signups.
  */
 import type { Logger } from '@nestjs/common';
+import type { CreateSignupDto } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { SettingsService } from '../../settings/settings.service';
@@ -29,6 +30,11 @@ import {
 } from './standalone-poll-voter.helpers';
 import { matchHubPayload } from './poll-hub-payload.helpers';
 import { loadFollowupCarryover } from './followup-signup-carryover.helpers';
+import type { LfgGroupingRegistry } from '../../lfg/lfg-grouping.helpers';
+import {
+  loadLfgPollCarryover,
+  mergeCarryover,
+} from '../../lfg/lfg-poll-carryover.helpers';
 import { revalidateBenchPick } from './standalone-poll-bench-pick.helpers';
 
 /** Everything the lock-in fan-out reaches. */
@@ -39,6 +45,8 @@ export interface LockInFanoutDeps {
   notifications: StandalonePollNotificationService;
   lineupNotifications: LineupNotificationService;
   logger: Logger;
+  /** ROK-2352: resolves the LFG grouping adapter for the poll carryover. */
+  lfgGrouping?: LfgGroupingRegistry | undefined;
 }
 
 /** What was locked in: the match, its event and the winning slot. */
@@ -175,6 +183,26 @@ async function benchPickForVoters(
   return pick;
 }
 
+/**
+ * Character/roles each voter signs up with. ROK-2320: a follow-up poll's
+ * voters keep their source-event signup. ROK-2352: an LFG group converted to
+ * this poll keeps each hand's character/roles; the follow-up map wins on a
+ * clash (AC7). Both reads degrade to empty, never failing the lock-in.
+ */
+async function loadVoterCarryover(
+  deps: LockInFanoutDeps,
+  lockIn: LockIn,
+  userIds: number[],
+): Promise<Map<number, CreateSignupDto>> {
+  const followup = await loadFollowupCarryover(
+    deps,
+    { matchId: lockIn.matchId, eventId: lockIn.eventId },
+    userIds,
+  );
+  const lfg = await loadLfgPollCarryover(deps, lockIn.matchId, userIds);
+  return mergeCarryover(lfg, followup);
+}
+
 /** Sign the slot voters up, benching the re-checked pick; benched + failed. */
 async function signUpWithPick(
   deps: LockInFanoutDeps,
@@ -182,10 +210,9 @@ async function signUpWithPick(
   voters: { userId: number }[],
 ): Promise<AutoSignupResult> {
   const benchUserIds = await benchPickForVoters(deps, lockIn, voters);
-  // ROK-2320: a follow-up poll's voters keep their source-event character/roles.
-  const carryover = await loadFollowupCarryover(
+  const carryover = await loadVoterCarryover(
     deps,
-    { matchId: lockIn.matchId, eventId: lockIn.eventId },
+    lockIn,
     voters.map((v) => v.userId),
   );
   return autoSignupSlotVoters({

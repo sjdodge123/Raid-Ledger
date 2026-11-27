@@ -13,6 +13,7 @@ import type {
   LfgGroupChangedPayload,
   LfgGroupChangedReason,
 } from '../../lfg/lfg.constants';
+import type { LfgGroupScope } from '../../lfg/lfg-group-scope.helpers';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
 import {
@@ -25,6 +26,7 @@ import {
   latestConversionTarget,
   readConvertedGroup,
   readLiveGroup,
+  readGroupSessionEventId,
   readOpenLfgNowEventId,
   readPlayingSession,
   resolvePollTarget,
@@ -33,6 +35,7 @@ import {
   type LfmGameRow,
   type LfmMessageRow,
 } from './lfm-embed.db-helpers';
+import { scopeArgs } from './lfm-embed.provenance.helpers';
 
 /** Just enough of a `Logger` for the one warning this module emits. */
 interface ViewLogger {
@@ -62,10 +65,13 @@ export function liveFloorFor(postKind: string): number {
 export async function liveView(
   db: LfgDb,
   game: LfmGameRow,
+  scope: LfgGroupScope = null,
 ): Promise<LfmGroupView> {
-  const group = await readLiveGroup(db, game);
+  const group = await readLiveGroup(db, game, scope);
   return {
     ...baseView(game),
+    // ROK-2352: only a keyed group carries its key; `''`/fold stays absent.
+    ...(scope ? { groupKey: scope } : {}),
     state: 'open',
     memberCount: group.members.length,
     memberNames: displayNames(group.members),
@@ -146,8 +152,13 @@ export async function playingView(
 export async function sessionView(
   db: LfgDb,
   game: LfmGameRow,
+  scope: LfgGroupScope = null,
 ): Promise<LfmGroupView | null> {
-  const eventId = await readOpenLfgNowEventId(db, game.id);
+  // ROK-2352 — a scoped post shows only its OWN group's session.
+  const eventId =
+    scope === null
+      ? await readOpenLfgNowEventId(db, game.id)
+      : await readGroupSessionEventId(db, game.id, scope);
   if (eventId == null) return null;
   return playingView(db, game, eventId);
 }
@@ -183,8 +194,9 @@ export async function sessionView(
 export async function currentView(
   db: LfgDb,
   game: LfmGameRow,
+  scope: LfgGroupScope = null,
 ): Promise<LfmGroupView> {
-  return (await sessionView(db, game)) ?? liveView(db, game);
+  return (await sessionView(db, game, scope)) ?? liveView(db, game, scope);
 }
 
 /**
@@ -242,8 +254,14 @@ export async function endedView(
   db: LfgDb,
   game: LfmGameRow,
   row: Pick<LfmMessageRow, 'gameId' | 'postedAt' | 'lastMemberCount'>,
+  scope: LfgGroupScope = null,
 ): Promise<LfmGroupView> {
-  const target = await latestConversionTarget(db, row.gameId, row.postedAt);
+  const target = await latestConversionTarget(
+    db,
+    row.gameId,
+    row.postedAt,
+    ...scopeArgs(scope),
+  );
   return target
     ? convertedView(db, game, target)
     : expiredView(game, row.lastMemberCount);
@@ -361,10 +379,11 @@ async function expiredBranch(
   game: LfmGameRow,
   lastMemberCount: number,
   liveFloor: number,
+  scope: LfgGroupScope,
 ): Promise<LfmGroupView> {
-  const live = await liveView(db, game);
+  const live = await liveView(db, game, scope);
   if (live.memberCount < liveFloor) return expiredView(game, lastMemberCount);
-  return (await sessionView(db, game)) ?? live;
+  return (await sessionView(db, game, scope)) ?? live;
 }
 
 /**
@@ -393,16 +412,17 @@ export async function viewForChange(
   payload: LfgGroupChangedPayload,
   logger: ViewLogger,
   liveFloor: number,
+  scope: LfgGroupScope = null,
 ): Promise<LfmGroupView | null> {
   // ROK-1494 AC7 — the live session outranks every non-terminal read. A
   // `converted` / `expired` change genuinely ends the group and must still be
   // able to close the row, so those two skip the lookup.
   if (!endsTheGroup(payload.reason)) {
-    const session = await sessionView(db, game);
+    const session = await sessionView(db, game, scope);
     if (session) return session;
   }
   if (payload.reason === 'expired') {
-    return expiredBranch(db, game, lastMemberCount, liveFloor);
+    return expiredBranch(db, game, lastMemberCount, liveFloor, scope);
   }
   if (payload.reason === 'converted') {
     return convertedBranch(db, game, payload, logger);
@@ -412,7 +432,7 @@ export async function viewForChange(
   if (payload.reason === 'playing') {
     return playingBranch(db, game, payload, logger);
   }
-  const view = await liveView(db, game);
+  const view = await liveView(db, game, scope);
   // E12: 3 -> 2 is still LFM. Only dropping below the floor is terminal —
   // and ROK-1505 D4 makes that floor ONE hand on the board: a 2 -> 1
   // withdrawal retitles the forum post back to LOOKING instead of archiving it.
@@ -420,4 +440,43 @@ export async function viewForChange(
     view.state = 'closed';
   }
   return view;
+}
+
+/**
+ * ROK-2352 — the change the Any (`''`) post renders. A keyed group's change
+ * (its lock-in, Start now, joins) is NOT the Any group's: the Any post only
+ * re-reads its own live view, so it can never go terminal on another group's
+ * exit. Thread membership is the board-members service's, not this render's.
+ *
+ * @param payload - The `GROUP_CHANGED` event.
+ */
+export function forAnyRow(
+  payload: LfgGroupChangedPayload,
+): LfgGroupChangedPayload {
+  return payload.groupKey
+    ? { gameId: payload.gameId, reason: 'joined' }
+    : payload;
+}
+
+/**
+ * ROK-2352 — the ending a keyed group's own `converted` / `playing` change
+ * renders on its post, or null for any other change.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The game.
+ * @param change - The `GROUP_CHANGED` event naming this group.
+ */
+export async function keyedChangeView(
+  db: LfgDb,
+  game: LfmGameRow,
+  change: LfgGroupChangedPayload,
+): Promise<LfmGroupView | null> {
+  if (change.reason === 'converted') {
+    const target = conversionTarget(change);
+    return target ? convertedView(db, game, target) : null;
+  }
+  if (change.reason === 'playing' && change.eventId != null) {
+    return playingView(db, game, change.eventId);
+  }
+  return null;
 }

@@ -30,6 +30,8 @@ export const HUB_BEHAVIOUR_KINDS = [
   'claim-provider',
   /** ROK-2187 — produces one "GG <year>" story card (api producer + web renderer). */
   'gg-card',
+  /** ROK-2352 — splits one game's LFG into several groups (WoW: one per dungeon/raid). */
+  'lfg-grouping',
 ] as const;
 export const HubBehaviourKindSchema = z.enum(HUB_BEHAVIOUR_KINDS);
 export type HubBehaviourKind = z.infer<typeof HubBehaviourKindSchema>;

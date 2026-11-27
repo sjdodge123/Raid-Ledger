@@ -17,9 +17,8 @@
  */
 import type { JSX } from 'react';
 import type { LfgGroupDetailDto } from '@raid-ledger/contract';
-import type { LfgUrgencyPick } from '../../components/lfg/lfg-urgency-choice';
 import { LfgHero } from './LfgHero';
-import { LfgJoinControl } from './LfgJoinControl';
+import { LfgJoinControl, type LfgJoinPick, type LfgRaiseHandSlot } from './LfgJoinControl';
 import { LfgNowStrip } from './LfgNowStrip';
 import { LfgParticipantsChip } from './LfgParticipantsChip';
 import { LfgPlayingNowCard } from './LfgPlayingNowCard';
@@ -28,7 +27,9 @@ import { LFG_COPY } from './lfg-copy';
 
 export interface LfgGroupTopProps {
     group: LfgGroupDetailDto;
-    onJoin: (pick: LfgUrgencyPick) => void;
+    onJoin: (pick: LfgJoinPick) => void;
+    /** ROK-2352: the grouping plugin's raise-hand fields, when one is active. */
+    raiseHand?: LfgRaiseHandSlot | undefined;
     onStartPoll: () => void;
     /** ROK-1613 — open the start-now confirm. Always offered while looking. */
     onStartNow: () => void;
@@ -54,18 +55,18 @@ function PlayingState({ group }: { group: LfgGroupDetailDto }): JSX.Element {
  * would read "Nobody's looking for a group right now" directly under a hero
  * announcing the event and its signups.
  */
-function JoinRow({ group, onJoin, isBusy, hasEvent }: Pick<LfgGroupTopProps, 'group' | 'onJoin' | 'isBusy'> & { hasEvent: boolean }): JSX.Element {
+function JoinRow({ group, onJoin, isBusy, hasEvent, raiseHand }: Pick<LfgGroupTopProps, 'group' | 'onJoin' | 'isBusy' | 'raiseHand'> & { hasEvent: boolean }): JSX.Element {
     return (
         <div data-testid="lfg-join-row" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface p-4">
             {group.activeCount === 0 && !hasEvent && <p className="text-sm text-muted">{LFG_COPY.emptyState}</p>}
-            <LfgJoinControl label={group.gameName} onJoin={onJoin} className={LFG_SECONDARY_BTN} isBusy={isBusy}
+            <LfgJoinControl label={group.gameName} onJoin={onJoin} className={LFG_SECONDARY_BTN} isBusy={isBusy} raiseHand={raiseHand}
                 spawnsNow={group.pressWouldSpawnNow === true} spawnEmoji={group.spawnIndicatorEmoji} />
         </div>
     );
 }
 
 /** Playing state, or the hero (plus the join row while the viewer is out). */
-export function LfgGroupTop({ group, onJoin, onStartPoll, onStartNow, onParticipants, isBusy }: LfgGroupTopProps): JSX.Element {
+export function LfgGroupTop({ group, onJoin, onStartPoll, onStartNow, onParticipants, isBusy, raiseHand }: LfgGroupTopProps): JSX.Element {
     if (group.playingNow != null) return <PlayingState group={group} />;
     const holdsIntent = group.ownIntent != null;
     // A locked-in event must not hide a new live group (ROK-1573 review P1).
@@ -88,7 +89,7 @@ export function LfgGroupTop({ group, onJoin, onStartPoll, onStartNow, onParticip
                 Start-now needs an intent (AC6), and in the event-set state
                 `activeCount === 0`, so nobody has one — without this the
                 button would render permanently disabled with no way in. */}
-            {!holdsIntent && <JoinRow group={group} onJoin={onJoin} isBusy={isBusy} hasEvent={event != null} />}
+            {!holdsIntent && <JoinRow group={group} onJoin={onJoin} isBusy={isBusy} hasEvent={event != null} raiseHand={raiseHand} />}
         </>
     );
 }

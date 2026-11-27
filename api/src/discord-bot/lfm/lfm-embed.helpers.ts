@@ -19,6 +19,7 @@
  * `linkStyle: 'button'`; the option is OPTIONAL and defaults to `'masked'` so
  * every 1454 call site renders byte-identically (AC5 i).
  */
+import { overflowLine, type LfmOverflowGroup } from './lfm-embed.overflow-line';
 import {
   createChannelEmbed,
   type ChannelEmbed,
@@ -110,6 +111,11 @@ export type LfmTarget =
 export interface LfmGroupView {
   state: LfmRenderState;
   gameId: number;
+  /**
+   * ROK-2352 — the group this post renders. Absent = `''`, the whole-game
+   * post, so every pre-groups fixture and call site renders byte for byte.
+   */
+  groupKey?: string;
   gameName: string;
   gameSlug: string;
   gameCoverUrl?: string | null;
@@ -163,6 +169,11 @@ export interface LfmGroupView {
    * over" and "this post is".
    */
   boardRetired?: boolean;
+  /**
+   * ROK-2352 Q11 — keyed groups the open-post cap kept off the board, listed
+   * as one line on the open `''` post. Absent/empty = no line.
+   */
+  overflowGroups?: readonly LfmOverflowGroup[];
 }
 
 /**
@@ -411,6 +422,9 @@ function description(
   const urgent = nowLine(group);
   if (urgent) lines.push(urgent);
   lines.push(formatRoster(group.memberNames ?? []) || 'Nobody yet');
+  const overflow =
+    group.state === 'open' ? overflowLine(group.overflowGroups) : null;
+  if (overflow) lines.push(overflow);
   // The Link button only exists while the group is open (AC5 iv): a terminal
   // render drops the whole component row, so suppressing its masked link too
   // would leave an archived post with no way back to the group.

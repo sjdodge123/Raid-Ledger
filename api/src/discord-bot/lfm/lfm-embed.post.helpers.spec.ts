@@ -163,6 +163,7 @@ const TWO_HANDS = view({ memberCount: 2, memberNames: ['Bosco', 'Karl'] });
 const DELETED_ROW: LfmMessageRow = {
   id: 'row-1',
   gameId: GAME_ID,
+  groupKey: '',
   guildId: GUILD_ID,
   channelId: 'chan-text',
   messageId: 'msg-gone',

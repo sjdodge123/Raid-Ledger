@@ -112,9 +112,12 @@ describe('spawnUnderGroupLock', () => {
     });
     expect(createRow).toHaveBeenCalledWith(expect.anything(), GAME_ID, 7, NOW);
     expect(signup).toHaveBeenCalledTimes(2);
-    expect(convert).toHaveBeenCalledWith(expect.anything(), GAME_ID, {
-      eventId: 900,
-    });
+    expect(convert).toHaveBeenCalledWith(
+      expect.anything(),
+      GAME_ID,
+      { eventId: 900 },
+      null, // ROK-2352: no group → the whole game converts
+    );
   });
 
   it('does NOT spawn for a mixed group with only one now-hand (AC5, Q1)', async () => {
@@ -148,9 +151,12 @@ describe('spawnUnderGroupLock', () => {
       spawned: false,
       invitedUserIds: [],
     });
-    expect(convert).toHaveBeenCalledWith(expect.anything(), GAME_ID, {
-      eventId: 555,
-    });
+    expect(convert).toHaveBeenCalledWith(
+      expect.anything(),
+      GAME_ID,
+      { eventId: 555 },
+      null, // ROK-2352: no group → the whole game converts
+    );
   });
 
   it('attaches a lone LATE third hand, below the threshold (AC1)', async () => {

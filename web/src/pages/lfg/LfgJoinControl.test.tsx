@@ -62,3 +62,25 @@ describe('LfgJoinControl — ROK-1619 spawn indicator', () => {
         expect(onJoin).toHaveBeenCalledWith({ urgency: 'now', ttlMinutes: 30 });
     });
 });
+
+describe('LfgJoinControl — ROK-2352 grouping raise-hand fields', () => {
+    function Fields({ onChange }: { onChange: (s: { groupKeys: string[]; handDetail: Record<string, unknown>; ready: boolean }) => void }) {
+        return (
+            <button type="button" data-testid="fake-ready"
+                onClick={() => onChange({ groupKeys: ['dungeon:36'], handDetail: { roles: ['tank'] }, ready: true })}>
+                ready
+            </button>
+        );
+    }
+    const context = { gameId: 1, gameSlug: 'world-of-warcraft', groupKey: '', hubId: null };
+
+    it('holds the urgency pick until the plugin is ready, then joins with its groups and detail', () => {
+        const onJoin = vi.fn();
+        render(<LfgJoinControl label="WoW" onJoin={onJoin} className="btn" raiseHand={{ Fields, context }} />);
+        fireEvent.click(screen.getByTestId('lfg-join-button'));
+        expect(screen.getByTestId('lfg-urgency-week')).toBeDisabled();
+        fireEvent.click(screen.getByTestId('fake-ready'));
+        fireEvent.click(screen.getByTestId('lfg-urgency-week'));
+        expect(onJoin).toHaveBeenCalledWith({ urgency: 'week', groupKeys: ['dungeon:36'], handDetail: { roles: ['tank'] } });
+    });
+});

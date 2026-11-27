@@ -82,6 +82,26 @@ export const lfgIntents = pgTable(
      * before this column existed (no backfill, ruled 2026-10-08).
      */
     convertedAt: timestamp('converted_at'),
+    /**
+     * ROK-2352 — the group this hand is raised in; a group is
+     * `(game_id, group_key)`. `''` is the whole-game group (every non-WoW
+     * game, and WoW's "Any dungeon"). Core treats the key as opaque; only an
+     * active `lfg-grouping` adapter mints a non-empty one (`dungeon:36`).
+     * NOT NULL on purpose: NULLs never collide in a unique index, so a
+     * nullable key would drop the one-live-hand guarantee for '' groups.
+     */
+    groupKey: text('group_key').default('').notNull(),
+    /**
+     * ROK-2352 §3.2 — WHY a `cleared` hand was cleared, when it was not the
+     * user's own Withdraw. Only `sibling_locked_in`: another of the user's
+     * groups in this game locked in / started and consumed their `now` hand.
+     * NULL on every other row (Withdraw, pre-0322 clears) = no notice.
+     */
+    clearedReason: text('cleared_reason'),
+    /** The group the user went into when `cleared_reason` is set. */
+    clearedIntoGroupKey: text('cleared_into_group_key'),
+    /** Show-once: when the owner acknowledged the "hand withdrawn" notice. */
+    clearedNoticeSeenAt: timestamp('cleared_notice_seen_at'),
   },
   (table) => [
     check(
@@ -105,19 +125,35 @@ export const lfgIntents = pgTable(
       'lfg_intents_ttl_minutes_check',
       sql`${table.ttlMinutes} IS NULL OR ${table.ttlMinutes} IN (30, 60)`,
     ),
+    check(
+      'lfg_intents_cleared_reason_check',
+      sql`${table.clearedReason} IS NULL OR ${table.clearedReason} IN ('sibling_locked_in')`,
+    ),
+    /** ROK-2352: `''` or `<kind>:<id>` — the grammar adapters mint. */
+    check(
+      'lfg_intents_group_key_check',
+      sql`${table.groupKey} = '' OR ${table.groupKey} ~ '^[a-z][a-z0-9_-]{0,31}:[A-Za-z0-9:_-]{1,64}$'`,
+    ),
     /**
-     * The concurrency guard: at most one LIVE intent per (user, game).
+     * The concurrency guard: at most one LIVE intent per (user, game, group)
+     * (ROK-2352 added `group_key`; `''` keeps the per-game guarantee).
      * Writes take `ON CONFLICT DO NOTHING` against this index and re-select
      * the winner — a caught unique violation would poison the transaction
      * (see memory `reference_postgres_savepoint_does_not_contain_violations`).
      */
-    uniqueIndex('uq_lfg_intents_user_game_active')
+    uniqueIndex('uq_lfg_intents_user_game_group_active')
+      .on(table.userId, table.gameId, table.groupKey)
+      .where(sql`${table.status} = 'active'`),
+    /** Group counts, per (game, group). */
+    index('idx_lfg_intents_game_group_active')
+      .on(table.gameId, table.groupKey)
+      .where(sql`${table.status} = 'active'`),
+    /** ROK-2352 §3.2: the viewer's unseen "hand withdrawn" notices. */
+    index('idx_lfg_intents_cleared_notice_unseen')
       .on(table.userId, table.gameId)
-      .where(sql`${table.status} = 'active'`),
-    /** Group counts. */
-    index('idx_lfg_intents_game_active')
-      .on(table.gameId)
-      .where(sql`${table.status} = 'active'`),
+      .where(
+        sql`${table.clearedReason} IS NOT NULL AND ${table.clearedNoticeSeenAt} IS NULL`,
+      ),
     /** Hourly expiry sweep. */
     index('idx_lfg_intents_expires_at')
       .on(table.expiresAt)

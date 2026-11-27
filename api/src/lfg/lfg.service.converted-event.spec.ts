@@ -13,10 +13,23 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as queryHelpers from './lfg-query.helpers';
 import * as writeHelpers from './lfg-write.helpers';
 import * as convertedHelpers from './lfg-converted-event.helpers';
+import * as forumThreadHelpers from './lfg-forum-thread.helpers';
+import * as scopeHelpers from './lfg-group-scope.helpers';
+
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 
 jest.mock('./lfg-query.helpers');
 jest.mock('./lfg-write.helpers');
 jest.mock('./lfg-converted-event.helpers');
+// Mock the SOURCE module, never a re-export: an automocked barrel's getter
+// re-export would not be the function the detail read actually calls.
+jest.mock('./lfg-forum-thread.helpers');
+// ROK-2352: the own-hand read moved to the group-scope helpers.
+jest.mock('./lfg-group-scope.helpers', () => ({
+  ...jest.requireActual<typeof scopeHelpers>('./lfg-group-scope.helpers'),
+  findOwnLiveHand: jest.fn(),
+  listOwnOtherGroups: jest.fn(),
+}));
 
 const GAME = { id: 42, name: 'Valheim' };
 const CONVERTED = {
@@ -33,8 +46,10 @@ async function buildService(converted: unknown): Promise<LfgService> {
     .mocked(queryHelpers.getGroupSummary)
     .mockResolvedValue({ gameId: 42, playingNow: null } as never);
   jest.mocked(queryHelpers.listGroupMembers).mockResolvedValue([]);
-  jest.mocked(queryHelpers.findOpenForumThreadId).mockResolvedValue(null);
+  jest.mocked(forumThreadHelpers.findOpenForumThreadId).mockResolvedValue(null);
   jest.mocked(writeHelpers.findActiveIntent).mockResolvedValue(null);
+  jest.mocked(scopeHelpers.findOwnLiveHand).mockResolvedValue(null);
+  jest.mocked(scopeHelpers.listOwnOtherGroups).mockResolvedValue([]);
   jest
     .mocked(convertedHelpers.readConvertedEvent)
     .mockResolvedValue(converted as never);
@@ -44,6 +59,7 @@ async function buildService(converted: unknown): Promise<LfgService> {
       { provide: DrizzleAsyncProvider, useValue: {} },
       { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       { provide: SettingsService, useValue: { get: jest.fn(() => null) } },
+      { provide: PluginRegistryService, useValue: { getAdapter: jest.fn() } },
     ],
   }).compile();
   return module.get(LfgService);
@@ -56,9 +72,12 @@ describe('LfgService.getGroupDetail — convertedEvent (ROK-1573)', () => {
     const service = await buildService(CONVERTED);
     const detail = await service.getGroupDetail(7, 42);
     expect(detail.convertedEvent).toEqual(CONVERTED);
+    // ROK-2352: a plain read (no `?group`) is the whole game — scope null.
     expect(convertedHelpers.readConvertedEvent).toHaveBeenCalledWith(
       expect.anything(),
       42,
+      expect.any(Date),
+      null,
     );
   });
 

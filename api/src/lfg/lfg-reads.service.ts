@@ -15,11 +15,17 @@ import type {
   LfgHistoryResponseDto,
   LfgOverlapResponseDto,
   LfgSuggestionsResponseDto,
+  LfgGroupListResponseDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
-import { requireGame } from './lfg-query.helpers';
+import { requireGame, requireVisibleGame } from './lfg-query.helpers';
+import { readGroupList } from './lfg-group-list.helpers';
+import { listClearedHandNotices } from './lfg-hand-notices.helpers';
+import { resolveLfgGrouping } from './lfg-grouping.helpers';
+import { resolveGameReadScope } from './lfg-group-scope.helpers';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { buildOverlapResponse } from './lfg-overlap-grid.helpers';
 import { listGameHistory } from './lfg-history.helpers';
 import { listSuggestions } from './lfg-suggestions.helpers';
@@ -30,6 +36,7 @@ export class LfgReadsService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
+    private readonly pluginRegistry: PluginRegistryService,
   ) {}
 
   /**
@@ -40,15 +47,23 @@ export class LfgReadsService {
    * is projected in the community's zone, not the server's (C1).
    *
    * @param gameId - Game whose group to project.
+   * @param group - ROK-2352 `?group`; the fold reads the whole game.
    */
-  async getOverlap(gameId: number): Promise<LfgOverlapResponseDto> {
-    await requireGame(this.db, gameId);
+  async getOverlap(
+    gameId: number,
+    group?: string,
+  ): Promise<LfgOverlapResponseDto> {
+    const game = await requireGame(this.db, gameId);
+    const scope = resolveGameReadScope(this.pluginRegistry, game.slug, group);
     const defaultTimeZone = (await this.settings.getDefaultTimezone()) ?? 'UTC';
-    return buildOverlapResponse(this.db, gameId, defaultTimeZone);
+    return buildOverlapResponse(this.db, gameId, defaultTimeZone, scope);
   }
 
   /**
    * `GET /lfg/:gameId/history` — past sessions for the game (§B).
+   *
+   * ROK-2352: `?group` is accepted (and grammar-checked) by the route but not
+   * applied — events carry no group key, so a group's history is its game's.
    *
    * @param gameId - Game whose history to read.
    */
@@ -62,15 +77,41 @@ export class LfgReadsService {
    *
    * @param userId - Caller, never suggested to themselves.
    * @param gameId - Game the group is for.
+   * @param group - ROK-2352 `?group`: members of THIS group are not suggested.
    */
   async getSuggestions(
     userId: number,
     gameId: number,
+    group?: string,
   ): Promise<LfgSuggestionsResponseDto> {
-    await requireGame(this.db, gameId);
+    const game = await requireGame(this.db, gameId);
+    const scope = resolveGameReadScope(this.pluginRegistry, game.slug, group);
     return {
       gameId,
-      suggestions: await listSuggestions(this.db, gameId, userId),
+      suggestions: await listSuggestions(this.db, gameId, userId, scope),
     };
+  }
+
+  /**
+   * ROK-2352 `GET /lfg/:gameId/groups` — the game's groups, `''` first. A
+   * game with no active `lfg-grouping` adapter is one folded group. Carries
+   * the caller's unseen "hand withdrawn" `notices` (§3.2) when there are any.
+   *
+   * @param userId - Caller, for `hasOwnIntent`.
+   * @param gameId - The (visible) game.
+   * @param includeCatalogue - `?include=catalogue` adds empty groups.
+   */
+  async listGameGroups(
+    userId: number,
+    gameId: number,
+    includeCatalogue: boolean,
+  ): Promise<LfgGroupListResponseDto> {
+    const game = await requireVisibleGame(this.db, gameId);
+    const adapter = resolveLfgGrouping(this.pluginRegistry, game.slug);
+    const [list, notices] = await Promise.all([
+      readGroupList(this.db, game, userId, adapter, includeCatalogue),
+      listClearedHandNotices(this.db, game, userId, adapter),
+    ]);
+    return notices.length > 0 ? { ...list, notices } : list;
   }
 }

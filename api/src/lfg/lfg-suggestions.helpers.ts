@@ -21,6 +21,7 @@ import type {
 import * as schema from '../drizzle/schema';
 import { HEART_SOURCES } from '../igdb/igdb-interest.helpers';
 import { eligibleUser, liveIntent, type LfgDb } from './lfg-query.helpers';
+import type { LfgGroupScope } from './lfg-group-scope.helpers';
 import {
   LFG_SUGGESTIONS_LIMIT,
   LFG_SUGGESTIONS_PLAYED_DAYS,
@@ -165,12 +166,15 @@ function collectCandidates(
 async function fetchLiveHolders(
   db: LfgDb,
   gameId: number,
+  scope: LfgGroupScope,
 ): Promise<Set<number>> {
   const rows = await db
     .select({ userId: schema.lfgIntents.userId })
     .from(schema.lfgIntents)
     .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
-    .where(and(eq(schema.lfgIntents.gameId, gameId), liveIntent(new Date())));
+    .where(
+      and(eq(schema.lfgIntents.gameId, gameId), liveIntent(new Date(), scope)),
+    );
   return new Set(rows.map((r) => r.userId));
 }
 
@@ -241,12 +245,16 @@ function fetchInvited(
   db: LfgDb,
   gameId: number,
   profiles: Profile[],
+  scope: LfgGroupScope,
 ): Promise<Set<number>> {
+  // ROK-2352 P2-5: the no-repeat rule is per group (§4.2), so an invite to
+  // another group of the game never greys this group's Invite button.
   return findInvitedUserIds(
     db,
     gameId,
     profiles.map((p) => p.userId),
     noRepeatHorizonStart(new Date()),
+    scope,
   );
 }
 
@@ -311,24 +319,27 @@ export async function reasonsForUser(
  * @param db - Drizzle handle.
  * @param gameId - Game the group is for.
  * @param viewerId - Caller, who is never suggested to themselves.
+ * @param scope - ROK-2352: holders of THIS group are skipped (a member of
+ *   another group may be suggested); null = any hand in the game.
  * @returns Ranked suggestions, capped at {@link LFG_SUGGESTIONS_LIMIT}.
  */
 export async function listSuggestions(
   db: LfgDb,
   gameId: number,
   viewerId: number,
+  scope: LfgGroupScope = null,
 ): Promise<LfgSuggestionDto[]> {
   const [played, interests, holders] = await Promise.all([
     fetchPlayedForGame(db, gameId, LFG_SUGGESTIONS_PLAYED_DAYS),
     fetchInterests(db, gameId),
-    fetchLiveHolders(db, gameId),
+    fetchLiveHolders(db, gameId, scope),
   ]);
   const candidates = collectCandidates(played, interests);
   for (const userId of [...candidates.keys()]) {
     if (userId === viewerId || holders.has(userId)) candidates.delete(userId);
   }
   const profiles = await fetchProfiles(db, [...candidates.keys()]);
-  const invited = await fetchInvited(db, gameId, profiles);
+  const invited = await fetchInvited(db, gameId, profiles, scope);
   const suggestions = profiles
     .map((p) =>
       toSuggestion(
