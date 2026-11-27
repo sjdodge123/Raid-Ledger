@@ -38,6 +38,7 @@ import { LfgGroupTop } from './lfg-group-top';
 import { LfgLoading, LfgNotFound, PendingPollCard } from './lfg-group-states';
 import { useLfgGrouping, type LfgGroupingContext } from '../../plugins/lfg-grouping';
 import { LfgGroupingHeader, LfgGroupingList, LfgGroupingPageSection } from './lfg-grouping-slots';
+import { LfgClearedHandNotices } from './lfg-cleared-hand-notices';
 import { groupPageTitle } from './lfg-group-title';
 import type { LfgJoinPick } from './LfgJoinControl';
 import { useLfgHubParam } from './lfg-hub-param';
@@ -161,6 +162,7 @@ function LfgGroupLoaded({ context, fallbackName, group }: { context: LfgGrouping
             <LfgTopBar onManage={() => overlays.open('manage')} canManage={group.playingNow == null} />
             <LfgGroupingHeader grouping={grouping} context={context} />
             <LfgHeader gameId={gameId} game={detail.data} fallbackName={fallbackName} title={groupPageTitle(grouping, context, group)} />
+            <LfgClearedHandNotices grouping={grouping} context={context} />
             <LfgGroupTop group={group} onJoin={actions.join} raiseHand={slots.raiseHand} isBusy={actions.isBusy}
                 onStartPoll={() => overlays.open('poll')} onStartNow={() => overlays.open('startnow')}
                 onParticipants={() => overlays.open('participants')} />

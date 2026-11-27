@@ -25,3 +25,14 @@ export async function getLfgGameGroups(
     const qs = includeCatalogue ? '?include=catalogue' : '';
     return fetchApi(`/lfg/${gameId}/groups${qs}`, {}, LfgGroupListResponseSchema);
 }
+
+/**
+ * ROK-2352 §3.2 — `POST /lfg/hands/notices/ack` (204): the cleared-hand
+ * notices the viewer has now seen, so they are not shown again. 1..50 ids.
+ */
+export async function ackLfgHandNotices(intentIds: number[]): Promise<void> {
+    await fetchApi<void>('/lfg/hands/notices/ack', {
+        method: 'POST',
+        body: JSON.stringify({ intentIds }),
+    });
+}
