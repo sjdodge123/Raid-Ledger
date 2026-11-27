@@ -136,7 +136,9 @@ export function trackAsync(instance: object): {
       return out;
     });
     restores.push(() =>
-      had ? Reflect.set(instance, name, original) : Reflect.deleteProperty(instance, name),
+      had
+        ? Reflect.set(instance, name, original)
+        : Reflect.deleteProperty(instance, name),
     );
   }
   return {
@@ -216,7 +218,12 @@ export async function probeTarget(
   deps: { db: WritableDb; gate: ActiveGate },
   payloads: readonly unknown[],
 ): Promise<ProbeResult> {
-  const out: ProbeResult = { key: t.key, effects: [], gateCalls: 0, errors: [] };
+  const out: ProbeResult = {
+    key: t.key,
+    effects: [],
+    gateCalls: 0,
+    errors: [],
+  };
   for (const payload of payloads) {
     const r = await probeOnce(t, deps, payload);
     out.effects.push(...r.effects);
@@ -252,7 +259,8 @@ export function targetProblems(
   }
   if (opts.requireGate && r.gateCalls === 0) {
     const last = r.errors.at(-1);
-    const why = last === undefined ? '' : ` (last throw: ${describeError(last)})`;
+    const why =
+      last === undefined ? '' : ` (last throw: ${describeError(last)})`;
     out.push(`${r.key}: never consulted isActive/getActiveSlugsSync${why}`);
   }
   return out;

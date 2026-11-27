@@ -132,7 +132,10 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
   ): Promise<string[]> {
     await deactivate(pluginSlugs);
     const deps = { db: testApp.db, gate: registry };
-    const payloads = [PROBE, ...pluginSlugs.map((slug) => ({ ...PROBE, slug }))];
+    const payloads = [
+      PROBE,
+      ...pluginSlugs.map((slug) => ({ ...PROBE, slug })),
+    ];
     const problems: string[] = [];
     for (const t of inv.targets) {
       const r = await probeTarget(t, deps, payloads);

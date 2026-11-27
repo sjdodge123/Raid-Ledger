@@ -150,7 +150,10 @@ export function pluginRoutes(app: INestApplication): PluginRoute[] {
  * plugin-guarded — each must show up among {@link pluginRoutes}' keys.
  */
 export function staticGuardedControllers(raw: readonly ScanSource[]): string[] {
-  const stripped = raw.map((s) => ({ file: s.file, text: stripComments(s.text) }));
+  const stripped = raw.map((s) => ({
+    file: s.file,
+    text: stripComments(s.text),
+  }));
   return scopedControllers(stripped)
     .filter(isPluginGuarded)
     .map((c) => c.key.split('#')[1] ?? '');
