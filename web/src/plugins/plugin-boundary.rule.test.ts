@@ -6,13 +6,12 @@
  */
 import { resolve } from 'node:path';
 import { RuleTester } from 'eslint';
-import { afterAll, describe, it } from 'vitest';
+import { describe, it } from 'vitest';
 import { createPluginBoundaryRule } from '../../../eslint-rules/plugin-boundary.mjs';
 
 RuleTester.describe = describe;
 RuleTester.it = it;
 RuleTester.itOnly = it.only;
-RuleTester.afterAll = afterAll;
 
 const WS = resolve(process.cwd(), '__plugin_boundary_ws__');
 const at = (rel: string) => `${WS}/${rel}`;
