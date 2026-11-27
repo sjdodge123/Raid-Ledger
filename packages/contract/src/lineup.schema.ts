@@ -134,7 +134,8 @@ export const CreateLineupSchema = z
 export type CreateLineupDto = z.infer<typeof CreateLineupSchema>;
 
 /**
- * Update a lineup's title and/or description (ROK-1063).
+ * Update a lineup's title, description and/or nomination target (ROK-1063,
+ * ROK-1710).
  * Title, when provided, must be 1-100 chars (trimmed non-empty).
  * Description may be null to clear.
  */
@@ -142,10 +143,32 @@ export const UpdateLineupMetadataSchema = z
     .object({
         title: z.string().trim().min(1).max(100).optional(),
         description: z.string().max(500).nullable().optional(),
+        /**
+         * ROK-1710: change the early-advance target after creation. Same
+         * bounds as `CreateLineupSchema.nominationTargetPct`; null turns the
+         * target off. Accepted only while the lineup is `building` (409
+         * otherwise). An explicit edit re-arms a lineup that an earlier
+         * `voting -> building` revert disarmed, and re-runs the create-time
+         * arm check, so a lineup already at/above the new target stays
+         * unarmed (no instant advance).
+         */
+        nominationTargetPct: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .nullable()
+            .optional(),
     })
     .refine(
-        (data) => data.title !== undefined || data.description !== undefined,
-        { message: 'At least one of title or description must be provided' },
+        (data) =>
+            data.title !== undefined ||
+            data.description !== undefined ||
+            data.nominationTargetPct !== undefined,
+        {
+            message:
+                'At least one of title, description or nominationTargetPct must be provided',
+        },
     );
 
 export type UpdateLineupMetadataDto = z.infer<typeof UpdateLineupMetadataSchema>;
@@ -366,7 +389,9 @@ export const LineupDetailResponseSchema = z.object({
     /**
      * ROK-1444: set when an operator reverted `voting -> building`. While
      * non-null the count target is permanently disarmed and the lineup
-     * advances only by deadline or manual action. Never auto-cleared.
+     * advances only by deadline or manual action. Never auto-cleared;
+     * cleared only by an explicit target edit (PATCH /lineups/:id/metadata,
+     * ROK-1710).
      */
     nominationTargetDisarmedAt: z.string().nullable(),
     /**

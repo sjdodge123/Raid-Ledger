@@ -35,7 +35,11 @@
  *                            short-circuit, because we run inside it.
  *   3. Sticky, not TTL'd   — `nomination_target_disarmed_at` is stamped on
  *                            `voting -> building` and NEVER auto-cleared, so a
- *                            reverted lineup stays manually controlled.
+ *                            reverted lineup stays manually controlled. Only an
+ *                            explicit target edit clears it (ROK-1710,
+ *                            `applyNominationTargetEdit`), and that edit re-runs
+ *                            the create-time arm check, so a standing condition
+ *                            still cannot fire.
  *
  * ## Moving denominator
  *
@@ -137,15 +141,42 @@ export async function evaluateNominationTarget(
  */
 async function armNominationTarget(db: Db, lineup: LineupRow): Promise<void> {
   if (lineup.nominationTargetBelowSeenAt != null) return;
+  await stampBelowSeen(db, lineup.id);
+}
+
+/** Id-based arm write; `IS NULL` in the WHERE keeps an earlier arm intact. */
+async function stampBelowSeen(db: Db, lineupId: number): Promise<void> {
   await db
     .update(schema.communityLineups)
     .set({ nominationTargetBelowSeenAt: new Date() })
     .where(
       and(
-        eq(schema.communityLineups.id, lineup.id),
+        eq(schema.communityLineups.id, lineupId),
         isNull(schema.communityLineups.nominationTargetBelowSeenAt),
       ),
     );
+}
+
+/**
+ * Arm the rising edge only when the lineup is currently BELOW `target`.
+ * Shared by creation and by an explicit target edit (ROK-1710): a lineup at
+ * or above the target is a standing condition and must stay unarmed.
+ */
+async function armIfBelowTarget(
+  db: Db,
+  lineupId: number,
+  target: number,
+): Promise<void> {
+  const rows = await db
+    .select({ id: schema.communityLineupEntries.id })
+    .from(schema.communityLineupEntries)
+    .where(eq(schema.communityLineupEntries.lineupId, lineupId));
+  // Read the cap fresh from the id: at creation the row passed in is the
+  // PRE-carry-over one, whose `nominationCapPeak` is still null.
+  const cap = await loadEffectiveNominationCapById(db, lineupId);
+  if (nominationTargetPercent(rows.length, cap) < target) {
+    await stampBelowSeen(db, lineupId);
+  }
 }
 
 /**
@@ -162,17 +193,53 @@ export async function armNominationTargetOnCreate(
 ): Promise<void> {
   const target = lineup.nominationTargetPct ?? null;
   if (target === null) return;
-  const rows = await db
-    .select({ id: schema.communityLineupEntries.id })
-    .from(schema.communityLineupEntries)
-    .where(eq(schema.communityLineupEntries.lineupId, lineup.id));
-  // Read the cap fresh from the id, not from `lineup`: this runs at creation
-  // with the PRE-carry-over row, whose `nominationCapPeak` is still null.
-  // `carryOverFromLastDecided` has since pinned it, and that — not this — is
-  // the ratchet point, or a deadline-only lineup (target null, early-returned
-  // above) would never pin at all.
-  const cap = await loadEffectiveNominationCapById(db, lineup.id);
-  if (nominationTargetPercent(rows.length, cap) < target) {
-    await armNominationTarget(db, lineup);
-  }
+  // `carryOverFromLastDecided` has already pinned the cap peak — that, not
+  // this, is the ratchet point, or a deadline-only lineup (target null,
+  // early-returned above) would never pin at all.
+  await armIfBelowTarget(db, lineup.id, target);
+}
+
+/**
+ * True when an edit to `nextPct` changes nothing: same target AND the lineup
+ * is not disarmed. Re-sending the current value on a disarmed lineup is the
+ * operator re-arming on purpose, so it is NOT a no-op (ROK-1710).
+ */
+export function isNominationTargetEditNoop(
+  lineup: Pick<LineupRow, 'nominationTargetPct' | 'nominationTargetDisarmedAt'>,
+  nextPct: number | null,
+): boolean {
+  return (
+    nextPct === (lineup.nominationTargetPct ?? null) &&
+    lineup.nominationTargetDisarmedAt == null
+  );
+}
+
+/**
+ * Apply an explicit target edit (ROK-1710 re-arm rule).
+ *
+ * One UPDATE writes the new pct and clears BOTH stamps — the sticky disarm and
+ * the rising-edge arm — then the create-time arm check runs against the new
+ * target. Consequences: a lineup below the new target arms and opens voting on
+ * the next crossing; one already at/above it stays unarmed (standing
+ * condition, no instant advance); null turns the target off cleanly. The
+ * ROK-1253 revert pause (`auto_advance_paused_at`) is untouched, so a
+ * just-reverted lineup still cannot auto-advance while it lasts. The caller
+ * owns the `building`-only status gate.
+ */
+export async function applyNominationTargetEdit(
+  db: Db,
+  lineup: LineupRow,
+  nextPct: number | null,
+): Promise<void> {
+  if (isNominationTargetEditNoop(lineup, nextPct)) return;
+  await db
+    .update(schema.communityLineups)
+    .set({
+      nominationTargetPct: nextPct,
+      nominationTargetDisarmedAt: null,
+      nominationTargetBelowSeenAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.communityLineups.id, lineup.id));
+  if (nextPct !== null) await armIfBelowTarget(db, lineup.id, nextPct);
 }
