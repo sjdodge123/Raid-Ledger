@@ -333,15 +333,7 @@ export class LineupsService {
     dto: UpdateLineupMetadataDto,
     caller: CallerIdentity,
   ): Promise<LineupDetailResponseDto> {
-    return runMetadataUpdate(
-      this.db,
-      this.lineupNotifications,
-      this.phaseQueue,
-      this.logger,
-      id,
-      dto,
-      caller,
-    );
+    return runMetadataUpdate(this.autoAdvanceDeps(), id, dto, caller);
   }
 
   /**

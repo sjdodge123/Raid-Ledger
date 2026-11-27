@@ -121,6 +121,14 @@ export async function authorizeAndPersistMetadata(
   });
 }
 
+/** What `runMetadataUpdate` needs; the service's auto-advance deps fit. */
+export interface MetadataUpdateDeps {
+  db: Db;
+  lineupNotifications: LineupNotificationService;
+  phaseQueue: Pick<LineupPhaseQueueService, 'cancelGraceAdvance'>;
+  logger: Logger;
+}
+
 /**
  * High-level metadata update: authorise, persist, fire notification refresh,
  * and return the fresh detail payload. A target edit retired the grace claim
@@ -129,14 +137,12 @@ export async function authorizeAndPersistMetadata(
  * failure — the surviving job then finds no claim and does nothing.
  */
 export async function runMetadataUpdate(
-  db: Db,
-  lineupNotifications: LineupNotificationService,
-  phaseQueue: Pick<LineupPhaseQueueService, 'cancelGraceAdvance'>,
-  logger: Logger,
+  deps: MetadataUpdateDeps,
   id: number,
   dto: UpdateLineupMetadataDto,
   caller: CallerIdentity,
 ): Promise<LineupDetailResponseDto> {
+  const { db, lineupNotifications, phaseQueue, logger } = deps;
   const targetEdited = await authorizeAndPersistMetadata(db, id, dto, caller);
   if (targetEdited) await phaseQueue.cancelGraceAdvance(id);
   const detail = await buildDetailResponse(db, id, caller.id);

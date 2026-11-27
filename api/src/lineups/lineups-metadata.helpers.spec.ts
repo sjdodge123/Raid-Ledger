@@ -207,11 +207,9 @@ describe('runMetadataUpdate grace job hygiene (ROK-1710 Codex P2)', () => {
   async function run(dto: { nominationTargetPct?: number | null }) {
     const { db } = fakeDb(lineup({ status: 'building' }));
     const phaseQueue = { cancelGraceAdvance: jest.fn() };
+    const logger = { warn: jest.fn() } as never;
     await runMetadataUpdate(
-      db,
-      {} as never,
-      phaseQueue,
-      { warn: jest.fn() } as never,
+      { db, lineupNotifications: {} as never, phaseQueue, logger },
       1,
       dto,
       { id: CREATOR_ID, role: 'member' },
