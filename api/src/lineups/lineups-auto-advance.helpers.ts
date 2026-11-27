@@ -31,6 +31,7 @@ import { announceTieDetected } from './tiebreaker/tie-notify.helpers';
 import type { TieResult } from './tiebreaker/tiebreaker-detect.helpers';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { runStatusTransition } from './lineups-transition.helpers';
+import { advanceGuardFrom } from './lineups-advance-guard.helpers';
 import {
   checkBuildingQuorum,
   checkVotingQuorum,
@@ -202,7 +203,14 @@ async function scheduleOrAdvance(
       }
       return;
     }
-    await runStatusTransition(deps, lineup.id, { status: nextStatus });
+    // ROK-1710: pinned to the target state judged on `lineup`.
+    await runStatusTransition(
+      deps,
+      lineup.id,
+      { status: nextStatus },
+      null,
+      advanceGuardFrom(lineup),
+    );
     return;
   }
   const pendingAdvanceAt = await claimGraceWindow(

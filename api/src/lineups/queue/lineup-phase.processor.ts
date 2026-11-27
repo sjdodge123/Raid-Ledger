@@ -40,6 +40,7 @@ import { ActivityLogService } from '../../activity-log/activity-log.service';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { isPauseActive } from '../lineups-auto-advance.helpers';
 import { runStatusTransition } from '../lineups-transition.helpers';
+import { advanceGuardFrom } from '../lineups-advance-guard.helpers';
 import {
   isExtendedWindowStillOpen,
   runBuildingDeadlineGuard,
@@ -274,10 +275,15 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     const targetStatus: LineupStatus =
       lineup.status === 'building' ? 'voting' : 'decided';
     try {
-      await runStatusTransition(this.buildTransitionDeps(), lineupId, {
-        status: targetStatus,
-        ...(decidedGameId ? { decidedGameId } : {}),
-      });
+      // ROK-1710: pinned to the target + grace claim judged on `lineup`,
+      // so a target edit that committed since cannot be overridden.
+      await runStatusTransition(
+        this.buildTransitionDeps(),
+        lineupId,
+        { status: targetStatus, ...(decidedGameId ? { decidedGameId } : {}) },
+        null,
+        advanceGuardFrom(lineup),
+      );
       this.logger.log(`Lineup ${lineupId} grace-advanced to '${targetStatus}'`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

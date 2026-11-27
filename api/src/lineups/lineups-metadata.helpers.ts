@@ -17,6 +17,7 @@ import type {
 import * as schema from '../drizzle/schema';
 import { buildDetailResponse } from './lineups-response.helpers';
 import type { LineupNotificationService } from './lineup-notification.service';
+import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { fireLineupMetadataRefresh } from './lineups-notify-hooks.helpers';
 import { applyNominationTargetEdit } from './quorum/nomination-target.helpers';
 import type { CallerIdentity } from './lineups.service';
@@ -74,12 +75,15 @@ function lockLineupForEdit(tx: Tx, id: number) {
     .for('no key update');
 }
 
-/** Title/description write plus the target edit, on the locked row. */
+/**
+ * Title/description write plus the target edit, on the locked row. True when
+ * the target edit wrote (and so retired any grace claim).
+ */
 async function persistMetadata(
   tx: Tx,
   lineup: LineupRow,
   dto: UpdateLineupMetadataDto,
-): Promise<void> {
+): Promise<boolean> {
   const values: Record<string, unknown> = { updatedAt: new Date() };
   if (dto.title !== undefined) values.title = dto.title;
   if (dto.description !== undefined) values.description = dto.description;
@@ -87,9 +91,8 @@ async function persistMetadata(
     .update(schema.communityLineups)
     .set(values)
     .where(eq(schema.communityLineups.id, lineup.id));
-  if (dto.nominationTargetPct !== undefined) {
-    await applyNominationTargetEdit(tx, lineup, dto.nominationTargetPct);
-  }
+  if (dto.nominationTargetPct === undefined) return false;
+  return applyNominationTargetEdit(tx, lineup, dto.nominationTargetPct);
 }
 
 /**
@@ -103,33 +106,39 @@ async function persistMetadata(
  *   rolls the title back too.
  * A target edit goes through `applyNominationTargetEdit`, which owns the
  * re-arm rule. Always bumps `updated_at` to match other lineup updates.
+ * Resolves true when the target edit wrote (the grace claim is retired).
  */
 export async function authorizeAndPersistMetadata(
   db: Db,
   id: number,
   dto: UpdateLineupMetadataDto,
   caller: CallerIdentity,
-): Promise<void> {
-  await db.transaction(async (tx) => {
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
     const [lineup] = await lockLineupForEdit(tx, id);
     assertMetadataEditable(lineup, dto, caller);
-    await persistMetadata(tx, lineup, dto);
+    return persistMetadata(tx, lineup, dto);
   });
 }
 
 /**
  * High-level metadata update: authorise, persist, fire notification refresh,
- * and return the fresh detail payload.
+ * and return the fresh detail payload. A target edit retired the grace claim
+ * in its transaction; the queued grace job is removed only AFTER commit (a
+ * queue call cannot roll back), and `cancelGraceAdvance` swallows its own
+ * failure — the surviving job then finds no claim and does nothing.
  */
 export async function runMetadataUpdate(
   db: Db,
   lineupNotifications: LineupNotificationService,
+  phaseQueue: Pick<LineupPhaseQueueService, 'cancelGraceAdvance'>,
   logger: Logger,
   id: number,
   dto: UpdateLineupMetadataDto,
   caller: CallerIdentity,
 ): Promise<LineupDetailResponseDto> {
-  await authorizeAndPersistMetadata(db, id, dto, caller);
+  const targetEdited = await authorizeAndPersistMetadata(db, id, dto, caller);
+  if (targetEdited) await phaseQueue.cancelGraceAdvance(id);
   const detail = await buildDetailResponse(db, id, caller.id);
   fireLineupMetadataRefresh(lineupNotifications, logger, {
     id: detail.id,

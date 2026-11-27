@@ -254,21 +254,29 @@ export function isNominationTargetEditNoop(
  * just-reverted lineup still cannot auto-advance while it lasts. The caller
  * owns the `building`-only status gate and runs this inside the transaction
  * that holds the lineup row lock (`authorizeAndPersistMetadata`).
+ *
+ * The same UPDATE retires any grace claim (`pending_advance_at`) judged under
+ * the old target (Codex P2): a later crossing of the NEW target claims a full
+ * window of its own instead of advancing at the old deadline. Returns true
+ * when it wrote, so the caller cancels the queued grace job after commit; a
+ * job that survives finds no claim and is a no-op.
  */
 export async function applyNominationTargetEdit(
   db: DbOrTx,
   lineup: LineupRow,
   nextPct: number | null,
-): Promise<void> {
-  if (isNominationTargetEditNoop(lineup, nextPct)) return;
+): Promise<boolean> {
+  if (isNominationTargetEditNoop(lineup, nextPct)) return false;
   await db
     .update(schema.communityLineups)
     .set({
       nominationTargetPct: nextPct,
       nominationTargetDisarmedAt: null,
       nominationTargetBelowSeenAt: null,
+      pendingAdvanceAt: null,
       updatedAt: new Date(),
     })
     .where(eq(schema.communityLineups.id, lineup.id));
   if (nextPct !== null) await armIfBelowTarget(db, lineup.id, nextPct);
+  return true;
 }

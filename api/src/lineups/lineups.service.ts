@@ -336,6 +336,7 @@ export class LineupsService {
     return runMetadataUpdate(
       this.db,
       this.lineupNotifications,
+      this.phaseQueue,
       this.logger,
       id,
       dto,
