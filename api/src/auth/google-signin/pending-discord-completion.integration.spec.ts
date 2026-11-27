@@ -177,6 +177,26 @@ describe('Google pending-link for a parked Discord identity (M2a)', () => {
     expect(await discordIdOf(other.id)).toBe(SNOWFLAKE);
   });
 
+  // Codex P2: an `unlinked:` row is still that other user's Discord — the
+  // relink path would hand it back to them, so it must not move here.
+  it('taken: an unlinked: row for the snowflake appeared after parking', async () => {
+    const owner = await googleOwner('pl-target-unlinked');
+    const parked = await parkDiscord();
+    let other: { id: number } | undefined;
+    const { location, cookies } = await pendingLink(parked, async () => {
+      other = await insertUser(testApp, {
+        username: 'pl-other-unlinked',
+        discordId: `unlinked:${SNOWFLAKE}`,
+      });
+    });
+    const otherId = must(other, 'unlinked owner').id;
+    expect(location.pathname).toBe('/auth/first-time');
+    expect(location.searchParams.get('error')).toBe('taken');
+    expect(cookies.has(REFRESH_COOKIE)).toBe(false);
+    expect(await discordIdOf(owner.id)).toBeNull();
+    expect(await discordIdOf(otherId)).toBe(`unlinked:${SNOWFLAKE}`);
+  });
+
   it('not_found: Google finds nobody, the parked record is kept', async () => {
     const before = await userCount(testApp);
     const parked = await parkDiscord();

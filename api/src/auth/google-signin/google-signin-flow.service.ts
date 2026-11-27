@@ -221,6 +221,15 @@ export class GoogleSigninFlowService {
     pending: { subject: string; displayName: string; avatar: string | null },
     sub: string,
   ): Promise<string> {
+    // Codex P2: the snowflake may have moved onto another user since it was
+    // parked — incl. an `unlinked:` row, which `linkDiscord`'s exact-match
+    // check misses. linkDiscord holds no lock/tx, so re-check right before it.
+    const owner = await this.usersService.findByDiscordIdIncludingUnlinked(
+      pending.subject,
+    );
+    if (owner && owner.id !== user.id) {
+      return `${base}/auth/first-time?error=taken`;
+    }
     try {
       await this.usersService.linkDiscord(
         user.id,
