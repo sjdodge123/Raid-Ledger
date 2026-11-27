@@ -133,6 +133,9 @@ describe('ROK-2369 deactivate inventory', () => {
 
   it('pins the gateway callbacks the integration spec cannot fire', () => {
     const raw = loadRawSources(path.resolve(__dirname, '../..'));
-    expect(checkedHandlerTargets(raw, new Map()).skipped).toEqual([]);
+    // A new gateway callback lands here: give it its own unit coverage.
+    expect(checkedHandlerTargets(raw, new Map()).skipped).toEqual([
+      'plugins/valheim/armory/identity/valheim-claim-suggest.listener.ts#interactionCreate[0]',
+    ]);
   });
 });
