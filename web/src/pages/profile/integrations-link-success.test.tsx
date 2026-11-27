@@ -99,6 +99,28 @@ describe('Discord link-success landings (ROK-1630)', () => {
     });
 });
 
+describe('Google link landings (ROK-2371)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('provider=google success toasts Google, not Discord, and refetches', async () => {
+        await renderAt('/profile/integrations?linked=success&provider=google');
+
+        await waitFor(() => expect(window.location.search).toBe(''));
+        expect(toast.success).toHaveBeenCalledWith('Google account linked successfully!');
+        expect(toast.success).not.toHaveBeenCalledWith('Discord account linked successfully!');
+        expect(refetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('provider=google error toasts the server message', async () => {
+        const message = 'This Google account is already linked to another Raid Ledger account';
+        await renderAt(`/profile/integrations?linked=error&provider=google&message=${encodeURIComponent(message)}`);
+
+        await waitFor(() => expect(window.location.search).toBe(''));
+        expect(toast.error).toHaveBeenCalledWith(message);
+        expect(toast.success).not.toHaveBeenCalled();
+    });
+});
+
 describe('Steam link-success landing at the default /profile returnTo (ROK-1630)', () => {
     beforeEach(() => vi.clearAllMocks());
 

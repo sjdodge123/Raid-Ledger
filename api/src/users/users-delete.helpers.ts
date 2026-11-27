@@ -268,6 +268,12 @@ export const REASSIGN_TABLES: readonly PgTable[] = [
  */
 export const KEEP_TABLES: readonly PgTable[] = [
   schema.adminActions,
+  // ROK-2371: a Google sign-in identity (user_id CASCADE). Kept on ban+wipe so
+  // the banned `sub` still resolves to the banned row and is REFUSED — the
+  // Google twin of `users.discord_id` staying on a banned user. Wiping it would
+  // make the `sub` unknown and let it create a fresh, unbanned account. A hard
+  // delete (self or admin) removes the users row, so the CASCADE drops it.
+  schema.userAuthIdentities,
   schema.activityLog,
   schema.aiRequestLogs,
   schema.adHocParticipants,

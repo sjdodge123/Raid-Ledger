@@ -9,6 +9,7 @@
 import type { JSX } from 'react';
 import { ArrowRightIcon, KeyIcon } from '@heroicons/react/24/outline';
 import { DiscordIcon } from '../../components/icons/DiscordIcon';
+import { GoogleIcon } from '../../components/icons/GoogleIcon';
 import { Pill } from '../../components/hub/hub-bits';
 import { AvatarWithFallback } from '../../components/shared/AvatarWithFallback';
 import { Button } from '../../components/ui/button';
@@ -30,10 +31,12 @@ const METHOD_LABEL: Record<LastSigninMethod, string> = {
     discord: 'Discord',
     'discord-app-code': 'Discord app code',
     password: 'Username and password',
+    google: 'Google',
 };
 
 function MethodIcon({ method }: { method: LastSigninMethod }): JSX.Element {
     if (method === 'password') return <KeyIcon className="h-4 w-4 shrink-0" aria-hidden="true" />;
+    if (method === 'google') return <GoogleIcon className="h-4 w-4 shrink-0" aria-hidden="true" />;
     return <DiscordIcon className="h-4 w-4 shrink-0" aria-hidden="true" />;
 }
 

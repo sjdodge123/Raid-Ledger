@@ -20,6 +20,7 @@ import { SignupsService } from '../events/signups.service';
 import type { Request, Response } from 'express';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { CharactersService } from '../characters/characters.service';
+import { SigninMethodsService } from '../users/signin-methods.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import type Redis from 'ioredis';
 import { RedeemIntentSchema } from '@raid-ledger/contract';
@@ -42,6 +43,7 @@ export class AuthController {
     private preferencesService: PreferencesService,
     private signupsService: SignupsService,
     private charactersService: CharactersService,
+    private signinMethodsService: SigninMethodsService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
@@ -89,12 +91,15 @@ export class AuthController {
     ]);
     if (!user) throw new UnauthorizedException('User no longer exists');
 
-    const resolvedAvatarUrl = await this.resolveAvatarUrl(
-      req.user.id,
-      user,
-      avatarPref,
-    );
-    return this.buildProfileResponse(user, avatarPref, resolvedAvatarUrl);
+    const [resolvedAvatarUrl, signinMethods] = await Promise.all([
+      this.resolveAvatarUrl(req.user.id, user, avatarPref),
+      this.signinMethodsService.forUser(user),
+    ]);
+    return {
+      ...this.buildProfileResponse(user, avatarPref, resolvedAvatarUrl),
+      // ROK-2371: owner-only — this route only ever answers for req.user.
+      signinMethods,
+    };
   }
 
   /** Resolve avatar URL from preference type. */

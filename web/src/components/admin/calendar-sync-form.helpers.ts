@@ -5,6 +5,7 @@
  * empty string clears it. A secret input is never prefilled, so an empty
  * secret box means "untouched" — the field is omitted — unless the admin
  * explicitly removed the saved secret, which sends `''`.
+ * ROK-2371: the Google sign-in toggle is sent only when it changed.
  */
 import type {
     AdminCalendarSyncSettings,
@@ -25,6 +26,8 @@ export interface ProviderDraft {
 /** The whole form: the kill switch and both providers save through one PUT. */
 export interface CalendarSyncDraft {
     enabled: boolean;
+    /** ROK-2371: "Allow sign-in with Google" — rides the same PUT. */
+    googleSigninEnabled: boolean;
     google: ProviderDraft;
     microsoft: ProviderDraft;
 }
@@ -37,6 +40,7 @@ function providerDraft(clientId: string | null): ProviderDraft {
 export function draftFromSettings(settings: AdminCalendarSyncSettings): CalendarSyncDraft {
     return {
         enabled: settings.enabled,
+        googleSigninEnabled: settings.googleSigninEnabled ?? false,
         google: providerDraft(settings.google.clientId),
         microsoft: providerDraft(settings.microsoft.clientId),
     };
@@ -60,6 +64,9 @@ export function buildCalendarSyncUpdate(
 ): UpdateAdminCalendarSyncSettings {
     const body: UpdateAdminCalendarSyncSettings = {};
     if (draft.enabled !== settings.enabled) body.enabled = draft.enabled;
+    if (draft.googleSigninEnabled !== (settings.googleSigninEnabled ?? false)) {
+        body.googleSigninEnabled = draft.googleSigninEnabled;
+    }
     for (const provider of CALENDAR_SYNC_FORM_PROVIDERS) {
         const update = buildProviderUpdate(draft[provider], settings[provider].clientId);
         if (update) body[provider] = update;
@@ -75,6 +82,7 @@ export function buildCalendarSyncUpdate(
 export function settleDraftAfterSave(draft: CalendarSyncDraft): CalendarSyncDraft {
     return {
         enabled: draft.enabled,
+        googleSigninEnabled: draft.googleSigninEnabled,
         google: providerDraft(draft.google.clientId.trim()),
         microsoft: providerDraft(draft.microsoft.clientId.trim()),
     };

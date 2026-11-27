@@ -11,7 +11,8 @@ import type { JSX, ReactNode } from 'react';
 import { useId, useState } from 'react';
 import { Button } from '../../components/ui/button';
 
-export type SignInSectionId = 'discord-app-code' | 'password';
+/** ROK-2371: `'other-providers'` lists any `placement: 'alternate'` login method. */
+export type SignInSectionId = 'discord-app-code' | 'password' | 'other-providers';
 
 /** One workaround inside the disclosure. */
 export interface SignInSection {

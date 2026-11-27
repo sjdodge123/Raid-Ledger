@@ -9,7 +9,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
 import { renderWithProviders } from '../test/render-helpers';
 import { LAST_SIGNIN_KEY } from '../lib/last-signin';
-import { DISCORD_OAUTH_AT_KEY } from '../lib/api/auth-storage-keys';
+import { AUTH_METHOD_KEY, DISCORD_OAUTH_AT_KEY } from '../lib/api/auth-storage-keys';
 import { AuthSuccessPage } from './auth-success-page';
 
 const login = vi.hoisted(() => vi.fn());
@@ -46,5 +46,16 @@ describe('AuthSuccessPage — ROK-2370 sign-in markers', () => {
         await waitFor(() => expect(localStorage.getItem(LAST_SIGNIN_KEY)).not.toBeNull());
         expect(Number(localStorage.getItem(DISCORD_OAUTH_AT_KEY)), 'rl_discord_oauth_at must be now')
             .toBeGreaterThanOrEqual(before);
+    });
+
+    it('ROK-2371: via=google records a Google marker and auth method, never the Discord OAuth stamp', async () => {
+        renderWithProviders(<AuthSuccessPage />, { initialEntries: ['/auth/success?code=rok2371g&via=google'] });
+
+        await waitFor(() => expect(localStorage.getItem(LAST_SIGNIN_KEY)).not.toBeNull());
+        const marker = JSON.parse(localStorage.getItem(LAST_SIGNIN_KEY) ?? '{}') as Record<string, unknown>;
+        expect(marker.method).toBe('google');
+        expect(marker.name).toBe('Returning Raider');
+        expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('google');
+        expect(localStorage.getItem(DISCORD_OAUTH_AT_KEY), 'a Google sign-in must not arm the Discord bounce').toBeNull();
     });
 });
