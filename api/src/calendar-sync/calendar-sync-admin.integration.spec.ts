@@ -64,6 +64,10 @@ function expectedRedirectUris(base: string) {
   return {
     google: `${base}/api/calendar-sync/oauth/google/callback`,
     microsoft: `${base}/api/calendar-sync/oauth/microsoft/callback`,
+    googleSignin: [
+      `${base}/api/auth/google/callback`,
+      `${base}/api/auth/google/link/callback`,
+    ],
   };
 }
 
@@ -124,6 +128,7 @@ describe('GET default', () => {
       google: { clientId: null, hasSecret: false },
       microsoft: { clientId: null, hasSecret: false },
       redirectUris: expectedRedirectUris(envClientUrl()),
+      googleSigninEnabled: false,
     });
     expect(() => AdminCalendarSyncSettingsSchema.parse(res.body)).not.toThrow();
   });
@@ -144,6 +149,7 @@ describe('PUT then GET round-trip', () => {
       google: { clientId: CLIENT_ID, hasSecret: true },
       microsoft: { clientId: null, hasSecret: false },
       redirectUris: expectedRedirectUris(envClientUrl()),
+      googleSigninEnabled: false,
     });
     // PUT answers with the same fresh read shape.
     expect(put.body).toEqual(get.body);
