@@ -27,7 +27,7 @@ import {
  * Both run on the caller's tx, AFTER `deactivated_at` is written.
  */
 
-const { users, guilds, guildMembers, guildEditors, characters } = schema;
+const { guilds, guildMembers, guildEditors, characters } = schema;
 
 /** Call after `deactivated_at` is set (same tx). */
 export async function auditOwnerDeactivated(
@@ -40,25 +40,6 @@ export async function auditOwnerDeactivated(
   await lockReleasedRows(tx, held);
   // ROK-2175: the owner's own both-ids character re-winning R is no transfer.
   await auditGuidReleases(tx, held, actorId, sql`clock_timestamp()`, userId);
-}
-
-/**
- * The user's `deactivated_at`, row-locked, as Postgres text; undefined = no
- * such user. Text, not a JS Date: the column is a naive `timestamp` written by
- * `NOW()` in the session time zone, and is compared to timestamptz grants in
- * SQL with the same session cast (review r2 M2) — a JS round-trip reads it as
- * UTC and is wrong whenever the session time zone is not UTC.
- */
-export async function lockDeactivatedAt(
-  tx: AddonImportTx,
-  userId: number,
-): Promise<string | null | undefined> {
-  const [row] = await tx
-    .select({ at: sql<string | null>`${users.deactivatedAt}::text` })
-    .from(users)
-    .where(eq(users.id, userId))
-    .for('update');
-  return row ? row.at : undefined;
 }
 
 /** A member grant on the row made after `since` (naive timestamp text). */
@@ -96,7 +77,7 @@ async function lockWonRows(tx: AddonImportTx, userId: number): Promise<void> {
 
 /**
  * Call after `deactivated_at` is cleared (same tx), with the value it had
- * ({@link lockDeactivatedAt}'s text).
+ * (core `lockDeactivatedAt`'s text, `users/users-deactivated-at.helpers.ts`).
  * @returns audits written.
  */
 export async function auditOwnerReactivated(

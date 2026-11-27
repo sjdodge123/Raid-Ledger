@@ -1430,7 +1430,7 @@ Still open, filed as follow-ups rather than fixed here:
   + its two legacy specs in `scripts/push-gate.spec.mjs`, and drop this entry.
 ### 2026-09-14 — feat/rok-1545-terminal-poll-states (surfaced during ROK-1545 review)
 
-- **med** — `web/src/components/lineups/cycle-4/SchedulingTerminalBanner.tsx:54-80` — no
+- ~~**med** — `web/src/components/lineups/cycle-4/SchedulingTerminalBanner.tsx:54-80` — no
   `linkedEventCancelled` handling. A poll that locked in and whose event was later
   CANCELLED still renders the `locked_in` banner ("Locked in" + the winning time) and
   links to the cancelled event, so the poll page asserts a plan that no longer exists.
@@ -1440,7 +1440,7 @@ Still open, filed as follow-ups rather than fixed here:
   + lineup rows and never looks at `events.status`.
   *Suggested:* join the linked event's status into the poll-page/embed queries and add a
   fifth lifecycle value (or a `linkedEventCancelled` flag) so the banner can say "the
-  locked-in event was cancelled" and drop the link.
+  locked-in event was cancelled" and drop the link.~~ **FIXED 2026-11-27** — ROK-2330 #2369
 
 - **low** — `api/src/lineups/scheduling/scheduling-poll-page.helpers.ts:95-108` — three
   sequential round trips in `assembleSchedulePollResponse`: `findScheduleVotes`, then
@@ -4598,7 +4598,7 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
   Suggested: read the member's `channelPrefs` for the invite type in `sendMemberInviteDm` (or its listener) and return early when the Discord switch is off.
 ### 2026-11-23 — fix/rok-2298-blocked-discord-signups (surfaced during the ROK-2298 review)
 
-- `med` — `api/src/guilds/forum/discord/hub-forum-discord-inbound.writes.ts:77` `userIdForDiscord` still credits a blocked (banned/deactivated) user's Discord forum posts to their Raid Ledger account (used by `inbound.ingest.ts:298`, `subject-gate.facts.ts:136/152`). Pre-existing, out of ROK-2298 scope (signup paths only). Suggested: resolve through the 3-way `discord-account-status` lookup and store blocked authors as unlinked.
+- ~~`med` — `api/src/guilds/forum/discord/hub-forum-discord-inbound.writes.ts:77` `userIdForDiscord` still credits a blocked (banned/deactivated) user's Discord forum posts to their Raid Ledger account (used by `inbound.ingest.ts:298`, `subject-gate.facts.ts:136/152`). Pre-existing, out of ROK-2298 scope (signup paths only). Suggested: resolve through the 3-way `discord-account-status` lookup and store blocked authors as unlinked.~~ **FIXED 2026-11-27** — ROK-2328 #2369
 
 ### 2026-11-23 — fix/rok-2299-day-view-card-clip (surfaced during the ROK-2299 e2e root cause)
 
@@ -4735,3 +4735,7 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 - **nit** `api/src/guilds/forum/hub-forum.mappers.ts:60` (`forumPerson`) — the api still returns a blocked author's real `displayName`/`avatarUrl`; the web hides them (ROK-2328 is a display rule). API-side redaction would need its own operator ruling and story, done in the forum mapper, not in the shared `toPerson` (Discord webhook voice and leader posts use it). Suggested: only if the operator rules for it.
 ### 2026-11-27 — fix/forum-reconcile-spec-isolation (surfaced during the ROK-2330 verify lane, overnight relay 9)
 - **low** `web/src/pages/scheduling-poll-page.tsx:86` — a locked-in poll that has an `eventId` reads "The event has been rescheduled." even on its first lock-in, when nothing was rescheduled. Pre-existing: reproduced on main a3d9cffac (not touched by #2369). Suggested: say "rescheduled" only when the event's time changed after the lock-in; otherwise "This poll locked in <time>."
+### 2026-11-27 — rok-2364-user-lifecycle (surfaced during ROK-2364 review)
+
+- **low** `api/plugin-boundary-allowlist.json` — 5 api specifiers stay allowlisted after ROK-2364 (target was 93, pin is 99): `src/events/invite.helpers.ts`, `src/characters/characters-import-game.helpers.ts`, `src/games-lookup/seed-games.data.ts` → `wow-common/blizzard.constants` + `minecraft/minecraft-bedrock-game`, `src/discord-bot/hub-welcome/hub-welcome.service.ts` → valheim, and `src/canary/blizzard-forever.canary.ts`. Routing them through a plugin `index.ts` either creates import cycles or drags the Nest module graph (`*Module`, `PluginRegistryService`, decorators) into the container boot seed script (`api/scripts/seed-games.ts`, whose failure `docker-entrypoint.sh:65` swallows) or the standalone canary. Suggested: split each plugin's leaf constants into a dependency-free `constants.ts` public entry (allowed by the boundary rule) and point these importers at it.
+- **low** `api/src/queue/queue-registry.ts:32` — now imports the core plugin index (`../plugins/core`), whose transitive graph is ~1,650 source files (incl. `CorePluginModule`, Sentry) versus a 1-file leaf before; importers are test-only (`common/testing/integration-helpers.ts`, `queue-registry.spec.ts`), so the cost is a slower unit spec and an import-cycle surface in test infra. Suggested: import the queue-name constant from a leaf constants entry (same fix as the bullet above).
