@@ -33,6 +33,7 @@ export type PluginSlotName =
     | 'character-create:inline-import'
     /** WoW armory import on the invite page's character step (ROK-2357); context `{ gameVariant, defaultRealm, onSuccess }`. */
     | 'invite:character-import'
+    /** Instance browser on the event form (ROK-2359: core passes the game slug, the plugin derives its variant); context `{ gameSlug, contentType, selectedInstances, onInstancesChange }`. */
     | 'event-create:content-browser'
     /** Core "Hub" picker on the event form (ROK-2071, was the WoW Guild field of ROK-1787); context `{ gameId, guildId, onGuildChange, dropUnlisted }`. */
     | 'event-create:hub-field'
@@ -42,6 +43,10 @@ export type PluginSlotName =
     | 'admin-settings:plugin-content'
     | 'profile:character-actions'
     | 'character-card:badges'
+    /** WoW class icon on core character/roster cards (ROK-2359); context `{ characterClass, iconClassName }`. */
+    | 'character-card:class-icon'
+    /** Profession pills in a core card's meta row (ROK-2359); context `{ professions, separator? }`. */
+    | 'character-card:professions'
     /** Desktop header links after the core NAV_LINKS (ROK-1785); context `{ pathname }`. Signed-in only. */
     | 'nav:primary-links'
     /** First block of the phone More drawer (ROK-1785); context `{ onClose }`. Signed-in only. */
