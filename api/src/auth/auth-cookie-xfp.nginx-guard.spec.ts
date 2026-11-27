@@ -21,7 +21,7 @@ const EXEMPT = ['location ~ ^/i/([^/]+)$ {'];
 /** Each `location … { … }` block, braces matched (nested `if` included). */
 function locationBlocks(conf: string): string[] {
   const blocks: string[] = [];
-  const re = /^\s*location\b[^{]*\{/gm;
+  const re = /^[ \t]*location\b[^{]*\{/gm;
   for (let m = re.exec(conf); m; m = re.exec(conf)) {
     let depth = 0;
     let end = m.index;
