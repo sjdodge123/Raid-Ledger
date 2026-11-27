@@ -51,6 +51,9 @@ const CONTROLLER_ALLOWLIST: ScopeAllowlist = {
   // Sign-in is core: Discord login/link stays up with the plugin off (operator ruling 2026-11-27).
   'plugins/discord/discord-auth.controller.ts#DiscordAuthController':
     'core-auth',
+  // ROK-2371 D1a: completes a parked Google identity with a Discord sign-in — core sign-in too.
+  'plugins/discord/discord-pending-link.controller.ts#DiscordPendingLinkController':
+    'core-auth',
   // DEMO_MODE fixture seeders (each checks DEMO_MODE, JWT + admin).
   'plugins/pelican/pelican-demo-seed.controller.ts#PelicanDemoSeedController':
     DEMO,
