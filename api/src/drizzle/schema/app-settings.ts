@@ -88,6 +88,11 @@ export const SETTING_KEYS = {
   /** ROK-1591: Google OAuth client for Calendar Sync (secret encrypted at rest). */
   CALENDAR_GOOGLE_CLIENT_ID: 'calendar_google_client_id',
   CALENDAR_GOOGLE_CLIENT_SECRET: 'calendar_google_client_secret',
+  /**
+   * ROK-2371: "Allow sign-in with Google" — reuses the Calendar Sync Google
+   * client. Not secret. Unset ⇒ off.
+   */
+  AUTH_GOOGLE_SIGNIN_ENABLED: 'auth_google_signin_enabled',
   /** ROK-1591: Microsoft OAuth client for Calendar Sync (secret encrypted at rest). */
   CALENDAR_MICROSOFT_CLIENT_ID: 'calendar_microsoft_client_id',
   CALENDAR_MICROSOFT_CLIENT_SECRET: 'calendar_microsoft_client_secret',

@@ -50,6 +50,11 @@ export type { WipeTarget };
 export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   { table: schema.sessions, column: schema.sessions.userId },
   { table: schema.localCredentials, column: schema.localCredentials.userId },
+  // ROK-2371: Google sign-in identities (user_id CASCADE) — personal.
+  {
+    table: schema.userAuthIdentities,
+    column: schema.userAuthIdentities.userId,
+  },
   { table: schema.availability, column: schema.availability.userId },
   { table: schema.eventTemplates, column: schema.eventTemplates.userId },
   { table: schema.refreshTokens, column: schema.refreshTokens.userId },
