@@ -42,7 +42,10 @@ describe('plugin-boundary allowlist (ROK-2366, shrink-only)', () => {
         if (!Array.isArray(specs) || specs.length === 0) return true;
         const strings = specs.filter((s): s is string => typeof s === 'string');
         const sorted = [...new Set(strings)].sort();
-        return strings.length !== specs.length || sorted.join('\n') !== strings.join('\n');
+        return (
+          strings.length !== specs.length ||
+          sorted.join('\n') !== strings.join('\n')
+        );
       })
       .map(([file]) => file);
     expect(bad).toEqual([]);

@@ -7,10 +7,10 @@
  * or renamed, or an entry that is malformed.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const WEB_DIR = fileURLToPath(new URL('../../', import.meta.url));
+const WEB_DIR = `${resolve(__dirname, '../..')}/`;
 
 function readAllowlist(): Record<string, unknown> {
     const parsed: unknown = JSON.parse(readFileSync(`${WEB_DIR}plugin-boundary-allowlist.json`, 'utf8'));
