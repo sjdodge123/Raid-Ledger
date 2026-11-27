@@ -82,9 +82,6 @@
   "src/canary/blizzard-forever.canary.ts": [
     "../plugins/wow-common/forever-namespace-probe.helpers.js"
   ],
-  "src/characters/characters-crud.helpers.ts": [
-    "../plugins/wow-common/addon-import/external-id.guid-release"
-  ],
   "src/characters/characters-import-game.helpers.ts": [
     "../plugins/wow-common/blizzard.constants"
   ],
@@ -157,9 +154,6 @@
     "../../plugins/pelican/pelican.constants",
     "../../plugins/wow-common/manifest",
     "../../plugins/wow-common/wow-forever-identity.helpers"
-  ],
-  "src/notifications/discord-notification-deactivate.helpers.ts": [
-    "../plugins/wow-common/addon-import/external-id.owner-status"
   ],
   "src/plugins/minecraft/minecraft.manifest.ts": [
     "../pelican/pelican.constants"
@@ -236,14 +230,5 @@
   ],
   "src/plugins/wow-common/gg/wow-gg.registration.ts": [
     "../../core/gg/gg-card.registry"
-  ],
-  "src/users/users-delete.helpers.ts": [
-    "../plugins/wow-common/addon-import/external-id.guid-release"
-  ],
-  "src/users/users-moderation-orchestration.helpers.ts": [
-    "../plugins/wow-common/addon-import/external-id.owner-status"
-  ],
-  "src/users/users-reactivate.helpers.ts": [
-    "../plugins/wow-common/addon-import/external-id.owner-status"
   ]
 }

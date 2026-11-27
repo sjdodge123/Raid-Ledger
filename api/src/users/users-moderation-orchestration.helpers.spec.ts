@@ -27,9 +27,11 @@ import * as signupCancel from '../events/signup-cancel-batch.helpers';
 import { at } from '../common/testing/narrow';
 import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 
-import * as ownerStatus from '../plugins/wow-common/addon-import/external-id.owner-status';
+import * as deactivatedAt from './users-deactivated-at.helpers';
+import * as lifecycle from './lifecycle/user-lifecycle.registry';
 
-jest.mock('../plugins/wow-common/addon-import/external-id.owner-status');
+jest.mock('./users-deactivated-at.helpers');
+jest.mock('./lifecycle/user-lifecycle.registry');
 jest.mock('./users-moderation.helpers');
 jest.mock('./users-admin-actions.helpers');
 jest.mock('./users-delete.helpers');
@@ -45,8 +47,8 @@ jest.mock('../guilds/community/community-membership.queries', () => ({
 const kickUserById = writes.kickUserById as jest.Mock;
 const unkickUserById = writes.unkickUserById as jest.Mock;
 const banUserById = writes.banUserById as jest.Mock;
-const lockDeactivatedAt = ownerStatus.lockDeactivatedAt as jest.Mock;
-const auditOwnerDeactivated = ownerStatus.auditOwnerDeactivated as jest.Mock;
+const lockDeactivatedAt = jest.mocked(deactivatedAt.lockDeactivatedAt);
+const runUserDeactivated = jest.mocked(lifecycle.runUserDeactivated);
 const unbanUserById = writes.unbanUserById as jest.Mock;
 const insertAdminAction = audit.insertAdminAction as jest.Mock;
 const wipeUserData = wipe.wipeUserData as jest.Mock;
@@ -213,7 +215,7 @@ describe('runBan', () => {
     lockDeactivatedAt.mockResolvedValueOnce(null);
     cancelAll.mockResolvedValue(0);
     await runBan(makeDeps(), banInput);
-    expect(auditOwnerDeactivated).toHaveBeenCalledWith({}, TARGET.id, ACTOR);
+    expect(runUserDeactivated).toHaveBeenCalledWith({}, TARGET.id, ACTOR);
   });
 
   it('ROK-2160: no GUID audit when the user was already deactivated', async () => {
@@ -221,7 +223,7 @@ describe('runBan', () => {
     lockDeactivatedAt.mockResolvedValueOnce('2026-01-01 00:00:00');
     cancelAll.mockResolvedValue(0);
     await runBan(makeDeps(), banInput);
-    expect(auditOwnerDeactivated).not.toHaveBeenCalled();
+    expect(runUserDeactivated).not.toHaveBeenCalled();
   });
 
   it('non-wipe: lockout, audit, cancel signups, reassign pug slots (no wipe)', async () => {
@@ -292,7 +294,7 @@ describe('runBan', () => {
     // Tx 1: the ban write and its owner audit; nothing of the wipe.
     expect(lockDeactivatedAt).toHaveBeenCalledWith(banTx, TARGET.id);
     expect(banUserById).toHaveBeenCalledWith(banTx, TARGET.id, undefined);
-    expect(auditOwnerDeactivated).toHaveBeenCalledWith(banTx, TARGET.id, ACTOR);
+    expect(runUserDeactivated).toHaveBeenCalledWith(banTx, TARGET.id, ACTOR);
     // Tx 2: the screenshot select and the wipe; nothing of the ban.
     expect(selectShots).toHaveBeenCalledWith(wipeTx, TARGET.id);
     expect(wipeUserData).toHaveBeenCalledWith(wipeTx, TARGET.id, ACTOR);

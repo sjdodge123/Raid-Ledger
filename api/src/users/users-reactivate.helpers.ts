@@ -4,10 +4,8 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
-import {
-  auditOwnerReactivated,
-  lockDeactivatedAt,
-} from '../plugins/wow-common/addon-import/external-id.owner-status';
+import { lockDeactivatedAt } from './users-deactivated-at.helpers';
+import { runUserReactivated } from './lifecycle/user-lifecycle.registry';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type UserRow = typeof schema.users.$inferSelect;
@@ -69,7 +67,7 @@ async function clearDeactivation(
       .set({ deactivatedAt: null, updatedAt: new Date() })
       .where(and(eq(schema.users.id, target.id), where))
       .returning();
-    if (row && since) await auditOwnerReactivated(tx, row.id, since, null);
+    if (row && since) await runUserReactivated(tx, row.id, since, null);
     return row;
   });
 }

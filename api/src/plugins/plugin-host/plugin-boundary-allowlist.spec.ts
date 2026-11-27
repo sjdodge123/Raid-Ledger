@@ -17,7 +17,7 @@ const LIST_FILE = path.join(API_DIR, 'plugin-boundary-allowlist.json');
  * deep import goes through `plugins/<x>/index.ts` instead. Raising it needs
  * operator sign-off, and the number edit is what review sees.
  */
-const MAX_SPECIFIERS = 103;
+const MAX_SPECIFIERS = 98;
 
 function totalSpecifiers(list: Record<string, unknown>): number {
   return Object.values(list).reduce<number>(
