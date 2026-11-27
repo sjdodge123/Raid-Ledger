@@ -1,0 +1,256 @@
+{
+  "src/admin/demo-test-addon-errors.helpers.ts": [
+    "../plugins/wow-common/companion/wow-addon-errors.scrub"
+  ],
+  "src/admin/demo-test-attunements-cast.helpers.ts": [
+    "../plugins/wow-common/data/forever-attunements"
+  ],
+  "src/admin/demo-test-attunements.controller.ts": [
+    "../plugins/wow-common/guilds/roster-insights/roster-insights.cache"
+  ],
+  "src/admin/demo-test-attunements.helpers.ts": [
+    "../plugins/wow-common/data/forever-attunements"
+  ],
+  "src/admin/demo-test-bg3.seed.ts": [
+    "../plugins/bg3/ingest/bg3-save.handler"
+  ],
+  "src/admin/demo-test-gg.controller.ts": [
+    "../plugins/core/gg/gg-compute.service",
+    "../plugins/core/gg/gg-delivery.schedule",
+    "../plugins/core/gg/gg-delivery.service",
+    "../plugins/core/gg/gg-dm-wave.helpers"
+  ],
+  "src/admin/demo-test-guild-armory.helpers.ts": [
+    "../plugins/wow-common/forever-armory-snapshot/snapshot.apply",
+    "../plugins/wow-common/forever-armory-snapshot/snapshot.helpers"
+  ],
+  "src/admin/demo-test-guild-dungeon-plan.helpers.ts": [
+    "../plugins/wow-common/forever-instance-aliases",
+    "../plugins/wow-common/instance-catalogue/instance-catalogue",
+    "../plugins/wow-common/quest-faction.helpers",
+    "../plugins/wow-common/wow-forever-identity.helpers"
+  ],
+  "src/admin/demo-test-guild-game-text.controller.ts": [
+    "../plugins/wow-common/guilds/guild-ingame-game-text.helpers",
+    "../plugins/wow-common/guilds/guild-ingame-text.queries"
+  ],
+  "src/admin/demo-test-guild-game-text.helpers.ts": [
+    "../plugins/wow-common/addon-import/addon-import-guild.game-text",
+    "../plugins/wow-common/guilds/guild-ingame-game-text.helpers",
+    "../plugins/wow-common/guilds/guild-ingame-game-text.queries",
+    "../plugins/wow-common/guilds/guild-ingame-text.queries"
+  ],
+  "src/admin/demo-test-guild-public-card.helpers.ts": [
+    "../plugins/wow-common/guilds/public-card/guild-public-card.queries"
+  ],
+  "src/admin/demo-test-guild-raids.helpers.ts": [
+    "../plugins/wow-common/instance-catalogue/instance-catalogue"
+  ],
+  "src/admin/demo-test-guild-recruitment.helpers.ts": [
+    "../plugins/wow-common/guilds/guild-recruitment.queries"
+  ],
+  "src/admin/demo-test-guild-suggested-groups.helpers.ts": [
+    "../plugins/wow-common/forever-armory-snapshot/snapshot.apply",
+    "../plugins/wow-common/instance-catalogue/instance-catalogue",
+    "../plugins/wow-common/wow-forever-identity.helpers"
+  ],
+  "src/admin/demo-test-guild.controller.ts": [
+    "../plugins/wow-common/guilds/roster-insights/roster-insights.cache",
+    "../plugins/wow-common/manifest"
+  ],
+  "src/admin/demo-test-guild.helpers.ts": [
+    "../plugins/wow-common/manifest",
+    "../plugins/wow-common/wow-forever-identity.helpers"
+  ],
+  "src/admin/demo-test-quick-play-server.controller.ts": [
+    "../plugins/pelican/presence/presence-events"
+  ],
+  "src/admin/demo-test-signin-reminder.controller.ts": [
+    "../plugins/core/signin-reminder/signin-reminder.dm",
+    "../plugins/core/signin-reminder/signin-reminder.service"
+  ],
+  "src/admin/demo-test-wow-item-tooltips.controller.ts": [
+    "../plugins/wow-common/boss-encounters.service"
+  ],
+  "src/admin/demo-test-wow-item-tooltips.helpers.ts": [
+    "../plugins/wow-common/wowhead-item/wow-item-meta.resolve",
+    "../plugins/wow-common/wowhead-item/wowhead-item.types"
+  ],
+  "src/app.module.ts": [
+    "./plugins/pelican/presence/server-presence-reader.module"
+  ],
+  "src/canary/blizzard-forever.canary.ts": [
+    "../plugins/wow-common/forever-namespace-probe.helpers.js"
+  ],
+  "src/characters/characters-crud.helpers.ts": [
+    "../plugins/wow-common/addon-import/external-id.guid-release"
+  ],
+  "src/characters/characters-import-game.helpers.ts": [
+    "../plugins/wow-common/blizzard.constants"
+  ],
+  "src/companion/ingest/testing/shadow-bg3-save-handler.ts": [
+    "../../../plugins/bg3/ingest/bg3-save.handler"
+  ],
+  "src/discord-bot/ad-hoc-server-presence.module.ts": [
+    "../plugins/pelican/presence/server-presence.sink"
+  ],
+  "src/discord-bot/hub-welcome/hub-welcome.service.ts": [
+    "../../plugins/valheim/valheim.constants"
+  ],
+  "src/discord-bot/listeners/voice-state-server-presence.handlers.ts": [
+    "../../plugins/pelican/presence/server-presence.reader"
+  ],
+  "src/discord-bot/listeners/voice-state.listener.ts": [
+    "../../plugins/pelican/presence/server-presence.reader"
+  ],
+  "src/discord-bot/services/ad-hoc-participant.service.ts": [
+    "../../plugins/pelican/presence/presence-events"
+  ],
+  "src/discord-bot/services/ad-hoc-server-enrol.helpers.ts": [
+    "../../plugins/pelican/presence/presence-events",
+    "../../plugins/pelican/presence/server-presence.reader",
+    "../../plugins/pelican/presence/server-presence.sink"
+  ],
+  "src/discord-bot/services/ad-hoc-server-pending.ts": [
+    "../../plugins/pelican/presence/presence-events",
+    "../../plugins/pelican/presence/server-presence.sink"
+  ],
+  "src/discord-bot/services/ad-hoc-server-presence.effects.ts": [
+    "../../plugins/pelican/presence/server-presence.sink"
+  ],
+  "src/discord-bot/services/ad-hoc-server-presence.helpers.ts": [
+    "../../plugins/pelican/presence/presence-events",
+    "../../plugins/pelican/presence/server-presence.sink"
+  ],
+  "src/discord-bot/services/ad-hoc-server-presence.service.ts": [
+    "../../plugins/pelican/pelican.constants",
+    "../../plugins/pelican/presence/presence-events",
+    "../../plugins/pelican/presence/server-presence.reader",
+    "../../plugins/pelican/presence/server-presence.sink"
+  ],
+  "src/discord-bot/services/ad-hoc-server-spawn.helpers.ts": [
+    "../../plugins/pelican/presence/server-presence.sink"
+  ],
+  "src/discord-bot/services/ad-hoc-server-voice-tally.service.ts": [
+    "../../plugins/pelican/presence/presence-events",
+    "../../plugins/pelican/presence/server-presence.sink"
+  ],
+  "src/discord-bot/services/ad-hoc-steam-identity.helpers.ts": [
+    "../../plugins/pelican/presence/presence-events"
+  ],
+  "src/discord-bot/services/ad-hoc-steam-participant.helpers.ts": [
+    "../../plugins/pelican/presence/presence-events"
+  ],
+  "src/discord-bot/services/server-presence-roster.helpers.ts": [
+    "../../plugins/pelican/presence/server-presence.reader"
+  ],
+  "src/discord-bot/services/server-presence-roster.service.ts": [
+    "../../plugins/pelican/presence/server-presence.reader"
+  ],
+  "src/events/invite.helpers.ts": [
+    "../plugins/wow-common/manifest"
+  ],
+  "src/games-lookup/seed-games.data.ts": [
+    "../plugins/minecraft/minecraft-bedrock-game",
+    "../plugins/wow-common/blizzard.constants"
+  ],
+  "src/guilds/community/community-directory.matrix.test-fixtures.ts": [
+    "../../plugins/pelican/pelican.constants",
+    "../../plugins/wow-common/manifest",
+    "../../plugins/wow-common/wow-forever-identity.helpers"
+  ],
+  "src/main.ts": [
+    "./plugins/valheim/link/ingest/valheim-link-body-bypass"
+  ],
+  "src/notifications/discord-notification-deactivate.helpers.ts": [
+    "../plugins/wow-common/addon-import/external-id.owner-status"
+  ],
+  "src/plugins/minecraft/minecraft.manifest.ts": [
+    "../pelican/pelican.constants"
+  ],
+  "src/plugins/pelican/hub/pelican-hub-kind.adapter.ts": [
+    "../../valheim/valheim.constants"
+  ],
+  "src/plugins/plugin-host/extension-points.ts": [
+    "../pelican/presence/presence-events"
+  ],
+  "src/plugins/valheim/armory/identity/valheim-claim-suggest.queries.ts": [
+    "../../../pelican/hub/server-hub-membership.helpers"
+  ],
+  "src/plugins/valheim/armory/valheim-armory-containers-demo-seed.controller.ts": [
+    "../../pelican/pelican-config.service"
+  ],
+  "src/plugins/valheim/armory/valheim-armory-demo-seed.controller.ts": [
+    "../../pelican/pelican-config.service"
+  ],
+  "src/plugins/valheim/armory/valheim-armory-map-demo-seed.controller.ts": [
+    "../../pelican/pelican-config.service"
+  ],
+  "src/plugins/valheim/armory/valheim-armory-map-hub.helpers.ts": [
+    "../../pelican/hub/server-hub-toggle.helpers"
+  ],
+  "src/plugins/valheim/armory/valheim-armory-recipes-demo-seed.controller.ts": [
+    "../../pelican/pelican-config.service"
+  ],
+  "src/plugins/valheim/armory/valheim-claim-drive-demo-seed.controller.ts": [
+    "../../pelican/pelican-config.service"
+  ],
+  "src/plugins/valheim/armory/valheim-deaths-demo-seed.controller.ts": [
+    "../../pelican/pelican-config.service"
+  ],
+  "src/plugins/valheim/armory/valheim-deaths.module.ts": [
+    "../../pelican/presence/server-death.sink"
+  ],
+  "src/plugins/valheim/armory/valheim-deaths.sink.ts": [
+    "../../pelican/presence/server-death.sink",
+    "../../pelican/presence/server-presence.sink"
+  ],
+  "src/plugins/valheim/gg/valheim-gg.producer.ts": [
+    "../../core/gg/gg-card.registry"
+  ],
+  "src/plugins/valheim/gg/valheim-gg.registration.ts": [
+    "../../core/gg/gg-card.registry"
+  ],
+  "src/plugins/valheim/link/valheim-link-demo-seed.controller.ts": [
+    "../../pelican/pelican-config.service",
+    "../../pelican/pelican-demo-seed.helpers",
+    "../../pelican/pelican.constants"
+  ],
+  "src/plugins/valheim/link/valheim-link-demo-seed.helpers.ts": [
+    "../../pelican/pelican-demo-quick-play-seed.helpers"
+  ],
+  "src/plugins/valheim/link/valheim-link-demo-seed.module.ts": [
+    "../../pelican/pelican-config.service",
+    "../../pelican/pelican.module"
+  ],
+  "src/plugins/valheim/link/valheim-link-remap.listener.ts": [
+    "../../pelican/pelican.constants"
+  ],
+  "src/plugins/valheim/link/valheim-link-token.guard.ts": [
+    "../../pelican/pelican.constants"
+  ],
+  "src/plugins/valheim/valheim-presence.parser.ts": [
+    "../pelican/presence/presence-events"
+  ],
+  "src/plugins/valheim/valheim.manifest.ts": [
+    "../pelican/pelican.constants"
+  ],
+  "src/plugins/wow-common/gg/wow-gg.producer.ts": [
+    "../../core/gg/gg-card.registry"
+  ],
+  "src/plugins/wow-common/gg/wow-gg.registration.ts": [
+    "../../core/gg/gg-card.registry"
+  ],
+  "src/queue/queue-registry.ts": [
+    "../plugins/core/steam-stats/steam-stats.constants"
+  ],
+  "src/users/users-delete.helpers.ts": [
+    "../plugins/wow-common/addon-import/external-id.guid-release"
+  ],
+  "src/users/users-moderation-orchestration.helpers.ts": [
+    "../plugins/wow-common/addon-import/external-id.owner-status"
+  ],
+  "src/users/users-reactivate.helpers.ts": [
+    "../plugins/wow-common/addon-import/external-id.owner-status"
+  ]
+}
