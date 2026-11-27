@@ -2248,6 +2248,13 @@
       "when": 1795629472575,
       "tag": "0321_wow_lfg_hand_details",
       "breakpoints": true
+    },
+    {
+      "idx": 322,
+      "version": "7",
+      "when": 1795738625230,
+      "tag": "0322_lfg_cleared_hand_notice",
+      "breakpoints": true
     }
   ]
 }

@@ -91,6 +91,17 @@ export const lfgIntents = pgTable(
      * nullable key would drop the one-live-hand guarantee for '' groups.
      */
     groupKey: text('group_key').default('').notNull(),
+    /**
+     * ROK-2352 §3.2 — WHY a `cleared` hand was cleared, when it was not the
+     * user's own Withdraw. Only `sibling_locked_in`: another of the user's
+     * groups in this game locked in / started and consumed their `now` hand.
+     * NULL on every other row (Withdraw, pre-0322 clears) = no notice.
+     */
+    clearedReason: text('cleared_reason'),
+    /** The group the user went into when `cleared_reason` is set. */
+    clearedIntoGroupKey: text('cleared_into_group_key'),
+    /** Show-once: when the owner acknowledged the "hand withdrawn" notice. */
+    clearedNoticeSeenAt: timestamp('cleared_notice_seen_at'),
   },
   (table) => [
     check(
@@ -114,6 +125,10 @@ export const lfgIntents = pgTable(
       'lfg_intents_ttl_minutes_check',
       sql`${table.ttlMinutes} IS NULL OR ${table.ttlMinutes} IN (30, 60)`,
     ),
+    check(
+      'lfg_intents_cleared_reason_check',
+      sql`${table.clearedReason} IS NULL OR ${table.clearedReason} IN ('sibling_locked_in')`,
+    ),
     /** ROK-2352: `''` or `<kind>:<id>` — the grammar adapters mint. */
     check(
       'lfg_intents_group_key_check',
@@ -133,6 +148,12 @@ export const lfgIntents = pgTable(
     index('idx_lfg_intents_game_group_active')
       .on(table.gameId, table.groupKey)
       .where(sql`${table.status} = 'active'`),
+    /** ROK-2352 §3.2: the viewer's unseen "hand withdrawn" notices. */
+    index('idx_lfg_intents_cleared_notice_unseen')
+      .on(table.userId, table.gameId)
+      .where(
+        sql`${table.clearedReason} IS NOT NULL AND ${table.clearedNoticeSeenAt} IS NULL`,
+      ),
     /** Hourly expiry sweep. */
     index('idx_lfg_intents_expires_at')
       .on(table.expiresAt)
