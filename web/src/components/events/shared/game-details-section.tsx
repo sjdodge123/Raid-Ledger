@@ -3,7 +3,7 @@ import type { IgdbGameDto, EventTypeDto } from '@raid-ledger/contract';
 import { GameSearchInput } from '../game-search-input';
 import { useGameRegistry, useEventTypes } from '../../../hooks/use-game-registry';
 import { PluginSlot } from '../../../plugins';
-import { getWowVariant, getContentType } from '../../../plugins/wow/utils';
+import { getContentType } from '../../../lib/event-content-type';
 import { applyEventTypeDefaults, type SlotState } from './event-form-constants';
 import { Field } from '../../ui/field';
 import { Input } from '../../ui/input';
@@ -199,13 +199,14 @@ function useGameDetailsData(props: GameDetailsSectionProps) {
     const registryGame = useRegistryLookup(game);
     const { data: eventTypesData } = useEventTypes(registryGame?.id);
     const eventTypes = eventTypesData?.data ?? [];
-    const wowVariant = registryGame?.slug ? getWowVariant(registryGame.slug) : null;
+    // ROK-2359: core hands the slot the game slug; the plugin decides whether it is its game.
+    const gameSlug = registryGame?.slug ?? null;
     const selectedEventType = eventTypes.find((t) => t.id === eventTypeId);
     const contentType = inferContentType(selectedEventType, selectedInstances);
     const computeSuggestion = useTitleSuggestion(selectedEventType, game, selectedInstances);
     const computeDescSuggestion = useDescriptionSuggestion(selectedInstances);
     useAutoFill({ computeSuggestion, computeDescSuggestion, title: props.title, description: props.description, titleIsAutoSuggested: props.titleIsAutoSuggested, descriptionIsAutoSuggested: props.descriptionIsAutoSuggested, onTitleChange, onDescriptionChange });
-    return { eventTypes, wowVariant, contentType, computeSuggestion, computeDescSuggestion };
+    return { eventTypes, gameSlug, contentType, computeSuggestion, computeDescSuggestion };
 }
 
 function handleEventTypeChange(
@@ -242,9 +243,9 @@ export function GameDetailsSection(props: GameDetailsSectionProps) {
                 <EventTypeDropdown eventTypeSelectId={eventTypeSelectId} eventTypeId={eventTypeId} eventTypes={d.eventTypes}
                     onEventTypeChange={(raw) => handleEventTypeChange(raw, d.eventTypes, onEventTypeIdChange, onSelectedInstancesChange, onEventTypeDefaults)} />
             )}
-            {d.wowVariant && d.contentType && (
+            {d.gameSlug && d.contentType && (
                 <PluginSlot name="event-create:content-browser"
-                    context={{ wowVariant: d.wowVariant, contentType: d.contentType, selectedInstances: props.selectedInstances, onInstancesChange: (instances: Record<string, unknown>[]) => onSelectedInstancesChange(instances) }} />
+                    context={{ gameSlug: d.gameSlug, contentType: d.contentType, selectedInstances: props.selectedInstances, onInstancesChange: (instances: Record<string, unknown>[]) => onSelectedInstancesChange(instances) }} />
             )}
             {slotBetween}
             <TitleField titleInputId={titleInputId} title={props.title} titleError={props.titleError}
