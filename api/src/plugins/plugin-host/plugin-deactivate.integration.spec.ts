@@ -61,9 +61,17 @@ import { VALHEIM_PLUGIN_ID } from '../valheim/valheim.constants';
 import { BG3_PLUGIN_ID } from '../bg3/bg3.constants';
 import { ValheimIdentityService } from '../valheim/armory/identity/valheim-identity.service';
 import { ValheimLinkTokensRepository } from '../valheim/link/valheim-link-tokens.repository';
+import { CLAIM_SUGGEST_TYPE } from '../valheim/armory/identity/valheim-claim-suggest.service';
+import { claimSuggestKeys } from '../valheim/armory/identity/valheim-claim-suggest.copy';
+import { NotificationDedupService } from '../../notifications/notification-dedup.service';
+import { DISCORD_NOTIFICATION_FAILED } from '../../notifications/discord-notification.events';
 import { EXTENSION_POINTS, type CronRegistrar } from './extension-points';
 import { CronManagerService } from './cron-manager.service';
 import { PluginRegistryService } from './plugin-registry.service';
+
+/** ROK-2362: hub arrivals are probed like every other checked handler. */
+const PRESENCE_HANDLER =
+  'plugins/pelican/hub/server-hub-membership.service.ts#onPresenceChanged';
 
 /** A probe payload: plausible ids, a slug no plugin owns. */
 const PROBE = {
@@ -156,16 +164,19 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
     const guarded = staticGuardedControllers(raw);
     expect(guarded.length).toBeGreaterThanOrEqual(20);
     expect(guarded.filter((c) => !routed.has(c))).toEqual([]);
-    // Census 2026-11-27: the scanner reads 18 scoped handlers — 3 with an
-    // active check (handleLinked, onBotConnected + its interactionCreate[0]
-    // callback), 3 cleanup-marked, 12 allowlisted. Every checked one must
-    // resolve; the floors are on what the scanner reads, not a guess.
+    // Census 2026-11-27: the scanner reads 18 scoped handlers — 4 with an
+    // active check (handleLinked, onPresenceChanged (ROK-2362),
+    // onBotConnected + its interactionCreate[0] callback), 3 cleanup-marked,
+    // 11 allowlisted. Every checked one must resolve; the floors are on what
+    // the scanner reads, not a guess.
     expect(scopedHandlers(raw).length).toBeGreaterThanOrEqual(15);
     const handlers = checkedHandlerTargets(raw, instances);
     expect(handlers.unresolved).toEqual([]);
-    expect(handlers.targets.length).toBeGreaterThanOrEqual(2);
+    expect(handlers.targets.length).toBeGreaterThanOrEqual(3);
     const direct = handlers.targets.filter((t) => t.gate === 'direct');
-    expect(direct.length).toBeGreaterThanOrEqual(1);
+    expect(direct.map((t) => t.key)).toEqual(
+      expect.arrayContaining([PRESENCE_HANDLER]),
+    );
     const crons = scopedCronTargets(raw, instances);
     expect(crons.unresolved).toEqual([]);
     expect(crons.targets.length).toBeGreaterThanOrEqual(4);
@@ -279,6 +290,26 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
         expect(revoke).toHaveBeenCalledWith(4242);
       } finally {
         revoke.mockRestore();
+      }
+    });
+
+    it('valheim: a failed claim DM still releases its pair key (ROK-2362)', async () => {
+      await deactivate([VALHEIM_PLUGIN_ID]);
+      const release = jest
+        .spyOn(NotificationDedupService.prototype, 'releaseKey')
+        .mockResolvedValue(undefined);
+      try {
+        const userId = testApp.seed.adminUser.id;
+        await testApp.app
+          .get(EventEmitter2)
+          .emitAsync(DISCORD_NOTIFICATION_FAILED, {
+            type: CLAIM_SUGGEST_TYPE,
+            userId,
+            payload: { profileId: 77 },
+          });
+        expect(release).toHaveBeenCalledWith(claimSuggestKeys.pair(77, userId));
+      } finally {
+        release.mockRestore();
       }
     });
 

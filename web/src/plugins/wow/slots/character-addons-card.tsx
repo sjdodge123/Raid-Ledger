@@ -13,7 +13,7 @@ import type { CharacterInstalledAddonsResponse, GuildSummary } from '@raid-ledge
 import { guildAddonView, pinnedAddonView } from '../guild/addon-view';
 import { Card } from '../../../components/hub/hub-bits';
 import { guildRealm } from '../hub/wow-guild.helpers';
-import { useGuildAddons } from '../../../components/hub/api/use-guild-content';
+import { useGuildAddons } from '../hub/use-guild-addons';
 import { guildHref, useCharacterGuild } from './guild-queries';
 import { useCharacterInstalledAddons } from './character-installed-addons-query';
 import { CompactRow, InstalledAddonsList } from './character-addons-card.parts';

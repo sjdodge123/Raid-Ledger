@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getClassIconUrl } from './class-icons';
 import { getProfessionIconUrl } from './profession-icons';
-import { getRoleIconUrl } from './role-icons';
+import { getRoleIconUrl } from '../../../components/shared/role-icons';
 import { foreverTreeNames } from './forever-talent-trees';
 
 const PROTOTYPE_KEYS = ['constructor', 'toString', '__proto__'];

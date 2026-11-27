@@ -56,25 +56,7 @@ function sourceFiles(dir: string): string[] {
  * These are pre-existing debt, NOT a licence for new ones — delete an entry the
  * moment its import is gone; the stale-entry test below enforces that.
  */
-export const ALLOWLIST: Record<string, Record<string, string>> = {
-    'components/shared/RoleIcon.tsx': {
-        '../../plugins/wow/lib/role-icons': 'ROK-1830 debt: role icons are not WoW-only; they need a host API.',
-    },
-    'components/roster/SelectableCharacterCard.tsx': {
-        '../../plugins/wow/lib/class-icons': 'ROK-1830 debt: class icons need a host API.',
-        '../../plugins/wow/components/ProfessionBadges': 'ROK-1830 debt: profession badges need a slot.',
-    },
-    'components/events/player-card.tsx': {
-        '../../plugins/wow/lib/class-icons': 'ROK-1830 debt: class icons need a host API.',
-    },
-    'components/events/shared/game-details-section.tsx': {
-        '../../../plugins/wow/utils': 'ROK-1830 debt: getWowVariant/getContentType need a host API.',
-    },
-    'components/characters/character-card-compact.tsx': {
-        '../../plugins/wow/lib/class-icons': 'ROK-1830 debt: class icons need a host API.',
-        '../../plugins/wow/components/ProfessionBadges': 'ROK-1830 debt: profession badges need a slot.',
-    },
-};
+export const ALLOWLIST: Record<string, Record<string, string>> = {};
 
 /** The host API modules: every loose, shipped `plugins/*.ts(x)` file (ROK-1776/ROK-1830 r2). */
 export function hostApiFiles(): string[] {
@@ -139,9 +121,14 @@ export function boundaryHits(): BoundaryHit[] {
 }
 
 /** Only a plugin-folder hit on an exactly-allowlisted `(file, specifier)` pair is exempt. */
-export function isAllowed(hit: BoundaryHit): boolean {
-    return !hit.pelican && ALLOWLIST[hit.file]?.[hit.specifier] !== undefined;
+export function isAllowed(hit: BoundaryHit, allowlist: Record<string, Record<string, string>> = ALLOWLIST): boolean {
+    return !hit.pelican && allowlist[hit.file]?.[hit.specifier] !== undefined;
 }
+
+/** ROK-2359 emptied ALLOWLIST; the exact-specifier semantics are still pinned against this fixture. */
+const FIXTURE_ALLOWLIST: Record<string, Record<string, string>> = {
+    'components/shared/RoleIcon.tsx': { '../../plugins/wow/lib/role-icons': 'fixture entry' },
+};
 
 const label = (hit: BoundaryHit): string => `${hit.file} → ${hit.specifier}`;
 
@@ -194,13 +181,13 @@ describe('plugin core boundary scan (ROK-1774/ROK-1830)', () => {
 
     it('the allowlist exempts one exact specifier, not a whole file (ROK-1830 r2)', () => {
         const file = 'components/shared/RoleIcon.tsx';
-        expect(isAllowed({ file, specifier: '../../plugins/wow/lib/role-icons', pelican: false })).toBe(true);
+        expect(isAllowed({ file, specifier: '../../plugins/wow/lib/role-icons', pelican: false }, FIXTURE_ALLOWLIST)).toBe(true);
         // A second plugin import from the SAME allowlisted file is still a failure.
-        expect(isAllowed({ file, specifier: '../../plugins/wow/lib/class-icons', pelican: false })).toBe(false);
-        expect(isAllowed({ file, specifier: '../../plugins/pelican/calendar/use-items', pelican: true })).toBe(false);
+        expect(isAllowed({ file, specifier: '../../plugins/wow/lib/class-icons', pelican: false }, FIXTURE_ALLOWLIST)).toBe(false);
+        expect(isAllowed({ file, specifier: '../../plugins/pelican/calendar/use-items', pelican: true }, FIXTURE_ALLOWLIST)).toBe(false);
         // …and the whole-file scan agrees: the extra import shows up as an unexempt hit.
         const extra = hitsIn(file, "import { a } from '../../plugins/wow/lib/role-icons';\nimport { b } from '../../plugins/pelican/x';", pluginSlugs());
-        expect(extra.filter((hit) => !isAllowed(hit)).map(label)).toEqual([`${file} → ../../plugins/pelican/x`]);
+        expect(extra.filter((hit) => !isAllowed(hit, FIXTURE_ALLOWLIST)).map(label)).toEqual([`${file} → ../../plugins/pelican/x`]);
     });
 
     it('no core component, page or host API file imports plugin code', () => {

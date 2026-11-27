@@ -18,7 +18,7 @@ const WEB_DIR = `${resolve(__dirname, '../..')}/`;
  * deep import goes through `plugins/<x>/index.ts` (or `register.ts`) instead.
  * Raising it needs operator sign-off, and the number edit is what review sees.
  */
-const MAX_SPECIFIERS = 10;
+const MAX_SPECIFIERS = 3;
 
 function readAllowlist(): Record<string, unknown> {
     const parsed: unknown = JSON.parse(readFileSync(`${WEB_DIR}plugin-boundary-allowlist.json`, 'utf8'));

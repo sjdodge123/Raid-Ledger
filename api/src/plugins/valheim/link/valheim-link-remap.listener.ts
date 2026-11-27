@@ -19,6 +19,8 @@ export class ValheimLinkRemapListener {
   @OnEvent(PELICAN_SERVER_GAME_CHANGED)
   async handleGameChanged(payload: { serverId: number }): Promise<void> {
     // plugin-scope: cleanup
+    // A token for a server that left Valheim is invalid state: revoke it even
+    // with Valheim off, so reactivation never revives it (ROK-2362).
     try {
       if (await this.repo.revokeIfNotValheim(payload.serverId)) {
         this.logger.log(

@@ -5,6 +5,8 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { HubJoinResponse } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import { PELICAN_PLUGIN_ID } from '../pelican.constants';
 import { PelicanPresenceSupervisor } from '../presence/pelican-presence.supervisor';
 import {
   SERVER_PRESENCE_EVENTS,
@@ -39,6 +41,7 @@ export class ServerHubMembershipService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly registry: PluginRegistryService,
     @Optional()
     @Inject(PelicanPresenceSupervisor)
     private readonly presence: PelicanPresenceSupervisor | null = null,
@@ -67,9 +70,19 @@ export class ServerHubMembershipService {
     return true;
   }
 
-  /** The one call site on the presence pipeline: record each arrival. */
+  /**
+   * The one call site on the presence pipeline: record each arrival. Inert
+   * while Pelican is off (ROK-2362) — not only because the supervisor stops
+   * its sessions on deactivate. The cached rosters are dropped while off, so
+   * the first event after reactivation is judged like the first after boot,
+   * never against a pre-deactivation snapshot.
+   */
   @OnEvent(SERVER_PRESENCE_EVENTS.CHANGED)
   async onPresenceChanged(src: ServerPresenceChangedPayload): Promise<void> {
+    if (!this.registry.isActive(PELICAN_PLUGIN_ID)) {
+      this.rosters.clear();
+      return;
+    }
     try {
       await this.recordArrivals(
         src.pelicanServerId,
