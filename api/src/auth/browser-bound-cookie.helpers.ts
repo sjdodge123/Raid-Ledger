@@ -16,13 +16,27 @@ import type { CookieOptions, Request } from 'express';
  * discord.com, which carries Lax cookies. Path '/' for the dev `/auth` vs
  * prod `/api/auth` split. Pass no `maxAgeMs` when clearing.
  */
+/**
+ * ROK-2322: the one scheme check every auth cookie's `Secure` flag uses
+ * (`rl_rt`, the link nonce/state cookies, the Discord login cookies).
+ * Express derives `req.secure` from the socket, or — only when the hop is
+ * covered by `trust proxy` (production, main.ts `applyTrustProxy`) — from
+ * `X-Forwarded-Proto`; an untrusted hop's header is ignored. A missing
+ * request (a hand-built test double) is treated as plain HTTP.
+ */
+export function isSecureRequest(
+  req: Pick<Request, 'secure'> | undefined,
+): boolean {
+  return req?.secure === true;
+}
+
 export function browserBoundCookieAttrs(
-  req: Pick<Request, 'secure'>,
+  req: Pick<Request, 'secure'> | undefined,
   maxAgeMs?: number,
 ): CookieOptions {
   return {
     httpOnly: true,
-    secure: req.secure === true,
+    secure: isSecureRequest(req),
     sameSite: 'lax',
     path: '/',
     ...(maxAgeMs === undefined ? {} : { maxAge: maxAgeMs }),

@@ -6,6 +6,7 @@ import {
   type LinkNonceService,
   type LinkProvider,
 } from './link-nonce.service';
+import { browserBoundCookieAttrs } from './browser-bound-cookie.helpers';
 
 /**
  * ROK-1366 follow-up (PR #1384 review): bind a link nonce to the browser that
@@ -32,14 +33,17 @@ function hashNonce(nonce: string): string {
   return crypto.createHash('sha256').update(nonce).digest('hex');
 }
 
-/** Shared by the nonce cookie and the state cookie (link-state-cookie.helpers). */
-export function linkCookieAttrs(): CookieOptions {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-  };
+/**
+ * Shared by the nonce cookie and the state cookie (link-state-cookie.helpers).
+ * ROK-2322: `Secure` follows the request's scheme (`isSecureRequest`), not
+ * NODE_ENV — the all-in-one image runs NODE_ENV=production on plain
+ * `http://<host>:8080`, where a Secure cookie is dropped and every link
+ * fails with "Link request expired". Pass the request that sets or clears it.
+ */
+export function linkCookieAttrs(
+  req: Pick<Request, 'secure'> | undefined,
+): CookieOptions {
+  return browserBoundCookieAttrs(req);
 }
 
 /** POST /link/start: remember this browser minted `nonce`. */
@@ -49,7 +53,7 @@ export function setLinkNonceCookie(
   nonce: string,
 ): void {
   res.cookie(linkNonceCookieName(provider), hashNonce(nonce), {
-    ...linkCookieAttrs(),
+    ...linkCookieAttrs(res.req),
     maxAge: LINK_NONCE_TTL_SECONDS * 1000,
   });
 }
@@ -100,6 +104,6 @@ export async function consumeBrowserBoundNonce(
   res: Response,
 ): Promise<LinkNonceClaims | null> {
   if (!nonce || !cookieMatches(req, provider, nonce)) return null;
-  res.clearCookie(linkNonceCookieName(provider), linkCookieAttrs());
+  res.clearCookie(linkNonceCookieName(provider), linkCookieAttrs(req));
   return linkNonceService.consume(provider, nonce);
 }

@@ -1,4 +1,5 @@
-import type { Request, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
+import { isSecureRequest } from '../browser-bound-cookie.helpers';
 
 /**
  * ROK-1353: httpOnly refresh-token cookie helpers.
@@ -12,9 +13,23 @@ import type { Request, Response } from 'express';
  */
 export const REFRESH_COOKIE_NAME = 'rl_rt';
 
-/** Whether we're running in production (drives secure + sameSite). */
-function isProd(): boolean {
-  return process.env.NODE_ENV === 'production';
+/**
+ * Attributes shared by set and clear (they must match or the browser keeps
+ * the cookie). ROK-2322: `Secure` follows the request's scheme
+ * (`isSecureRequest` — direct TLS, or a trusted proxy's
+ * `X-Forwarded-Proto: https`), not NODE_ENV: the all-in-one image runs
+ * NODE_ENV=production on plain `http://<host>:8080`, where a Secure cookie
+ * never sticks. SameSite stays Strict in production and Lax in dev, as
+ * before — never None, which would need Secure. `res.req` is the request
+ * Express pairs with every response.
+ */
+function refreshCookieAttrs(res: Response): CookieOptions {
+  return {
+    httpOnly: true,
+    secure: isSecureRequest(res.req),
+    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    path: '/',
+  };
 }
 
 /**
@@ -27,10 +42,7 @@ export function setRefreshCookie(
   maxAgeMs: number,
 ): void {
   res.cookie(REFRESH_COOKIE_NAME, rawToken, {
-    httpOnly: true,
-    secure: isProd(),
-    sameSite: isProd() ? 'strict' : 'lax',
-    path: '/',
+    ...refreshCookieAttrs(res),
     maxAge: maxAgeMs,
   });
 }
@@ -60,10 +72,5 @@ export function readRefreshCookie(req: Request): string | null {
 /** Clear the refresh cookie (logout). Mirrors the set attrs so the browser
  * matches and drops it. */
 export function clearRefreshCookie(res: Response): void {
-  res.clearCookie(REFRESH_COOKIE_NAME, {
-    httpOnly: true,
-    secure: isProd(),
-    sameSite: isProd() ? 'strict' : 'lax',
-    path: '/',
-  });
+  res.clearCookie(REFRESH_COOKIE_NAME, refreshCookieAttrs(res));
 }
