@@ -85,8 +85,6 @@ const CACHE_DROP = 'cleanup';
 const HANDLER_ALLOWLIST: ScopeAllowlist = {
   // Keeps the core sign-in strategy current on a settings save (operator ruling 2026-11-27).
   'plugins/discord/discord-auth.strategy.ts#handleOAuthUpdate': 'core-auth',
-  'plugins/pelican/hub/server-hub-membership.service.ts#onPresenceChanged':
-    'gap: records hub arrivals with no pelican active check — relies on presence sessions being stopped on deactivate',
   // reconcile → desired → enabledPanelUrl, pelican-presence.supervisor.ts:225.
   'plugins/pelican/presence/pelican-presence.supervisor.ts#handlePresenceConfigChanged':
     'service-checks-active',
