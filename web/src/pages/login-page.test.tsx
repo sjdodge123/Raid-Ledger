@@ -363,8 +363,8 @@ describe('LoginPage — deactivated session notice (ROK-1753)', () => {
 });
 
 // ROK-2371 §3: Google sign-in refusals share the Discord params. Banned and
-// kicked ride `suspended` + the server copy; deactivated carries the Google
-// copy in `reason`; an unverified Google email has its own code.
+// kicked ride `suspended` + the server copy; deactivated always shows the
+// fixed Google copy (a crafted `reason` is ignored); unverified has its own code.
 describe('LoginPage — Google sign-in refusals (ROK-2371)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -381,6 +381,7 @@ describe('LoginPage — Google sign-in refusals (ROK-2371)', () => {
             'Your session was ended by an administrator. You may log in again in 5 minute(s).',
         ],
         ['deactivated', `error=deactivated&reason=${encodeURIComponent(GOOGLE_DEACTIVATED)}`, GOOGLE_DEACTIVATED],
+        ['deactivated with a crafted reason', 'error=deactivated&reason=Visit%20evil.example', GOOGLE_DEACTIVATED],
         ['unverified', 'error=google_unverified', 'Google has not verified the email on that account, so it cannot be used to sign in.'],
     ])('%s: toasts the refusal copy and scrubs error + reason', async (_label, query, copy) => {
         renderSuspended(`?${query}`);
