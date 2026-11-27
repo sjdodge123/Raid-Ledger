@@ -201,14 +201,18 @@ describe('maybeAutoAdvance', () => {
   });
 
   it('escape hatch: graceMs=0 advances immediately, pinned to the judged target (ROK-1710)', async () => {
+    const armedAt = new Date('2026-11-27T09:00:00Z');
     setLineup('building', {
       nominationTargetPct: 50,
       nominationTargetDisarmedAt: null,
+      nominationTargetBelowSeenAt: armedAt,
     });
     (checkBuildingQuorum as jest.Mock).mockResolvedValue({ ready: true });
     (runStatusTransition as jest.Mock).mockResolvedValue(undefined);
     const deps = makeDeps({ graceMs: '0' });
     await maybeAutoAdvance(deps, 7);
+    // Codex round 4: the arm stamp is pinned too, so an ABA target edit
+    // (50 -> 75 -> 50) cannot leave this evaluation matching the row.
     expect(runStatusTransition).toHaveBeenCalledWith(
       expect.any(Object),
       7,
@@ -218,6 +222,7 @@ describe('maybeAutoAdvance', () => {
         nominationTargetPct: 50,
         nominationTargetDisarmedAt: null,
         pendingAdvanceAt: null,
+        nominationTargetBelowSeenAt: armedAt,
       },
     );
     expect(deps._phaseQueue.scheduleGraceAdvance).not.toHaveBeenCalled();
