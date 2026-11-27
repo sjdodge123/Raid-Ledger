@@ -95,7 +95,7 @@ ticket_dead_reason() {
 # queue_ahead CHECK — prints how many live tickets sort before this run.
 queue_ahead() {
   local code ref sha tname id att reason ahead=0
-  code="$(api GET "git/matching-refs/${QUEUE_PREFIX}/")"
+  code="$(api GET "git/matching-refs/${QUEUE_PREFIX}")"
   if [ "$code" != 200 ]; then
     echo "::warning::lease: cannot list the queue (HTTP $code); competing unordered this poll" >&2
     echo 0; return 0
@@ -107,13 +107,17 @@ queue_ahead() {
     id="${tname%-*}"; att="${tname##*-}"
     { is_num "$id" && is_num "$att"; } || continue   # TDB:3194: digits only into arithmetic
     case "$sha" in ""|*[!0-9a-f]*) continue ;; esac
+    # Only tickets that sort before this run matter (and cost API calls); a
+    # later run's dead ticket is dropped by the waiters behind it. An earlier
+    # attempt of this run is checked too, so a re-run clears its old ticket.
+    [ "$(( 10#$id ))" -le "$(( 10#$RUN_ID ))" ] || continue
     reason="$(ticket_dead_reason "$id" "$att" "$sha" "$1")"
     if [ -n "$reason" ]; then
       echo "lease: dropping queue ticket ${tname} (${reason})" >&2
       api DELETE "git/refs/${QUEUE_PREFIX}/${tname}" > /dev/null
       continue
     fi
-    [ "$(( 10#$id ))" -ge "$(( 10#$RUN_ID ))" ] || ahead=$(( ahead + 1 ))
+    [ "$id" = "$RUN_ID" ] || ahead=$(( ahead + 1 ))   # same run, later attempt: not ahead
   done < "$CACHE/queue"
   echo "$ahead"
 }
