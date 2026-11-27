@@ -173,6 +173,40 @@ function mockRedisPipeline(set: ReturnType<typeof mockRedisSet>) {
   };
 }
 
+/**
+ * Redis mock MULTI (ROK-2371): queues GET / DEL / SET and runs them in order
+ * on `exec` — enough for an atomic read-and-spend (`multi().get(k).del(k)`).
+ */
+function mockRedisMulti(
+  store: Map<string, string>,
+  set: ReturnType<typeof mockRedisSet>,
+  del: ReturnType<typeof mockRedisDel>,
+) {
+  return () => {
+    const queued: Array<() => Promise<unknown>> = [];
+    const multi = {
+      get: (key: string) => {
+        queued.push(() => Promise.resolve(store.get(key) ?? null));
+        return multi;
+      },
+      del: (...keys: string[]) => {
+        queued.push(() => del(...keys));
+        return multi;
+      },
+      set: (key: string, value: string, ...args: (string | number)[]) => {
+        queued.push(() => set(key, value, ...args));
+        return multi;
+      },
+      exec: async (): Promise<Array<[Error | null, unknown]>> => {
+        const out: Array<[Error | null, unknown]> = [];
+        for (const run of queued) out.push([null, await run()]);
+        return out;
+      },
+    };
+    return multi;
+  };
+}
+
 export interface RedisMockHandle {
   client: ReturnType<typeof buildRedisMockClient>;
   store: Map<string, string>;
@@ -199,6 +233,11 @@ function buildRedisMockClient(
     mget: (...keys: string[]) =>
       Promise.resolve(keys.map((k) => store.get(k) ?? null)),
     pipeline: mockRedisPipeline(mockRedisSet(store, expiries)),
+    multi: mockRedisMulti(
+      store,
+      mockRedisSet(store, expiries),
+      mockRedisDel(store, expiries),
+    ),
     getdel: mockRedisGetdel(store, expiries),
     lpush: (key: string, ...values: string[]) => {
       const list = readList(store, key);

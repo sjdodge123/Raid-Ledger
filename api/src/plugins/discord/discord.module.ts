@@ -9,6 +9,8 @@ import { NotificationModule } from '../../notifications/notification.module';
 import { DiscordAuthStrategy } from './discord-auth.strategy';
 import { DiscordAuthService } from './discord-auth.service';
 import { DiscordAuthController } from './discord-auth.controller';
+import { DiscordPendingLinkController } from './discord-pending-link.controller';
+import { DiscordPendingIdentityService } from '../../auth/google-signin/discord-pending-identity.service';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { DISCORD_MANIFEST } from './manifest';
@@ -33,8 +35,12 @@ import { DISCORD_MANIFEST } from './manifest';
       inject: [ConfigService],
     }),
   ],
-  controllers: [DiscordAuthController],
-  providers: [DiscordAuthStrategy, DiscordAuthService],
+  controllers: [DiscordAuthController, DiscordPendingLinkController],
+  providers: [
+    DiscordAuthStrategy,
+    DiscordAuthService,
+    DiscordPendingIdentityService,
+  ],
   exports: [DiscordAuthStrategy, DiscordAuthService],
 })
 export class DiscordModule implements OnModuleInit {

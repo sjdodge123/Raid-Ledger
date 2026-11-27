@@ -2,7 +2,7 @@ import passport from 'passport';
 import { Strategy as DiscordStrategy, Profile } from 'passport-discord';
 import type { VerifyCallback } from 'passport-oauth2';
 import { PassportStrategy } from '@nestjs/passport';
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { OnEvent } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
@@ -12,6 +12,8 @@ import { SettingsService } from '../../settings/settings.service';
 import { SETTINGS_EVENTS } from '../../settings/settings.types';
 import type { DiscordOAuthConfig } from '../../settings/settings.types';
 import { DiscordLoginStateStore } from './discord-login-state.helpers';
+import { DiscordPendingIdentityService } from '../../auth/google-signin/discord-pending-identity.service';
+import type { PendingDiscordMarker } from '../../auth/google-signin/discord-pending-identity.helpers';
 
 /**
  * Dynamic Discord OAuth strategy that supports hot-reload.
@@ -31,6 +33,9 @@ export class DiscordAuthStrategy
     private authService: AuthService,
     private settingsService: SettingsService,
     private configService: ConfigService,
+    // ROK-2371 D1a: absent (unit specs) → today's path, never a marker.
+    @Optional()
+    private readonly pendingIdentity?: DiscordPendingIdentityService,
   ) {
     // Placeholder config — overwritten on first reloadConfig().
     // DI requires super() to run so the NestJS class can be constructed.
@@ -134,7 +139,9 @@ export class DiscordAuthStrategy
     accessToken: string,
     refreshToken: string,
     profile: Profile,
-  ): Promise<{ id: number; username: string; role: string }> {
+  ): Promise<
+    { id: number; username: string; role: string } | PendingDiscordMarker
+  > {
     if (!this.isStrategyConfigured) {
       throw new Error('Discord OAuth is not configured');
     }
@@ -169,8 +176,18 @@ export class DiscordAuthStrategy
     }
   }
 
+  /**
+   * ROK-2371 D1a: an unknown snowflake while Google sign-in is live becomes a
+   * marker the login callback parks; otherwise exactly today's path.
+   */
   private async runValidate(profile: Profile) {
     const { id, username, avatar } = profile;
+    const marker = await this.pendingIdentity?.markerFor({
+      id,
+      username,
+      avatar: avatar ?? null,
+    });
+    if (marker) return marker;
     return this.authService.validateDiscordUser(id, username, avatar ?? null);
   }
 }
