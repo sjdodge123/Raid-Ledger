@@ -1,4 +1,4 @@
-import { Injectable, type OnModuleInit } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { registerUserLifecycleHooks } from '../../../users/lifecycle/user-lifecycle.registry';
 import type { UserLifecycleHooks } from '../../../users/lifecycle/user-lifecycle.types';
 import { WOW_COMMON_MANIFEST } from '../manifest';
@@ -34,13 +34,16 @@ export const wowUserLifecycleHooks: UserLifecycleHooks = {
 };
 
 /**
- * Registers the hooks at module init, whatever the plugin's state — NOT in
+ * Registers the hooks in its CONSTRUCTOR, whatever the plugin's state. Nest
+ * instantiates every provider before any `onModuleInit`, so the hooks exist
+ * before a BullMQ worker (started in `BullRegistrar.onModuleInit`) can process
+ * a deactivation. Idempotent: the registry is a Map keyed by owner. NOT in
  * `WowCommonModule.registerAdapters()`, which runs only while active, and not
  * through the adapter registry, which suspends an inactive owner's adapters.
  */
 @Injectable()
-export class WowUserLifecycleRegistrar implements OnModuleInit {
-  onModuleInit(): void {
+export class WowUserLifecycleRegistrar {
+  constructor() {
     registerUserLifecycleHooks(WOW_COMMON_MANIFEST.id, wowUserLifecycleHooks);
   }
 }
