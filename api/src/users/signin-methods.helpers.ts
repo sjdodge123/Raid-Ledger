@@ -22,13 +22,6 @@ export type UnlinkableSigninMethod = 'discord' | 'google';
 export const LAST_SIGNIN_METHOD_CODE = 'LAST_SIGNIN_METHOD';
 export const LAST_SIGNIN_METHOD_MESSAGE = 'Add another way to sign in first';
 
-/**
- * Spec header ruling 10 (supersedes the §3 "exception kept" draft): unlinking
- * Discord when it is the user's last sign-in method is refused too, so a
- * Discord-only user gets the same 409 as any other last method.
- */
-export const DISCORD_ONLY_MAY_UNLINK = false;
-
 function findGoogleIdentity(db: SigninMethodsDb, userId: number) {
   return db
     .select({
@@ -84,14 +77,14 @@ function hasMethod(m: SigninMethodsDto, method: UnlinkableSigninMethod) {
 /**
  * True when removing `method` would leave no way to sign in. Removing a
  * method the user does not have never trips it (the unlink is a no-op).
+ * Discord is no exception (spec ruling 10): a Discord-only user is refused.
  */
 export function wouldLeaveNoSigninMethod(
   m: SigninMethodsDto,
   method: UnlinkableSigninMethod,
 ): boolean {
   if (!hasMethod(m, method)) return false;
-  if (countSigninMethods(m) > 1) return false;
-  return !(method === 'discord' && DISCORD_ONLY_MAY_UNLINK);
+  return countSigninMethods(m) <= 1;
 }
 
 /** Throw 409 `{code:'LAST_SIGNIN_METHOD'}` when the unlink would lock out. */

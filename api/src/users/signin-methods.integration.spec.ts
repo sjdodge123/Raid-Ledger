@@ -160,6 +160,26 @@ describe('DELETE /users/me/discord', () => {
   });
 });
 
+describe('concurrent unlinks (review M1)', () => {
+  it('Discord + Google unlinked at once: exactly one wins, a method remains', async () => {
+    const { userId, token } = await makeUser('race', {
+      google: true,
+      discordId: '300400502',
+    });
+    const [g, d] = await Promise.all([
+      del('/users/me/identities/google', token),
+      del('/users/me/discord', token),
+    ]);
+    expect([g.status, d.status].sort()).toEqual([204, 409]);
+    const loser = g.status === 409 ? g : d;
+    expectLastMethod409(loser);
+    const google = (await googleRows(userId)).length;
+    const discord = await discordIdOf(userId);
+    const remaining = google + (discord === '300400502' ? 1 : 0);
+    expect({ google, discord, remaining }).toMatchObject({ remaining: 1 });
+  });
+});
+
 describe('GET /auth/me signinMethods', () => {
   it('reports every method the owner has, contract-valid', async () => {
     const { token } = await makeUser('all3', {

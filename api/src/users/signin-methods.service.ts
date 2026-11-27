@@ -7,15 +7,30 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { SigninMethodsDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import { UsersService } from './users.service';
+import { invalidateAuthUser } from '../auth/auth-user-cache';
+import { isLinkedDiscordId } from '../guilds/community/discord-guild-member.helpers';
 import { assertCanUnlink, getSigninMethods } from './signin-methods.helpers';
+
+type Tx = Parameters<
+  Parameters<PostgresJsDatabase<typeof schema>['transaction']>[0]
+>[0];
+
+/** Lock the user row so concurrent unlinks serialise on the method count. */
+async function lockUser(tx: Tx, userId: number) {
+  const [user] = await tx
+    .select({ id: schema.users.id, discordId: schema.users.discordId })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .for('update');
+  if (!user) throw new UnauthorizedException('User no longer exists');
+  return user;
+}
 
 @Injectable()
 export class SigninMethodsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
-    private readonly usersService: UsersService,
   ) {}
 
   /** The owner's sign-in methods. */
@@ -32,12 +47,7 @@ export class SigninMethodsService {
    */
   async unlinkGoogle(userId: number): Promise<void> {
     await this.db.transaction(async (tx) => {
-      const [user] = await tx
-        .select({ id: schema.users.id, discordId: schema.users.discordId })
-        .from(schema.users)
-        .where(eq(schema.users.id, userId))
-        .for('update');
-      if (!user) throw new UnauthorizedException('User no longer exists');
+      const user = await lockUser(tx, userId);
       assertCanUnlink(await getSigninMethods(tx, user), 'google');
       await tx
         .delete(schema.userAuthIdentities)
@@ -51,14 +61,26 @@ export class SigninMethodsService {
   }
 
   /**
-   * `DELETE /users/me/discord`: the guard, then today's unlink
-   * (`unlinked:<id>`). A Discord-only user is refused like any last method
-   * (`DISCORD_ONLY_MAY_UNLINK`, ruling 10).
+   * `DELETE /users/me/discord`: today's unlink (`unlinked:<id>`, avatar
+   * cleared) behind the guard, in one transaction holding the same row lock
+   * as `unlinkGoogle` so the two cannot race to zero methods. A Discord-only
+   * user is refused like any last method (ruling 10). No real id = no-op.
    */
   async unlinkDiscord(userId: number): Promise<void> {
-    const user = await this.usersService.findById(userId);
-    if (!user) throw new UnauthorizedException('User no longer exists');
-    assertCanUnlink(await getSigninMethods(this.db, user), 'discord');
-    await this.usersService.unlinkDiscord(userId);
+    const changed = await this.db.transaction(async (tx) => {
+      const user = await lockUser(tx, userId);
+      assertCanUnlink(await getSigninMethods(tx, user), 'discord');
+      if (!user.discordId || !isLinkedDiscordId(user.discordId)) return false;
+      await tx
+        .update(schema.users)
+        .set({
+          discordId: `unlinked:${user.discordId}`,
+          avatar: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.id, userId));
+      return true;
+    });
+    if (changed) invalidateAuthUser(userId);
   }
 }
