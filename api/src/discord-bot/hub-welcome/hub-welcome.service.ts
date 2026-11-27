@@ -9,8 +9,10 @@
  * - pin refusal → `warning`, never a failure;
  * - channel cleared → delete the stored message, clear the ids.
  *
- * v1 is Valheim server hubs only (Q8): other hubs are skipped by the event
- * path and refused (400) by the re-post route.
+ * Only a hub whose live claim provider carries `welcome` copy gets one (v1:
+ * Valheim server hubs, Q8); ROK-2362 #10 moved that copy into the plugin, so
+ * an inactive plugin's hubs are skipped by the event path and refused (400)
+ * by the re-post route. Clearing the channel still deletes a stored welcome.
  */
 import {
   BadRequestException,
@@ -26,7 +28,8 @@ import type { HubWelcomeResult } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
-import { VALHEIM_GAME_SLUG } from '../../plugins/valheim/valheim.constants';
+import { HubClaimRegistry } from '../../guilds/claim/hub-claim.registry';
+import type { HubWelcomeCopy } from '../../plugins/plugin-host/extension-points';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { isUnknownMessage } from '../discord-bot-client.messages.helpers';
 import {
@@ -43,10 +46,7 @@ import {
   buildHubWelcomeEmbed,
   buildHubWelcomeRow,
 } from './hub-welcome-embed.helpers';
-import {
-  HUB_WELCOME_COPY,
-  HUB_WELCOME_VALHEIM_COPY,
-} from './hub-welcome.constants';
+import { HUB_WELCOME_COPY } from './hub-welcome.constants';
 import {
   locateHubWelcome,
   writeHubWelcome,
@@ -63,15 +63,24 @@ const UNKNOWN_CHANNEL = 10003;
 
 export const HUB_WELCOME_ERRORS = {
   notFound: 'Hub not found',
-  unsupported: 'Welcome messages are only posted for Valheim server hubs.',
+  unsupported:
+    'Welcome messages are only posted for Valheim server hubs, and only while the Valheim plugin is active.',
   noChannel: 'Link a Discord channel to this hub first.',
   notText: "The hub's channel isn't a text channel the bot can see.",
   unavailable: "Discord didn't answer — nothing was posted, try again.",
 } as const;
 
-/** Whether a hub gets a welcome in v1 (Q8): Valheim server hubs only. */
-export function isWelcomeHub(target: HubWelcomeTarget): boolean {
-  return target.kind === 'game_server' && target.gameSlug === VALHEIM_GAME_SLUG;
+/**
+ * The welcome copy for `target`: the `welcome` of the single live claim
+ * provider serving it, or undefined (no provider, its plugin inactive, or a
+ * provider conflict) — the hub then gets no welcome.
+ */
+export function welcomeCopyFor(
+  claims: HubClaimRegistry,
+  target: HubWelcomeTarget,
+): HubWelcomeCopy | undefined {
+  const { guildId: id, kind, gameSlug, gameIgdbId } = target;
+  return claims.forHub({ id, kind, gameSlug, gameIgdbId })?.welcome;
 }
 
 @Injectable()
@@ -89,25 +98,25 @@ export class HubWelcomeService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
     private readonly client: DiscordBotClientService,
+    private readonly claims: HubClaimRegistry,
   ) {}
 
   /**
    * The re-post route: edit-or-post into the hub's currently bound channel.
    *
-   * @throws NotFoundException · BadRequestException (not a Valheim server
-   * hub, no channel, not a text channel) · ServiceUnavailableException.
+   * @throws NotFoundException · BadRequestException (no live welcome copy for
+   * the hub, no channel, not a text channel) · ServiceUnavailableException.
    */
   repost(guildId: number): Promise<HubWelcomeResult> {
     return this.serialize(guildId, async () => {
       const target = await findWelcomeTarget(this.db, guildId);
       if (!target) throw new NotFoundException(HUB_WELCOME_ERRORS.notFound);
-      if (!isWelcomeHub(target)) {
-        throw new BadRequestException(HUB_WELCOME_ERRORS.unsupported);
-      }
+      const copy = welcomeCopyFor(this.claims, target);
+      if (!copy) throw new BadRequestException(HUB_WELCOME_ERRORS.unsupported);
       if (!target.boundChannelId) {
         throw new BadRequestException(HUB_WELCOME_ERRORS.noChannel);
       }
-      return this.publishNow(target, target.boundChannelId);
+      return this.publishNow(target, copy, target.boundChannelId);
     });
   }
 
@@ -122,8 +131,9 @@ export class HubWelcomeService {
   ): Promise<HubWelcomeResult | null> {
     return this.serialize(guildId, async () => {
       const target = await findWelcomeTarget(this.db, guildId);
-      if (!target || !isWelcomeHub(target)) return null;
-      return this.publishNow(target, channelId);
+      const copy = target ? welcomeCopyFor(this.claims, target) : undefined;
+      if (!target || !copy) return null;
+      return this.publishNow(target, copy, channelId);
     });
   }
 
@@ -160,6 +170,7 @@ export class HubWelcomeService {
 
   private async publishNow(
     target: HubWelcomeTarget,
+    copy: HubWelcomeCopy,
     channelId: string,
   ): Promise<HubWelcomeResult> {
     const ctx = requireBotContext(this.client);
@@ -167,7 +178,7 @@ export class HubWelcomeService {
     if (!channel) throw new BadRequestException(HUB_WELCOME_ERRORS.notText);
     const sameChannel = target.welcomeChannelId === channelId;
     const storedId = sameChannel ? target.welcomeMessageId : null;
-    const payload = await this.buildPayload(target);
+    const payload = await this.buildPayload(target, copy);
     const { message, result } = await this.discord('write', async () => {
       const located = await locateHubWelcome(
         channel,
@@ -231,6 +242,7 @@ export class HubWelcomeService {
 
   private async buildPayload(
     target: HubWelcomeTarget,
+    copy: HubWelcomeCopy,
   ): Promise<JoinPostPayload> {
     const [branding, clientUrl] = await Promise.all([
       this.settings.getBranding(),
@@ -239,8 +251,8 @@ export class HubWelcomeService {
     const embed = buildHubWelcomeEmbed({
       hubId: target.guildId,
       hubName: target.name,
-      description: HUB_WELCOME_VALHEIM_COPY.description(target.name),
-      claimHint: HUB_WELCOME_VALHEIM_COPY.claimHint,
+      description: copy.description(target.name),
+      claimHint: copy.claimHint,
       communityName: branding.communityName || null,
     });
     const row = buildHubWelcomeRow({
