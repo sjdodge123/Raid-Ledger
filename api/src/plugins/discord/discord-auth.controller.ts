@@ -91,6 +91,12 @@ export class DiscordAuthController {
     // Initiates the Discord OAuth flow
   }
 
+  /** ROK-2371 D1a: park an unknown snowflake / finish a pending-link. */
+  private routePendingIdentity(req: Request, res: Response) {
+    const state = verifiedLoginStateOf(req);
+    return this.pendingIdentity?.route(req, res, this.getClientUrl(req), state);
+  }
+
   @RateLimit('auth')
   @Get('discord/callback')
   @UseGuards(DiscordAuthGuard)
@@ -99,13 +105,7 @@ export class DiscordAuthController {
     @Res() res: Response,
   ) {
     if (res.headersSent) return;
-    // ROK-2371 D1a: park an unknown snowflake / finish a pending-link.
-    const routed = await this.pendingIdentity?.route(
-      req,
-      res,
-      this.getClientUrl(req),
-      verifiedLoginStateOf(req),
-    );
+    const routed = await this.routePendingIdentity(req, res);
     if (routed) return res.redirect(routed);
     const { access_token } = await this.authService.login(req.user);
     // ROK-1808: the code is bound to this browser (cookie of its hash).
