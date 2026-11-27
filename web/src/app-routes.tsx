@@ -166,7 +166,8 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<RootRedirect />} />
-      <Route path="/login" element={<Navigate to="/" replace />} />
+      {/* Keep `?error=&reason=`: Discord + Google sign-in refusals land on /login (ROK-2371). */}
+      <Route path="/login" element={<RedirectKeepingLocation to="/" />} />
       <Route path="/auth/success" element={<AuthSuccessPage />} />
       {/* ROK-2371 D1a: an unknown Google/Discord identity — link it to an account or create one. */}
       <Route path="/auth/first-time" element={<FirstTimePage />} />
