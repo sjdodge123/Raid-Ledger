@@ -24,6 +24,26 @@ export interface SettingsCore {
   delete(key: SettingKey): Promise<void>;
 }
 
+/** Local fallback: Nest on :3000 serves its routes without `/api`. */
+export const LOCAL_DISCORD_CALLBACK_URL =
+  'http://localhost:3000/auth/discord/callback';
+
+/**
+ * The Discord OAuth callback URL: saved setting → `DISCORD_CALLBACK_URL` →
+ * `<public url>/api/auth/discord/callback` → the local Nest URL. ROK-2371:
+ * Google sign-in derives its redirect URIs from this same chain.
+ */
+export async function resolveDiscordCallbackUrl(
+  svc: Pick<SettingsCore, 'get'>,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> {
+  return (
+    (await svc.get(SETTING_KEYS.DISCORD_CALLBACK_URL)) ||
+    env.DISCORD_CALLBACK_URL ||
+    defaultDiscordCallbackUrl(env, LOCAL_DISCORD_CALLBACK_URL)
+  );
+}
+
 /** Get Discord OAuth configuration. */
 export async function getDiscordOAuthConfig(
   svc: SettingsCore,
@@ -31,20 +51,10 @@ export async function getDiscordOAuthConfig(
   const [clientId, clientSecret, callbackUrl] = await Promise.all([
     svc.get(SETTING_KEYS.DISCORD_CLIENT_ID),
     svc.get(SETTING_KEYS.DISCORD_CLIENT_SECRET),
-    svc.get(SETTING_KEYS.DISCORD_CALLBACK_URL),
+    resolveDiscordCallbackUrl(svc),
   ]);
   if (!clientId || !clientSecret) return null;
-  return {
-    clientId,
-    clientSecret,
-    callbackUrl:
-      callbackUrl ||
-      process.env.DISCORD_CALLBACK_URL ||
-      defaultDiscordCallbackUrl(
-        process.env,
-        'http://localhost:3000/auth/discord/callback',
-      ),
-  };
+  return { clientId, clientSecret, callbackUrl };
 }
 
 /** Get IGDB configuration. */

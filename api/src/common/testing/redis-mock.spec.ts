@@ -60,3 +60,26 @@ describe('redis-mock eval (compare-and-delete only)', () => {
     );
   });
 });
+
+describe('redis-mock multi (ROK-2371 read-and-spend)', () => {
+  it('resolves the ioredis [[err, result], …] shape in queue order', async () => {
+    const { client } = createRedisMock();
+    await client.set('k', 'v');
+    const out = await client.multi().get('k').del('k').exec();
+    expect(out).toEqual([
+      [null, 'v'],
+      [null, 1],
+    ]);
+    expect(await client.get('k')).toBeNull();
+  });
+
+  it('two concurrent execs never both read the value (no interleaving)', async () => {
+    const { client } = createRedisMock();
+    await client.set('k', 'v');
+    const [a, b] = await Promise.all([
+      client.multi().get('k').del('k').exec(),
+      client.multi().get('k').del('k').exec(),
+    ]);
+    expect([a?.[0]?.[1], b?.[0]?.[1]].filter((r) => r === 'v')).toHaveLength(1);
+  });
+});

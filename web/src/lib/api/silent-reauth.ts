@@ -60,8 +60,12 @@ function isTouchDevice(): boolean {
   return window.matchMedia('(pointer: coarse)').matches;
 }
 
-/** Record how the user authenticated (for the silent-reauth decision). */
-export function setAuthMethod(method: 'discord' | 'local' | 'magic'): void {
+/**
+ * Record how the user authenticated (for the silent-reauth decision). ROK-2371:
+ * `'google'` is recorded but never bounces — `attemptSilentReauth` only acts on
+ * `'discord'`, so a dead Google session shows the login page.
+ */
+export function setAuthMethod(method: 'discord' | 'local' | 'magic' | 'google'): void {
   safeSetItem(AUTH_METHOD_KEY, method);
 }
 

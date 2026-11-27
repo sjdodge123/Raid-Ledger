@@ -11,6 +11,7 @@ import { UsersService } from '../users/users.service';
 import { PreferencesService } from '../users/preferences.service';
 import { SignupsService } from '../events/signups.service';
 import { CharactersService } from '../characters/characters.service';
+import { SigninMethodsService } from '../users/signin-methods.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import type { UserRole } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from './types';
@@ -111,6 +112,16 @@ function describeAuthControllerRedeemIntent() {
         { provide: PreferencesService, useValue: mockPreferencesService },
         { provide: SignupsService, useValue: mockSignupsService },
         { provide: CharactersService, useValue: mockCharactersService },
+        {
+          provide: SigninMethodsService,
+          useValue: {
+            forUser: jest.fn().mockResolvedValue({
+              discord: true,
+              google: null,
+              password: false,
+            }),
+          },
+        },
         {
           provide: REDIS_CLIENT,
           useValue: {
@@ -357,6 +368,16 @@ function describeAuthControllerGetProfile() {
         { provide: PreferencesService, useValue: mockPreferencesService },
         { provide: SignupsService, useValue: mockSignupsService },
         { provide: CharactersService, useValue: mockCharactersService },
+        {
+          provide: SigninMethodsService,
+          useValue: {
+            forUser: jest.fn().mockResolvedValue({
+              discord: true,
+              google: null,
+              password: false,
+            }),
+          },
+        },
         {
           provide: REDIS_CLIENT,
           useValue: {

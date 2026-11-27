@@ -3,6 +3,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { useDiscordLinkAction } from '../../hooks/use-discord-link';
 import { buildDiscordAvatarUrl, isDiscordLinked } from '../../lib/avatar';
+import { DiscordLinkNudge } from './discord-link-nudge';
 
 function DiscordLinkedState({ user }: { user: { username: string; discordId?: string | null; avatar?: string | null } }) {
     const discordAvatarUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
@@ -54,6 +55,7 @@ export function ProfileDiscordPanel() {
                 <p className="text-sm text-muted mb-5">
                     {hasDiscordLinked ? 'Your Discord account is linked. This enables rich notifications and authentication.' : 'Link your Discord account for authentication and notifications.'}
                 </p>
+                {!hasDiscordLinked && <DiscordLinkNudge methods={user.signinMethods} />}
                 {hasDiscordLinked ? <DiscordLinkedState user={user} /> : <DiscordLinkButton onLink={handleLinkDiscord} pending={linkPending} />}
             </div>
         </div>

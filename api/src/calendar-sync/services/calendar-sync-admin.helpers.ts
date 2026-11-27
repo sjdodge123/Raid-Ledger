@@ -5,7 +5,7 @@
  * `getCalendarProviderConfig` without `includeSecret`, field by field, so the
  * contract's `.strict()` schema matches exactly.
  */
-import { Logger } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import type {
   AdminCalendarSyncSettings,
@@ -23,6 +23,11 @@ import {
   type CalendarOAuthProvider,
   type CalendarProviderConfigUpdate,
 } from '../../settings/settings-calendar-sync.helpers';
+import {
+  getGoogleSigninEnabled,
+  googleSigninRedirectUris,
+  setGoogleSigninEnabled,
+} from '../../settings/settings-google-signin.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import {
@@ -51,9 +56,13 @@ export async function buildRedirectUris(
   svc: SettingsCore,
 ): Promise<AdminCalendarSyncSettings['redirectUris']> {
   const base = (await getClientUrl(svc)).replace(/\/+$/, '');
+  // ROK-2371: Google sign-in + Profile link, on the same Google client — the
+  // exact URIs the sign-in flow sends (built like the Discord callback).
+  const signin = await googleSigninRedirectUris(svc);
   return {
     google: `${base}${oauthCallbackPath('google')}`,
     microsoft: `${base}${oauthCallbackPath('microsoft')}`,
+    googleSignin: [signin.signin, signin.link],
   };
 }
 
@@ -61,13 +70,15 @@ export async function buildRedirectUris(
 export async function buildAdminCalendarSyncSettings(
   svc: SettingsCore,
 ): Promise<AdminCalendarSyncSettings> {
-  const [enabled, google, microsoft, redirectUris] = await Promise.all([
-    getCalendarSyncEnabled(svc),
-    readProvider(svc, 'google'),
-    readProvider(svc, 'microsoft'),
-    buildRedirectUris(svc),
-  ]);
-  return { enabled, google, microsoft, redirectUris };
+  const [enabled, google, microsoft, redirectUris, googleSigninEnabled] =
+    await Promise.all([
+      getCalendarSyncEnabled(svc),
+      readProvider(svc, 'google'),
+      readProvider(svc, 'microsoft'),
+      buildRedirectUris(svc),
+      getGoogleSigninEnabled(svc),
+    ]);
+  return { enabled, google, microsoft, redirectUris, googleSigninEnabled };
 }
 
 /** Drop absent keys: an omitted field leaves the stored value alone. */
@@ -80,6 +91,29 @@ function toProviderConfigUpdate(
   };
 }
 
+/** A field after this update: the new value when sent, else the stored one. */
+function effectiveSet(sent: string | undefined, stored: boolean): boolean {
+  return sent === undefined ? stored : sent.trim() !== '';
+}
+
+/**
+ * ROK-2371 §5: turning Google sign-in on needs the Google client id AND
+ * secret — stored, or set by this same PUT. Checked before anything is
+ * written, so a refused PUT changes nothing.
+ */
+async function assertGoogleSigninEnableable(
+  svc: SettingsCore,
+  update: UpdateAdminCalendarSyncSettings,
+): Promise<void> {
+  if (update.googleSigninEnabled !== true) return;
+  const stored = await getCalendarProviderConfig(svc, 'google');
+  const hasId = effectiveSet(update.google?.clientId, stored.clientId !== null);
+  const hasSecret = effectiveSet(update.google?.clientSecret, stored.hasSecret);
+  if (!hasId || !hasSecret) {
+    throw new BadRequestException('Set the Google client first');
+  }
+}
+
 /**
  * Apply a validated PUT body. Omitted fields are left alone; an empty string
  * clears a client id or secret.
@@ -89,6 +123,7 @@ export async function applyAdminCalendarSyncUpdate(
   update: UpdateAdminCalendarSyncSettings,
   effects?: KillSwitchEffects,
 ): Promise<void> {
+  await assertGoogleSigninEnableable(svc, update);
   for (const provider of CALENDAR_OAUTH_PROVIDERS) {
     const providerUpdate = update[provider];
     if (providerUpdate) {
@@ -102,6 +137,9 @@ export async function applyAdminCalendarSyncUpdate(
   if (update.enabled !== undefined) {
     await setCalendarSyncEnabled(svc, update.enabled);
     if (effects) await applyKillSwitchEffectsSafely(effects, update.enabled);
+  }
+  if (update.googleSigninEnabled !== undefined) {
+    await setGoogleSigninEnabled(svc, update.googleSigninEnabled);
   }
 }
 

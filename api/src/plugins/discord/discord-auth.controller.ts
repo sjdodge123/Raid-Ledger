@@ -42,7 +42,9 @@ import { verifyDiscordLinkState } from './discord-link-state.helpers';
 import { signBrowserBoundLoginState } from './discord-login-state.helpers';
 import { mintBrowserBoundAuthCode } from '../../auth/auth-code-cookie.helpers';
 import { verifiedLoginStateOf } from './discord-verified-login-state';
-import { isInviteCodeFormat } from './invite-code-format';
+import { isInviteCodeFormat } from '../../auth/invite-code-format';
+import { assertDiscordNotOnAnotherUser } from './discord-link-conflict.helpers';
+import { DiscordPendingIdentityService } from '../../auth/google-signin/discord-pending-identity.service';
 
 interface RequestWithUser extends Request {
   user: {
@@ -69,6 +71,8 @@ export class DiscordAuthController {
     private readonly eventEmitter: EventEmitter2,
     private readonly refreshService: RefreshTokenService,
     private readonly linkNonceService: LinkNonceService,
+    @Optional()
+    private readonly pendingIdentity?: DiscordPendingIdentityService,
   ) {}
 
   /** Get the frontend client URL for post-auth redirects. */
@@ -88,6 +92,12 @@ export class DiscordAuthController {
     // Initiates the Discord OAuth flow
   }
 
+  /** ROK-2371 D1a: park an unknown snowflake / finish a pending-link. */
+  private routePendingIdentity(req: Request, res: Response) {
+    const state = verifiedLoginStateOf(req);
+    return this.pendingIdentity?.route(req, res, this.getClientUrl(req), state);
+  }
+
   @RateLimit('auth')
   @Get('discord/callback')
   @UseGuards(DiscordAuthGuard)
@@ -96,6 +106,8 @@ export class DiscordAuthController {
     @Res() res: Response,
   ) {
     if (res.headersSent) return;
+    const routed = await this.routePendingIdentity(req, res);
+    if (routed) return res.redirect(routed);
     const { access_token } = await this.authService.login(req.user);
     // ROK-1808: the code is bound to this browser (cookie of its hash).
     const authCode = mintBrowserBoundAuthCode(req, res);
@@ -307,19 +319,10 @@ export class DiscordAuthController {
       tokens.access_token,
       discordFetch,
     );
-    await this.validateNoExistingLink(discordProfile.id, userId);
+    const ids = { discordId: discordProfile.id, userId };
+    const google = this.pendingIdentity;
+    await assertDiscordNotOnAnotherUser(this.usersService, google, ids);
     return discordProfile;
-  }
-
-  /** Validate that the Discord account isn't already linked to another user. */
-  private async validateNoExistingLink(
-    discordId: string,
-    userId: number,
-  ): Promise<void> {
-    const existingUser =
-      await this.usersService.findByDiscordIdIncludingUnlinked(discordId);
-    if (existingUser && existingUser.id !== userId)
-      throw new Error('This Discord account is already linked to another user');
   }
 
   /** Send welcome DM safely (fire-and-forget). */

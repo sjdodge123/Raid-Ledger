@@ -16,6 +16,7 @@ describe('LastUsedSigninCard (ROK-2370)', () => {
         ['discord', 'Discord'],
         ['discord-app-code', 'Discord app code'],
         ['password', 'Username and password'],
+        ['google', 'Google'],
     ] as const)('shows name, method (%s) and the Last used pill', (method, label) => {
         render(<LastUsedSigninCard marker={marker(method)} onContinue={vi.fn()} onNotYou={vi.fn()} />);
         const card = screen.getByRole('button', { name: `Continue as Roknua with ${label}` });
