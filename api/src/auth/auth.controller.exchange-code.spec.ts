@@ -17,6 +17,7 @@ import { UsersService } from '../users/users.service';
 import { PreferencesService } from '../users/preferences.service';
 import { SignupsService } from '../events/signups.service';
 import { CharactersService } from '../characters/characters.service';
+import { SigninMethodsService } from '../users/signin-methods.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { createRedisMock } from '../common/testing/redis-mock';
 import { AUTH_CODE_COOKIE } from './auth-code-cookie.helpers';
@@ -35,6 +36,7 @@ async function buildController() {
       { provide: PreferencesService, useValue: {} },
       { provide: SignupsService, useValue: {} },
       { provide: CharactersService, useValue: {} },
+      { provide: SigninMethodsService, useValue: {} },
       { provide: REDIS_CLIENT, useValue: redis.client },
     ],
   }).compile();

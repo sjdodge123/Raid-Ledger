@@ -30,8 +30,20 @@ export function discordProvider(providers: LoginMethodDto[]): LoginMethodDto | u
     return providers.find((p) => p.key === 'discord' || p.icon === 'discord');
 }
 
+/** ROK-2371: the provider a `google` marker continues with, if the server still offers it. */
+export function googleProvider(providers: LoginMethodDto[]): LoginMethodDto | undefined {
+    return providers.find((p) => p.key === 'google' || p.icon === 'google');
+}
+
+/** The OAuth provider a marker method continues with (undefined for the in-page methods). */
+function oauthProviderFor(method: LastSigninMethod, providers: LoginMethodDto[]): LoginMethodDto | undefined {
+    if (method === 'discord') return discordProvider(providers);
+    if (method === 'google') return googleProvider(providers);
+    return undefined;
+}
+
 function isOffered(marker: LastSignin, providers: LoginMethodDto[], codeOffered: boolean): boolean {
-    if (marker.method === 'discord') return discordProvider(providers) !== undefined;
+    if (marker.method === 'discord' || marker.method === 'google') return oauthProviderFor(marker.method, providers) !== undefined;
     if (marker.method === 'discord-app-code') return codeOffered;
     return true;
 }
@@ -50,9 +62,11 @@ export function useLastUsedSignin(opts: {
     const [request, setRequest] = useState<DisclosureRequest | null>(null);
     const marker = stored && isOffered(stored, opts.providers, opts.codeOffered) ? stored : null;
     const continueWith = (method: LastSigninMethod): void => {
-        const provider = discordProvider(opts.providers);
-        if (method === 'discord' && provider) { opts.onProviderLogin(provider); return; }
-        if (method === 'discord') return;
+        if (method === 'discord' || method === 'google') {
+            const provider = oauthProviderFor(method, opts.providers);
+            if (provider) opts.onProviderLogin(provider);
+            return;
+        }
         setExpanded(true);
         setRequest((prev) => ({ section: method, n: (prev?.n ?? 0) + 1 }));
     };

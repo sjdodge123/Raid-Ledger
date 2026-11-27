@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LinkStartError, startAccountLink, type LinkProvider } from '../lib/api/link-start-api';
 import { toast } from '../lib/toast';
 
-const PROVIDER_LABEL: Record<LinkProvider, string> = { discord: 'Discord', steam: 'Steam' };
+const PROVIDER_LABEL: Record<LinkProvider, string> = { discord: 'Discord', steam: 'Steam', google: 'Google' };
 
 function failureMessage(provider: LinkProvider, err: unknown): string {
     const label = PROVIDER_LABEL[provider];

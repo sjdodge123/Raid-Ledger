@@ -9,7 +9,13 @@ import type { JwtService } from '@nestjs/jwt';
  * signature failure rather than a branch someone could get wrong.
  */
 export type JwtPurpose =
-  'magic-link' | 'discord-signin' | 'link-nonce:discord' | 'link-nonce:steam';
+  | 'magic-link'
+  | 'discord-signin'
+  | 'link-nonce:discord'
+  | 'link-nonce:steam'
+  | 'link-nonce:google'
+  // ROK-2371: the Google sign-in / link OAuth round-trip state.
+  | 'google-signin-state';
 
 /** HMAC-SHA256(baseSecret, "rl-jwt-purpose:<purpose>"), hex-encoded. */
 export function derivePurposeSecret(

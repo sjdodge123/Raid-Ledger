@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/use-auth';
 
 import { ProfileSidebar } from './profile-sidebar';
 import { toast } from '../../lib/toast';
+import { linkResultToast } from './link-result-toast';
 import './integration-hub.css';
 
 /** Query params a Discord/Steam link callback lands with (ROK-1630). */
@@ -34,18 +35,13 @@ function useDiscordLinkCallback(refetch: () => void) {
         // clearing params here would navigate back to /profile and win the
         // race, leaving a blank page (ROK-1630). Handle it after the forward.
         if (processedRef.current || isProfileRoot(pathname)) return;
-        const linked = searchParams.get('linked');
-        const message = searchParams.get('message');
-        if (linked === 'success') {
-            processedRef.current = true;
-            toast.success('Discord account linked successfully!');
-            setSearchParams({}, { replace: true });
-            refetch();
-        } else if (linked === 'error') {
-            processedRef.current = true;
-            toast.error(message || 'Failed to link Discord account');
-            setSearchParams({}, { replace: true });
-        }
+        const result = linkResultToast(searchParams);
+        if (!result) return;
+        processedRef.current = true;
+        if (result.kind === 'success') toast.success(result.text);
+        else toast.error(result.text);
+        setSearchParams({}, { replace: true });
+        if (result.kind === 'success') refetch();
     }, [pathname, searchParams, setSearchParams, refetch]);
 }
 

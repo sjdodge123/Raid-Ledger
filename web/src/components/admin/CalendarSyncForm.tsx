@@ -10,7 +10,7 @@
  * save, and "Remove saved secret" sends `''`. Redirect URIs come from the
  * server (built from `CLIENT_URL`) and are copy-only.
  */
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { AdminCalendarSyncSettings } from '@raid-ledger/contract';
 import { toast } from '../../lib/toast';
 import { useUpdateAdminCalendarSyncSettings } from '../../hooks/use-admin-calendar-sync';
@@ -20,6 +20,8 @@ import { CopyableInput, FormTextField, PasswordInput } from './admin-form-helper
 import { IntegrationFormActions } from './integration-form-actions';
 import { SavedSecretStatus } from './saved-secret-status';
 import { CalendarSyncInstructions } from './calendar-sync-instructions';
+import { GoogleSigninBlock } from './calendar-sync-google-signin';
+import { httpStatusOf } from '../../lib/api/api-error';
 import {
     CALENDAR_SYNC_FORM_PROVIDERS,
     buildCalendarSyncUpdate,
@@ -107,9 +109,11 @@ function OriginCopyField({ redirectUri, field }: { redirectUri: string; field: (
     );
 }
 
-function ProviderSection({ provider, draft, settings, onChange }: {
+function ProviderSection({ provider, draft, settings, onChange, children }: {
     provider: CalendarSyncFormProvider; draft: ProviderDraft;
     settings: AdminCalendarSyncSettings; onChange: (next: ProviderDraft) => void;
+    /** ROK-2371: extra rows at the end of this provider's block (Google sign-in). */
+    children?: ReactNode;
 }) {
     const copy = PROVIDER_COPY[provider];
     return (
@@ -127,8 +131,16 @@ function ProviderSection({ provider, draft, settings, onChange }: {
             {provider === 'google' && ORIGIN_FIELDS.map((field) => (
                 <OriginCopyField key={field.label} redirectUri={settings.redirectUris.google} field={field} />
             ))}
+            {children}
         </section>
     );
+}
+
+/** A 400 on a save that turned Google sign-in on belongs to the toggle; anything else is a toast. */
+function reportSaveError(err: unknown, enablingSignin: boolean, setSigninError: (m: string) => void): void {
+    const message = err instanceof Error && err.message ? err.message : 'Failed to save Calendar Sync settings';
+    if (enablingSignin && httpStatusOf(err) === 400) setSigninError(message);
+    else toast.error(message);
 }
 
 function useCalendarSyncForm(settings: AdminCalendarSyncSettings) {
@@ -137,20 +149,27 @@ function useCalendarSyncForm(settings: AdminCalendarSyncSettings) {
     const setProvider = (provider: CalendarSyncFormProvider, next: ProviderDraft) =>
         setDraft((prev) => ({ ...prev, [provider]: next }));
     const setEnabled = (enabled: boolean) => setDraft((prev) => ({ ...prev, enabled }));
+    // ROK-2371: the 400 "Set the Google client first" is shown under the toggle, not toasted.
+    const [signinError, setSigninError] = useState<string | null>(null);
+    const setGoogleSignin = (googleSigninEnabled: boolean) => {
+        setSigninError(null);
+        setDraft((prev) => ({ ...prev, googleSigninEnabled }));
+    };
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         const body = buildCalendarSyncUpdate(draft, settings);
         if (Object.keys(body).length === 0) { toast.success('No changes to save'); return; }
+        setSigninError(null);
         try {
             const saved = await update.mutateAsync(body);
             // Reset from what the server stored, not from the submit-time draft.
             setDraft((current) => (saved ? draftFromSettings(saved) : settleDraftAfterSave(current)));
             toast.success('Calendar Sync settings saved');
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to save Calendar Sync settings');
+            reportSaveError(err, body.googleSigninEnabled === true, setSigninError);
         }
     };
-    return { draft, setProvider, setEnabled, handleSave, isSaving: update.isPending };
+    return { draft, setProvider, setEnabled, setGoogleSignin, signinError, handleSave, isSaving: update.isPending };
 }
 
 export function CalendarSyncForm({ settings }: { settings: AdminCalendarSyncSettings }) {
@@ -163,7 +182,13 @@ export function CalendarSyncForm({ settings }: { settings: AdminCalendarSyncSett
                 <CalendarSyncInstructions />
                 {CALENDAR_SYNC_FORM_PROVIDERS.map((provider) => (
                     <ProviderSection key={provider} provider={provider} draft={form.draft[provider]}
-                        settings={settings} onChange={(next) => form.setProvider(provider, next)} />
+                        settings={settings} onChange={(next) => form.setProvider(provider, next)}>
+                        {provider === 'google' && settings.googleSigninEnabled !== undefined && (
+                            <GoogleSigninBlock checked={form.draft.googleSigninEnabled}
+                                saved={settings.googleSigninEnabled} onChange={form.setGoogleSignin}
+                                redirectUris={settings.redirectUris.googleSignin ?? []} error={form.signinError} />
+                        )}
+                    </ProviderSection>
                 ))}
             </fieldset>
             <IntegrationFormActions showTest={false} showClear={false} onTest={NO_TEST} onClear={NO_TEST}

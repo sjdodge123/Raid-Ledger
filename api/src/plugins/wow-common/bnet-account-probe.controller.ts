@@ -60,7 +60,7 @@ export class BnetAccountProbeController {
     const region = parsed.data.region ?? 'us';
     const { url, cookieValue } = await this.probe.start(req.user.id, region);
     res.cookie(BNET_PROBE_COOKIE, cookieValue, {
-      ...linkCookieAttrs(),
+      ...linkCookieAttrs(res.req),
       maxAge: SIGNED_STATE_TTL_SECONDS * 1000,
     });
     return { url };

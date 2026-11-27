@@ -19,6 +19,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
+import { SigninMethodsService } from '../users/signin-methods.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { AuthenticatedRequest } from './types';
@@ -85,6 +86,7 @@ function buildProviders(
       },
     },
     { provide: SignupsService, useValue: signups },
+    { provide: SigninMethodsService, useValue: {} },
     {
       provide: ConfigService,
       useValue: { get: jest.fn().mockReturnValue('http://localhost:3000') },

@@ -14,8 +14,8 @@ import { safeGetItem, safeRemoveItem, safeSetItem } from './safe-storage';
 
 export const LAST_SIGNIN_KEY = 'rl_last_signin';
 
-/** Every sign-in method the marker can name. ROK-2371 adds `'google'`. */
-export const LAST_SIGNIN_METHODS = ['discord', 'discord-app-code', 'password'] as const;
+/** Every sign-in method the marker can name (ROK-2371 added `'google'`). */
+export const LAST_SIGNIN_METHODS = ['discord', 'discord-app-code', 'password', 'google'] as const;
 export type LastSigninMethod = (typeof LAST_SIGNIN_METHODS)[number];
 
 /** The stored marker. */
