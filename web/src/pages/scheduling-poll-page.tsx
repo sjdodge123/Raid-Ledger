@@ -69,6 +69,10 @@ function SchedulePollNotFound(): JSX.Element {
  */
 function CompletedOutcome({ poll }: { poll: SchedulePollPageResponseDto }): JSX.Element {
   const eventId = poll.match.linkedEventId;
+  // ROK-2330: a cancelled event is not a live plan — no "rescheduled" claim
+  // and no link to it.
+  const cancelledAt = poll.linkedEventCancelledAt ?? null;
+  const liveEventId = cancelledAt ? null : eventId;
   return (
     <>
       <SchedulingTerminalBanner
@@ -76,17 +80,16 @@ function CompletedOutcome({ poll }: { poll: SchedulePollPageResponseDto }): JSX.
         lockedInTime={poll.lockedInTime ?? null}
         cancelReason={null}
         linkedEventId={eventId}
+        linkedEventCancelledAt={cancelledAt}
       />
       <div className="p-6 rounded-xl bg-success/10 border border-success/30 text-center space-y-3">
         <div data-testid="match-status-badge"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-success/10 text-success border border-success/30">
           Poll Complete
         </div>
-        <p className="text-sm text-success">
-          {eventId ? 'The event has been rescheduled.' : 'This poll has been locked in.'}
-        </p>
-        {eventId && (
-          <Link to={`/events/${eventId}`}
+        <p className="text-sm text-success">{completedCopy(eventId, cancelledAt)}</p>
+        {liveEventId && (
+          <Link to={`/events/${liveEventId}`}
             className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
             View Event &rarr;
           </Link>
@@ -94,6 +97,12 @@ function CompletedOutcome({ poll }: { poll: SchedulePollPageResponseDto }): JSX.
       </div>
     </>
   );
+}
+
+/** The outcome card's line — what the lock-in left behind. */
+function completedCopy(eventId: number | null, cancelledAt: string | null): string {
+  if (cancelledAt) return 'This poll locked in, but its event was later cancelled.';
+  return eventId ? 'The event has been rescheduled.' : 'This poll has been locked in.';
 }
 
 /**
@@ -114,7 +123,9 @@ function CompletedPollState({ matchId, poll }: {
       <SchedulingReopenLockInAction matchId={matchId} recoverable={poll.lockInRecoverable} />
       <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
       {!stalled && <CompletedOutcome poll={poll} />}
-      <PollDiscussion matchId={matchId} lockedInEventId={poll.match.linkedEventId} />
+      {/* ROK-2330: no "View the event" CTA to an event that was cancelled. */}
+      <PollDiscussion matchId={matchId}
+        lockedInEventId={poll.linkedEventCancelledAt ? null : poll.match.linkedEventId} />
     </div>
   );
 }
