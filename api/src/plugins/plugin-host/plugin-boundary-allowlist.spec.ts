@@ -11,6 +11,21 @@ import * as path from 'node:path';
 const API_DIR = path.resolve(__dirname, '../../..');
 const LIST_FILE = path.join(API_DIR, 'plugin-boundary-allowlist.json');
 
+/**
+ * Shrink-only pin: the list's total number of specifiers. When you delete
+ * entries, LOWER this to the new total in the same PR. NEVER raise it: a new
+ * deep import goes through `plugins/<x>/index.ts` instead. Raising it needs
+ * operator sign-off, and the number edit is what review sees.
+ */
+const MAX_SPECIFIERS = 106;
+
+function totalSpecifiers(list: Record<string, unknown>): number {
+  return Object.values(list).reduce<number>(
+    (n, specs) => n + (Array.isArray(specs) ? specs.length : 0),
+    0,
+  );
+}
+
 function readAllowlist(): Record<string, unknown> {
   const parsed: unknown = JSON.parse(fs.readFileSync(LIST_FILE, 'utf8'));
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
@@ -29,11 +44,20 @@ describe('plugin-boundary allowlist (ROK-2366, shrink-only)', () => {
     expect(missing).toEqual([]);
   });
 
-  it('lists only lint-checked source files, never specs', () => {
-    const specs = Object.keys(allowlist).filter((file) =>
-      /\.spec(-helpers)?\.ts$/.test(file),
+  it('holds exactly MAX_SPECIFIERS entries: after deleting some, LOWER the pin; never raise it', () => {
+    expect(totalSpecifiers(allowlist)).toBe(MAX_SPECIFIERS);
+  });
+
+  it('lists only lint-checked source files, never specs or src/common/testing', () => {
+    const outOfScope = Object.keys(allowlist).filter((file) =>
+      /^src\/common\/testing\/|\.spec(-helpers)?\.ts$/.test(file),
     );
-    expect(specs).toEqual([]);
+    expect(outOfScope).toEqual([]);
+  });
+
+  it('keeps the file keys sorted, so diffs stay stable', () => {
+    const keys = Object.keys(allowlist);
+    expect(keys).toEqual([...keys].sort());
   });
 
   it('keeps every entry a non-empty, sorted, unique list of specifiers', () => {

@@ -27,13 +27,13 @@ export default defineConfig([
       'max-lines-per-function': ['warn', { max: 30, skipBlankLines: true, skipComments: true }],
     },
   },
-  // ROK-2366: outside plugins/<x>/, reach plugins/<x>/** only through its
-  // index.ts or register.ts. Offenders: plugin-boundary-allowlist.json (shrink-only).
+  // ROK-2366: outside plugins/<x>/ (other plugins included), reach plugins/<x>/**
+  // only through its index.ts or register.ts. Offenders:
+  // plugin-boundary-allowlist.json (shrink-only). Web has no `@/` alias, so none is passed.
   pluginBoundaryBlock({
     workspaceDir: import.meta.dirname,
     files: ['src/**/*.{ts,tsx}'],
-    ignores: ['src/plugins/**', 'src/dev/**', 'src/test/**', '**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
-    aliases: { '@/': `${import.meta.dirname}/src/` },
+    ignores: ['src/dev/**', 'src/test/**', '**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
     entries: ['index', 'register'],
   }),
   {

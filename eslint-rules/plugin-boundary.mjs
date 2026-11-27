@@ -14,7 +14,20 @@
  *   - a listed specifier the file no longer imports (or that no longer crosses
  *     the boundary) is reported as STALE on that file, so it must be deleted;
  *   - a listed file that no longer exists fails the workspace's
- *     `plugin-boundary-allowlist` spec (the rule never sees a deleted file).
+ *     `plugin-boundary-allowlist` spec (the rule never sees a deleted file);
+ *   - each list's total is pinned as a ceiling in that spec, so adding an
+ *     entry fails it and raising the pin is a visible, reviewed number edit.
+ *
+ * Checked: `import`, `export … from`, `export * from`, `import('literal')`, and
+ * a computed `import()` (template literal / `'…' + x`) whose static prefix
+ * already lands inside `plugins/<x>/` — that one is never allowlistable.
+ * `// eslint-disable… rl-plugin-boundary/*` is banned by
+ * `eslint-comments/no-restricted-disable` in pluginBoundaryBlock, so the
+ * allowlist is the only escape hatch.
+ * Known gaps (none occur in non-test src today): a computed `import()` whose
+ * static prefix stops short of `plugins/<x>/` (e.g. `` `./plugins/${p}` ``), `require(…)`,
+ * `import x = require(…)` and `typeof import(…)` type queries.
+ * Spec: web/src/plugins/plugin-boundary.rule.test.ts (RuleTester).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -52,7 +65,9 @@ export function crossesBoundary({ fromRel, specifier, srcDir, fromAbs, aliases, 
   let targetAbs = null;
   if (specifier.startsWith('.')) targetAbs = path.resolve(path.dirname(fromAbs), specifier);
   for (const [prefix, dir] of Object.entries(aliases)) {
-    if (specifier.startsWith(prefix)) targetAbs = path.join(dir, specifier.slice(prefix.length));
+    if (!specifier.startsWith(prefix)) continue;
+    targetAbs = path.join(dir, specifier.slice(prefix.length));
+    break;
   }
   if (targetAbs === null) return null;
   const target = pluginOf(toPosix(path.relative(srcDir, targetAbs)), hostDirs);
@@ -76,6 +91,7 @@ export function createPluginBoundaryRule({ workspaceDir, allowlistFile, aliases 
       schema: [{ type: 'object', properties: { allowlist: { type: 'object' } }, additionalProperties: false }],
       messages: {
         deep: "'{{spec}}' reaches inside plugin '{{slug}}'. Import it through plugins/{{slug}}/index.ts (export it there) instead. (ROK-2366)",
+        computed: "A computed import() reaches inside plugin '{{slug}}'. Import a named loader exported from plugins/{{slug}}/index.ts instead; computed paths cannot be allowlisted. (ROK-2366)",
         stale: "{{list}} lists '{{spec}}' for this file, but it no longer deep-imports a plugin. Delete the entry — the allowlist only shrinks. (ROK-2366)",
       },
     },
@@ -83,22 +99,12 @@ export function createPluginBoundaryRule({ workspaceDir, allowlistFile, aliases 
       const fromAbs = context.filename;
       const fromRel = toPosix(path.relative(srcDir, fromAbs));
       if (fromRel.startsWith('..')) return {};
-      const wsRel = toPosix(path.relative(workspaceDir, fromAbs));
       /** @type {Record<string, string[]>} */
       const allowlist = context.options[0]?.allowlist ?? {};
-      const allowed = new Set(allowlist[wsRel] ?? []);
+      const allowed = new Set(allowlist[toPosix(path.relative(workspaceDir, fromAbs))] ?? []);
       const seen = new Set();
-      /** @param {any} node */
-      const check = (node) => {
-        const src = node && node.source;
-        if (!src || src.type !== 'Literal' || typeof src.value !== 'string') return;
-        const spec = src.value;
-        const slug = crossesBoundary({ fromRel, specifier: spec, srcDir, fromAbs, aliases, hostDirs, entries });
-        if (slug === null) return;
-        seen.add(spec);
-        if (allowed.has(spec)) return;
-        context.report({ node: src, messageId: 'deep', data: { spec, slug } });
-      };
+      const base = { fromRel, srcDir, fromAbs, aliases, hostDirs, entries };
+      const check = makeCheck({ context, base, allowed, seen });
       return {
         ImportDeclaration: check,
         ExportNamedDeclaration: check,
@@ -115,6 +121,44 @@ export function createPluginBoundaryRule({ workspaceDir, allowlistFile, aliases 
 }
 
 /**
+ * The static prefix of a computed `import()` source, or null.
+ * @param {any} src
+ */
+function staticPrefix(src) {
+  if (src.type === 'TemplateLiteral') return src.quasis[0]?.value.cooked ?? null;
+  if (src.type === 'BinaryExpression' && src.operator === '+' && src.left.type === 'Literal') {
+    return typeof src.left.value === 'string' ? src.left.value : null;
+  }
+  return null;
+}
+
+/**
+ * The node visitor: report each deep import that the allowlist does not hold.
+ * @param {{ context: import('eslint').Rule.RuleContext, allowed: Set<string>, seen: Set<string>,
+ *   base: Omit<Parameters<typeof crossesBoundary>[0], 'specifier'> }} args
+ */
+function makeCheck({ context, base, allowed, seen }) {
+  /** @param {any} node */
+  return (node) => {
+    const src = node && node.source;
+    if (!src) return;
+    if (src.type !== 'Literal') {
+      const prefix = node.type === 'ImportExpression' ? staticPrefix(src) : null;
+      // `x` stands in for the computed tail: `./plugins/wow/pages/${p}` → plugins/wow/pages/x.
+      const slug = prefix === null ? null : crossesBoundary({ ...base, specifier: `${prefix}x` });
+      if (slug !== null) context.report({ node: src, messageId: 'computed', data: { slug } });
+      return;
+    }
+    if (typeof src.value !== 'string') return;
+    const spec = src.value;
+    const slug = crossesBoundary({ ...base, specifier: spec });
+    if (slug === null) return;
+    seen.add(spec);
+    if (!allowed.has(spec)) context.report({ node: src, messageId: 'deep', data: { spec, slug } });
+  };
+}
+
+/**
  * The flat-config block that turns the rule on (as an error) for one workspace.
  * The allowlist is `<workspaceDir>/plugin-boundary-allowlist.json`.
  * @param {{ workspaceDir: string, files: string[], ignores: string[],
@@ -127,6 +171,10 @@ export function pluginBoundaryBlock({ workspaceDir, files, ignores, ...rest }) {
     files,
     ignores,
     plugins: { 'rl-plugin-boundary': { rules: { 'deep-import': rule } } },
-    rules: { 'rl-plugin-boundary/deep-import': ['error', { allowlist: loadAllowlist(allowlistFile) }] },
+    rules: {
+      'rl-plugin-boundary/deep-import': ['error', { allowlist: loadAllowlist(allowlistFile) }],
+      // The allowlist is the only escape hatch: an eslint-disable for this rule is itself an error.
+      '@eslint-community/eslint-comments/no-restricted-disable': ['error', 'rl-plugin-boundary/*'],
+    },
   };
 }

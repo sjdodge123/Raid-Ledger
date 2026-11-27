@@ -14,7 +14,10 @@ import { describe, expect, it } from 'vitest';
 const SRC_DIR = `${resolve(__dirname, '../..')}/`;
 
 /** Lazy export name → why it may mount outside a PluginRoute. */
-const ALLOWED_UNWRAPPED: Readonly<Record<string, string>> = {};
+const ALLOWED_UNWRAPPED: Readonly<Record<string, string>> = {
+    PublicGuildCardNotFoundPage:
+        'the fallback of /p/guild/:slug: renders the not-found page while the blizzard plugin is off, by design',
+};
 
 function parse(file: string): ts.SourceFile {
     const text = readFileSync(`${SRC_DIR}${file}`, 'utf8');
@@ -45,7 +48,23 @@ function pluginLazyExports(): { name: string; specifier: string }[] {
     return found;
 }
 
-/** `<Name …>` usages in app-routes.tsx with no enclosing `<PluginRoute>` element. */
+/**
+ * The enclosing `<PluginRoute>` whose CHILDREN hold `n`, or undefined. A use inside one of
+ * its attributes (`fallback={<X/>}`) does not count: a fallback renders exactly when the
+ * plugin is off.
+ */
+function enclosingPluginRoute(n: ts.Node, sf: ts.SourceFile): ts.JsxElement | undefined {
+    let attr: ts.JsxAttribute | undefined;
+    for (let p: ts.Node | undefined = n.parent; p; p = p.parent) {
+        if (ts.isJsxAttribute(p)) attr = p;
+        if (!ts.isJsxElement(p) || p.openingElement.tagName.getText(sf) !== 'PluginRoute') continue;
+        // In this PluginRoute's own props (its fallback): keep looking further out.
+        if (attr?.parent.parent !== p.openingElement) return p;
+    }
+    return undefined;
+}
+
+/** `<Name …>` usages in app-routes.tsx that are not children of a `<PluginRoute>` element. */
 function routeUsages(names: ReadonlySet<string>): { wrapped: Set<string>; unwrapped: string[] } {
     const sf = parse('app-routes.tsx');
     const wrapped = new Set<string>();
@@ -54,9 +73,7 @@ function routeUsages(names: ReadonlySet<string>): { wrapped: Set<string>; unwrap
         if (!ts.isJsxSelfClosingElement(n) && !ts.isJsxOpeningElement(n)) return;
         const tag = n.tagName.getText(sf);
         if (!names.has(tag)) return;
-        let p: ts.Node | undefined = n.parent;
-        while (p && !(ts.isJsxElement(p) && p.openingElement.tagName.getText(sf) === 'PluginRoute')) p = p.parent;
-        if (p) wrapped.add(tag);
+        if (enclosingPluginRoute(n, sf)) wrapped.add(tag);
         else unwrapped.push(`${tag} (app-routes.tsx:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1})`);
     });
     return { wrapped, unwrapped };
