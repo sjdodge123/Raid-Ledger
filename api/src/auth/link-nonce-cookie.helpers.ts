@@ -35,8 +35,8 @@ function hashNonce(nonce: string): string {
 
 /**
  * Shared by the nonce cookie and the state cookie (link-state-cookie.helpers).
- * ROK-2322: `Secure` follows the request's scheme (`isSecureRequest`), not
- * NODE_ENV — the all-in-one image runs NODE_ENV=production on plain
+ * ROK-2322: `Secure` follows `isSecureRequest` (the request's scheme, or an
+ * https `CLIENT_URL`), not NODE_ENV — the all-in-one image runs NODE_ENV=production on plain
  * `http://<host>:8080`, where a Secure cookie is dropped and every link
  * fails with "Link request expired". Pass the request that sets or clears it.
  */

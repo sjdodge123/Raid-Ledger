@@ -34,8 +34,15 @@ function clearAttrs(c: jest.Mock<void, [string, unknown]>): unknown {
 
 describe('rl_rt refresh cookie attributes (ROK-2322)', () => {
   const savedEnv = process.env.NODE_ENV;
+  const savedClientUrl = process.env.CLIENT_URL;
+  beforeEach(() => {
+    // A plain-HTTP install: only the request's scheme decides Secure.
+    process.env.CLIENT_URL = 'http://192.168.0.10:8080';
+  });
   afterEach(() => {
     process.env.NODE_ENV = savedEnv;
+    if (savedClientUrl === undefined) delete process.env.CLIENT_URL;
+    else process.env.CLIENT_URL = savedClientUrl;
   });
 
   describe('NODE_ENV=production (the all-in-one image)', () => {
@@ -65,10 +72,30 @@ describe('rl_rt refresh cookie attributes (ROK-2322)', () => {
       }
     });
 
-    it('a response without a paired request is treated as plain HTTP', () => {
+    it('a response without a paired request falls back to CLIENT_URL', () => {
       const set = response(undefined);
       setRefreshCookie(set.res, 'raw', 1);
       expect(setAttrs(set.cookie)).toMatchObject({ secure: false });
+      process.env.CLIENT_URL = 'https://raid.example.net';
+      const https = response(undefined);
+      setRefreshCookie(https.res, 'raw', 1);
+      expect(setAttrs(https.cookie)).toMatchObject({ secure: true });
+    });
+
+    it('https CLIENT_URL keeps rl_rt Secure on a plain-HTTP request, set and clear', () => {
+      process.env.CLIENT_URL = 'https://raid.example.net';
+      const set = response({ secure: false });
+      setRefreshCookie(set.res, 'raw', 60_000);
+      const want = {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'strict',
+        path: '/',
+      };
+      expect(setAttrs(set.cookie)).toEqual({ ...want, maxAge: 60_000 });
+      const clear = response({ secure: false });
+      clearRefreshCookie(clear.res);
+      expect(clearAttrs(clear.clearCookie)).toEqual(want);
     });
   });
 

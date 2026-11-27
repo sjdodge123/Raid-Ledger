@@ -6,10 +6,10 @@
  * plain-HTTP install sends none. Supertest connects over loopback, which the
  * default TRUST_PROXY covers — so it stands in for the nginx hop.
  */
-import { Controller, Get, Req, Res } from '@nestjs/common';
+import { Controller, Get, Res } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import request from 'supertest';
 import { applyTrustProxy } from '../main.helpers';
 import { setLinkNonceCookie } from './link-nonce-cookie.helpers';
@@ -34,7 +34,7 @@ class CookieProbeController {
   }
 
   @Get('link')
-  link(@Req() _req: Request, @Res() res: Response) {
+  link(@Res() res: Response) {
     setLinkNonceCookie(res, 'discord', 'nonce');
     bindLinkStateToBrowser(res, 'steam');
     res.end();
@@ -73,13 +73,20 @@ const isSecure = (c: string) => /;\s*Secure(;|$)/i.test(c);
 
 describe('auth cookies follow the request scheme (ROK-2322)', () => {
   const savedEnv = process.env.NODE_ENV;
+  const savedClientUrl = process.env.CLIENT_URL;
   let prod: NestExpressApplication;
   beforeAll(async () => {
     process.env.NODE_ENV = 'production';
     prod = await buildApp(true);
   });
+  beforeEach(() => {
+    // A plain-HTTP install unless a case says otherwise.
+    process.env.CLIENT_URL = 'http://192.168.0.10:8080';
+  });
   afterAll(async () => {
     process.env.NODE_ENV = savedEnv;
+    if (savedClientUrl === undefined) delete process.env.CLIENT_URL;
+    else process.env.CLIENT_URL = savedClientUrl;
     await prod.close();
   });
 
@@ -129,4 +136,18 @@ describe('auth cookies follow the request scheme (ROK-2322)', () => {
       await app.close();
     }
   });
+
+  it.each(['/probe/rt', '/probe/rt-clear', '/probe/link'])(
+    '%s with an https CLIENT_URL but no X-Forwarded-Proto: still Secure',
+    async (path) => {
+      process.env.CLIENT_URL = 'https://raid.example.net';
+      for (const c of await setCookies(prod, path)) {
+        expect({ cookie: c, secure: isSecure(c) }).toEqual({
+          cookie: c,
+          secure: true,
+        });
+        expect(c).not.toMatch(/SameSite=None/i);
+      }
+    },
+  );
 });

@@ -15,9 +15,9 @@ export const REFRESH_COOKIE_NAME = 'rl_rt';
 
 /**
  * Attributes shared by set and clear (they must match or the browser keeps
- * the cookie). ROK-2322: `Secure` follows the request's scheme
- * (`isSecureRequest` — direct TLS, or a trusted proxy's
- * `X-Forwarded-Proto: https`), not NODE_ENV: the all-in-one image runs
+ * the cookie). ROK-2322: `Secure` follows `isSecureRequest` — direct TLS, a
+ * trusted proxy's `X-Forwarded-Proto: https`, or an https `CLIENT_URL` (fails
+ * closed in production if the proxy chain drifts) — not NODE_ENV: the all-in-one image runs
  * NODE_ENV=production on plain `http://<host>:8080`, where a Secure cookie
  * never sticks. SameSite stays Strict in production and Lax in dev, as
  * before — never None, which would need Secure. `res.req` is the request

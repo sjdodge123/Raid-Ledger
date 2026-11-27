@@ -41,11 +41,16 @@ function only<T extends unknown[]>(m: jest.Mock<void, T>): T {
 
 describe('link cookie attributes (ROK-2322)', () => {
   const savedEnv = process.env.NODE_ENV;
+  const savedClientUrl = process.env.CLIENT_URL;
   beforeEach(() => {
     process.env.NODE_ENV = 'production';
+    // A plain-HTTP install: only the request's scheme decides Secure.
+    process.env.CLIENT_URL = 'http://192.168.0.10:8080';
   });
   afterEach(() => {
     process.env.NODE_ENV = savedEnv;
+    if (savedClientUrl === undefined) delete process.env.CLIENT_URL;
+    else process.env.CLIENT_URL = savedClientUrl;
   });
 
   it.each([
@@ -55,8 +60,10 @@ describe('link cookie attributes (ROK-2322)', () => {
     expect(linkCookieAttrs({ secure })).toEqual({ ...LAX, secure });
   });
 
-  it('a missing request is treated as plain HTTP', () => {
+  it('a missing request falls back to the CLIENT_URL rule', () => {
     expect(linkCookieAttrs(undefined)).toEqual({ ...LAX, secure: false });
+    process.env.CLIENT_URL = 'https://raid.example.net';
+    expect(linkCookieAttrs(undefined)).toEqual({ ...LAX, secure: true });
   });
 
   it.each([false, true])(
