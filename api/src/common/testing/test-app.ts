@@ -337,7 +337,7 @@ async function buildNestApp(
  * and clears the internal interval, so jobs stay in the registry but are
  * inert for the lifetime of the test app.
  */
-function stopAllCronJobs(app: INestApplication): void {
+export function stopAllCronJobs(app: INestApplication): void {
   const scheduler = app.get(SchedulerRegistry, { strict: false });
   if (!scheduler) return;
   for (const [, job] of scheduler.getCronJobs()) {

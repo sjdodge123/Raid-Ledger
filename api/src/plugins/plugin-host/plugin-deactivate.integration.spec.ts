@@ -2,13 +2,19 @@
  * ROK-2369 — a deactivated plugin does nothing (plugin-scoping audit, guards
  * gap item 6). The static guard (`plugin-scope.guard.spec.ts`) proves every
  * plugin controller and handler HAS an active check; this proves the checks
- * hold at runtime against a real DB. Everything is derived, never listed:
+ * hold at runtime against a real DB. Everything is derived, never listed.
+ * Scope is the scanner's: plugin code under `plugins/<folder>/` (minus core and
+ * plugin-host). Plugin-owned behaviour elsewhere (e.g. the AI plugin's handlers
+ * and crons, ROK-2354) is NOT exercised here.
  *
- * - routes: one per controller carrying `@RequirePlugin` + `PluginActiveGuard`
- *   (Nest route metadata) → 403 `Plugin "<slug>" is not active`;
+ * - routes: every route behind `@RequirePlugin` + `PluginActiveGuard` (Nest
+ *   route metadata; must cover every controller the static scanner reads as
+ *   guarded) → 403 `Plugin "<slug>" is not active`;
  * - handlers: every scoped `@OnEvent` / `@Processor` the scanner finds an
- *   active check in, plus every scoped plugin `@Cron` → fired with every
- *   non-built-in plugin off: no DB write, no fetch/enqueue/Discord send;
+ *   active check in → fired with every non-built-in plugin off: it must
+ *   CONSULT the gate (`isActive` / `getActiveSlugsSync`), must not crash on
+ *   the probe (TypeError & co.), and must make no DB write and no
+ *   fetch/enqueue/Discord call. Every scoped plugin `@Cron` → no effects;
  * - cron manager: each plugin's `CronRegistrar` jobs leave the scheduler;
  * - withdrawal cleanup (unlink, delete) still runs with the plugin off;
  * - the built-in Core plugin cannot be deactivated.
@@ -16,7 +22,14 @@
 import * as path from 'path';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SchedulerRegistry } from '@nestjs/schedule';
-import { getTestApp, type TestApp } from '../../common/testing/test-app';
+import { eq } from 'drizzle-orm';
+import { BG3_SAVE_CONTRACT_ID } from '@raid-ledger/contract';
+import * as schema from '../../drizzle/schema';
+import {
+  getTestApp,
+  stopAllCronJobs,
+  type TestApp,
+} from '../../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
@@ -28,15 +41,14 @@ import {
   pluginRoutes,
   providerInstances,
   scopedCronTargets,
-  type HandlerTarget,
+  staticGuardedControllers,
   type PluginRoute,
   type TargetInventory,
 } from '../../common/testing/plugin-deactivate-inventory';
 import {
   flushAsync,
-  invoke,
-  stopAllCrons,
-  watchSideEffects,
+  probeTarget,
+  targetProblems,
 } from '../../common/testing/plugin-deactivate-effects';
 import type { ScanSource } from '../../common/testing/hub-registration-scan';
 import { STEAM_ACCOUNT_UNLINKED } from '../../steam/steam.constants';
@@ -93,7 +105,7 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
       await registry.ensureInstalled(slug);
       await registry.activate(slug);
     }
-    stopAllCrons(testApp.app);
+    stopAllCronJobs(testApp.app);
   }
 
   async function deactivate(slugs: readonly string[]): Promise<void> {
@@ -110,32 +122,34 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
     return testApp.request[route.verb](route.path).set('Authorization', auth);
   }
 
-  /** Fire each target with every plugin off; name the ones with effects. */
-  async function effectsOf(inv: TargetInventory): Promise<string[]> {
+  /**
+   * Fire each target with every plugin off (PROBE, then PROBE with each real
+   * slug until the gate is reached); name each problem.
+   */
+  async function problemsOf(
+    inv: TargetInventory,
+    requireGate: boolean,
+  ): Promise<string[]> {
     await deactivate(pluginSlugs);
+    const deps = { db: testApp.db, gate: registry };
+    const payloads = [PROBE, ...pluginSlugs.map((slug) => ({ ...PROBE, slug }))];
     const problems: string[] = [];
     for (const t of inv.targets) {
-      const found = await effectsOfOne(t);
-      if (found.length > 0) problems.push(`${t.key}: ${found.join(', ')}`);
+      const r = await probeTarget(t, deps, payloads);
+      problems.push(...targetProblems(r, { requireGate }));
     }
     return problems;
-  }
-
-  async function effectsOfOne(t: HandlerTarget): Promise<string[]> {
-    const watch = watchSideEffects(testApp.db);
-    try {
-      await invoke(t.instance, t.method, PROBE);
-      await flushAsync();
-      return watch.effects();
-    } finally {
-      watch.restore();
-    }
   }
 
   it('derives a non-vacuous inventory from the app and the scanner', () => {
     expect(pluginSlugs.length).toBeGreaterThanOrEqual(5);
     expect(pluginSlugs).not.toContain('core');
-    expect(pluginRoutes(testApp.app).length).toBeGreaterThanOrEqual(20);
+    const routed = new Set(
+      pluginRoutes(testApp.app).map((r) => r.key.split('.')[0]),
+    );
+    const guarded = staticGuardedControllers(raw);
+    expect(guarded.length).toBeGreaterThanOrEqual(20);
+    expect(guarded.filter((c) => !routed.has(c))).toEqual([]);
     const handlers = checkedHandlerTargets(raw, instances);
     expect(handlers.unresolved).toEqual([]);
     expect(handlers.targets.length).toBeGreaterThanOrEqual(10);
@@ -163,16 +177,16 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
     expect(problems).toEqual([]);
   });
 
-  it('every active-checked plugin handler writes and sends nothing while off', async () => {
+  it('every active-checked plugin handler consults the gate and writes and sends nothing while off', async () => {
     const inv = checkedHandlerTargets(raw, instances);
     expect(inv.targets.length).toBeGreaterThan(0);
-    expect(await effectsOf(inv)).toEqual([]);
+    expect(await problemsOf(inv, true)).toEqual([]);
   });
 
   it('every plugin @Cron writes and sends nothing while off', async () => {
     const inv = scopedCronTargets(raw, instances);
     expect(inv.targets.length).toBeGreaterThan(0);
-    expect(await effectsOf(inv)).toEqual([]);
+    expect(await problemsOf(inv, false)).toEqual([]);
   });
 
   it('deactivating a plugin unregisters its CronRegistrar jobs', async () => {
@@ -186,7 +200,7 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
     const problems: string[] = [];
     for (const slug of owned) {
       crons.handlePluginActivated({ slug });
-      stopAllCrons(testApp.app);
+      stopAllCronJobs(testApp.app);
       const names = () => [...scheduler.getCronJobs().keys()];
       const mine = () => names().filter((n) => n.startsWith(`${slug}:`));
       if (mine().length === 0) problems.push(`${slug}: no jobs registered`);
@@ -257,12 +271,27 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
     });
 
     it('bg3: DELETE /plugins/bg3/me/data still deletes my data', async () => {
+      const m = schema.companionIngestLatest;
+      const userId = testApp.seed.adminUser.id;
+      const marker = (contract: string) => ({
+        userId,
+        contract,
+        latestKey: 'cd'.repeat(32),
+        latestAt: new Date('2026-10-24T12:00:00Z'),
+      });
+      await testApp.db
+        .insert(m)
+        .values([marker(BG3_SAVE_CONTRACT_ID), marker('valheim-world')]);
       await deactivate([BG3_PLUGIN_ID]);
       const res = await testApp.request
         .delete('/plugins/bg3/me/data')
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('deleted');
+      const left = await testApp.db
+        .select({ contract: m.contract })
+        .from(m)
+        .where(eq(m.userId, userId));
+      expect(left).toEqual([{ contract: 'valheim-world' }]);
     });
   });
 });

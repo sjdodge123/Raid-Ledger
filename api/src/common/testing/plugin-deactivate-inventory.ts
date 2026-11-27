@@ -2,16 +2,18 @@
  * ROK-2369 — the inventory `plugin-deactivate.integration.spec.ts` drives, all
  * derived from the running app and the source tree (never a hand copy):
  *
- * - {@link pluginRoutes}: one route per controller that carries
- *   `@RequirePlugin` + `PluginActiveGuard` (class or method), read from Nest's
- *   own route metadata.
+ * - {@link pluginRoutes}: every route behind `@RequirePlugin` +
+ *   `PluginActiveGuard` (class or method), read from Nest's own route
+ *   metadata; {@link staticGuardedControllers} is the scanner's view of the
+ *   same set, so the spec can tie the two together.
  * - {@link checkedHandlerTargets}: every scoped `@OnEvent` / `@Processor`
  *   handler the plugin-scope scanner (`hub-registration-scan.handlers.ts`)
  *   finds an active check in, resolved to its live provider instance.
  * - {@link scopedCronTargets}: every `@Cron` method in a scoped plugin folder.
  *
  * Discord gateway callbacks (`interactionCreate` / `messageCreate`) are not
- * resolvable to a method and are returned as `skipped`.
+ * resolvable to a method and are returned as `skipped`. Class and `@Cron`
+ * scans read comment-stripped text, so a doc comment cannot mint a target.
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -32,7 +34,12 @@ import {
   isScopeChecked,
   scopedHandlers,
 } from './hub-registration-scan.handlers';
-import { scopedFolder } from './hub-registration-scan.scope';
+import {
+  isPluginGuarded,
+  scopedControllers,
+  scopedFolder,
+} from './hub-registration-scan.scope';
+import { stripComments } from './strip-comments';
 
 /** Every non-spec `.ts` under `srcRoot`, raw, keyed by its relative path. */
 export function loadRawSources(srcRoot: string): ScanSource[] {
@@ -107,23 +114,23 @@ function protoMethods(cls: object): { name: string; fn: object }[] {
   });
 }
 
-/** The first route of `cls` behind the plugin-active guard, if any. */
-function firstGuardedRoute(cls: object): PluginRoute | undefined {
+/** Every route of `cls` behind the plugin-active guard. */
+function guardedRoutes(cls: object): PluginRoute[] {
   const base = firstPath(meta(PATH_METADATA, cls));
   const clsName = String(Reflect.get(cls, 'name'));
-  for (const { name, fn } of protoMethods(cls)) {
+  return protoMethods(cls).flatMap(({ name, fn }) => {
     const method = meta(METHOD_METADATA, fn);
     const verb = typeof method === 'number' ? VERBS.get(method) : undefined;
     const slug = slugOf(fn) ?? slugOf(cls);
     const guarded = hasPluginGuard(fn) || hasPluginGuard(cls);
-    if (verb === undefined || slug === undefined || !guarded) continue;
+    if (verb === undefined || slug === undefined || !guarded) return [];
     const sub = firstPath(meta(PATH_METADATA, fn));
-    return { key: `${clsName}.${name}`, slug, verb, path: joinPath(base, sub) };
-  }
-  return undefined;
+    const key = `${clsName}.${name}`;
+    return [{ key, slug, verb, path: joinPath(base, sub) }];
+  });
 }
 
-/** One route per plugin-guarded controller registered in `app`. */
+/** Every plugin-guarded route of every controller registered in `app`. */
 export function pluginRoutes(app: INestApplication): PluginRoute[] {
   const seen = new Set<object>();
   const out: PluginRoute[] = [];
@@ -132,11 +139,21 @@ export function pluginRoutes(app: INestApplication): PluginRoute[] {
       const cls: unknown = wrapper.metatype;
       if (typeof cls !== 'function' || seen.has(cls)) continue;
       seen.add(cls);
-      const route = firstGuardedRoute(cls);
-      if (route !== undefined) out.push(route);
+      out.push(...guardedRoutes(cls));
     }
   }
   return out;
+}
+
+/**
+ * Class names of the scoped controllers the static scanner reads as fully
+ * plugin-guarded — each must show up among {@link pluginRoutes}' keys.
+ */
+export function staticGuardedControllers(raw: readonly ScanSource[]): string[] {
+  const stripped = raw.map((s) => ({ file: s.file, text: stripComments(s.text) }));
+  return scopedControllers(stripped)
+    .filter(isPluginGuarded)
+    .map((c) => c.key.split('#')[1] ?? '');
 }
 
 /** Live provider instances by class name (first registration wins). */
@@ -220,8 +237,8 @@ export function checkedHandlerTargets(
     .map((s) => {
       const [file = '', member = ''] = s.key.split('#');
       const [first = '', second] = member.split('.');
-      const classes =
-        second === undefined ? classesIn(text.get(file) ?? '') : [first];
+      const src = stripComments(text.get(file) ?? '');
+      const classes = second === undefined ? classesIn(src) : [first];
       return { key: s.key, classes, method: second ?? first };
     });
   return collect(entries, index, skipped);
@@ -244,12 +261,13 @@ export function scopedCronTargets(
 ): TargetInventory {
   const entries = raw
     .filter((s) => scopedFolder(s.file) !== undefined)
-    .flatMap((s) =>
-      [...s.text.matchAll(CRON_METHOD)].map((m) => ({
+    .flatMap((s) => {
+      const text = stripComments(s.text);
+      return [...text.matchAll(CRON_METHOD)].map((m) => ({
         key: `${s.file}#${m[1] ?? ''}`,
-        classes: classesIn(s.text),
+        classes: classesIn(text),
         method: m[1] ?? '',
-      })),
-    );
+      }));
+    });
   return collect(entries, index, []);
 }
