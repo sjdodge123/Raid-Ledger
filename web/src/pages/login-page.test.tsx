@@ -357,7 +357,7 @@ describe('LoginPage — deactivated session notice (ROK-1753)', () => {
     it('toasts the deactivated copy and clears the error param', async () => {
         renderSuspended('?error=deactivated');
 
-        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Your account has been deactivated.'));
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Your account was deactivated when you left the Discord server. Rejoin it, then sign in with Discord.'));
         await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(''));
     });
 });
