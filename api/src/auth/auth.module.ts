@@ -38,6 +38,8 @@ import { GoogleSigninController } from './google-signin/google-signin.controller
 import { FirstTimeController } from './google-signin/first-time.controller';
 import { PendingIdentityStore } from './google-signin/pending-identity.store';
 import { GoogleAuthProviderAdapter } from './google-signin/google-auth-provider.adapter';
+import { GoogleLinkController } from './google-signin/google-link.controller';
+import { GoogleLinkService } from './google-signin/google-link.service';
 
 /**
  * Auth module — core authentication logic (JWT, local auth, intent tokens).
@@ -78,6 +80,7 @@ import { GoogleAuthProviderAdapter } from './google-signin/google-auth-provider.
     LinkStartController,
     GoogleSigninController,
     FirstTimeController,
+    GoogleLinkController,
   ],
   providers: [
     AuthService,
@@ -96,6 +99,7 @@ import { GoogleAuthProviderAdapter } from './google-signin/google-auth-provider.
     SigninCodeStore,
     GoogleSigninService,
     GoogleSigninFlowService,
+    GoogleLinkService,
     PendingIdentityStore,
     GoogleAuthProviderAdapter,
   ],

@@ -13,6 +13,7 @@ export type JwtPurpose =
   | 'discord-signin'
   | 'link-nonce:discord'
   | 'link-nonce:steam'
+  | 'link-nonce:google'
   // ROK-2371: the Google sign-in / link OAuth round-trip state.
   | 'google-signin-state';
 
