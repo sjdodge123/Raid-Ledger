@@ -4,6 +4,17 @@ name: Rebase open PRs after main update
 # PR to become BEHIND and stop auto-merging. This workflow rebases the
 # lowest-numbered merge-ready BEHIND PR via the REST update-branch endpoint,
 # at most one per run (sequential queue — see the rebase job for rationale).
+# "Merge-ready" = auto-merge on, not a draft, and no red required check —
+# except a red required check that main has since FIXED: it was also failing
+# on the PR's merge-base commit with main (main was red there) and is green on
+# main's head now, so the rebase itself is the cure (logged "rebasing #N: red
+# on <ctx>: failing at merge-base <sha7>, green on main"). Green on main alone
+# is NOT enough — main is nearly always green, so a PR red through its own bug
+# or a flake would be rebased on every merge. Green PRs go before such fix
+# rebases. Main's check state is read once per run; merge bases only for the
+# first 10 candidates for a fix rebase. The plan is
+# .github/scripts/rebase-plan.jq (offline test: scripts/test/rebase-plan.test.sh,
+# run by CI's scripts-tests job).
 #
 # Scope: ALL open PRs, regardless of author. Originally this was Dependabot-only
 # but the operator runs parallel agents that also produce PRs needing the same
@@ -24,7 +35,8 @@ name: Rebase open PRs after main update
 #
 # Security: pull_request_target runs with this repo's secrets, so this job must
 # NEVER check out or execute PR code. It only calls the GitHub API; PR event
-# fields are read in the job `if:` and nowhere else.
+# fields are read in the job `if:` and nowhere else. The jq plan is fetched
+# from GITHUB_SHA (the base branch for pull_request_target), never the PR head.
 
 on:
   push:
@@ -96,8 +108,15 @@ jobs:
           #      required checks are pending (or not reported yet just after a
           #      rebase), the slot is taken — exit without rebasing anything.
           #   2. Otherwise try BEHIND PRs that have auto-merge enabled, are not
-          #      drafts, and have no failing required check, lowest number
-          #      first, until one update-branch call succeeds.
+          #      drafts, and either have no failing required check or fail
+          #      ONLY contexts that were failing at the PR's merge base with
+          #      main AND are SUCCESS on main's current head (main has since
+          #      fixed them; the rebase picks the fix up). Green PRs first,
+          #      then those fix rebases, each lowest number first, until one
+          #      update-branch call succeeds. A PR red on a context that is
+          #      red/pending/skipped/missing on main, or that was NOT failing
+          #      at its merge base (its own failure), or whose merge base
+          #      could not be read, is skipped.
           # Not BEHIND (CLEAN/BLOCKED/DIRTY/...) means no rebase is needed or a
           # human is needed; those are never rebased.
 
@@ -114,42 +133,55 @@ jobs:
           # can read UNKNOWN. Re-query a bounded number of times.
           for attempt in 1 2 3 4; do
             prs=$(gh pr list --state open --limit 200 \
-              --json number,mergeStateStatus,autoMergeRequest,isDraft,updatedAt,statusCheckRollup)
+              --json number,headRefOid,mergeStateStatus,autoMergeRequest,isDraft,updatedAt,statusCheckRollup)
             unknown=$(jq '[.[] | select(.mergeStateStatus == "UNKNOWN")] | length' <<<"$prs")
             if [ "$unknown" -eq 0 ]; then break; fi
             echo "$unknown open PR(s) have mergeStateStatus UNKNOWN — re-querying in 15s (attempt $attempt/4)"
             sleep 15
           done
 
-          plan=$(jq -c --argjson req "$req" '
-            def terminal: IN("SUCCESS","FAILURE","ERROR","TIMED_OUT","ACTION_REQUIRED",
-                             "STARTUP_FAILURE","CANCELLED","SKIPPED","NEUTRAL","STALE");
-            def failing: IN("FAILURE","ERROR","TIMED_OUT","ACTION_REQUIRED","STARTUP_FAILURE");
-            map(
-              ([.statusCheckRollup[]?
-                | {k: (.name // .context),
-                   t: ((.startedAt // "") + (.completedAt // "")),
-                   v: (if (.conclusion // "") != "" then .conclusion else (.state // .status // "") end)}
-                | select(.k | IN($req[]))]
-               | group_by(.k) | map(max_by(.t))) as $latest
-              | {number,
-                 mss: .mergeStateStatus,
-                 ready: (.autoMergeRequest != null and (.isDraft | not)),
-                 red: [$latest[] | select(.v | failing) | "\(.k)=\(.v)"],
-                 pending: [$latest[] | select(.v | terminal | not) | .k],
-                 reported: ($latest | length),
-                 fresh: ((.updatedAt | fromdateiso8601) > (now - 600))})
-            | sort_by(.number) as $all
-            | {inflight: [$all[]
-                 | select(.ready and (.mss | IN("BEHIND","DIRTY") | not) and (.red | length == 0)
-                          and ((.pending | length > 0) or (.reported == 0 and .fresh)))
-                 | "#\(.number) (\(.mss), pending: \(if .reported == 0 then "no required checks reported yet" else (.pending | join(",")) end))"],
-               candidates: [$all[] | select(.mss == "BEHIND" and .ready and (.red | length == 0)) | .number],
-               skipped: [$all[] | select(.mss == "BEHIND" and ((.ready | not) or (.red | length > 0)))
-                 | "#\(.number): \(if .ready | not then "no auto-merge or draft" else "required check failing: \(.red | join(","))" end)"]}
-          ' <<<"$prs")
+          # Scratch files the plan reads with --slurpfile (no per-argument
+          # size limit as the check matrix grows). An EMPTY file means
+          # "unknown" to the plan.
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          # $1 = commit sha -> $2 check runs file, $3 commit statuses file.
+          checks_at() {
+            gh api --paginate "repos/$GH_REPO/commits/$1/check-runs?per_page=100" \
+                --jq '.check_runs[] | {name, status, conclusion, started_at, completed_at}' | jq -sc . > "$2" \
+              && gh api "repos/$GH_REPO/commits/$1/status?per_page=100" --jq '.statuses' | jq -c . > "$3"
+          }
 
-          jq -r '.skipped[] | "Skip BEHIND PR \(.)"' <<<"$plan"
+          # Main's head state, read ONCE per run. Pinned to one SHA so check
+          # runs and statuses describe the same commit. On an API error, treat
+          # main as unknown — red PRs are then skipped exactly as before.
+          if main_sha=$(gh api "repos/$GH_REPO/commits/main" --jq .sha) \
+             && checks_at "$main_sha" "$tmp/main-runs.json" "$tmp/main-statuses.json"; then
+            echo "Main head: $main_sha"
+          else
+            echo "::warning::Could not read main's check state — PRs with a red required check will be skipped."
+            : > "$tmp/main-runs.json"; : > "$tmp/main-statuses.json"
+          fi
+
+          # The plan lives in .github/scripts/rebase-plan.jq (offline test:
+          # scripts/test/rebase-plan.test.sh). Fetched through the contents
+          # API at GITHUB_SHA — main's commit for push/schedule, the BASE
+          # branch tip for pull_request_target, the dispatched ref for
+          # workflow_dispatch (whose YAML runs too, so keep the two from the
+          # same ref; never pin ref=main) — never from the PR head.
+          plan_jq="$tmp/rebase-plan.jq"
+          gh api -H 'Accept: application/vnd.github.raw+json' \
+            "repos/$GH_REPO/contents/.github/scripts/rebase-plan.jq?ref=$GITHUB_SHA" > "$plan_jq"
+          run_plan() {
+            jq -c --argjson req "$req" --slurpfile runs "$tmp/main-runs.json" \
+              --slurpfile statuses "$tmp/main-statuses.json" \
+              --slurpfile bases "$tmp/bases.json" -f "$plan_jq" <<<"$prs"
+          }
+
+          # Pass 1, no merge bases yet: in-flight check, and which red PRs
+          # (all red contexts green on main) need their merge base read.
+          echo '{}' > "$tmp/bases.json"
+          plan=$(run_plan)
 
           if [ "$(jq '.inflight | length' <<<"$plan")" -gt 0 ]; then
             jq -r '.inflight[] | "In flight (up to date, CI running): PR \(.)"' <<<"$plan"
@@ -157,7 +189,34 @@ jobs:
             exit 0
           fi
 
-          mapfile -t candidates < <(jq -r '.candidates[]' <<<"$plan")
+          # Pass 2: a red context counts as fixed by main only if it was ALSO
+          # failing at the PR's merge base with main. The plan caps need_base
+          # at 10 PRs (3 API calls each). A failed read leaves that PR out of
+          # bases.json, so the plan skips it.
+          mapfile -t need < <(jq -r '.need_base[]' <<<"$plan")
+          if [ "${#need[@]}" -gt 0 ]; then
+            : > "$tmp/bases.jsonl"
+            for n in "${need[@]}"; do
+              head=$(jq -r --argjson n "$n" '.[] | select(.number == $n) | .headRefOid' <<<"$prs")
+              if [[ "$head" =~ ^[0-9a-f]{40}$ ]] \
+                 && base_sha=$(gh api "repos/$GH_REPO/compare/$main_sha...$head?per_page=1" \
+                                 --jq .merge_base_commit.sha) \
+                 && [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] \
+                 && checks_at "$base_sha" "$tmp/base-runs.json" "$tmp/base-statuses.json"; then
+                jq -cn --arg n "$n" --arg sha "$base_sha" \
+                  --slurpfile r "$tmp/base-runs.json" --slurpfile s "$tmp/base-statuses.json" \
+                  '{($n): {sha: $sha, runs: $r[0], statuses: $s[0]}}' >> "$tmp/bases.jsonl"
+              else
+                echo "::warning::Could not read the merge base of PR #$n with main — it will be skipped."
+              fi
+            done
+            jq -sc 'add // {}' "$tmp/bases.jsonl" > "$tmp/bases.json"
+            plan=$(run_plan)
+          fi
+
+          jq -r '.skipped[] | "Skip BEHIND PR \(.)"' <<<"$plan"
+
+          mapfile -t candidates < <(jq -r '.candidates[] | "\(.number)\t\(.why)"' <<<"$plan")
           if [ "${#candidates[@]}" -eq 0 ]; then
             echo "No merge-ready BEHIND open PRs — nothing to rebase."
             exit 0
@@ -168,8 +227,13 @@ jobs:
           # BEHIND that really conflicts, or the PR closed meanwhile), but fail
           # loudly on 401/403: an expired/revoked REBASE_PAT must not report
           # success (this file has had two silent-success bugs already).
-          for n in "${candidates[@]}"; do
-            echo "Updating branch on PR #$n"
+          for c in "${candidates[@]}"; do
+            n=${c%%$'\t'*}; why=${c#*$'\t'}
+            if [ -n "$why" ]; then
+              echo "rebasing #$n: $why"
+            else
+              echo "Updating branch on PR #$n"
+            fi
             if out=$(gh api -X PUT "repos/$GH_REPO/pulls/$n/update-branch" 2>&1); then
               echo "Updated PR #$n: $out"
               exit 0
