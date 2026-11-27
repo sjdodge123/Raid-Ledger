@@ -18,9 +18,10 @@
  *   - each list's total is pinned as a ceiling in that spec, so adding an
  *     entry fails it and raising the pin is a visible, reviewed number edit.
  *
- * Checked: `import`, `export … from`, `export * from`, `import('literal')`, and
- * a computed `import()` (template literal / `'…' + x`) whose static prefix
- * already lands inside `plugins/<x>/` — that one is never allowlistable.
+ * Checked: `import`, `export … from`, `export * from`, `import('literal')`
+ * (a template with no `${…}` counts as a literal), and a computed `import()`
+ * (template literal with `${…}` / `'…' + x`) whose static prefix already lands
+ * inside `plugins/<x>/` — that one is never allowlistable.
  * `// eslint-disable… rl-plugin-boundary/*` is banned by
  * `eslint-comments/no-restricted-disable` in pluginBoundaryBlock, so the
  * allowlist is the only escape hatch.
@@ -121,6 +122,17 @@ export function createPluginBoundaryRule({ workspaceDir, allowlistFile, aliases 
 }
 
 /**
+ * The specifier when the source is fully static — a string literal, or a
+ * template literal with no `${…}` — else null.
+ * @param {any} src
+ */
+function literalSpecifier(src) {
+  if (src.type === 'Literal') return typeof src.value === 'string' ? src.value : null;
+  if (src.type === 'TemplateLiteral' && src.expressions.length === 0) return src.quasis[0]?.value.cooked ?? null;
+  return null;
+}
+
+/**
  * The static prefix of a computed `import()` source, or null.
  * @param {any} src
  */
@@ -142,15 +154,15 @@ function makeCheck({ context, base, allowed, seen }) {
   return (node) => {
     const src = node && node.source;
     if (!src) return;
-    if (src.type !== 'Literal') {
+    const spec = literalSpecifier(src);
+    if (spec === null) {
+      if (src.type === 'Literal') return;
       const prefix = node.type === 'ImportExpression' ? staticPrefix(src) : null;
       // `x` stands in for the computed tail: `./plugins/wow/pages/${p}` → plugins/wow/pages/x.
       const slug = prefix === null ? null : crossesBoundary({ ...base, specifier: `${prefix}x` });
       if (slug !== null) context.report({ node: src, messageId: 'computed', data: { slug } });
       return;
     }
-    if (typeof src.value !== 'string') return;
-    const spec = src.value;
     const slug = crossesBoundary({ ...base, specifier: spec });
     if (slug === null) return;
     seen.add(spec);

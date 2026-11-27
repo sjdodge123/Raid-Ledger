@@ -46,6 +46,14 @@ tester.run('deep-import (web shape)', webRule, {
         },
         // Outside src/: not checked.
         { filename: at('scripts/s.ts'), code: "import '../src/plugins/wow/lib/z';" },
+        // A template with no `${…}` is a literal path: the public entry passes, and the allowlist matches it.
+        { filename: at('src/lazy-routes.ts'), code: 'import(`./plugins/pelican/index`);' },
+        { filename: at('src/lazy-routes.ts'), code: 'import(`./plugins/wow/register`);' },
+        {
+            filename: at('src/lazy-routes.ts'),
+            code: 'import(`./plugins/wow/lib/z`);',
+            options: [{ allowlist: { 'src/lazy-routes.ts': ['./plugins/wow/lib/z'] } }],
+        },
     ],
     invalid: [
         { filename: at('src/components/a.ts'), code: "import { z } from '../plugins/wow/lib/z';", errors: [deep('../plugins/wow/lib/z', 'wow')] },
@@ -54,6 +62,9 @@ tester.run('deep-import (web shape)', webRule, {
         { filename: at('src/lazy-routes.ts'), code: "const P = () => import('./plugins/valheim/pages/v');", errors: [deep('./plugins/valheim/pages/v', 'valheim')] },
         { filename: at('src/lazy-routes.ts'), code: 'const n = "v"; import(`./plugins/valheim/pages/${n}`);', errors: [computed('valheim')] },
         { filename: at('src/lazy-routes.ts'), code: "const n = 'v'; import('./plugins/valheim/pages/' + n);", errors: [computed('valheim')] },
+        // No `${…}`: a deep literal path (deep, not computed). With one: computed, even on an entry-shaped path.
+        { filename: at('src/lazy-routes.ts'), code: 'import(`./plugins/valheim/pages/v`);', errors: [deep('./plugins/valheim/pages/v', 'valheim')] },
+        { filename: at('src/lazy-routes.ts'), code: 'const n = "index"; import(`./plugins/pelican/${n}`);', errors: [computed('pelican')] },
         { filename: at('src/components/a.ts'), code: "import '@/plugins/wow/lib/z';", errors: [deep('@/plugins/wow/lib/z', 'wow')] },
         { filename: at('src/components/a.ts'), code: "import '../plugins/wow/sub/index';", errors: [deep('../plugins/wow/sub/index', 'wow')] },
         { filename: at('src/components/a.ts'), code: "import '../x/../plugins/wow/lib/z';", errors: [deep('../x/../plugins/wow/lib/z', 'wow')] },
@@ -72,6 +83,7 @@ tester.run('deep-import (web shape)', webRule, {
 tester.run('deep-import (api shape)', apiRule, {
     valid: [
         { filename: at('src/app.module.ts'), code: "import { M } from './plugins/pelican';" },
+        { filename: at('src/app.module.ts'), code: 'import(`./plugins/pelican/index`);' },
         { filename: at('src/app.module.ts'), code: "import { H } from './plugins/plugin-host/host.service';" },
     ],
     invalid: [
