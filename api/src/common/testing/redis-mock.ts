@@ -164,9 +164,12 @@ function mockRedisPipeline(set: ReturnType<typeof mockRedisSet>) {
         return pipeline;
       },
       exec: async (): Promise<Array<[Error | null, unknown]>> => {
-        const out: Array<[Error | null, unknown]> = [];
-        for (const run of queued) out.push([null, await run()]);
-        return out;
+        // Every queued op mutates the store synchronously when called, so
+        // starting them all in one tick (no await between) keeps two
+        // concurrent execs from interleaving — atomic, like real MULTI.
+        const pending = queued.map((run) => run());
+        const values = await Promise.all(pending);
+        return values.map((v): [Error | null, unknown] => [null, v]);
       },
     };
     return pipeline;
@@ -175,7 +178,8 @@ function mockRedisPipeline(set: ReturnType<typeof mockRedisSet>) {
 
 /**
  * Redis mock MULTI (ROK-2371): queues GET / DEL / SET and runs them in order
- * on `exec` — enough for an atomic read-and-spend (`multi().get(k).del(k)`).
+ * on `exec` without yielding between them — an atomic read-and-spend
+ * (`multi().get(k).del(k)`). Resolves ioredis's `[[err, result], …]` shape.
  */
 function mockRedisMulti(
   store: Map<string, string>,
@@ -198,9 +202,12 @@ function mockRedisMulti(
         return multi;
       },
       exec: async (): Promise<Array<[Error | null, unknown]>> => {
-        const out: Array<[Error | null, unknown]> = [];
-        for (const run of queued) out.push([null, await run()]);
-        return out;
+        // Every queued op mutates the store synchronously when called, so
+        // starting them all in one tick (no await between) keeps two
+        // concurrent execs from interleaving — atomic, like real MULTI.
+        const pending = queued.map((run) => run());
+        const values = await Promise.all(pending);
+        return values.map((v): [Error | null, unknown] => [null, v]);
       },
     };
     return multi;
