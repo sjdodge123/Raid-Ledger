@@ -1,6 +1,5 @@
 import type { CharacterDto } from '@raid-ledger/contract';
-import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
-import { ProfessionBadges } from '../../plugins/wow/components/ProfessionBadges';
+import { PluginSlot } from '../../plugins';
 import { CharacterPortraitFallback } from '../../plugins/character-portrait';
 
 /**
@@ -52,9 +51,7 @@ function CharacterInfo({ character, isMain }: { character: CharacterDto; isMain?
                 {character.level && character.class && <span>·</span>}
                 {character.class && (
                     <span className="inline-flex items-center gap-1">
-                        {getClassIconUrl(character.class) && (
-                            <img src={getClassIconUrl(character.class)!} alt="" className="w-4 h-4 rounded-sm" />
-                        )}
+                        <PluginSlot name="character-card:class-icon" context={{ characterClass: character.class, iconClassName: 'w-4 h-4 rounded-sm' }} />
                         {character.class}
                     </span>
                 )}
@@ -62,7 +59,7 @@ function CharacterInfo({ character, isMain }: { character: CharacterDto; isMain?
                 {character.itemLevel && (
                     <><span>·</span><span className="text-item-level">{character.itemLevel} iLvl</span></>
                 )}
-                <ProfessionBadges professions={character.professions} />
+                <PluginSlot name="character-card:professions" context={{ professions: character.professions }} />
             </div>
         </div>
     );

@@ -17,7 +17,7 @@ import { AddonRow, type RowActions } from './addon-row';
 import {
     guildAddonMatches, guildAddonView, pinnedAddonView, pinnedMatches, reorderedIds, type FlavorFilter,
 } from './addon-view';
-import { useGuildAddonMutations, useGuildAddons } from '../../../components/hub/api/use-guild-content';
+import { useGuildAddonMutations, useGuildAddons } from '../hub/use-guild-addons';
 import { useGuildPage } from '../../../components/hub/api/use-guild';
 import { guildAddonFlavorForSlug, pickFlavor } from './addon-flavor-default';
 import type { HubResourceCtx } from '../../hub-module';

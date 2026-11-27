@@ -107,6 +107,62 @@ describe('resolvePollTerminalState — locked-in fallback (ROK-1545 F3)', () => 
   });
 });
 
+/**
+ * A db handle whose single linked-event lookup
+ * (`select().from().where().limit()`) resolves to `rows`.
+ */
+function eventDb(
+  rows: Array<{ startTime: string; cancelledAt: Date | null }>,
+): Db {
+  const chain = {
+    from: () => chain,
+    where: () => chain,
+    limit: () => Promise.resolve(rows),
+  };
+  return { select: () => chain } as unknown as Db;
+}
+
+describe('resolvePollTerminalState — linked event cancelled (ROK-2330)', () => {
+  const slots = [{ id: 1, proposedTime: EARLY }];
+  const lockedMatch = { status: 'scheduled', linkedEventId: 314 };
+
+  it("reports when the locked-in poll's event was cancelled", async () => {
+    const cancelledAt = new Date('2030-06-09T12:00:00.000Z');
+    const state = await resolvePollTerminalState(
+      eventDb([{ startTime: LATE.toISOString(), cancelledAt }]),
+      lockedMatch,
+      { id: 7 },
+      slots,
+      null,
+    );
+    expect(state.pollStatus).toBe('locked_in');
+    expect(state.lockedInTime).toBe(LATE.toISOString());
+    expect(state.linkedEventCancelledAt).toBe(cancelledAt.toISOString());
+  });
+
+  it('stays null while the linked event is live', async () => {
+    const state = await resolvePollTerminalState(
+      eventDb([{ startTime: LATE.toISOString(), cancelledAt: null }]),
+      lockedMatch,
+      { id: 7 },
+      slots,
+      null,
+    );
+    expect(state.linkedEventCancelledAt).toBeNull();
+  });
+
+  it('stays null on a poll that never locked in', async () => {
+    const state = await resolvePollTerminalState(
+      unusedDb,
+      { status: 'cancelled', linkedEventId: null },
+      { id: 7 },
+      slots,
+      null,
+    );
+    expect(state.linkedEventCancelledAt).toBeNull();
+  });
+});
+
 describe('assertPollOpen (ROK-1545 F8)', () => {
   const past = new Date('2020-01-01T00:00:00.000Z');
   const future = new Date('2999-01-01T00:00:00.000Z');

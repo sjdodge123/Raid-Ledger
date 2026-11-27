@@ -28,6 +28,11 @@ type Db = PostgresJsDatabase<typeof schema>;
 export interface PollTerminalState {
   pollStatus: SchedulingPollStatus;
   lockedInTime: string | null;
+  /**
+   * ROK-2330: ISO time the linked event was cancelled, or null. Only set on a
+   * `locked_in` poll whose event was cancelled after the lock-in.
+   */
+  linkedEventCancelledAt: string | null;
   cancelReason: string | null;
   canVote: boolean;
   /** Review fix: the viewer may suggest a time — see the contract docstring. */
@@ -70,31 +75,74 @@ interface OrderedSlot {
  */
 type SlotVoteRef = StanceVoteRef;
 
+/** What the lock-in landed on: its start time and the event's cancellation. */
+interface LockedInResolution {
+  lockedInTime: string | null;
+  linkedEventCancelledAt: string | null;
+}
+
+const NOT_LOCKED_IN: LockedInResolution = {
+  lockedInTime: null,
+  linkedEventCancelledAt: null,
+};
+
 /**
- * ISO start time the lock-in selected. The linked event's start is the only
- * trustworthy value (lock-in is not required to pick the top-voted slot); the
- * shared comparator's winner is the fallback when the event row is gone.
+ * Read the linked event's start and cancellation stamp. `events.duration` is
+ * a tsrange — its lower bound is the start time. It is zone-less UTC, and a
+ * raw `sql` read hands back a bare string that `new Date()` parses as LOCAL
+ * time (TDB:1489: off by the host's offset off-UTC) — `to_char` spells the
+ * `Z` out, as the column's `fromDriver` does.
  */
-async function resolveLockedInTime(
+async function loadLinkedEvent(
+  db: Db,
+  eventId: number,
+): Promise<{ startTime: string | null; cancelledAt: Date | null } | undefined> {
+  const [event] = await db
+    .select({
+      startTime: sql<
+        string | null
+      >`to_char(lower(${schema.events.duration}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+      cancelledAt: schema.events.cancelledAt,
+    })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return event;
+}
+
+/**
+ * ISO start time the lock-in selected, plus (ROK-2330) when the linked event
+ * was cancelled. The linked event's start is the only trustworthy value
+ * (lock-in is not required to pick the top-voted slot); the shared
+ * comparator's winner is the fallback when the event row is gone.
+ */
+async function resolveLockedIn(
   db: Db,
   match: PollMatchContext,
   slots: OrderedSlot[],
   votes: SlotVoteRef[],
-): Promise<string | null> {
-  if (match.linkedEventId) {
-    // `events.duration` is a tsrange — its lower bound is the start time.
-    // It is zone-less UTC, and a raw `sql` read hands back a bare string that
-    // `new Date()` parses as LOCAL time (TDB:1489: off by the host's offset
-    // off-UTC) — `to_char` spells the `Z` out, as the column's `fromDriver` does.
-    const [event] = await db
-      .select({
-        startTime: sql<string>`to_char(lower(${schema.events.duration}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
-      })
-      .from(schema.events)
-      .where(eq(schema.events.id, match.linkedEventId))
-      .limit(1);
-    if (event?.startTime) return new Date(event.startTime).toISOString();
+): Promise<LockedInResolution> {
+  const event = match.linkedEventId
+    ? await loadLinkedEvent(db, match.linkedEventId)
+    : undefined;
+  const linkedEventCancelledAt = event?.cancelledAt?.toISOString() ?? null;
+  if (event?.startTime) {
+    return {
+      lockedInTime: new Date(event.startTime).toISOString(),
+      linkedEventCancelledAt,
+    };
   }
+  return {
+    lockedInTime: winningSlotTime(slots, votes),
+    linkedEventCancelledAt,
+  };
+}
+
+/** The shared comparator's winner — the fallback when the event row is gone. */
+function winningSlotTime(
+  slots: OrderedSlot[],
+  votes: SlotVoteRef[],
+): string | null {
   const tallies = tallyStancesBySlot(votes);
   const [winner] = sortSchedulingSlots(
     slots
@@ -205,16 +253,16 @@ export async function resolvePollTerminalState(
     // whose every time has passed is expired on both.
     slotTimes: slots.map((s) => s.proposedTime),
   });
-  const [lockedInTime, eligible] = await Promise.all([
+  const [lockedIn, eligible] = await Promise.all([
     pollStatus === 'locked_in'
-      ? resolveLockedInTime(db, match, slots, votes)
-      : Promise.resolve(null),
+      ? resolveLockedIn(db, match, slots, votes)
+      : Promise.resolve(NOT_LOCKED_IN),
     resolveViewerEligibility(db, lineup, caller),
   ]);
   const canVote = pollStatus === 'open' && eligible;
   return {
     pollStatus,
-    lockedInTime,
+    ...lockedIn,
     cancelReason:
       pollStatus === 'cancelled' ? (match.cancellationReason ?? null) : null,
     canVote,

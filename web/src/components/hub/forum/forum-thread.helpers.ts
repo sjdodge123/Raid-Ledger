@@ -4,11 +4,18 @@ import {
     type HubForumCan, type HubForumDeleted, type HubForumThreadSummary, type HubPostPerson,
 } from '@raid-ledger/contract';
 import { syncedAgo } from '../../../lib/synced-ago';
-import { forumByline } from './forum-byline';
+import { BLOCKED_AUTHOR_NAME, forumByline, isBlockedAuthor } from './forum-byline';
 
-/** A deleted user's threads keep a null author (AC12). */
+/** A deleted user's threads keep a null author (AC12); a banned/deactivated one reads "Deactivated member" (ROK-2328). */
 export function forumAuthorName(author: HubPostPerson | null): string {
+    if (isBlockedAuthor(author)) return BLOCKED_AUTHOR_NAME;
     return author?.displayName ?? 'Former member';
+}
+
+/** The author's avatar, never a banned/deactivated author's (ROK-2328). */
+export function forumAuthorAvatarUrl(author: HubPostPerson | null): string | null {
+    if (isBlockedAuthor(author)) return null;
+    return author?.avatarUrl ?? null;
 }
 
 /** The placeholder for removed text (AC6, Q8). */

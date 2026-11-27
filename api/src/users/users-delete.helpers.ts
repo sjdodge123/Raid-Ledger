@@ -29,10 +29,7 @@ import {
   type WipeTarget,
 } from './users-delete-secrets.manifest';
 import { wipeCommunityHubData } from '../guilds/community/community-user-wipe.helpers';
-import {
-  auditGuidReleases,
-  heldGuidsOf,
-} from '../plugins/wow-common/addon-import/external-id.guid-release';
+import { runPrepareWipe } from './lifecycle/user-lifecycle.registry';
 
 const logger = new Logger('UserDelete');
 
@@ -429,11 +426,11 @@ export async function wipeUserData(
   userId: number,
   reassignToUserId: number,
 ): Promise<void> {
-  // ROK-2115 Codex r2 P1: rows the user's GUIDs held get new Blizzard-id
-  // winners — audit them as fresh links so no member grant carries over.
-  const held = await heldGuidsOf(tx, userId);
+  // ROK-2115 Codex r2 P1 / ROK-2364: plugin hooks read what the wipe is
+  // about to remove (wow-common: held GUIDs) BEFORE it, and audit AFTER it.
+  const finishWipe = await runPrepareWipe(tx, userId);
   await deleteUserOwnedData(tx, userId);
-  await auditGuidReleases(tx, held, null);
+  await finishWipe(tx);
   await reassignUserEntities(tx, userId, reassignToUserId);
 }
 

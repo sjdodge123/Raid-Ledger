@@ -204,3 +204,40 @@ describe('SchedulingTerminalBanner (ROK-1545)', () => {
     );
   });
 });
+
+describe('SchedulingTerminalBanner — linked event cancelled (ROK-2330)', () => {
+  it('drops the "Locked in" claim and the event link once the event is cancelled', () => {
+    renderWithProviders(
+      <SchedulingTerminalBanner
+        pollStatus="locked_in"
+        lockedInTime={LOCKED_TIME}
+        cancelReason={null}
+        linkedEventId={314}
+        linkedEventCancelledAt="2026-06-09T12:00:00.000Z"
+      />,
+    );
+    const banner = screen.getByTestId('read-only-banner');
+    expect(banner).toHaveAttribute('data-event-cancelled', 'true');
+    expect(banner).toHaveTextContent(/event cancelled/i);
+    expect(banner).not.toHaveTextContent(/^locked in/i);
+    expect(banner).toHaveTextContent(/that event was cancelled/i);
+    expect(banner).toHaveClass('border-danger/40', 'bg-danger/10');
+    expect(screen.queryByTestId('terminal-event-link')).toBeNull();
+  });
+
+  it('keeps the locked-in banner and link while the event is live', () => {
+    renderWithProviders(
+      <SchedulingTerminalBanner
+        pollStatus="locked_in"
+        lockedInTime={LOCKED_TIME}
+        cancelReason={null}
+        linkedEventId={314}
+        linkedEventCancelledAt={null}
+      />,
+    );
+    const banner = screen.getByTestId('read-only-banner');
+    expect(banner).not.toHaveAttribute('data-event-cancelled');
+    expect(banner).toHaveTextContent(/^locked in/i);
+    expect(screen.getByTestId('terminal-event-link')).toBeInTheDocument();
+  });
+});

@@ -159,3 +159,45 @@ describe('SchedulingPollPage — Discussion card wiring (ROK-2272 S9)', () => {
         expect(probe).toHaveAttribute('data-locked-in', 'none');
     });
 });
+
+describe('SchedulingPollPage — locked-in poll whose event was cancelled (ROK-2330)', () => {
+    beforeEach(() => {
+        schedulePoll.mockReset();
+    });
+
+    /** The locked-in poll after its event was cancelled. */
+    function buildCancelledEventPoll(): SchedulePollPageResponseDto {
+        return { ...buildLockedInPoll(), linkedEventCancelledAt: '2030-06-09T12:00:00.000Z' };
+    }
+
+    it('shows the cancelled-event state instead of "Locked in"', () => {
+        renderPage(buildCancelledEventPoll());
+        const banner = screen.getByTestId('read-only-banner');
+        expect(banner).toHaveAttribute('data-event-cancelled', 'true');
+        expect(banner).toHaveTextContent(/event cancelled/i);
+        expect(banner).not.toHaveTextContent(/^locked in/i);
+    });
+
+    it('offers no live link to the cancelled event anywhere on the page', () => {
+        renderPage(buildCancelledEventPoll());
+        expect(screen.queryByTestId('terminal-event-link')).toBeNull();
+        expect(screen.queryByRole('link', { name: /view event/i })).toBeNull();
+        expect(screen.getByTestId('match-status-badge')).toHaveTextContent(/poll complete/i);
+        expect(screen.getByText(/its event was later cancelled/i)).toBeInTheDocument();
+        expect(screen.getByTestId('poll-discussion-probe')).toHaveAttribute('data-locked-in', 'none');
+    });
+
+    it('drops the outcome card to the neutral tone, not the green success tone', () => {
+        renderPage(buildCancelledEventPoll());
+        const card = screen.getByTestId('poll-outcome-card');
+        expect(card).toHaveAttribute('data-tone', 'neutral');
+        expect(card.className).not.toMatch(/success/);
+        expect(screen.getByTestId('match-status-badge').className).not.toMatch(/success/);
+        expect(screen.getByText(/its event was later cancelled/i).className).not.toMatch(/success/);
+    });
+
+    it('keeps the green success tone when the linked event is live', () => {
+        renderPage(buildLockedInPoll());
+        expect(screen.getByTestId('poll-outcome-card')).toHaveAttribute('data-tone', 'success');
+    });
+});

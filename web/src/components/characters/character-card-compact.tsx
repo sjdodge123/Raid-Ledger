@@ -1,7 +1,5 @@
 import { Link } from 'react-router-dom';
 import type { CharacterDto, CharacterProfessionsDto } from '@raid-ledger/contract';
-import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
-import { ProfessionBadges } from '../../plugins/wow/components/ProfessionBadges';
 import { PluginSlot } from '../../plugins';
 import { CharacterPortraitFallback } from '../../plugins/character-portrait';
 
@@ -110,14 +108,14 @@ function MetadataRow({ level, race, charClass, spec, role, itemLevel, profession
             {race && charClass && <span>•</span>}
             {charClass && (
                 <span className="inline-flex items-center gap-1 truncate max-w-[120px] sm:max-w-none">
-                    {getClassIconUrl(charClass) && <img src={getClassIconUrl(charClass)!} alt="" className="w-4 h-4 rounded-sm flex-shrink-0" />}
+                    <PluginSlot name="character-card:class-icon" context={{ characterClass: charClass, iconClassName: 'w-4 h-4 rounded-sm flex-shrink-0' }} />
                     {charClass}
                 </span>
             )}
             {spec && <span className="truncate max-w-[80px] sm:max-w-none">• {spec}</span>}
             {role && <span className={`px-1.5 py-0.5 rounded text-xs text-foreground flex-shrink-0 ${ROLE_COLORS[role] ?? 'bg-faint'}`}>{role.toUpperCase()}</span>}
             {itemLevel != null && itemLevel > 0 && <><span>•</span><span className="text-item-level whitespace-nowrap">{itemLevel} iLvl</span></>}
-            <ProfessionBadges professions={professions ?? null} separator="•" />
+            <PluginSlot name="character-card:professions" context={{ professions: professions ?? null, separator: '•' }} />
         </div>
     );
 }

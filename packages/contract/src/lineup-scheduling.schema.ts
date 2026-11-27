@@ -291,6 +291,13 @@ export const SchedulePollPageResponseSchema = z.object({
    */
   lockedInTime: z.string().nullable(),
   /**
+   * ROK-2330: ISO time the lock-in's linked event was CANCELLED. Null (or
+   * absent, from an older server) unless `pollStatus` is `locked_in` and that
+   * event was cancelled afterwards — the page then shows a cancelled-event
+   * state instead of "Locked in" and drops the link to the event.
+   */
+  linkedEventCancelledAt: z.string().datetime().nullable().optional(),
+  /**
    * ROK-1545: the operator's cancellation reason, persisted on the match row.
    * Null unless `pollStatus` is `cancelled` (and the operator gave one).
    */
