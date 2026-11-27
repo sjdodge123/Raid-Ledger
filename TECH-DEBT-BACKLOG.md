@@ -4726,3 +4726,5 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 
 ### 2026-11-27 — rok-2369-plugin-deactivate-spec (surfaced during the ROK-2369 review, NIT 10)
 - **nit** `api/src/plugins/plugin-host/plugin-scope.guard.spec.ts:28` + `api/src/plugins/plugin-host/hub-ownership.guard.spec.ts:67` — each guard spec carries its own `walk()` over `api/src` that duplicates `loadRawSources` in `api/src/common/testing/plugin-deactivate-inventory.ts:44` (added by ROK-2369). Deferred: touching two unrelated guard specs was out of the story's scope. Suggested: point both walkers at `loadRawSources` (strip comments where each spec already does).
+### 2026-11-27 — fix/forum-reconcile-spec-isolation (surfaced during the ROK-2330 verify lane, overnight relay 9)
+- **low** `web/src/pages/scheduling-poll-page.tsx:86` — a locked-in poll that has an `eventId` reads "The event has been rescheduled." even on its first lock-in, when nothing was rescheduled. Pre-existing: reproduced on main a3d9cffac (not touched by #2369). Suggested: say "rescheduled" only when the event's time changed after the lock-in; otherwise "This poll locked in <time>."
