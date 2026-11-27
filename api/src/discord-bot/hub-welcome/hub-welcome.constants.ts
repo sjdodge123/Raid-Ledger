@@ -14,7 +14,7 @@ export const HUB_WELCOME_COPY = {
   /** Author line. Also the scan marker for finding the bot's own welcome. */
   author: 'Raid Ledger',
   title: (hubName: string): string => `${hubName} on Raid Ledger`,
-  /** Generic description; a hub kind may pass its own (see VALHEIM below). */
+  /** Generic description; a claim provider's `welcome` copy replaces it. */
   description: (hubName: string): string =>
     `This channel is linked to the **${escapeHubName(hubName)}** hub on Raid Ledger.`,
   claimFieldName: 'Claim your character',
@@ -24,14 +24,6 @@ export const HUB_WELCOME_COPY = {
   claimLabel: 'Claim your character',
   /** Audit-log reason on the pin. */
   pinReason: 'Raid Ledger hub welcome',
-} as const;
-
-/** Placeholder plugin copy for a Valheim server hub (mockup REC wording). */
-export const HUB_WELCOME_VALHEIM_COPY = {
-  description: (hubName: string): string =>
-    `This channel is linked to the **${escapeHubName(hubName)}** hub: who's online, the map, chests, the crafting planner and the play schedule, all in one place.`,
-  claimHint:
-    "Link Steam once on Raid Ledger and every character you play here is claimed for you. Or open the hub's Characters tab and pick yours.",
 } as const;
 
 /** Hub page path; the claim button deep-links its Characters tab. */
