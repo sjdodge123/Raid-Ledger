@@ -27,7 +27,7 @@ interface Props {
 function useAckOnce(gameId: number): (ids: number[]) => void {
     const queryClient = useQueryClient();
     const { mutate } = useMutation({
-        mutationFn: ackLfgHandNotices,
+        mutationFn: (ids: number[]) => ackLfgHandNotices(ids),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lfg', 'game-groups', gameId] }),
     });
     return useCallback((ids: number[]) => {
