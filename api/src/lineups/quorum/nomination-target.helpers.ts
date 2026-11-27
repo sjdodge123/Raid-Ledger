@@ -51,7 +51,7 @@
  * does. That trick is only sound when the denominator is fixed.
  */
 import { ConflictException } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -141,7 +141,9 @@ export async function evaluateNominationTarget(
  *
  * Opportunistic write from inside a predicate, mirroring `isPauseActive`'s lazy
  * pause clear. Guarded on the in-memory snapshot AND in the WHERE (see
- * `stampBelowSeen`) so a stale snapshot cannot arm the lineup.
+ * `stampBelowSeen`) so a stale snapshot cannot arm the lineup. The snapshot's
+ * `updated_at` is passed through so an edit that landed after the read voids
+ * the write even when it restored the judged pct (Codex round 5).
  */
 async function armNominationTarget(
   db: Db,
@@ -149,7 +151,7 @@ async function armNominationTarget(
   judgedTarget: number,
 ): Promise<void> {
   if (lineup.nominationTargetBelowSeenAt != null) return;
-  await stampBelowSeen(db, lineup.id, judgedTarget);
+  await stampBelowSeen(db, lineup.id, judgedTarget, lineup.updatedAt);
 }
 
 /**
@@ -161,10 +163,21 @@ async function armNominationTarget(
  *   must not re-arm it afterwards. Without this, a lineup the edit left
  *   unarmed at/above its NEW target was armed by the stale stamp and advanced
  *   on the very next nomination.
+ * - `updated_at = readUpdatedAt` (ROK-1710 Codex round 5), when the write
+ *   comes from an evaluation's snapshot: an edit sequence that ends on the
+ *   judged pct (75 -> 50 -> 75) restores pct and both stamps, but every
+ *   target edit bumps `updated_at`, so the stale arm matches no row.
+ *   Nominating and unnominating never bump `updated_at`, so a live arm is not
+ *   refused by its own path. An unrelated bump in the read-to-write window (a
+ *   title edit, a share toggle, a deadline extension) only defers the arm to
+ *   the next below-target evaluation. Compared at ms precision: the JS Date
+ *   read back is ms, while `defaultNow()` stores microseconds. Omitted for the
+ *   create and edit paths, which read the row fresh under the edit's lock.
  */
 export function belowSeenStampCondition(
   lineupId: number,
   judgedTarget: number,
+  readUpdatedAt?: Date,
 ) {
   const t = schema.communityLineups;
   return and(
@@ -172,6 +185,9 @@ export function belowSeenStampCondition(
     isNull(t.nominationTargetBelowSeenAt),
     eq(t.nominationTargetPct, judgedTarget),
     isNull(t.nominationTargetDisarmedAt),
+    readUpdatedAt === undefined
+      ? undefined
+      : sql`date_trunc('milliseconds', ${t.updatedAt}) = ${readUpdatedAt.toISOString()}::timestamp`,
   );
 }
 
@@ -179,11 +195,12 @@ async function stampBelowSeen(
   db: DbOrTx,
   lineupId: number,
   judgedTarget: number,
+  readUpdatedAt?: Date,
 ): Promise<void> {
   await db
     .update(schema.communityLineups)
     .set({ nominationTargetBelowSeenAt: new Date() })
-    .where(belowSeenStampCondition(lineupId, judgedTarget));
+    .where(belowSeenStampCondition(lineupId, judgedTarget, readUpdatedAt));
 }
 
 /**

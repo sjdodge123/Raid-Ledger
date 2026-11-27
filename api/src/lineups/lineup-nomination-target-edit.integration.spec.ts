@@ -27,6 +27,7 @@ import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 import { LINEUP_GRACE_ADVANCE } from './queue/lineup-phase.constants';
 import { runStatusTransition } from './lineups-transition.helpers';
 import { advanceGuardFrom } from './lineups-advance-guard.helpers';
+import { evaluateNominationTarget } from './quorum/nomination-target.helpers';
 
 type Game = typeof schema.games.$inferSelect;
 type Lineup = typeof schema.communityLineups.$inferSelect;
@@ -315,6 +316,122 @@ function describeNominationTargetEdit() {
     // An evaluation judged under the old arm must not advance an unarmed lineup.
     expect(outcome).toBe('ConflictException');
     expect((await readRow(lineupId)).status).toBe('building');
+  });
+
+  it('a stale zero-grace evaluation cannot advance after a 50 -> 75 -> 50 edit that re-arms (review r4 MINOR 2)', async () => {
+    const a = await createMember('aba2-a');
+    const b = await createMember('aba2-b');
+    const lineupId = await createLineup(50);
+    const games = await createGames(10);
+    await nominateAll(lineupId, games.slice(0, 9), a, b);
+    const tenth = nonEmpty(games.slice(9), 'tenth game')[0];
+    const [entry] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupEntries)
+        .values({ lineupId, gameId: tenth.id, nominatedBy: b.userId })
+        .returning(),
+      'tenth entry',
+    );
+    // The evaluation reads 10/20 = 50% while armed: a ready crossing.
+    const judged = await readRow(lineupId);
+    expect(judged.nominationTargetBelowSeenAt).not.toBeNull();
+
+    // Before it writes, the count drops to 9 (45%) and the operator edits
+    // 50 -> 75 -> 50. Both edits see 45% below target, so each re-arms with
+    // a fresh stamp; the 10th game then comes back.
+    await testApp.db
+      .delete(schema.communityLineupEntries)
+      .where(eq(schema.communityLineupEntries.id, entry.id));
+    expect(
+      (await patchTarget(lineupId, { nominationTargetPct: 75 })).status,
+    ).toBe(200);
+    const back = await patchTarget(lineupId, { nominationTargetPct: 50 });
+    expect(back.status).toBe(200);
+    expect(back.body.nominationTargetArmed).toBe(true);
+    const rearmed = await readRow(lineupId);
+    expect(rearmed.nominationTargetBelowSeenAt).not.toEqual(
+      judged.nominationTargetBelowSeenAt,
+    );
+    await testApp.db
+      .insert(schema.communityLineupEntries)
+      .values({ lineupId, gameId: tenth.id, nominatedBy: b.userId });
+
+    const processor = testApp.app.get(LineupPhaseProcessor);
+    const outcome = await runStatusTransition(
+      processor['buildTransitionDeps'](),
+      lineupId,
+      { status: 'voting' },
+      null,
+      advanceGuardFrom(judged),
+    ).then(
+      () => 'advanced',
+      (err: unknown) => (err instanceof Error ? err.name : String(err)),
+    );
+
+    // The re-arm wrote a new stamp, so the old evaluation's arm is gone.
+    expect(outcome).toBe('ConflictException');
+    expect((await readRow(lineupId)).status).toBe('building');
+  });
+
+  it('an evaluation arms an unarmed lineup it reads below target', async () => {
+    const a = await createMember('arm-a');
+    const b = await createMember('arm-b');
+    const lineupId = await createLineup(75);
+    await nominateAll(lineupId, await createGames(5), a, b);
+    // Fixture: unarmed below target (5/20 = 25% of 75%). `updated_at` keeps
+    // its insert-time microsecond value, so the ms-precision match is tested.
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ nominationTargetBelowSeenAt: null })
+      .where(eq(schema.communityLineups.id, lineupId));
+
+    // A live nomination (6/20 = 30%) evaluates a fresh read and arms.
+    await nominateAll(lineupId, await createGames(1), a, b);
+
+    expect(
+      (await readRow(lineupId)).nominationTargetBelowSeenAt,
+    ).not.toBeNull();
+  });
+
+  it('a stale evaluation cannot re-arm after a 75 -> 50 -> 75 edit (Codex round 5)', async () => {
+    const a = await createMember('rearm-a');
+    const b = await createMember('rearm-b');
+    const lineupId = await createLineup(75);
+    const games = await createGames(16);
+    await nominateAll(lineupId, games.slice(0, 14), a, b);
+    // Fixture: an unarmed lineup at 14/20 = 70%, below its 75% target.
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ nominationTargetBelowSeenAt: null })
+      .where(eq(schema.communityLineups.id, lineupId));
+    // An evaluation reads it here: below target, so it is about to arm.
+    const stale = await readRow(lineupId);
+    expect(stale.nominationTargetBelowSeenAt).toBeNull();
+
+    // Before it writes, two nominations land (16/20 = 80%) and the operator
+    // saves 75 -> 50 -> 75. 80% is a standing condition for both, so both
+    // edits leave the lineup unarmed.
+    await testApp.db.insert(schema.communityLineupEntries).values(
+      games.slice(14).map((g) => ({
+        lineupId,
+        gameId: g.id,
+        nominatedBy: b.userId,
+      })),
+    );
+    expect(
+      (await patchTarget(lineupId, { nominationTargetPct: 50 })).status,
+    ).toBe(200);
+    const back = await patchTarget(lineupId, { nominationTargetPct: 75 });
+    expect(back.status).toBe(200);
+    expect(back.body.nominationTargetArmed).toBe(false);
+
+    // The stale evaluation now runs its arm write on the old snapshot.
+    const result = await evaluateNominationTarget(testApp.db, stale, 14, 1);
+    expect(result.ready).toBe(false);
+
+    expect(
+      (await readRow(lineupId)).nominationTargetBelowSeenAt,
+    ).toBeNull();
   });
 
   it('still honours the 24h revert pause after a re-arm', async () => {
