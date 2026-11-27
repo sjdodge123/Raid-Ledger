@@ -18,7 +18,7 @@ import { clearCapturedQueryToken } from '../lib/query-token-capture';
 import { clearPendingSigninCode } from '../lib/signin-code-storage';
 import { bumpIdentityEpoch } from '../lib/api/cross-tab-auth';
 import { dropViewerPrivateCaches } from './viewer-private-caches';
-import type { UserRole } from '@raid-ledger/contract';
+import type { SigninMethodsDto, UserRole } from '@raid-ledger/contract';
 
 export interface User {
     id: number;
@@ -32,6 +32,8 @@ export interface User {
     onboardingCompletedAt: string | null;
     avatarPreference?: { type: 'custom' | 'discord' | 'character'; characterName?: string | undefined } | null;
     resolvedAvatarUrl?: string | null;
+    /** ROK-2371: every way the owner can sign in (owner-only `/auth/me` field). */
+    signinMethods?: SigninMethodsDto | undefined;
 }
 
 /** Check if user has admin role */
