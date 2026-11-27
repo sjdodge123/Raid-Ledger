@@ -86,13 +86,14 @@ jobs:
     #     OLDEST FIRST (by run_id): each queues a ticket ref
     #     `refs/locks/discord-smoke/queue/<run_id>-<attempt>` and tries for a
     #     slot only while fewer live tickets sort before it than slots are
-    #     free; tickets of completed/gone runs or older than 155 min are
-    #     skipped (scripts/ci/discord-smoke-lease-queue.sh). It takes over a lease
+    #     free; tickets of completed/gone runs, of an earlier attempt, of a
+    #     run that holds a slot, or older than ~106 min (the 100-min wait +
+    #     margin) are skipped (scripts/ci/discord-smoke-lease-queue.sh). It takes over a lease
     #     whose holder run is completed/gone, a lease left by an earlier
     #     attempt of this same run, or one older than 155 min (longer than
     #     timeout-minutes below, so a live holder is never taken over).
-    #   - release: `always()` final step deletes this run's queue ticket and
-    #     the lease ref ONLY if it still points at this run's owner commit. The step before it stops the
+    #   - release: `always()` final step deletes the lease ref ONLY if it
+    #     still points at this run's owner commit, then this run's queue ticket. The step before it stops the
     #     API, so the bot has left the gateway before the next run connects.
     # The lease is taken right before the first step that touches Discord
     # (bot connect), not at job start: the bot token reaches the API only via
