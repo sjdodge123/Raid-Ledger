@@ -111,7 +111,9 @@ describe('resolvePollTerminalState — locked-in fallback (ROK-1545 F3)', () => 
  * A db handle whose single linked-event lookup
  * (`select().from().where().limit()`) resolves to `rows`.
  */
-function eventDb(rows: Array<{ startTime: string; cancelledAt: Date | null }>): Db {
+function eventDb(
+  rows: Array<{ startTime: string; cancelledAt: Date | null }>,
+): Db {
   const chain = {
     from: () => chain,
     where: () => chain,
@@ -124,7 +126,7 @@ describe('resolvePollTerminalState — linked event cancelled (ROK-2330)', () =>
   const slots = [{ id: 1, proposedTime: EARLY }];
   const lockedMatch = { status: 'scheduled', linkedEventId: 314 };
 
-  it('reports when the locked-in poll\'s event was cancelled', async () => {
+  it("reports when the locked-in poll's event was cancelled", async () => {
     const cancelledAt = new Date('2030-06-09T12:00:00.000Z');
     const state = await resolvePollTerminalState(
       eventDb([{ startTime: LATE.toISOString(), cancelledAt }]),
