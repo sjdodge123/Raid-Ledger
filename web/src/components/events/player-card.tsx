@@ -14,7 +14,7 @@ import { toAvatarUser } from '../../lib/avatar';
 import { guestProfileLink } from '../../lib/guest-profile-link';
 import type { AvatarUser } from '../../lib/avatar';
 import { formatRole } from '../../lib/role-colors';
-import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
+import { PluginSlot } from '../../plugins';
 import { RoleIcon } from '../shared/RoleIcon';
 import { CharacterPortraitFallback } from '../../plugins/character-portrait';
 import { SeriesBadge } from './SeriesBadge';
@@ -103,9 +103,7 @@ function PlayerCharacterInfo({ player, raised }: { player: ViewerRosterAssignmen
         // Raised, the line hugs its text (w-fit) so the card action keeps the rest of the row.
         <p className={`flex items-center gap-1 truncate text-xs text-muted${raised ? ' relative w-fit max-w-full cursor-default' : ''}`}
             title={[player.character.name, player.character.className].filter(Boolean).join(' \u2022 ')}>
-            {getClassIconUrl(player.character.className) && (
-                <img src={getClassIconUrl(player.character.className)!} alt="" className="w-3.5 h-3.5 rounded-sm flex-shrink-0" />
-            )}
+            <PluginSlot name="character-card:class-icon" context={{ characterClass: player.character.className, iconClassName: 'w-3.5 h-3.5 rounded-sm flex-shrink-0' }} />
             <span className="truncate">
                 {player.character.name}
                 {player.character.className && ` \u2022 ${player.character.className}`}

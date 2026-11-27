@@ -79,10 +79,6 @@ vi.mock('../../plugins', () => ({
     PluginSlot: vi.fn(() => null),
 }));
 
-vi.mock('../../plugins/wow/utils', () => ({
-    getWowVariant: vi.fn(() => null),
-    getContentType: vi.fn(() => null),
-}));
 
 // ─── Child component mocks ────────────────────────────────────────────────────
 vi.mock('./game-search-input', () => ({
