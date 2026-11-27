@@ -5,7 +5,7 @@
  * (`stubOutbound`). The services are called directly, so nothing is hidden
  * behind the CONNECTED handler's catch.
  */
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
 import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import * as schema from '../../../drizzle/schema';
@@ -628,9 +628,22 @@ describe('ROK-2314 MAJOR-2 requeueHeldReplies', () => {
 });
 
 describe('ROK-2292 review M1: heldReplyTarget (a reply claimed while its post was in flight)', () => {
+  /**
+   * Each case leaves a due pending post + held reply in a bound hub, and the
+   * outbound retry sweep is global — unbind these hubs afterwards so a later
+   * sweep-asserting case (in CI's randomized order) never sends them.
+   */
+  const hubs: number[] = [];
+  afterEach(async () => {
+    if (hubs.length === 0) return;
+    const b = schema.hubForumDiscordBindings;
+    await ctx.testApp.db.delete(b).where(inArray(b.guildId, hubs.splice(0)));
+  });
+
   /** A post claimed but unsent, with one reply held on its placeholder. */
   async function inFlight(title: string) {
     const { g } = await boundHub();
+    hubs.push(g);
     const pending = { syncState: 'pending', attempts: 0 };
     const { thread, link: post } = await queuedThread(g, title, pending);
     const { link: reply } = await heldReply(g, thread.id, `${title} reply`);
