@@ -96,14 +96,23 @@ function EditActions({ onCancel, saveDisabled, isPending }: {
  * Target form state. The key goes in the PATCH body only once the user touched
  * the control AND the pct differs from the value at open, or the lineup was
  * disarmed at open (a deliberate re-arm at the same pct). Omitting the key
- * keeps the stored target. The comparison is against a snapshot taken at
- * open, never the live prop: a background refetch (another operator's edit)
- * must not turn an untouched control into an overwrite (ROK-1710 Codex P2).
+ * keeps the stored target. The comparison is against a snapshot taken when
+ * the section first became editable, never the live prop: a background
+ * refetch (another operator's edit) must not turn an untouched control into an
+ * overwrite (ROK-1710 Codex P2). A modal opened during voting has no target;
+ * if a refetch then shows the lineup back in building, the snapshot is taken
+ * at that moment (Codex round 4), or every edit to the shown control would be
+ * silently dropped from the PATCH.
  */
 function useTargetEdit(target: EditableTarget | undefined) {
-    const [opened] = useState(target);
+    const [opened, setOpened] = useState(target);
     const [pct, setPctState] = useState<number | null>(opened?.initialPct ?? null);
     const [touched, setTouched] = useState(false);
+    if (opened === undefined && target !== undefined) {
+        // Render-phase snapshot (React's "adjust state on prop change").
+        setOpened(target);
+        setPctState(target.initialPct);
+    }
     const setPct = (next: number | null): void => {
         setPctState(next);
         setTouched(true);

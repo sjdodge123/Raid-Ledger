@@ -351,6 +351,39 @@ describe('EditLineupMetadataModal — nomination target (ROK-1710)', () => {
     });
 });
 
+describe('EditLineupMetadataModal — target appears after open (ROK-1710 Codex round 4)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    const props = { lineupId: 7, initialTitle: 'Friday Lineup', initialDescription: null, onClose: vi.fn() };
+
+    it('a modal opened during voting sends the edit once a refetch shows building', async () => {
+        const m = mockMutation();
+        const { rerender } = renderWithProviders(<EditLineupMetadataModal {...props} />);
+        expect(screen.queryByTestId('nomination-target-enabled')).not.toBeInTheDocument();
+        // Another operator reverted the lineup to building; the detail query
+        // refetched and the target section appeared.
+        rerender(<EditLineupMetadataModal {...props} target={{ initialPct: 50, disarmed: false }} />);
+        expect(targetToggle(), 'the section must start from the target it shows (50%), not off').toBeChecked();
+        fireEvent.change(screen.getByTestId('nomination-target-pct'), { target: { value: '60' } });
+        fireEvent.click(saveButton());
+        await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
+        expect(
+            sentBody(m).nominationTargetPct,
+            'the shown target control must not be silently ignored',
+        ).toBe(60);
+    });
+
+    it('an untouched target that appears after open stays out of the body', async () => {
+        const m = mockMutation();
+        const { rerender } = renderWithProviders(<EditLineupMetadataModal {...props} />);
+        rerender(<EditLineupMetadataModal {...props} target={{ initialPct: 50, disarmed: false }} />);
+        fireEvent.change(titleInput(), { target: { value: 'Saturday Lineup' } });
+        fireEvent.click(saveButton());
+        await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
+        expect(Object.keys(sentBody(m))).toEqual(['title', 'description']);
+    });
+});
+
 describe('EditLineupMetadataModal — disarmed nomination target (ROK-1710)', () => {
     beforeEach(() => vi.clearAllMocks());
 
