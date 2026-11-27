@@ -51,6 +51,7 @@ import {
   targetProblems,
 } from '../../common/testing/plugin-deactivate-effects';
 import type { ScanSource } from '../../common/testing/hub-registration-scan';
+import { scopedHandlers } from '../../common/testing/hub-registration-scan.handlers';
 import { STEAM_ACCOUNT_UNLINKED } from '../../steam/steam.constants';
 import {
   PELICAN_PLUGIN_ID,
@@ -139,7 +140,9 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
     const problems: string[] = [];
     for (const t of inv.targets) {
       const r = await probeTarget(t, deps, payloads);
-      problems.push(...targetProblems(r, { requireGate }));
+      // A `callback` target only binds a gateway callback; the check runs in it.
+      const gated = requireGate && t.gate === 'direct';
+      problems.push(...targetProblems(r, { requireGate: gated }));
     }
     return problems;
   }
@@ -153,9 +156,16 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
     const guarded = staticGuardedControllers(raw);
     expect(guarded.length).toBeGreaterThanOrEqual(20);
     expect(guarded.filter((c) => !routed.has(c))).toEqual([]);
+    // Census 2026-11-27: the scanner reads 18 scoped handlers — 3 with an
+    // active check (handleLinked, onBotConnected + its interactionCreate[0]
+    // callback), 3 cleanup-marked, 12 allowlisted. Every checked one must
+    // resolve; the floors are on what the scanner reads, not a guess.
+    expect(scopedHandlers(raw).length).toBeGreaterThanOrEqual(15);
     const handlers = checkedHandlerTargets(raw, instances);
     expect(handlers.unresolved).toEqual([]);
-    expect(handlers.targets.length).toBeGreaterThanOrEqual(10);
+    expect(handlers.targets.length).toBeGreaterThanOrEqual(2);
+    const direct = handlers.targets.filter((t) => t.gate === 'direct');
+    expect(direct.length).toBeGreaterThanOrEqual(1);
     const crons = scopedCronTargets(raw, instances);
     expect(crons.unresolved).toEqual([]);
     expect(crons.targets.length).toBeGreaterThanOrEqual(4);
@@ -257,11 +267,10 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
 
     it('valheim: a Pelican re-map still revokes the Valheim Link token', async () => {
       await deactivate([VALHEIM_PLUGIN_ID, PELICAN_PLUGIN_ID]);
-      const repo = testApp.app.get(ValheimLinkTokensRepository, {
-        strict: false,
-      });
+      // ValheimLinkDemoSeedModule re-provides the repository, so the
+      // listener's instance is not necessarily the one `app.get` returns.
       const revoke = jest
-        .spyOn(repo, 'revokeIfNotValheim')
+        .spyOn(ValheimLinkTokensRepository.prototype, 'revokeIfNotValheim')
         .mockResolvedValue(false);
       try {
         await testApp.app

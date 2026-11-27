@@ -173,12 +173,30 @@ export function providerInstances(app: INestApplication): Map<string, object> {
   return out;
 }
 
+/**
+ * How a target reaches its active check: `direct` — when fired; `callback` —
+ * it only attaches a Discord gateway callback, and the check runs inside that
+ * callback (listed separately, as a `skipped` `#interactionCreate[n]` key).
+ */
+export type GateRoute = 'direct' | 'callback';
+
 /** A handler resolved to the live instance it runs on. */
 export interface HandlerTarget {
   key: string;
   instance: object;
   method: string;
+  gate: GateRoute;
 }
+
+interface TargetEntry {
+  key: string;
+  classes: string[];
+  method: string;
+  gate: GateRoute;
+}
+
+/** A handler body that only binds a gateway callback (the check lives in it). */
+const BINDS_GATEWAY = /\bgatewayBinding\s*\(|\.attachToClient\s*\(/;
 
 export interface TargetInventory {
   targets: HandlerTarget[];
@@ -192,30 +210,28 @@ function classesIn(text: string): string[] {
 
 /** The first class in `classes` with a live instance owning `method`. */
 function resolveTarget(
-  key: string,
-  classes: readonly string[],
-  method: string,
+  e: TargetEntry,
   index: ReadonlyMap<string, object>,
 ): HandlerTarget | undefined {
-  for (const cls of classes) {
+  for (const cls of e.classes) {
     const instance = index.get(cls);
     if (instance === undefined) continue;
-    if (typeof Reflect.get(instance, method) === 'function') {
-      return { key, instance, method };
+    if (typeof Reflect.get(instance, e.method) === 'function') {
+      return { key: e.key, instance, method: e.method, gate: e.gate };
     }
   }
   return undefined;
 }
 
 function collect(
-  entries: readonly { key: string; classes: string[]; method: string }[],
+  entries: readonly TargetEntry[],
   index: ReadonlyMap<string, object>,
   skipped: string[],
 ): TargetInventory {
   const targets: HandlerTarget[] = [];
   const unresolved: string[] = [];
   for (const e of entries) {
-    const t = resolveTarget(e.key, e.classes, e.method, index);
+    const t = resolveTarget(e, index);
     if (t === undefined) unresolved.push(e.key);
     else targets.push(t);
   }
@@ -237,12 +253,14 @@ export function checkedHandlerTargets(
   const skipped = sites.filter((s) => /\[\d+\]$/.test(s.key)).map((s) => s.key);
   const entries = sites
     .filter((s) => !/\[\d+\]$/.test(s.key))
-    .map((s) => {
+    .map((s): TargetEntry => {
       const [file = '', member = ''] = s.key.split('#');
       const [first = '', second] = member.split('.');
       const src = stripComments(text.get(file) ?? '');
       const classes = second === undefined ? classesIn(src) : [first];
-      return { key: s.key, classes, method: second ?? first };
+      const binds = BINDS_GATEWAY.test(stripComments(s.body));
+      const gate: GateRoute = binds ? 'callback' : 'direct';
+      return { key: s.key, classes, method: second ?? first, gate };
     });
   return collect(entries, index, skipped);
 }
@@ -266,10 +284,11 @@ export function scopedCronTargets(
     .filter((s) => scopedFolder(s.file) !== undefined)
     .flatMap((s) => {
       const text = stripComments(s.text);
-      return [...text.matchAll(CRON_METHOD)].map((m) => ({
+      return [...text.matchAll(CRON_METHOD)].map((m): TargetEntry => ({
         key: `${s.file}#${m[1] ?? ''}`,
         classes: classesIn(text),
         method: m[1] ?? '',
+        gate: 'direct',
       }));
     });
   return collect(entries, index, []);

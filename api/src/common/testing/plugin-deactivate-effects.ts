@@ -177,12 +177,17 @@ export async function invoke(
   return undefined;
 }
 
-/** What firing one handler did: effects, gate consultations, throws. */
+/**
+ * What firing one handler did: effects, gate consultations, the throws of
+ * attempts that reached the gate (`errors`), and the last throw of any
+ * attempt (`lastError`).
+ */
 export interface ProbeResult {
   key: string;
   effects: string[];
   gateCalls: number;
   errors: unknown[];
+  lastError: unknown;
 }
 
 /** One fire of `t` with `payload`: watch, gate spies, drain, restore. */
@@ -211,7 +216,9 @@ async function probeOnce(
 /**
  * Fire `t` with each payload in turn until one reaches the gate (a handler
  * may filter on `payload.slug` before its active check). Effects of every
- * attempt count.
+ * attempt count. A throw counts only from an attempt that consulted the gate:
+ * a crash before it is a probe-shape miss (a later payload may still reach
+ * the gate), a crash after it is a real leak.
  */
 export async function probeTarget(
   t: { key: string; instance: object; method: string },
@@ -223,12 +230,16 @@ export async function probeTarget(
     effects: [],
     gateCalls: 0,
     errors: [],
+    lastError: undefined,
   };
   for (const payload of payloads) {
     const r = await probeOnce(t, deps, payload);
     out.effects.push(...r.effects);
     out.gateCalls += r.gateCalls;
-    if (r.error !== undefined) out.errors.push(r.error);
+    if (r.error !== undefined) {
+      out.lastError = r.error;
+      if (r.gateCalls > 0) out.errors.push(r.error);
+    }
     if (out.gateCalls > 0) break;
   }
   return out;
@@ -240,11 +251,16 @@ function describeError(err: unknown): string {
   return err instanceof Error ? `${err.name}: ${err.message}` : String(err);
 }
 
+function isProgrammerError(err: unknown): boolean {
+  return PROGRAMMER_ERRORS.some((E) => err instanceof E);
+}
+
 /**
- * Problems with one probe: any effect; a programmer error (the probe crashed
- * the handler, so the gate was never what stopped it); and, with
- * `requireGate`, a handler that never consulted `isActive` /
- * `getActiveSlugsSync` — its active check is missing or unreachable.
+ * Problems with one probe: any effect; a programmer error thrown after the
+ * gate was consulted (or, without `requireGate`, the last one when the gate
+ * never was); and, with `requireGate`, a handler that never consulted
+ * `isActive` / `getActiveSlugsSync` — its active check is missing or
+ * unreachable (its last throw, if any, is named).
  */
 export function targetProblems(
   r: ProbeResult,
@@ -252,13 +268,14 @@ export function targetProblems(
 ): string[] {
   const out: string[] = [];
   if (r.effects.length > 0) out.push(`${r.key}: ${r.effects.join(', ')}`);
-  for (const err of r.errors) {
-    if (PROGRAMMER_ERRORS.some((E) => err instanceof E)) {
+  const ungated = r.gateCalls === 0 && !opts.requireGate ? [r.lastError] : [];
+  for (const err of [...r.errors, ...ungated]) {
+    if (isProgrammerError(err)) {
       out.push(`${r.key}: threw ${describeError(err)}`);
     }
   }
   if (opts.requireGate && r.gateCalls === 0) {
-    const last = r.errors.at(-1);
+    const last = r.lastError;
     const why =
       last === undefined ? '' : ` (last throw: ${describeError(last)})`;
     out.push(`${r.key}: never consulted isActive/getActiveSlugsSync${why}`);

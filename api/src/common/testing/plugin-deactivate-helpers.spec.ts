@@ -32,6 +32,8 @@ function fakeDb() {
   };
 }
 
+const CRASH_MESSAGE = "Cannot read properties of undefined (reading 'id')";
+
 const gate: ActiveGate = {
   isActive: (slug: string) => slug === 'core',
   getActiveSlugsSync: () => new Set<string>(['core']),
@@ -55,6 +57,18 @@ class FakeListener {
     throw new TypeError("Cannot read properties of undefined (reading 'id')");
   }
 
+  /** Crashes on the bare probe (slug filter), reaches the gate on a slug. */
+  slugFirst(payload: { slug: string }): void {
+    if (payload.slug === 'probe') throw new TypeError(CRASH_MESSAGE);
+    if (!gate.isActive('valheim')) return;
+  }
+
+  /** Consults the gate, then crashes: a real leak while off. */
+  crashAfterGate(): void {
+    gate.isActive('valheim');
+    throw new TypeError(CRASH_MESSAGE);
+  }
+
   private async work(): Promise<void> {
     await ticks(5);
     this.db.insert();
@@ -68,6 +82,7 @@ async function problems(
   checked: boolean,
   writes: boolean,
   method = 'handle',
+  requireGate = true,
 ): Promise<string[]> {
   const db = fakeDb();
   const instance = new FakeListener(db, checked, writes);
@@ -76,7 +91,7 @@ async function problems(
     { db, gate },
     PAYLOADS,
   );
-  return targetProblems(r, { requireGate: true });
+  return targetProblems(r, { requireGate });
 }
 
 describe('ROK-2369 deactivate probe', () => {
@@ -92,13 +107,27 @@ describe('ROK-2369 deactivate probe', () => {
     expect(await problems(false, true)).toEqual(['k: db.insert×1', NEVER]);
   });
 
-  it('reports a probe crash instead of swallowing it', async () => {
-    const crash =
-      "TypeError: Cannot read properties of undefined (reading 'id')";
+  const crash = `TypeError: ${CRASH_MESSAGE}`;
+
+  it('names the crash when a handler never reaches the gate', async () => {
     expect(await problems(true, false, 'crash')).toEqual([
-      `k: threw ${crash}`,
-      `k: threw ${crash}`,
       `${NEVER} (last throw: ${crash})`,
+    ]);
+  });
+
+  it('reports an ungated crash when the gate is not required (crons)', async () => {
+    expect(await problems(true, false, 'crash', false)).toEqual([
+      `k: threw ${crash}`,
+    ]);
+  });
+
+  it('does not fail a crash on the bare probe when a later payload reaches the gate', async () => {
+    expect(await problems(true, false, 'slugFirst')).toEqual([]);
+  });
+
+  it('reports a crash after the gate was consulted', async () => {
+    expect(await problems(true, false, 'crashAfterGate')).toEqual([
+      `k: threw ${crash}`,
     ]);
   });
 
@@ -129,6 +158,21 @@ describe('ROK-2369 deactivate inventory', () => {
       unresolved: [],
       skipped: [],
     });
+  });
+
+  it('pins every checked handler and how it reaches its gate', () => {
+    const raw = loadRawSources(path.resolve(__dirname, '../..'));
+    const index = new Map<string, object>([
+      ['ValheimSteamLinkListener', { handleLinked: () => undefined }],
+      ['ValheimClaimSuggestListener', { onBotConnected: () => undefined }],
+    ]);
+    const inv = checkedHandlerTargets(raw, index);
+    const dir = 'plugins/valheim/armory/identity';
+    expect(inv.unresolved).toEqual([]);
+    expect(inv.targets.map((t) => [t.key, t.gate])).toEqual([
+      [`${dir}/valheim-claim-suggest.listener.ts#onBotConnected`, 'callback'],
+      [`${dir}/valheim-steam-link.listener.ts#handleLinked`, 'direct'],
+    ]);
   });
 
   it('pins the gateway callbacks the integration spec cannot fire', () => {
