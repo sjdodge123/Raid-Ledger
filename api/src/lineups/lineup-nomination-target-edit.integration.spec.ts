@@ -429,9 +429,7 @@ function describeNominationTargetEdit() {
     const result = await evaluateNominationTarget(testApp.db, stale, 14, 1);
     expect(result.ready).toBe(false);
 
-    expect(
-      (await readRow(lineupId)).nominationTargetBelowSeenAt,
-    ).toBeNull();
+    expect((await readRow(lineupId)).nominationTargetBelowSeenAt).toBeNull();
   });
 
   it('still honours the 24h revert pause after a re-arm', async () => {
