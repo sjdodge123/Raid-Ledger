@@ -21,6 +21,7 @@ import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { useTransitionLineupStatus } from '../../hooks/use-lineups';
 import { toast } from '../../lib/toast';
 import { EditLineupMetadataModal } from './edit-lineup-metadata-modal';
+import type { EditableTarget } from './edit-lineup-target-section';
 import { AbortLineupModal } from './AbortLineupModal';
 import { PhaseTransitionModal } from './phase-transition-modal';
 import { nextPhase, prevPhase, type AdjacentPhase } from './operator-menu-transitions';
@@ -39,6 +40,15 @@ interface Props {
 }
 
 /** Edit / Abort / phase-transition modal host, driven by the menu's state. */
+/** ROK-1710: the target is editable only while nominating (the API 409s otherwise). */
+function editableTarget(lineup: LineupDetailResponseDto): EditableTarget | undefined {
+  if (lineup.status !== 'building') return undefined;
+  return {
+    initialPct: lineup.nominationTargetPct,
+    disarmed: lineup.nominationTargetDisarmedAt != null,
+  };
+}
+
 function MenuModalsHost({
   lineup,
   modals,
@@ -80,6 +90,7 @@ function MenuModalsHost({
           lineupId={lineup.id}
           initialTitle={lineup.title}
           initialDescription={lineup.description}
+          target={editableTarget(lineup)}
           onClose={() => setModals((m) => ({ ...m, edit: false }))}
         />
       )}

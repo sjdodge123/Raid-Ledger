@@ -6,6 +6,9 @@
  * `useDirtyCloseGuard`, so edited text is never dropped without "Discard your
  * changes?". Cancel + Save sit in the Modal's pinned `footer`; Save reaches the
  * fields' `<form>` through `form=`, so Enter in the title submits too.
+ *
+ * ROK-1710: while the lineup is nominating (`target` present) the modal also
+ * edits the early-advance nomination target; see `edit-lineup-target-section`.
  */
 import { useState, type FormEvent, type JSX } from 'react';
 import { Modal } from '../ui/modal';
@@ -16,11 +19,14 @@ import { Textarea } from '../ui/textarea';
 import { useUpdateLineupMetadata } from '../../hooks/use-lineups';
 import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { toast } from '../../lib/toast';
+import { EditTargetSection, type EditableTarget } from './edit-lineup-target-section';
 
 interface Props {
     lineupId: number;
     initialTitle: string;
     initialDescription: string | null;
+    /** Present only while the lineup is in `building`; absent hides the target block. */
+    target?: EditableTarget | undefined;
     onClose: () => void;
 }
 
@@ -86,11 +92,30 @@ function EditActions({ onCancel, saveDisabled, isPending }: {
     );
 }
 
+/**
+ * Target form state. The key goes in the PATCH body only when the pct changed,
+ * or when the user touched the control on a disarmed lineup (a deliberate
+ * re-arm at the same pct). Omitting the key keeps the stored target.
+ */
+function useTargetEdit(target: EditableTarget | undefined) {
+    const [pct, setPctState] = useState<number | null>(target?.initialPct ?? null);
+    const [touched, setTouched] = useState(false);
+    const setPct = (next: number | null): void => {
+        setPctState(next);
+        setTouched(true);
+    };
+    const changed = target !== undefined
+        && (pct !== target.initialPct || (target.disarmed && touched));
+    const bodyPatch: { nominationTargetPct?: number | null } = changed ? { nominationTargetPct: pct } : {};
+    return { pct, setPct, changed, bodyPatch };
+}
+
 /** Form state + save. A blank title surfaces inline; only server errors toast. */
-function useEditLineupForm({ lineupId, initialTitle, initialDescription, onClose }: Props) {
+function useEditLineupForm({ lineupId, initialTitle, initialDescription, target, onClose }: Props) {
     const [title, setTitle] = useState(initialTitle);
     const [description, setDescription] = useState(initialDescription ?? '');
     const [titleTouched, setTitleTouched] = useState(false);
+    const targetEdit = useTargetEdit(target);
     const update = useUpdateLineupMetadata();
     const titleBlank = title.trim() === '';
 
@@ -100,7 +125,11 @@ function useEditLineupForm({ lineupId, initialTitle, initialDescription, onClose
             return;
         }
         try {
-            const body = { title: title.trim(), description: description.trim() === '' ? null : description };
+            const body = {
+                title: title.trim(),
+                description: description.trim() === '' ? null : description,
+                ...targetEdit.bodyPatch,
+            };
             await update.mutateAsync({ lineupId, body });
             toast.success('Lineup updated');
             onClose();
@@ -110,8 +139,8 @@ function useEditLineupForm({ lineupId, initialTitle, initialDescription, onClose
     }
 
     const titleError = titleTouched && titleBlank ? TITLE_REQUIRED : undefined;
-    const isDirty = title !== initialTitle || description !== (initialDescription ?? '');
-    return { title, setTitle, description, setDescription, titleBlank, titleError, isDirty,
+    const isDirty = title !== initialTitle || description !== (initialDescription ?? '') || targetEdit.changed;
+    return { title, setTitle, description, setDescription, titleBlank, titleError, isDirty, targetEdit,
         touchTitle: () => setTitleTouched(true), isPending: update.isPending, save };
 }
 
@@ -130,6 +159,13 @@ export function EditLineupMetadataModal(props: Props): JSX.Element {
             <form id={FORM_ID} noValidate onSubmit={submit} className="space-y-4">
                 <TitleField value={form.title} onChange={form.setTitle} error={form.titleError} onBlur={form.touchTitle} />
                 <DescriptionField value={form.description} onChange={form.setDescription} />
+                {props.target && (
+                    <EditTargetSection
+                        disarmed={props.target.disarmed}
+                        value={form.targetEdit.pct}
+                        onChange={form.targetEdit.setPct}
+                    />
+                )}
             </form>
         </Modal>
     );
