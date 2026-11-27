@@ -5,6 +5,7 @@ import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended'
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import { noPrintfLoggerSyntax } from './eslint.no-printf-logger.mjs';
+import { pluginBoundaryBlock } from '../eslint-rules/plugin-boundary.mjs';
 
 export default tseslint.config(
   {
@@ -61,6 +62,15 @@ export default tseslint.config(
       'max-lines-per-function': ['warn', { max: 60, skipBlankLines: true, skipComments: true }],
     },
   },
+  // ROK-2366: outside plugins/<x>/, reach plugins/<x>/** only through its
+  // index.ts. Today's offenders: plugin-boundary-allowlist.json (shrink-only).
+  // plugin-host is the host, not a plugin. Specs may test internals.
+  pluginBoundaryBlock({
+    workspaceDir: import.meta.dirname,
+    files: ['src/**/*.ts'],
+    ignores: ['**/*.spec.ts', '**/*.spec-helpers.ts', 'src/common/testing/**'],
+    hostDirs: ['plugin-host'],
+  }),
   {
     files: ['**/migrations/**'],
     rules: {
