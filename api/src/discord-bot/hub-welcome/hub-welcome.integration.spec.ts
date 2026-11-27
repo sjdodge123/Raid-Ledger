@@ -34,7 +34,7 @@ import {
   fakeTextChannel,
   type FakeTextChannel,
 } from '../join-post/join-post.integration.spec-helpers';
-import { HubWelcomeService } from './hub-welcome.service';
+import { HUB_WELCOME_ERRORS, HubWelcomeService } from './hub-welcome.service';
 
 let testApp: TestApp;
 let welcome: HubWelcomeService;
@@ -315,9 +315,9 @@ describe('hub welcome — Valheim plugin inactive (ROK-2362 #10)', () => {
   it('a re-post is refused with 400 unsupported', async () => {
     await bind(hubId, 'c-a');
     await setValheimActive(false);
-    await expect(welcome.repost(hubId)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    const refused = welcome.repost(hubId);
+    await expect(refused).rejects.toBeInstanceOf(BadRequestException);
+    await expect(refused).rejects.toThrow(HUB_WELCOME_ERRORS.unsupported);
     expect(chanA.send).not.toHaveBeenCalled();
   });
 

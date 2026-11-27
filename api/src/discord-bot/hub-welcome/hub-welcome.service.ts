@@ -63,7 +63,8 @@ const UNKNOWN_CHANNEL = 10003;
 
 export const HUB_WELCOME_ERRORS = {
   notFound: 'Hub not found',
-  unsupported: 'Welcome messages are only posted for Valheim server hubs.',
+  unsupported:
+    'Welcome messages are only posted for Valheim server hubs, and only while the Valheim plugin is active.',
   noChannel: 'Link a Discord channel to this hub first.',
   notText: "The hub's channel isn't a text channel the bot can see.",
   unavailable: "Discord didn't answer — nothing was posted, try again.",
