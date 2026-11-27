@@ -32,6 +32,12 @@
 # .github/workflows/discord-smoke.yml) so a slow-but-alive holder, whose bot is
 # still connected, is never taken over.
 #
+# Waiting order (FIFO): a waiter queues a ticket ref
+# refs/locks/<name>/queue/<run_id>-<attempt> and only tries for a slot while
+# fewer live tickets sort before it than there are free slots — so the OLDEST
+# waiting run wins a freed slot, not whichever waiter polls first. Ordering,
+# stale-ticket rules and failure modes: scripts/ci/discord-smoke-lease-queue.sh.
+#
 # Needs job permissions `contents: write` (refs + commit objects) and
 # `actions: read` (holder run status). A read-only token (Dependabot, forks)
 # gets 403 on the commit create and this script FAILS the job rather than let
@@ -94,15 +100,13 @@ lease_tree() {
   cat "$CACHE/tree"
 }
 
-# make_commit INDEX [PARENT_SHA] — prints the new owner-token commit sha.
+# post_commit MESSAGE [PARENT_SHA] — prints the new commit sha.
 # Runs inside $(...), so a read-only token is flagged via $CACHE/readonly
 # and turned into a job failure by the caller (an exit here would only
 # leave the subshell).
-make_commit() {
-  local idx="$1" parent="${2:-}" msg json code tree
+post_commit() {
+  local msg="$1" parent="${2:-}" json code tree
   tree="$(lease_tree)" || return 1
-  msg="$(printf '%s lease %s\n\nrun_id=%s\nrun_attempt=%s\nrun_url=%s\nacquired_at=%s\n' \
-    "$NAME" "$idx" "$RUN_ID" "$RUN_ATTEMPT" "$RUN_URL" "$(now)")"
   json="$(jq -nc --arg m "$msg" --arg t "$tree" --arg p "$parent" \
     '{message: $m, tree: $t, parents: (if $p == "" then [] else [$p] end)}')"
   code="$(api POST git/commits "$json")"
@@ -111,6 +115,12 @@ make_commit() {
     403) echo "$code" > "$CACHE/readonly"; return 1 ;;
     *) echo "::warning::lease: commit create failed (HTTP $code), will retry" >&2; return 1 ;;
   esac
+}
+
+# make_commit INDEX [PARENT_SHA] — prints the new owner-token commit sha.
+make_commit() {
+  post_commit "$(printf '%s lease %s\n\nrun_id=%s\nrun_attempt=%s\nrun_url=%s\nacquired_at=%s\n' \
+    "$NAME" "$1" "$RUN_ID" "$RUN_ATTEMPT" "$RUN_URL" "$(now)")" "${2:-}"
 }
 
 # holder_msg SHA — the holder commit's message (cached per sha).
@@ -153,6 +163,7 @@ stale_reason() {
 }
 
 own() {  # own REF SHA INDEX
+  echo "ref=$1" > "$CACHE/own"
   {
     echo "ref=$1"; echo "sha=$2"; echo "index=$3"; echo "acquired_at=$(now)"
   } >> "$OUT"
@@ -231,19 +242,19 @@ acquire() {
   release_earlier_attempts
   while :; do
     check=0; [ $(( polls % RUN_CHECK_EVERY )) -eq 0 ] && check=1
-    for idx in $(seq 0 $(( POOL_SIZE - 1 ))); do
-      if try_slot "$idx" "$check"; then
-        echo "lease: acquired ${NS}/${NAME}/${idx} after waiting $(mins $(( $(now) - start )))"
-        return 0
-      fi
-    done
+    if poll_once "$check"; then
+      echo "lease: acquired $(sed -n 's/^ref=//p' "$CACHE/own") after waiting $(mins $(( $(now) - start )))"
+      return 0
+    fi
     polls=$(( polls + 1 )); waited=$(( $(now) - start ))
     if [ "$waited" -ge "$MAX_WAIT_S" ]; then
+      delete_ticket
       echo "::error::lease: gave up after waiting $(mins "$waited") for ${NS}/${NAME}"; exit 1
     fi
+    echo "lease: waited $(mins "$waited"); $(cat "$CACHE/ahead" 2>/dev/null || echo '?') live waiter(s) queued ahead"
     for idx in $(seq 0 $(( POOL_SIZE - 1 ))); do
       holder="$(cat "$CACHE/holder-$idx" 2>/dev/null || true)"
-      echo "lease: waited $(mins "$waited"); slot ${idx} held by $( [ -n "$holder" ] && holder_msg "$holder" | field run_url)"
+      echo "lease: slot ${idx} last seen held by $( [ -n "$holder" ] && holder_msg "$holder" | field run_url)"
     done
     sleep "$POLL_S"
   done
@@ -251,6 +262,7 @@ acquire() {
 
 release() {
   local ref="${LEASE_REF:-}" sha="${LEASE_SHA:-}" code holder
+  delete_ticket   # a run that gave up or was cancelled while queued
   if [ -z "$ref" ] || [ -z "$sha" ]; then echo "lease: nothing to release"; return 0; fi
   for _ in 1 2 3; do
     code="$(api GET "git/ref/${ref}")"
@@ -274,6 +286,9 @@ release() {
   echo "::warning::lease: could not release ${ref} (last HTTP $code); waiters take it over once this run completes"
   return 0
 }
+
+# shellcheck source=scripts/ci/discord-smoke-lease-queue.sh
+source "$(dirname "${BASH_SOURCE[0]}")/discord-smoke-lease-queue.sh"
 
 # LEASE_LIB_ONLY=1 stops here so scripts/test can source the functions.
 # shellcheck disable=SC2317  # the `exit` runs only when executed, not sourced
