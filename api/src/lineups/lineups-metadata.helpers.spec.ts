@@ -11,19 +11,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { authorizeAndPersistMetadata } from './lineups-metadata.helpers';
-import { findLineupById } from './lineups-query.helpers';
 import { applyNominationTargetEdit } from './quorum/nomination-target.helpers';
 
-jest.mock('./lineups-query.helpers', () => ({
-  findLineupById: jest.fn(),
-}));
 jest.mock('./quorum/nomination-target.helpers', () => ({
   applyNominationTargetEdit: jest.fn(),
 }));
-
-const findLineupByIdMock = findLineupById as jest.MockedFunction<
-  typeof findLineupById
->;
 
 const applyEditMock = applyNominationTargetEdit as jest.MockedFunction<
   typeof applyNominationTargetEdit
@@ -36,12 +28,40 @@ function lineup(overrides: Record<string, unknown> = {}) {
   return [{ id: 1, status: 'active', createdBy: CREATOR_ID, ...overrides }];
 }
 
-/** A db whose update path explodes — every ordering case must throw first. */
-const db = {
-  update: () => {
-    throw new Error('persist should not be reached');
-  },
-} as never;
+/**
+ * A db whose transaction hands back a tx that reads `rows` under a row lock
+ * and records each `.set()` payload. With `failUpdate` the update path
+ * explodes, so a case that must throw before any write proves it.
+ */
+function fakeDb(rows: unknown[], opts: { failUpdate?: boolean } = {}) {
+  const sets: Record<string, unknown>[] = [];
+  const lockModes: string[] = [];
+  const tx = {
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          for: (mode: string) => {
+            lockModes.push(mode);
+            return Promise.resolve(rows);
+          },
+        }),
+      }),
+    }),
+    update: () => {
+      if (opts.failUpdate) throw new Error('persist should not be reached');
+      return {
+        set: (values: Record<string, unknown>) => {
+          sets.push(values);
+          return { where: () => Promise.resolve() };
+        },
+      };
+    },
+  };
+  const db = {
+    transaction: (fn: (t: unknown) => Promise<unknown>) => fn(tx),
+  } as never;
+  return { db, tx, sets, lockModes };
+}
 
 describe('authorizeAndPersistMetadata guard ordering', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -51,7 +71,7 @@ describe('authorizeAndPersistMetadata guard ordering', () => {
     role: string,
     status = 'active',
   ): Promise<unknown> {
-    findLineupByIdMock.mockResolvedValue(lineup({ status }) as never);
+    const { db } = fakeDb(lineup({ status }), { failUpdate: true });
     return authorizeAndPersistMetadata(
       db,
       1,
@@ -90,7 +110,7 @@ describe('authorizeAndPersistMetadata guard ordering', () => {
   });
 
   it('returns 404 when the lineup does not exist', async () => {
-    findLineupByIdMock.mockResolvedValue([] as never);
+    const { db } = fakeDb([], { failUpdate: true });
 
     const err = await authorizeAndPersistMetadata(
       db,
@@ -106,25 +126,11 @@ describe('authorizeAndPersistMetadata guard ordering', () => {
   });
 });
 
-/** A db whose update chain resolves and records each `.set()` payload. */
-function recordingDb(): { db: never; sets: Record<string, unknown>[] } {
-  const sets: Record<string, unknown>[] = [];
-  const db = {
-    update: () => ({
-      set: (values: Record<string, unknown>) => {
-        sets.push(values);
-        return { where: () => Promise.resolve() };
-      },
-    }),
-  } as never;
-  return { db, sets };
-}
-
 describe('authorizeAndPersistMetadata nomination target gate (ROK-1710)', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('returns 409 to the creator when the lineup is not building, before any write', async () => {
-    findLineupByIdMock.mockResolvedValue(lineup({ status: 'voting' }) as never);
+    const { db } = fakeDb(lineup({ status: 'voting' }), { failUpdate: true });
 
     const err = await authorizeAndPersistMetadata(
       db,
@@ -141,7 +147,7 @@ describe('authorizeAndPersistMetadata nomination target gate (ROK-1710)', () => 
   });
 
   it('tells an outsider 403 before the not-building 409', async () => {
-    findLineupByIdMock.mockResolvedValue(lineup({ status: 'voting' }) as never);
+    const { db } = fakeDb(lineup({ status: 'voting' }), { failUpdate: true });
 
     const err = await authorizeAndPersistMetadata(
       db,
@@ -153,10 +159,9 @@ describe('authorizeAndPersistMetadata nomination target gate (ROK-1710)', () => 
     expect(err).toBeInstanceOf(ForbiddenException);
   });
 
-  it('hands a building lineup and the new pct to applyNominationTargetEdit', async () => {
+  it('hands the locked building row and the new pct to applyNominationTargetEdit inside the transaction', async () => {
     const row = lineup({ status: 'building' });
-    findLineupByIdMock.mockResolvedValue(row as never);
-    const { db: okDb } = recordingDb();
+    const { db: okDb, tx, lockModes } = fakeDb(row);
 
     await authorizeAndPersistMetadata(
       okDb,
@@ -165,12 +170,14 @@ describe('authorizeAndPersistMetadata nomination target gate (ROK-1710)', () => 
       { id: OUTSIDER_ID, role: 'operator' },
     );
 
-    expect(applyEditMock).toHaveBeenCalledWith(okDb, row[0], null);
+    // The same tx that read the row under the lock does the target write, so a
+    // status change cannot land between the guard and the write.
+    expect(applyEditMock).toHaveBeenCalledWith(tx, row[0], null);
+    expect(lockModes).toEqual(['no key update']);
   });
 
   it('leaves the target alone on a title-only edit outside building', async () => {
-    findLineupByIdMock.mockResolvedValue(lineup({ status: 'voting' }) as never);
-    const { db: okDb, sets } = recordingDb();
+    const { db: okDb, sets } = fakeDb(lineup({ status: 'voting' }));
 
     await authorizeAndPersistMetadata(
       okDb,

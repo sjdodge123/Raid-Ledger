@@ -55,6 +55,7 @@ function describeNominationTargetEdit() {
 
   async function createMember(
     tag: string,
+    role: 'member' | 'operator' = 'member',
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('TargetEdit1!', 4);
@@ -64,7 +65,7 @@ function describeNominationTargetEdit() {
         .values({
           discordId: `local:${tag}@targetedit.local`,
           username: tag,
-          role: 'member',
+          role,
         })
         .returning(),
       'user',
@@ -172,6 +173,29 @@ function describeNominationTargetEdit() {
     expect(row.status).toBe('building');
     expect(row.nominationTargetDisarmedAt).not.toBeNull();
     return { lineupId, a, b };
+  }
+
+  /**
+   * 75% target, 5 games across two members: 5/20 = 25%. Never reverted, so
+   * ARMED (below-seen stamped) and not disarmed — the common edit path.
+   */
+  async function armedLineupAtFive() {
+    const a = await createMember('armed-a');
+    const b = await createMember('armed-b');
+    const lineupId = await createLineup(75);
+    await nominateAll(lineupId, await createGames(5), a, b);
+    const row = await readRow(lineupId);
+    expect(row.status).toBe('building');
+    expect(row.nominationTargetDisarmedAt).toBeNull();
+    expect(row.nominationTargetBelowSeenAt).not.toBeNull();
+    return { lineupId, a, b, belowSeenAt: row.nominationTargetBelowSeenAt };
+  }
+
+  async function setCreator(lineupId: number, userId: number): Promise<void> {
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ createdBy: userId })
+      .where(eq(schema.communityLineups.id, lineupId));
   }
 
   // -- Cases -----------------------------------------------------------------
@@ -313,6 +337,64 @@ function describeNominationTargetEdit() {
     const res = await patchTarget(lineupId, { title: 'Just a rename' });
     expect(res.status).toBe(200);
     expect(res.body.nominationTargetPct).toBe(25);
+  });
+
+  it('lowers an armed lineup to its current fill: comes back unarmed and does not advance', async () => {
+    const { lineupId, a, b } = await armedLineupAtFive();
+
+    const res = await patchTarget(lineupId, { nominationTargetPct: 25 });
+
+    expect(res.status).toBe(200);
+    // 5/20 = 25% >= 25%: a standing condition, so the old arm is cleared.
+    expect(res.body.nominationTargetArmed).toBe(false);
+    expect((await readRow(lineupId)).nominationTargetBelowSeenAt).toBeNull();
+
+    // No revert pause applies, and the next nomination is still no crossing.
+    await settings.set(SETTING_KEYS.LINEUP_AUTO_ADVANCE_PAUSE_TTL_MS, '0');
+    await nominateAll(lineupId, await createGames(1), a, b);
+    expect((await readRow(lineupId)).status).toBe('building');
+  });
+
+  it('re-sending the same pct on an armed lineup keeps its arm stamp', async () => {
+    const { lineupId, belowSeenAt } = await armedLineupAtFive();
+
+    const res = await patchTarget(lineupId, { nominationTargetPct: 75 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.nominationTargetArmed).toBe(true);
+    const row = await readRow(lineupId);
+    expect(row.nominationTargetBelowSeenAt?.getTime()).toBe(
+      belowSeenAt?.getTime(),
+    );
+  });
+
+  it('lets the non-admin creator edit the target', async () => {
+    const creator = await createMember('edit-creator');
+    const lineupId = await createLineup(25);
+    await setCreator(lineupId, creator.userId);
+
+    const res = await patchTarget(
+      lineupId,
+      { nominationTargetPct: 50 },
+      creator.token,
+    );
+
+    expect(res.status).toBe(200);
+    expect((await readRow(lineupId)).nominationTargetPct).toBe(50);
+  });
+
+  it('lets an operator who did not create the lineup edit the target', async () => {
+    const operator = await createMember('edit-operator', 'operator');
+    const lineupId = await createLineup(25);
+
+    const res = await patchTarget(
+      lineupId,
+      { nominationTargetPct: 50 },
+      operator.token,
+    );
+
+    expect(res.status).toBe(200);
+    expect((await readRow(lineupId)).nominationTargetPct).toBe(50);
   });
 }
 

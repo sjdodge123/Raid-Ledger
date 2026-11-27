@@ -5,11 +5,17 @@
  * end-to-end behaviour is covered by
  * `lineup-nomination-target-edit.integration.spec.ts`.
  */
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   applyNominationTargetEdit,
+  evaluateNominationTarget,
   isNominationTargetEditNoop,
 } from './nomination-target.helpers';
-import { loadEffectiveNominationCapById } from '../lineups-nomination-cap.helpers';
+import {
+  loadEffectiveNominationCap,
+  loadEffectiveNominationCapById,
+} from '../lineups-nomination-cap.helpers';
 import type * as schema from '../../drizzle/schema';
 
 jest.mock('../lineups-nomination-cap.helpers', () => ({
@@ -19,6 +25,10 @@ jest.mock('../lineups-nomination-cap.helpers', () => ({
 
 const capMock = loadEffectiveNominationCapById as jest.MockedFunction<
   typeof loadEffectiveNominationCapById
+>;
+
+const evalCapMock = loadEffectiveNominationCap as jest.MockedFunction<
+  typeof loadEffectiveNominationCap
 >;
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -33,14 +43,23 @@ function row(overrides: Partial<LineupRow>): LineupRow {
   } as LineupRow;
 }
 
-/** Records every `.set()` payload; `select` resolves `entryCount` rows. */
+/**
+ * Records every `.set()` payload and its WHERE; `select` resolves
+ * `entryCount` rows.
+ */
 function fakeDb(entryCount: number) {
   const sets: Record<string, unknown>[] = [];
+  const wheres: (SQL | undefined)[] = [];
   const db = {
     update: () => ({
       set: (values: Record<string, unknown>) => {
         sets.push(values);
-        return { where: () => Promise.resolve() };
+        return {
+          where: (cond: SQL | undefined) => {
+            wheres.push(cond);
+            return Promise.resolve();
+          },
+        };
       },
     }),
     select: () => ({
@@ -52,7 +71,13 @@ function fakeDb(entryCount: number) {
       }),
     }),
   } as never;
-  return { db, sets };
+  return { db, sets, wheres };
+}
+
+/** Render a recorded WHERE to SQL text + params; a missing one fails loudly. */
+function renderWhere(cond: SQL | undefined): { sql: string; params: unknown[] } {
+  if (!cond) throw new Error('expected a recorded WHERE condition');
+  return new PgDialect().sqlToQuery(cond);
 }
 
 describe('isNominationTargetEditNoop', () => {
@@ -134,5 +159,44 @@ describe('applyNominationTargetEdit', () => {
       nominationTargetDisarmedAt: null,
     });
     expect(capMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('below-seen stamp is pinned to the judged state (ROK-1710 race guard)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    evalCapMock.mockResolvedValue(20);
+    capMock.mockResolvedValue(20);
+  });
+
+  it('a nomination arms only while the target it judged is still set and undisarmed', async () => {
+    const { db, sets, wheres } = fakeDb(0);
+    // 8/20 = 40% < 75%: below target, so evaluate stamps the rising edge.
+    const res = await evaluateNominationTarget(
+      db,
+      row({ nominationTargetPct: 75 }),
+      8,
+      1,
+    );
+    expect(res.ready).toBe(false);
+    expect(sets).toHaveLength(1);
+    const where = renderWhere(wheres[0]);
+    // An edit that landed after this row was read changes the pct (or a
+    // revert sets the disarm), so the stale stamp matches no row.
+    expect(where.sql).toMatch(/"nomination_target_pct" = \$\d/);
+    expect(where.sql).toMatch(/"nomination_target_disarmed_at" is null/);
+    expect(where.sql).toMatch(/"nomination_target_below_seen_at" is null/);
+    expect(where.params).toContain(75);
+  });
+
+  it('the edit-time arm check is pinned to the NEW target', async () => {
+    const { db, wheres } = fakeDb(5); // 5/20 = 25% < 50%
+    await applyNominationTargetEdit(
+      db,
+      row({ nominationTargetPct: 75, nominationTargetDisarmedAt: new Date() }),
+      50,
+    );
+    expect(wheres).toHaveLength(2);
+    expect(renderWhere(wheres[1]).params).toContain(50);
   });
 });
