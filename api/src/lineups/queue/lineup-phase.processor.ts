@@ -275,8 +275,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     const targetStatus: LineupStatus =
       lineup.status === 'building' ? 'voting' : 'decided';
     try {
-      // ROK-1710: pinned to the target + grace claim judged on `lineup`,
-      // so a target edit that committed since cannot be overridden.
+      // ROK-1710: pinned to the target + grace claim judged on `lineup`.
       await runStatusTransition(
         this.buildTransitionDeps(),
         lineupId,
