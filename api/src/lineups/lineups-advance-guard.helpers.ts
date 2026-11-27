@@ -58,11 +58,14 @@ export function advanceGuardFrom(
 /**
  * WHERE fragment: the row still holds exactly the judged target state.
  *
- * The arm stamp is matched only when the evaluation saw one. A target-driven
- * ready needs an arm, so that is the case an ABA edit can fake. An unarmed
- * snapshot is ready for another reason (deadline-free quorum), and its own
- * predicate may stamp the arm while judging (`armNominationTarget`), which
- * must not void the advance it is about to make.
+ * The arm stamp is matched only when the evaluation saw one. A building
+ * advance is never ready without an arm: `checkBuildingQuorum` has no ready
+ * path other than the target, and the target refuses an unarmed row (rising
+ * edge). When `armNominationTarget` stamps during an evaluation, that same
+ * evaluation returns `ready: false`. So a null snapshot never reaches a
+ * building advance, and leaving the stamp unconstrained for it is only
+ * tolerance: it keeps a null-stamp guard harmless. Matching `IS NULL` there
+ * would be equivalent.
  */
 export function advanceGuardCondition(guard: AdvanceGuard): SQL | undefined {
   const c = schema.communityLineups;

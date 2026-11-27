@@ -74,8 +74,9 @@ describe('advanceGuardCondition', () => {
     });
     expect(where.sql).toMatch(/"nomination_target_pct" is null/);
     expect(where.sql).toMatch(/"pending_advance_at" is null/);
-    // Unarmed snapshot: its own predicate may arm while judging, so the arm
-    // stamp is left unconstrained.
+    // Unarmed snapshot: no building advance is ever judged on one (the target
+    // is the only ready path and needs an arm), so the stamp is left
+    // unconstrained as tolerance only.
     expect(where.sql).not.toMatch(/"nomination_target_below_seen_at"/);
   });
 
