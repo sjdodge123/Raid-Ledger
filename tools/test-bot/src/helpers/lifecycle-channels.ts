@@ -61,11 +61,29 @@ export async function deleteChannelQuietly(id: string): Promise<void> {
   });
 }
 
-/** Delete every `smoke-lc-*` channel and category left by an earlier run. */
-export async function sweepLifecycleLeftovers(): Promise<number> {
+/**
+ * A `smoke-lc-*` channel younger than this may belong to a run on the OTHER
+ * lease slot (the shared guild runs two discord-smoke jobs at once), so the
+ * sweep leaves it alone. The lifecycle test holds its channels for ~1 min; a
+ * crashed run's leftovers are swept by the first run after they age out.
+ */
+export const LIFECYCLE_SWEEP_MIN_AGE_MS = 15 * 60_000;
+
+/** True when a channel is a lifecycle-smoke leftover old enough to delete. */
+export function isSweepableLifecycleLeftover(
+  name: string,
+  createdTimestamp: number,
+  now: number,
+): boolean {
+  return name.startsWith(LIFECYCLE_SMOKE_PREFIX) && now - createdTimestamp >= LIFECYCLE_SWEEP_MIN_AGE_MS;
+}
+
+/** Delete the `smoke-lc-*` channels and categories left by an earlier run. */
+export async function sweepLifecycleLeftovers(now: number = Date.now()): Promise<number> {
   const all = await getGuild().channels.fetch();
   const stale = [...all.values()].filter(
-    (c): c is NonNullable<typeof c> => c !== null && c.name.startsWith(LIFECYCLE_SMOKE_PREFIX),
+    (c): c is NonNullable<typeof c> =>
+      c !== null && isSweepableLifecycleLeftover(c.name, c.createdTimestamp, now),
   );
   // Children first, so a category is empty when it goes.
   stale.sort((a, b) => Number(a.type === ChannelType.GuildCategory) - Number(b.type === ChannelType.GuildCategory));
