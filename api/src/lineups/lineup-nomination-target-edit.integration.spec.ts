@@ -23,6 +23,8 @@ import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { nonEmpty } from '../common/testing/narrow';
+import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
+import { LINEUP_GRACE_ADVANCE } from './queue/lineup-phase.constants';
 
 type Game = typeof schema.games.$inferSelect;
 type Lineup = typeof schema.communityLineups.$inferSelect;
@@ -235,6 +237,28 @@ function describeNominationTargetEdit() {
     await nominateAll(lineupId, await createGames(5), a, b);
 
     expect((await readRow(lineupId)).status).toBe('voting');
+  });
+
+  it('an edit during a pending grace window retires it: the old deadline never advances (Codex P2)', async () => {
+    await settings.set(SETTING_KEYS.LINEUP_AUTO_ADVANCE_GRACE_MS, '600000');
+    const a = await createMember('grace-a');
+    const b = await createMember('grace-b');
+    const lineupId = await createLineup(50);
+    // 10 of 20 = 50%: the crossing claims a 10-minute grace window.
+    await nominateAll(lineupId, await createGames(10), a, b);
+    expect((await readRow(lineupId)).pendingAdvanceAt).not.toBeNull();
+
+    expect(
+      (await patchTarget(lineupId, { nominationTargetPct: 75 })).status,
+    ).toBe(200);
+    const edited = await readRow(lineupId);
+    expect(edited.pendingAdvanceAt).toBeNull();
+
+    // The grace job firing at the old deadline is a no-op.
+    await testApp.app
+      .get(LineupPhaseProcessor)
+      .process({ name: LINEUP_GRACE_ADVANCE, data: { lineupId } } as never);
+    expect((await readRow(lineupId)).status).toBe('building');
   });
 
   it('still honours the 24h revert pause after a re-arm', async () => {
