@@ -10,13 +10,14 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { authorizeAndPersistMetadata } from './lineups-metadata.helpers';
 import {
-  authorizeAndPersistMetadata,
-  runMetadataUpdate,
-} from './lineups-metadata.helpers';
-import { applyNominationTargetEdit } from './quorum/nomination-target.helpers';
+  applyNominationTargetEdit,
+  PENDING_ADVANCE_EDIT_MESSAGE,
+} from './quorum/nomination-target.helpers';
 
 jest.mock('./quorum/nomination-target.helpers', () => ({
+  ...jest.requireActual<object>('./quorum/nomination-target.helpers'),
   applyNominationTargetEdit: jest.fn(),
 }));
 jest.mock('./lineups-response.helpers', () => ({
@@ -201,30 +202,44 @@ describe('authorizeAndPersistMetadata nomination target gate (ROK-1710)', () => 
   });
 });
 
-describe('runMetadataUpdate grace job hygiene (ROK-1710 Codex P2)', () => {
+describe('authorizeAndPersistMetadata refuses a target edit while an early advance is pending (ROK-1710 Codex round 3)', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  async function run(dto: { nominationTargetPct?: number | null }) {
-    const { db } = fakeDb(lineup({ status: 'building' }));
-    const phaseQueue = { cancelGraceAdvance: jest.fn() };
-    const logger = { warn: jest.fn() } as never;
-    await runMetadataUpdate(
-      { db, lineupNotifications: {} as never, phaseQueue, logger },
-      1,
-      dto,
-      { id: CREATOR_ID, role: 'member' },
-    );
-    return phaseQueue.cancelGraceAdvance;
-  }
+  const pending = () =>
+    lineup({
+      status: 'building',
+      nominationTargetPct: 50,
+      nominationTargetDisarmedAt: null,
+      pendingAdvanceAt: new Date('2026-11-27T10:00:00Z'),
+    });
 
-  it('cancels the queued grace job after a target edit that wrote', async () => {
-    applyEditMock.mockResolvedValue(true);
-    const cancel = await run({ nominationTargetPct: 55 });
-    expect(cancel).toHaveBeenCalledWith(1);
+  it('returns 409 with the countdown message before any write', async () => {
+    const { db } = fakeDb(pending(), { failUpdate: true });
+
+    const err = await authorizeAndPersistMetadata(
+      db,
+      1,
+      { title: 'x', nominationTargetPct: 75 },
+      { id: CREATOR_ID, role: 'member' },
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as ConflictException).message).toBe(
+      PENDING_ADVANCE_EDIT_MESSAGE,
+    );
+    expect(applyEditMock).not.toHaveBeenCalled();
   });
 
-  it('leaves the grace job alone on a no-op target edit', async () => {
-    applyEditMock.mockResolvedValue(false);
-    expect(await run({ nominationTargetPct: 50 })).not.toHaveBeenCalled();
+  it('still saves a title-only or unchanged-target edit during the countdown', async () => {
+    const { db, sets } = fakeDb(pending());
+
+    await authorizeAndPersistMetadata(
+      db,
+      1,
+      { title: 'Renamed', nominationTargetPct: 50 },
+      { id: CREATOR_ID, role: 'member' },
+    );
+
+    expect(sets[0]).toMatchObject({ title: 'Renamed' });
   });
 });

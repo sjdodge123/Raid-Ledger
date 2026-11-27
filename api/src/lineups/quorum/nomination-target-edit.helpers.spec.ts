@@ -7,10 +7,12 @@
  */
 import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
+import { ConflictException } from '@nestjs/common';
 import {
   applyNominationTargetEdit,
   evaluateNominationTarget,
   isNominationTargetEditNoop,
+  PENDING_ADVANCE_EDIT_MESSAGE,
 } from './nomination-target.helpers';
 import {
   loadEffectiveNominationCap,
@@ -47,9 +49,11 @@ function row(overrides: Partial<LineupRow>): LineupRow {
  * Records every `.set()` payload and its WHERE; `select` resolves
  * `entryCount` rows.
  */
-function fakeDb(entryCount: number) {
+function fakeDb(entryCount: number, opts: { claimed?: boolean } = {}) {
   const sets: Record<string, unknown>[] = [];
   const wheres: (SQL | undefined)[] = [];
+  // `.returning()` answers the target UPDATE: no row once a claim landed.
+  const returned = opts.claimed ? [] : [{ id: 1 }];
   const db = {
     update: () => ({
       set: (values: Record<string, unknown>) => {
@@ -57,7 +61,9 @@ function fakeDb(entryCount: number) {
         return {
           where: (cond: SQL | undefined) => {
             wheres.push(cond);
-            return Promise.resolve();
+            return Object.assign(Promise.resolve(), {
+              returning: () => Promise.resolve(returned),
+            });
           },
         };
       },
@@ -112,19 +118,27 @@ describe('applyNominationTargetEdit', () => {
 
   it('writes nothing for a no-op edit', async () => {
     const { db, sets } = fakeDb(5);
-    expect(await applyNominationTargetEdit(db, row({}), 25)).toBe(false);
+    await applyNominationTargetEdit(db, row({}), 25);
     expect(sets).toEqual([]);
   });
 
-  it('retires a grace claim judged under the old target and reports the write (Codex P2)', async () => {
-    const { db, sets } = fakeDb(10); // 10/20 = 50% < 55%
-    const wrote = await applyNominationTargetEdit(
+  it('writes only while no early advance is pending, else 409 (Codex round 3)', async () => {
+    const { db, sets, wheres } = fakeDb(10, { claimed: true });
+    const err = await applyNominationTargetEdit(
       db,
-      row({ nominationTargetPct: 50, pendingAdvanceAt: new Date() }),
+      row({ nominationTargetPct: 50 }),
       55,
+    ).catch((e: unknown) => e);
+    expect(renderWhere(wheres[0]).sql).toContain(
+      '"pending_advance_at" is null',
     );
-    expect(wrote).toBe(true);
-    expect(sets[0]).toHaveProperty('pendingAdvanceAt', null);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as ConflictException).message).toBe(
+      PENDING_ADVANCE_EDIT_MESSAGE,
+    );
+    // The arm check never ran: one UPDATE, and it did not claim the edit.
+    expect(sets).toHaveLength(1);
+    expect(sets[0]).not.toHaveProperty('pendingAdvanceAt');
   });
 
   it('clears both stamps and arms a lineup below the new target', async () => {

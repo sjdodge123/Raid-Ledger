@@ -239,26 +239,34 @@ function describeNominationTargetEdit() {
     expect((await readRow(lineupId)).status).toBe('voting');
   });
 
-  it('an edit during a pending grace window retires it: the old deadline never advances (Codex P2)', async () => {
+  it('refuses a target edit during a pending grace window: 409, no writes, the countdown still fires (Codex round 3)', async () => {
     await settings.set(SETTING_KEYS.LINEUP_AUTO_ADVANCE_GRACE_MS, '600000');
     const a = await createMember('grace-a');
     const b = await createMember('grace-b');
     const lineupId = await createLineup(50);
     // 10 of 20 = 50%: the crossing claims a 10-minute grace window.
     await nominateAll(lineupId, await createGames(10), a, b);
-    expect((await readRow(lineupId)).pendingAdvanceAt).not.toBeNull();
+    const claimed = await readRow(lineupId);
+    expect(claimed.pendingAdvanceAt).not.toBeNull();
 
-    expect(
-      (await patchTarget(lineupId, { nominationTargetPct: 75 })).status,
-    ).toBe(200);
-    const edited = await readRow(lineupId);
-    expect(edited.pendingAdvanceAt).toBeNull();
+    const res = await patchTarget(lineupId, {
+      title: 'Renamed mid-countdown',
+      nominationTargetPct: 75,
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe(
+      'An early advance is already counting down — wait for it or advance manually',
+    );
+    const after = await readRow(lineupId);
+    expect(after.title).toBe(claimed.title);
+    expect(after.nominationTargetPct).toBe(50);
+    expect(after.pendingAdvanceAt).toEqual(claimed.pendingAdvanceAt);
 
-    // The grace job firing at the old deadline is a no-op.
+    // The grace job firing at its deadline still opens voting.
     await testApp.app
       .get(LineupPhaseProcessor)
       .process({ name: LINEUP_GRACE_ADVANCE, data: { lineupId } } as never);
-    expect((await readRow(lineupId)).status).toBe('building');
+    expect((await readRow(lineupId)).status).toBe('voting');
   });
 
   it('still honours the 24h revert pause after a re-arm', async () => {

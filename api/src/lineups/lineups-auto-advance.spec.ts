@@ -6,6 +6,8 @@
  * The cases here exercise the branch points without spinning up a real DB.
  */
 import type { Logger } from '@nestjs/common';
+import { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 jest.mock('./lineups-query.helpers', () => ({
   findLineupById: jest.fn(),
@@ -100,6 +102,7 @@ function makeDeps(
     eventEmitter: { emit: jest.fn() } as never,
     logger,
     _phaseQueue: phaseQueue,
+    _where: where,
     _settings: settings,
     _lineupsGateway: lineupsGateway,
   };
@@ -167,6 +170,22 @@ describe('maybeAutoAdvance', () => {
       7,
       expect.any(Number),
     );
+  });
+
+  it('the building grace claim is pinned to the judged target (ROK-1710 Codex round 3)', async () => {
+    setLineup('building', {
+      nominationTargetPct: 70,
+      nominationTargetDisarmedAt: null,
+    });
+    (checkBuildingQuorum as jest.Mock).mockResolvedValue({ ready: true });
+    const deps = makeDeps();
+    await maybeAutoAdvance(deps, 7);
+    const claimWhere: unknown = deps._where.mock.calls[0]?.[0];
+    if (!(claimWhere instanceof SQL)) throw new Error('no claim WHERE');
+    const { sql, params } = new PgDialect().sqlToQuery(claimWhere);
+    expect(sql).toContain('"nomination_target_pct" = $');
+    expect(sql).toContain('"nomination_target_disarmed_at" is null');
+    expect(params).toContain(70);
   });
 
   it('schedules grace job when voting quorum is ready', async () => {
