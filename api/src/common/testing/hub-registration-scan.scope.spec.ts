@@ -74,6 +74,11 @@ describe('ROK-2365 — controller rule (each must go red)', () => {
       controllerScopeViolations(ctl(GUARDED, GET), { [KEY]: 'cleanup' }),
     ).toEqual([`${KEY}: allowlisted but already plugin-guarded — drop it`]);
   });
+
+  it('accepts the core-auth reason for an unguarded sign-in controller', () => {
+    const bare = ctl(`@Controller('x')`, GET);
+    expect(controllerScopeViolations(bare, { [KEY]: 'core-auth' })).toEqual([]);
+  });
 });
 
 const HFILE = 'plugins/valheim/x.listener.ts';
