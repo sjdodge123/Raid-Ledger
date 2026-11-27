@@ -4738,3 +4738,6 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 
 ### 2026-11-27 — rok-2359-core-cards-wow (surfaced during ROK-2359 implementation)
 - **low** `web/src/plugins/wow/slots/character-class-icon.tsx:15` — the WoW class icon matches by class name only (`getClassIconUrl`), so a non-WoW character whose class shares a WoW name (BG3 Paladin, Druid, Warlock…) shows the WoW icon while the WoW plugin is active. Pre-existing: the core cards did the same lookup before ROK-2359 moved it into the slot unchanged. Suggested: pass the card's `gameId`/slug in the `character-card:class-icon` context and render only for WoW games.
+
+### 2026-11-27 — rok-2359-core-cards-wow (surfaced during ROK-2359 fleet UI verify)
+- `low` — `web/src/components/roster/SelectableCharacterCard.tsx` — on phone (375px) the profession count (e.g. "200") in the roster assignment popup's character list clips at the card's right edge and sits under the selected-check badge. Seen on env rok-2359 (desktop fine); the profession pill markup is unchanged by ROK-2359 apart from moving into the WoW slot, so likely pre-existing. Suggested: reserve right padding for the check badge on the card (or wrap the pill row) at the phone breakpoint.
