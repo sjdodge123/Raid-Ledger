@@ -59,6 +59,9 @@ import {
 } from '../lineups-nomination-cap.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+/** A transaction handle: the metadata edit runs the target edit inside one. */
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+type DbOrTx = Db | Tx;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 
 /** Mirror of `QuorumResult` — kept local so this module stays dependency-light. */
@@ -107,7 +110,7 @@ export async function evaluateNominationTarget(
 
   if (pct < target) {
     // Below target: arm the rising edge so a later crossing may fire.
-    await armNominationTarget(db, lineup);
+    await armNominationTarget(db, lineup, target);
     return {
       ready: false,
       reason: `nomination target not met (${entryCount}/${cap} = ${Math.floor(pct)}% of ${target}%)`,
@@ -136,25 +139,47 @@ export async function evaluateNominationTarget(
  * Stamp the rising-edge arm the first time the target is seen unmet.
  *
  * Opportunistic write from inside a predicate, mirroring `isPauseActive`'s lazy
- * pause clear. Guarded on the in-memory snapshot AND on `IS NULL` in the WHERE
- * so concurrent nominators cannot clobber an earlier arm.
+ * pause clear. Guarded on the in-memory snapshot AND in the WHERE (see
+ * `stampBelowSeen`) so a stale snapshot cannot arm the lineup.
  */
-async function armNominationTarget(db: Db, lineup: LineupRow): Promise<void> {
+async function armNominationTarget(
+  db: Db,
+  lineup: LineupRow,
+  judgedTarget: number,
+): Promise<void> {
   if (lineup.nominationTargetBelowSeenAt != null) return;
-  await stampBelowSeen(db, lineup.id);
+  await stampBelowSeen(db, lineup.id, judgedTarget);
 }
 
-/** Id-based arm write; `IS NULL` in the WHERE keeps an earlier arm intact. */
-async function stampBelowSeen(db: Db, lineupId: number): Promise<void> {
+/**
+ * Id-based arm write, pinned to the state that judged the lineup below target.
+ *
+ * - `below_seen_at IS NULL` keeps an earlier arm intact.
+ * - `nomination_target_pct = judgedTarget` AND `disarmed_at IS NULL` (ROK-1710):
+ *   a nomination that read the row before a target edit (or a revert) landed
+ *   must not re-arm it afterwards. Without this, a lineup the edit left
+ *   unarmed at/above its NEW target was armed by the stale stamp and advanced
+ *   on the very next nomination.
+ */
+export function belowSeenStampCondition(lineupId: number, judgedTarget: number) {
+  const t = schema.communityLineups;
+  return and(
+    eq(t.id, lineupId),
+    isNull(t.nominationTargetBelowSeenAt),
+    eq(t.nominationTargetPct, judgedTarget),
+    isNull(t.nominationTargetDisarmedAt),
+  );
+}
+
+async function stampBelowSeen(
+  db: DbOrTx,
+  lineupId: number,
+  judgedTarget: number,
+): Promise<void> {
   await db
     .update(schema.communityLineups)
     .set({ nominationTargetBelowSeenAt: new Date() })
-    .where(
-      and(
-        eq(schema.communityLineups.id, lineupId),
-        isNull(schema.communityLineups.nominationTargetBelowSeenAt),
-      ),
-    );
+    .where(belowSeenStampCondition(lineupId, judgedTarget));
 }
 
 /**
@@ -163,7 +188,7 @@ async function stampBelowSeen(db: Db, lineupId: number): Promise<void> {
  * or above the target is a standing condition and must stay unarmed.
  */
 async function armIfBelowTarget(
-  db: Db,
+  db: DbOrTx,
   lineupId: number,
   target: number,
 ): Promise<void> {
@@ -175,7 +200,7 @@ async function armIfBelowTarget(
   // PRE-carry-over one, whose `nominationCapPeak` is still null.
   const cap = await loadEffectiveNominationCapById(db, lineupId);
   if (nominationTargetPercent(rows.length, cap) < target) {
-    await stampBelowSeen(db, lineupId);
+    await stampBelowSeen(db, lineupId, target);
   }
 }
 
@@ -224,10 +249,11 @@ export function isNominationTargetEditNoop(
  * condition, no instant advance); null turns the target off cleanly. The
  * ROK-1253 revert pause (`auto_advance_paused_at`) is untouched, so a
  * just-reverted lineup still cannot auto-advance while it lasts. The caller
- * owns the `building`-only status gate.
+ * owns the `building`-only status gate and runs this inside the transaction
+ * that holds the lineup row lock (`authorizeAndPersistMetadata`).
  */
 export async function applyNominationTargetEdit(
-  db: Db,
+  db: DbOrTx,
   lineup: LineupRow,
   nextPct: number | null,
 ): Promise<void> {

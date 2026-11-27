@@ -15,7 +15,6 @@ import type {
   UpdateLineupMetadataDto,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
-import { findLineupById } from './lineups-query.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import type { LineupNotificationService } from './lineup-notification.service';
 import { fireLineupMetadataRefresh } from './lineups-notify-hooks.helpers';
@@ -23,6 +22,7 @@ import { applyNominationTargetEdit } from './quorum/nomination-target.helpers';
 import type { CallerIdentity } from './lineups.service';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 
@@ -61,11 +61,48 @@ function assertMetadataEditable(
 }
 
 /**
+ * Read the lineup under a row lock for the rest of the edit transaction.
+ * `NO KEY UPDATE` conflicts with a status transition's UPDATE, so the status
+ * the guards judge cannot change before the writes commit, but it does not
+ * block nominations (their FK insert only takes `KEY SHARE`).
+ */
+function lockLineupForEdit(tx: Tx, id: number) {
+  return tx
+    .select()
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, id))
+    .for('no key update');
+}
+
+/** Title/description write plus the target edit, on the locked row. */
+async function persistMetadata(
+  tx: Tx,
+  lineup: LineupRow,
+  dto: UpdateLineupMetadataDto,
+): Promise<void> {
+  const values: Record<string, unknown> = { updatedAt: new Date() };
+  if (dto.title !== undefined) values.title = dto.title;
+  if (dto.description !== undefined) values.description = dto.description;
+  await tx
+    .update(schema.communityLineups)
+    .set(values)
+    .where(eq(schema.communityLineups.id, lineup.id));
+  if (dto.nominationTargetPct !== undefined) {
+    await applyNominationTargetEdit(tx, lineup, dto.nominationTargetPct);
+  }
+}
+
+/**
  * Authorise a metadata update and persist the change (ROK-1063, ROK-1710).
  *
- * See `assertMetadataEditable` for the guard order. A target edit goes through
- * `applyNominationTargetEdit`, which owns the re-arm rule. Always bumps
- * `updated_at` to match other lineup updates.
+ * See `assertMetadataEditable` for the guard order. One transaction holds the
+ * row lock from the read to the last write (ROK-1710 review), so:
+ * - a `building -> voting` advance cannot slip between the status check and
+ *   the target write — it waits, then sees the new state;
+ * - the body succeeds or fails as a whole: a 409 or a failed target write
+ *   rolls the title back too.
+ * A target edit goes through `applyNominationTargetEdit`, which owns the
+ * re-arm rule. Always bumps `updated_at` to match other lineup updates.
  */
 export async function authorizeAndPersistMetadata(
   db: Db,
@@ -73,19 +110,11 @@ export async function authorizeAndPersistMetadata(
   dto: UpdateLineupMetadataDto,
   caller: CallerIdentity,
 ): Promise<void> {
-  const [lineup] = await findLineupById(db, id);
-  assertMetadataEditable(lineup, dto, caller);
-
-  const values: Record<string, unknown> = { updatedAt: new Date() };
-  if (dto.title !== undefined) values.title = dto.title;
-  if (dto.description !== undefined) values.description = dto.description;
-  await db
-    .update(schema.communityLineups)
-    .set(values)
-    .where(eq(schema.communityLineups.id, id));
-  if (dto.nominationTargetPct !== undefined) {
-    await applyNominationTargetEdit(db, lineup, dto.nominationTargetPct);
-  }
+  await db.transaction(async (tx) => {
+    const [lineup] = await lockLineupForEdit(tx, id);
+    assertMetadataEditable(lineup, dto, caller);
+    await persistMetadata(tx, lineup, dto);
+  });
 }
 
 /**
