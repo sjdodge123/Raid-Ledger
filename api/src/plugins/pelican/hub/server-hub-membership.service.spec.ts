@@ -5,6 +5,7 @@
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../drizzle/schema';
+import type { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import type { PelicanPresenceSupervisor } from '../presence/pelican-presence.supervisor';
 import { steamPlayer } from '../presence/presence-events';
 import type { ServerRosterPlayer } from '../presence/server-presence.reader';
@@ -27,16 +28,20 @@ function player(steamId: string, name: string): ServerRosterPlayer {
 }
 
 /** A service over a fake roster; the db is only handed through to the mocked queries. */
-function make(roster: {
-  current: ServerRosterPlayer[];
-}): ServerHubMembershipService {
+function make(
+  roster: { current: ServerRosterPlayer[] },
+  pelicanActive: () => boolean = () => true,
+): ServerHubMembershipService {
   const presence = {
     playersOnGames: () => roster.current,
   } as unknown as PelicanPresenceSupervisor;
   const db = {
     select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }),
   } as unknown as PostgresJsDatabase<typeof schema>;
-  return new ServerHubMembershipService(db, presence);
+  const registry = {
+    isActive: (slug: string) => slug === 'pelican' && pelicanActive(),
+  } as unknown as PluginRegistryService;
+  return new ServerHubMembershipService(db, registry, presence);
 }
 
 beforeEach(() => {
@@ -122,6 +127,31 @@ describe('arrivals after boot (Codex r2 P2: hydration is explicit)', () => {
       expect.anything(),
       expect.objectContaining({ userId: 13 }),
       false,
+    );
+  });
+});
+
+describe('ROK-2362 — presence arrivals while Pelican is off', () => {
+  it('a live join writes no sighting and no member count', async () => {
+    const svc = make({ current: [player('12', 'Astrid')] }, () => false);
+    await svc.onPresenceChanged(LIVE);
+    expect(q.usersBySteamId).not.toHaveBeenCalled();
+    expect(q.upsertSighting).not.toHaveBeenCalled();
+    expect(q.refreshMemberCount).not.toHaveBeenCalled();
+  });
+
+  it('after reactivation the first live join is still an arrival', async () => {
+    let active = false;
+    const roster = { current: [player('12', 'Astrid')] };
+    const svc = make(roster, () => active);
+    await svc.onPresenceChanged(LIVE);
+    active = true;
+    await svc.onPresenceChanged(LIVE);
+    expect(q.upsertSighting).toHaveBeenCalledTimes(1);
+    expect(q.upsertSighting).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ userId: 12 }),
+      true,
     );
   });
 });
