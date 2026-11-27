@@ -300,13 +300,14 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
         .mockResolvedValue(undefined);
       try {
         const userId = testApp.seed.adminUser.id;
-        await testApp.app.get(EventEmitter2).emitAsync(
-          DISCORD_NOTIFICATION_FAILED,
-          { type: CLAIM_SUGGEST_TYPE, userId, payload: { profileId: 77 } },
-        );
-        expect(release).toHaveBeenCalledWith(
-          claimSuggestKeys.pair(77, userId),
-        );
+        await testApp.app
+          .get(EventEmitter2)
+          .emitAsync(DISCORD_NOTIFICATION_FAILED, {
+            type: CLAIM_SUGGEST_TYPE,
+            userId,
+            payload: { profileId: 77 },
+          });
+        expect(release).toHaveBeenCalledWith(claimSuggestKeys.pair(77, userId));
       } finally {
         release.mockRestore();
       }
