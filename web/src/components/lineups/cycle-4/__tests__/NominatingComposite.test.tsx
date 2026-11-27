@@ -339,7 +339,7 @@ describe('NominatingComposite — early-advance copy (ROK-1444)', () => {
         expect(screen.queryByText(/voting opens at/i)).not.toBeInTheDocument();
     });
 
-    it('stays silent once an operator revert has disarmed the target', async () => {
+    it('says early advance is off once an operator revert has disarmed the target (ROK-1710)', async () => {
         const lineup = buildBuildingLineup({
             nominationTargetPct: 50,
             nominationTargetArmed: true,
@@ -352,6 +352,9 @@ describe('NominatingComposite — early-advance copy (ROK-1444)', () => {
 
         await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
         expect(screen.queryByText(/voting opens at/i)).not.toBeInTheDocument();
+        expect(
+            screen.getByText(/early advance is off — this lineup was reverted/i),
+        ).toBeInTheDocument();
     });
 });
 

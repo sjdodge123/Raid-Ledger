@@ -256,3 +256,131 @@ describe('EditLineupMetadataModal — pinned footer (ROK-1655)', () => {
         expect(screen.queryByText(CONFIRM), 'a save must not ask to discard').not.toBeInTheDocument();
     });
 });
+
+/**
+ * ROK-1710 — the nomination target block. Shown only while the lineup is
+ * nominating (`target` present). The PATCH body carries `nominationTargetPct`
+ * only when it changed, or on a deliberate touch of a disarmed lineup's
+ * control (the re-arm); otherwise the key is omitted so the server keeps it.
+ */
+function renderTargetModal(target: { initialPct: number | null; disarmed: boolean }) {
+    const onClose = vi.fn();
+    renderWithProviders(
+        <EditLineupMetadataModal
+            lineupId={7}
+            initialTitle="Friday Lineup"
+            initialDescription={null}
+            target={target}
+            onClose={onClose}
+        />,
+    );
+    return { onClose };
+}
+
+function sentBody(m: MutationLike): Record<string, unknown> {
+    const call = m.mutateAsync.mock.calls[0];
+    if (!call) throw new Error('mutateAsync was never called');
+    const arg = call[0] as { body: Record<string, unknown> };
+    return arg.body;
+}
+
+const targetToggle = () => screen.getByTestId('nomination-target-enabled');
+
+describe('EditLineupMetadataModal — nomination target (ROK-1710)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('hides the target block when the lineup is not nominating', () => {
+        mockMutation();
+        renderModal();
+        expect(screen.queryByTestId('edit-lineup-target-section')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('nomination-target-enabled')).not.toBeInTheDocument();
+    });
+
+    it('switching the target on sends nominationTargetPct: 75', async () => {
+        const m = mockMutation();
+        renderTargetModal({ initialPct: null, disarmed: false });
+        fireEvent.click(targetToggle());
+        fireEvent.click(saveButton());
+        await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
+        expect(sentBody(m)).toEqual({ title: 'Friday Lineup', description: null, nominationTargetPct: 75 });
+    });
+
+    it('moving the slider sends the new pct', async () => {
+        const m = mockMutation();
+        renderTargetModal({ initialPct: 50, disarmed: false });
+        fireEvent.change(screen.getByTestId('nomination-target-pct'), { target: { value: '60' } });
+        fireEvent.click(saveButton());
+        await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
+        expect(sentBody(m).nominationTargetPct).toBe(60);
+    });
+
+    it('switching the target off sends null', async () => {
+        const m = mockMutation();
+        renderTargetModal({ initialPct: 50, disarmed: false });
+        fireEvent.click(targetToggle());
+        fireEvent.click(saveButton());
+        await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
+        expect(sentBody(m).nominationTargetPct).toBeNull();
+    });
+
+    it('omits the key when the target is unchanged', async () => {
+        const m = mockMutation();
+        renderTargetModal({ initialPct: 50, disarmed: false });
+        fireEvent.change(titleInput(), { target: { value: 'Saturday Lineup' } });
+        fireEvent.click(saveButton());
+        await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
+        expect(Object.keys(sentBody(m))).toEqual(['title', 'description']);
+    });
+
+    it('shows the disarmed hint and omits the key on an untouched disarmed lineup', async () => {
+        const m = mockMutation();
+        renderTargetModal({ initialPct: 75, disarmed: true });
+        expect(screen.getByTestId('edit-lineup-target-disarmed')).toHaveTextContent(
+            'Early advance is off — this lineup was reverted. Saving a target turns it back on.',
+        );
+        fireEvent.change(titleInput(), { target: { value: 'Saturday Lineup' } });
+        fireEvent.click(saveButton());
+        await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
+        expect(Object.keys(sentBody(m))).toEqual(['title', 'description']);
+    });
+
+    it('re-arms a disarmed lineup at the same pct once the control is touched', async () => {
+        const m = mockMutation();
+        renderTargetModal({ initialPct: 75, disarmed: true });
+        fireEvent.click(targetToggle());
+        fireEvent.click(targetToggle());
+        fireEvent.click(saveButton());
+        await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
+        expect(sentBody(m).nominationTargetPct).toBe(75);
+    });
+
+    it('does not show the disarmed hint on an armed lineup', () => {
+        mockMutation();
+        renderTargetModal({ initialPct: 50, disarmed: false });
+        expect(screen.queryByTestId('edit-lineup-target-disarmed')).not.toBeInTheDocument();
+    });
+
+    it('a target-only change makes Cancel ask before discarding', async () => {
+        mockMutation();
+        const user = userEvent.setup();
+        const { onClose } = renderTargetModal({ initialPct: null, disarmed: false });
+        fireEvent.click(targetToggle());
+        await user.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(onClose, 'a dirty Cancel must ask first').not.toHaveBeenCalled();
+        expect(screen.getByText('Discard your changes?')).toBeInTheDocument();
+    });
+
+    it('surfaces the 409 outside nominating as an error toast and stays open', async () => {
+        const m = mockMutation({
+            mutateAsync: vi.fn().mockRejectedValue(new Error('Nomination target can only be changed while nominating')),
+        });
+        const { onClose } = renderTargetModal({ initialPct: null, disarmed: false });
+        fireEvent.click(targetToggle());
+        fireEvent.click(saveButton());
+        await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
+        await waitFor(() =>
+            expect(toast.error).toHaveBeenCalledWith('Nomination target can only be changed while nominating'),
+        );
+        expect(onClose).not.toHaveBeenCalled();
+    });
+});
