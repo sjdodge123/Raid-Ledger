@@ -93,19 +93,23 @@ function EditActions({ onCancel, saveDisabled, isPending }: {
 }
 
 /**
- * Target form state. The key goes in the PATCH body only when the pct changed,
- * or when the user touched the control on a disarmed lineup (a deliberate
- * re-arm at the same pct). Omitting the key keeps the stored target.
+ * Target form state. The key goes in the PATCH body only once the user touched
+ * the control AND the pct differs from the value at open, or the lineup was
+ * disarmed at open (a deliberate re-arm at the same pct). Omitting the key
+ * keeps the stored target. The comparison is against a snapshot taken at
+ * open, never the live prop: a background refetch (another operator's edit)
+ * must not turn an untouched control into an overwrite (ROK-1710 Codex P2).
  */
 function useTargetEdit(target: EditableTarget | undefined) {
-    const [pct, setPctState] = useState<number | null>(target?.initialPct ?? null);
+    const [opened] = useState(target);
+    const [pct, setPctState] = useState<number | null>(opened?.initialPct ?? null);
     const [touched, setTouched] = useState(false);
     const setPct = (next: number | null): void => {
         setPctState(next);
         setTouched(true);
     };
-    const changed = target !== undefined
-        && (pct !== target.initialPct || (target.disarmed && touched));
+    const changed = target !== undefined && opened !== undefined && touched
+        && (pct !== opened.initialPct || opened.disarmed);
     const bodyPatch: { nominationTargetPct?: number | null } = changed ? { nominationTargetPct: pct } : {};
     return { pct, setPct, changed, bodyPatch };
 }

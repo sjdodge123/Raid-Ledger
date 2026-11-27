@@ -332,6 +332,23 @@ describe('EditLineupMetadataModal — nomination target (ROK-1710)', () => {
         expect(Object.keys(sentBody(m))).toEqual(['title', 'description']);
     });
 
+    it('a title-only save omits the key after a background refetch changes the target', async () => {
+        const m = mockMutation();
+        const props = { lineupId: 7, initialTitle: 'Friday Lineup', initialDescription: null, onClose: vi.fn() };
+        const { rerender } = renderWithProviders(
+            <EditLineupMetadataModal {...props} target={{ initialPct: 50, disarmed: false }} />,
+        );
+        // Another operator saved 80% while this modal was open; the detail
+        // query refetched and handed the modal the new value.
+        rerender(<EditLineupMetadataModal {...props} target={{ initialPct: 80, disarmed: false }} />);
+        fireEvent.change(titleInput(), { target: { value: 'Saturday Lineup' } });
+        fireEvent.click(saveButton());
+        await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
+        expect(
+            Object.keys(sentBody(m)),
+            'an untouched target must not overwrite the refreshed one',
+        ).toEqual(['title', 'description']);
+    });
 });
 
 describe('EditLineupMetadataModal — disarmed nomination target (ROK-1710)', () => {
