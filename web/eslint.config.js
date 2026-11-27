@@ -5,6 +5,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
+import { pluginBoundaryBlock } from '../eslint-rules/plugin-boundary.mjs'
 
 export default defineConfig([
   globalIgnores(['dist', 'src/plugins/bg3/upload/vendor']),
@@ -26,6 +27,15 @@ export default defineConfig([
       'max-lines-per-function': ['warn', { max: 30, skipBlankLines: true, skipComments: true }],
     },
   },
+  // ROK-2366: outside plugins/<x>/ (other plugins included), reach plugins/<x>/**
+  // only through its index.ts or register.ts. Offenders:
+  // plugin-boundary-allowlist.json (shrink-only). Web has no `@/` alias, so none is passed.
+  pluginBoundaryBlock({
+    workspaceDir: import.meta.dirname,
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/dev/**', 'src/test/**', '**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
+    entries: ['index', 'register'],
+  }),
   {
     files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
     rules: {
