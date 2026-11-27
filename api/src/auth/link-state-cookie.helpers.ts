@@ -59,7 +59,7 @@ function sha256(value: string): string {
 export function bindLinkStateToBrowser(
   res: Response,
   provider: LinkStateProvider,
-  attrs: CookieOptions = linkCookieAttrs(),
+  attrs: CookieOptions = linkCookieAttrs(res.req),
 ): string {
   const r = crypto.randomBytes(32).toString('base64url');
   res.cookie(linkStateCookieName(provider), sha256(r), {
@@ -95,7 +95,7 @@ export function assertLinkStateBoundToBrowser(
   res: Response,
   provider: LinkStateProvider,
   r: unknown,
-  clearAttrs: CookieOptions = linkCookieAttrs(),
+  clearAttrs: CookieOptions = linkCookieAttrs(req),
 ): void {
   if (!stateCookieMatches(req, provider, r)) {
     throw new Error(LINK_REQUEST_EXPIRED_MESSAGE);

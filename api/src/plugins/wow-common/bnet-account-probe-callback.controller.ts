@@ -34,7 +34,7 @@ export class BnetAccountProbeCallbackController {
   ): Promise<void> {
     const cookieHash = readCookie(req, BNET_PROBE_COOKIE) ?? undefined;
     const location = await this.probe.handleCallback({ query, cookieHash });
-    res.clearCookie(BNET_PROBE_COOKIE, linkCookieAttrs());
+    res.clearCookie(BNET_PROBE_COOKIE, linkCookieAttrs(req));
     res.redirect(302, location);
   }
 }
