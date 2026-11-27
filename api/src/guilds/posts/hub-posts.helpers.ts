@@ -10,6 +10,7 @@ import type {
   HubPostRelay,
 } from '@raid-ledger/contract';
 import type { HubPostSelect } from '../../drizzle/schema/hub-posts';
+import { accountBlockReason } from '../../users/discord-account-status.helpers';
 
 /**
  * Keyset position: `(created_at DESC, id DESC)`. `createdAt` is the DB's
@@ -29,6 +30,9 @@ export interface HubPostPersonRow {
   avatar: string | null;
   customAvatarUrl: string | null;
   discordId: string | null;
+  /** ROK-2328: the moderation columns; selected by the forum author queries. */
+  bannedAt?: Date | null;
+  deactivatedAt?: Date | null;
 }
 
 /** Author + last editor of one post; null once the user is wiped. */
@@ -97,12 +101,22 @@ export function personAvatarUrl(row: HubPostPersonRow): string | null {
   return `https://cdn.discordapp.com/avatars/${row.discordId}/${row.avatar}.png`;
 }
 
+/**
+ * ROK-2328: `blocked` is present only for a banned / deactivated author (the
+ * link is kept; the web shows "Deactivated member"). Rows selected without
+ * the moderation columns map as active.
+ */
 export function toPerson(row: HubPostPersonRow | null): HubPostPerson {
   if (!row) return { userId: null, displayName: null, avatarUrl: null };
+  const blocked = accountBlockReason({
+    bannedAt: row.bannedAt ?? null,
+    deactivatedAt: row.deactivatedAt ?? null,
+  });
   return {
     userId: row.userId,
     displayName: row.displayName ?? row.username,
     avatarUrl: personAvatarUrl(row),
+    ...(blocked === null ? {} : { blocked }),
   };
 }
 

@@ -7,6 +7,8 @@
  *   - locked in → the winning time + a link to the created event
  *   - cancelled → visually distinct, carrying the operator's reason
  *   - expired  → "the deadline passed without a lock-in" + the next action
+ *   - locked in, event since cancelled (ROK-2330) → a danger "Event cancelled"
+ *     state with no "Locked in" claim and no link to the dead event
  *
  * It sits BELOW the kept poll header (operator ruling 2026-09-13) and keeps
  * `data-testid="read-only-banner"`, which the shipped smoke specs resolve.
@@ -28,6 +30,11 @@ export interface SchedulingTerminalBannerProps {
   cancelReason: string | null;
   /** The event a lock-in produced, for the "Open the event" link. */
   linkedEventId: number | null;
+  /**
+   * ROK-2330: ISO time the lock-in's event was cancelled. Set → the locked-in
+   * banner becomes the cancelled-event state.
+   */
+  linkedEventCancelledAt?: string | null;
   /**
    * ROK-1610: on an EXPIRED poll the organiser may still finish it at a time
    * its members already voted for. The label of that slot, or null when there
@@ -115,6 +122,30 @@ function CancelledBody({ reason }: { reason: string | null }): JSX.Element {
 }
 
 /**
+ * ROK-2330: body of a lock-in whose event was cancelled afterwards. Names the
+ * time it had locked, says it is off, and offers no link to the dead event.
+ */
+function EventCancelledBody(props: {
+  lockedInTime: string | null;
+}): JSX.Element {
+  const time = props.lockedInTime
+    ? formatSlotTime(props.lockedInTime).label
+    : null;
+  return (
+    <>
+      <p className="mt-1 text-sm text-foreground">
+        {time
+          ? `This poll locked in ${time}, but that event was cancelled.`
+          : 'This poll locked in a time, but that event was cancelled.'}
+      </p>
+      <p className="mt-1 text-xs text-secondary">
+        Start a new poll from the game to pick another time.
+      </p>
+    </>
+  );
+}
+
+/**
  * Body of the expired banner: what happened, then the next action.
  *
  * ROK-1610: when the organiser can still finish the poll (`lockInLabel` +
@@ -159,25 +190,41 @@ function ExpiredBody(props: {
   );
 }
 
+/** The banner's look: a lock-in whose event was cancelled reads as cancelled. */
+function resolveLook(
+  pollStatus: Exclude<SchedulingPollStatus, 'open'>,
+  eventCancelled: boolean,
+): { tint: string; label: string; labelTint: string } {
+  const key = eventCancelled ? 'cancelled' : pollStatus;
+  return {
+    tint: TINTS[key],
+    label: eventCancelled ? 'Event cancelled' : LABELS[key],
+    labelTint: LABEL_TINTS[key],
+  };
+}
+
 /** Terminal-state banner — renders nothing while the poll is still open. */
 export function SchedulingTerminalBanner(
   props: SchedulingTerminalBannerProps,
 ): JSX.Element | null {
   const { pollStatus, lockedInTime, cancelReason, linkedEventId } = props;
   if (pollStatus === 'open') return null;
+  const eventCancelled =
+    pollStatus === 'locked_in' && Boolean(props.linkedEventCancelledAt);
+  const look = resolveLook(pollStatus, eventCancelled);
   return (
     <div
       data-testid="read-only-banner"
       data-poll-status={pollStatus}
+      data-event-cancelled={eventCancelled ? 'true' : undefined}
       role="status"
-      className={`rounded-lg border p-3 ${TINTS[pollStatus]}`}
+      className={`rounded-lg border p-3 ${look.tint}`}
     >
-      <p
-        className={`text-xs uppercase tracking-wider ${LABEL_TINTS[pollStatus]}`}
-      >
-        {LABELS[pollStatus]}
+      <p className={`text-xs uppercase tracking-wider ${look.labelTint}`}>
+        {look.label}
       </p>
-      {pollStatus === 'locked_in' && (
+      {eventCancelled && <EventCancelledBody lockedInTime={lockedInTime} />}
+      {pollStatus === 'locked_in' && !eventCancelled && (
         <LockedInBody
           lockedInTime={lockedInTime}
           linkedEventId={linkedEventId}

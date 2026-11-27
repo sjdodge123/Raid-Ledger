@@ -226,6 +226,57 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
     expect(res.body.match.linkedEventId).toBe(eventId);
   });
 
+  // ── (b2) locked in, then the linked event was cancelled (ROK-2330) ──
+
+  it('a locked-in poll whose linked event is live carries linkedEventCancelledAt=null', async () => {
+    const poll = await seedOpenPoll();
+    await lockIn(poll, adminToken);
+
+    const res = await getPoll(poll, adminToken);
+
+    expect(res.status).toBe(200);
+    expect(res.body.pollStatus).toBe('locked_in');
+    expect(res.body.linkedEventCancelledAt ?? null).toBeNull();
+  });
+
+  it('a locked-in poll whose linked event was cancelled carries the event cancelled_at as linkedEventCancelledAt', async () => {
+    const poll = await seedOpenPoll();
+    const eventId = await lockIn(poll, adminToken);
+
+    // The real cancel path, so the column the resolver reads is the one the
+    // app writes.
+    const cancel = await testApp.request
+      .patch(`/events/${eventId}/cancel`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Raid leader is ill.' });
+    expect(cancel.status).toBe(200);
+    const [event] = nonEmpty(
+      await testApp.db
+        .select({ cancelledAt: schema.events.cancelledAt })
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId)),
+      'event',
+    );
+    const cancelledAt = event.cancelledAt;
+    if (!cancelledAt)
+      throw new Error('event cancel did not stamp cancelled_at');
+
+    const res = await getPoll(poll, adminToken);
+
+    expect(res.status).toBe(200);
+    expect(res.body.pollStatus).toBe('locked_in');
+    expect(res.body.linkedEventCancelledAt).toBe(cancelledAt.toISOString());
+  });
+
+  it('a poll that never locked in carries linkedEventCancelledAt=null', async () => {
+    const poll = await seedOpenPoll();
+
+    const res = await getPoll(poll, adminToken);
+
+    expect(res.body.pollStatus).toBe('open');
+    expect(res.body.linkedEventCancelledAt ?? null).toBeNull();
+  });
+
   // ── (c) cancelled ──────────────────────────────────────────────────
 
   it('a cancelled poll reports pollStatus=cancelled and returns the persisted reason', async () => {
