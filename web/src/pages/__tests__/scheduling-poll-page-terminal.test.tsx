@@ -186,4 +186,18 @@ describe('SchedulingPollPage — locked-in poll whose event was cancelled (ROK-2
         expect(screen.getByText(/its event was later cancelled/i)).toBeInTheDocument();
         expect(screen.getByTestId('poll-discussion-probe')).toHaveAttribute('data-locked-in', 'none');
     });
+
+    it('drops the outcome card to the neutral tone, not the green success tone', () => {
+        renderPage(buildCancelledEventPoll());
+        const card = screen.getByTestId('poll-outcome-card');
+        expect(card).toHaveAttribute('data-tone', 'neutral');
+        expect(card.className).not.toMatch(/success/);
+        expect(screen.getByTestId('match-status-badge').className).not.toMatch(/success/);
+        expect(screen.getByText(/its event was later cancelled/i).className).not.toMatch(/success/);
+    });
+
+    it('keeps the green success tone when the linked event is live', () => {
+        renderPage(buildLockedInPoll());
+        expect(screen.getByTestId('poll-outcome-card')).toHaveAttribute('data-tone', 'success');
+    });
 });

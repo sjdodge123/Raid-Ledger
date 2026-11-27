@@ -73,6 +73,7 @@ function CompletedOutcome({ poll }: { poll: SchedulePollPageResponseDto }): JSX.
   // and no link to it.
   const cancelledAt = poll.linkedEventCancelledAt ?? null;
   const liveEventId = cancelledAt ? null : eventId;
+  const tone = cancelledAt ? OUTCOME_TONES.neutral : OUTCOME_TONES.success;
   return (
     <>
       <SchedulingTerminalBanner
@@ -82,12 +83,12 @@ function CompletedOutcome({ poll }: { poll: SchedulePollPageResponseDto }): JSX.
         linkedEventId={eventId}
         linkedEventCancelledAt={cancelledAt}
       />
-      <div className="p-6 rounded-xl bg-success/10 border border-success/30 text-center space-y-3">
+      <div data-testid="poll-outcome-card" data-tone={tone.name} className={`p-6 rounded-xl border text-center space-y-3 ${tone.card}`}>
         <div data-testid="match-status-badge"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-success/10 text-success border border-success/30">
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border ${tone.pill}`}>
           Poll Complete
         </div>
-        <p className="text-sm text-success">{completedCopy(eventId, cancelledAt)}</p>
+        <p className={`text-sm ${tone.copy}`}>{completedCopy(eventId, cancelledAt)}</p>
         {liveEventId && (
           <Link to={`/events/${liveEventId}`}
             className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
@@ -98,6 +99,25 @@ function CompletedOutcome({ poll }: { poll: SchedulePollPageResponseDto }): JSX.
     </>
   );
 }
+
+/**
+ * Outcome card tones. ROK-2330: under the danger "Event cancelled" banner the
+ * card must not read as a green success, so it drops to the neutral tokens.
+ */
+const OUTCOME_TONES = {
+  success: {
+    name: 'success',
+    card: 'bg-success/10 border-success/30',
+    pill: 'bg-success/10 text-success border-success/30',
+    copy: 'text-success',
+  },
+  neutral: {
+    name: 'neutral',
+    card: 'bg-panel border-edge',
+    pill: 'bg-panel text-muted border-edge',
+    copy: 'text-muted',
+  },
+} as const;
 
 /** The outcome card's line — what the lock-in left behind. */
 function completedCopy(eventId: number | null, cancelledAt: string | null): string {
