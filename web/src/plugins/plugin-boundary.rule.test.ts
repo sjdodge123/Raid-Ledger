@@ -1,4 +1,3 @@
-// @vitest-environment node
 /**
  * ROK-2366 — RuleTester spec for `eslint-rules/plugin-boundary.mjs`
  * (`rl-plugin-boundary/deep-import`), shared by the api and web lint configs.
