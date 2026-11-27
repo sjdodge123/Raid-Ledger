@@ -42,9 +42,7 @@ function groupLabeller(
     }
     const hit = cache.get(key);
     if (hit) return hit;
-    const label = adapter
-      .describeGroup(ctx, key)
-      .then((g) => g?.label ?? null);
+    const label = adapter.describeGroup(ctx, key).then((g) => g?.label ?? null);
     cache.set(key, label);
     return label;
   };
