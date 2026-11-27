@@ -41,6 +41,9 @@ export const authorColumns = {
   avatar: author.avatar,
   customAvatarUrl: author.customAvatarUrl,
   discordId: author.discordId,
+  // ROK-2328: a banned / deactivated author's posts render as blocked.
+  bannedAt: author.bannedAt,
+  deactivatedAt: author.deactivatedAt,
 };
 
 /** ROK-2226: the discussed event (null for normal threads or a deleted event). */

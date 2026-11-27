@@ -24,6 +24,7 @@ import { Pill } from '../hub/hub-bits';
 import { QuietEmpty } from '../hub/card-bits';
 import {
     forumAgo,
+    forumAuthorAvatarUrl,
     forumAuthorName,
     replyCountLabel,
 } from '../hub/forum/forum-thread.helpers';
@@ -47,7 +48,7 @@ function ReplyRow({ kind, reply }: { kind: Kind; reply: HubForumReply }): JSX.El
         >
             <AvatarWithFallback
                 username={name}
-                avatarUrl={reply.author?.avatarUrl ?? null}
+                avatarUrl={forumAuthorAvatarUrl(reply.author)}
                 sizeClassName="h-7 w-7"
                 alt=""
             />

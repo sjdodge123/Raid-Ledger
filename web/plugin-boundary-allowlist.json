@@ -1,0 +1,7 @@
+{
+  "src/lazy-routes.ts": [
+    "./plugins/valheim/pages/valheim-character-page",
+    "./plugins/wow/admin/addon-errors-page",
+    "./plugins/wow/public-card/public-guild-card-page"
+  ]
+}

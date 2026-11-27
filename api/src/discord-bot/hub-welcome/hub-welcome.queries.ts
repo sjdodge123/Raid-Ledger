@@ -4,6 +4,7 @@
  */
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { GuildKind } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -12,8 +13,9 @@ type Db = PostgresJsDatabase<typeof schema>;
 export interface HubWelcomeTarget {
   guildId: number;
   name: string;
-  kind: string;
+  kind: GuildKind;
   gameSlug: string | null;
+  gameIgdbId: number | null;
   /** The channel currently bound (as this connection sees it). */
   boundChannelId: string | null;
   welcomeChannelId: string | null;
@@ -37,6 +39,7 @@ export async function findWelcomeTarget(
       name: schema.guilds.name,
       kind: schema.guilds.kind,
       gameSlug: schema.games.slug,
+      gameIgdbId: schema.games.igdbId,
       boundChannelId: schema.guildProfiles.discordChannelId,
       welcomeChannelId: schema.guildProfiles.welcomeChannelId,
       welcomeMessageId: schema.guildProfiles.welcomeMessageId,

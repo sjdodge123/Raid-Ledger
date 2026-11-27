@@ -25,7 +25,7 @@ import {
   enableGracefulShutdown,
 } from './main.helpers';
 import type { LogLevelEnv } from './main.helpers';
-import { installValheimLinkBodyBypass } from './plugins/valheim/link/ingest/valheim-link-body-bypass';
+import { installValheimLinkBodyBypass } from './plugins/valheim';
 import { installCompanionBodyBypass } from './companion/ingest/companion-body-bypass';
 import {
   GUILD_CREST_URL_PREFIX,

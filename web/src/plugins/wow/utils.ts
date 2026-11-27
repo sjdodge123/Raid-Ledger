@@ -27,9 +27,5 @@ export function getWowVariant(slug: string): string | null {
     return SLUG_VARIANT_MAP[slug] ?? null;
 }
 
-/** Map event type slug to content category for instance browsing */
-export function getContentType(slug: string): 'dungeon' | 'raid' | null {
-    if (/raid/.test(slug)) return 'raid';
-    if (/dungeon|mythic-plus/.test(slug)) return 'dungeon';
-    return null;
-}
+/** ROK-2359: event-type → content category is core now; re-exported for WoW callers. */
+export { getContentType } from '../../lib/event-content-type';

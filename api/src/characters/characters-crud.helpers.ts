@@ -21,10 +21,7 @@ import {
 import { mapCharacterToDto } from './characters-mapping.helpers';
 import { defined } from '../common/defined.helpers';
 import type { ExternalImportPolicy } from '../plugins/plugin-host/character-external-import.types';
-import {
-  auditGuidRelease,
-  releasedGuidOf,
-} from '../plugins/wow-common/addon-import/external-id.guid-release';
+import { runCharacterDeleted } from '../users/lifecycle/user-lifecycle.registry';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = {
@@ -315,6 +312,6 @@ export async function deleteOwnedCharacter(
         gameId: schema.characters.gameId,
         region: schema.characters.region,
       });
-    await auditGuidRelease(tx, gone ? releasedGuidOf(gone) : null, userId);
+    if (gone) await runCharacterDeleted(tx, gone, userId);
   });
 }

@@ -26,10 +26,8 @@ import { UsersService } from '../../../users/users.service';
 import { UsersModerationService } from '../../../users/users-moderation.service';
 import { reactivateOnGuildRejoin } from '../../../users/users-reactivate.helpers';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
-import {
-  auditOwnerReactivated,
-  lockDeactivatedAt,
-} from '../addon-import/external-id.owner-status';
+import { lockDeactivatedAt } from '../../../users/users-deactivated-at.helpers';
+import { auditOwnerReactivated } from '../addon-import/external-id.owner-status';
 import { hasConfirmedMemberGrant } from './guild-delegation.helpers';
 import { findLinkedMemberRows } from './guild-membership.helpers';
 

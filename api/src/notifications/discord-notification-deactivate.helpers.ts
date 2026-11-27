@@ -11,7 +11,7 @@ import { endSeriesMembershipsForUserBestEffort } from '../events/series-signups-
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 import { RefreshTokenService } from '../auth/refresh/refresh-token.service';
-import { auditOwnerDeactivated } from '../plugins/wow-common/addon-import/external-id.owner-status';
+import { runUserDeactivated } from '../users/lifecycle/user-lifecycle.registry';
 
 /**
  * ROK-1749: why a user was deactivated — rendered into the admin notification
@@ -210,7 +210,7 @@ async function markDeactivated(
       .set({ deactivatedAt: sql`NOW()` })
       .where(deactivationTarget(userId, guard))
       .returning({ id: schema.users.id, username: schema.users.username });
-    if (row) await auditOwnerDeactivated(tx, row.id, null);
+    if (row) await runUserDeactivated(tx, row.id, null);
     return row;
   });
 }

@@ -232,6 +232,7 @@ export function SchedulingComposite(
         lockedInTime={poll.lockedInTime ?? null}
         cancelReason={poll.cancelReason ?? null}
         linkedEventId={poll.match.linkedEventId}
+        linkedEventCancelledAt={poll.linkedEventCancelledAt ?? null}
         lockInLabel={
           expiredLock.slot
             ? formatSlotTime(expiredLock.slot.proposedTime).label

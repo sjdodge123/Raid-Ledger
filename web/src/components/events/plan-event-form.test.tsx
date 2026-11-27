@@ -50,10 +50,6 @@ vi.mock('../../plugins', () => ({
     PluginSlot: vi.fn(() => null),
 }));
 
-vi.mock('../../plugins/wow/utils', () => ({
-    getWowVariant: vi.fn(() => null),
-    getContentType: vi.fn(() => null),
-}));
 
 // ─── API client mock ──────────────────────────────────────────────────────────
 

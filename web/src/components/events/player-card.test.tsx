@@ -361,3 +361,21 @@ describe('PlayerCard — Forever fallback portrait (ROK-1761)', () => {
         expect(screen.queryByTestId('forever-portrait'), 'roster row draws the tile from the character game id').not.toBeNull();
     });
 });
+
+/** ROK-2359: the class icon is the WoW plugin's `character-card:class-icon` slot. */
+describe('PlayerCard — WoW class icon slot (ROK-2359)', () => {
+    afterEach(() => usePluginStore.setState({ activeSlugs: new Set() }));
+    const shaman = { id: '00000000-0000-4000-8000-0000000000bb', name: 'Thrall', className: 'Shaman', role: 'dps', avatarUrl: null };
+
+    it('shows the class icon on the character line while the WoW plugin is active', () => {
+        activateWowPlugin();
+        const { container } = renderCard({ player: createMockPlayer({ character: shaman }) });
+        expect(container.querySelector('img[src$="classicon_shaman.jpg"]'), 'class icon via the slot').not.toBeNull();
+    });
+
+    it('hides the class icon while the WoW plugin is inactive, keeping the class text', () => {
+        const { container } = renderCard({ player: createMockPlayer({ character: shaman }) });
+        expect(container.querySelector('img[src$="classicon_shaman.jpg"]'), 'no class icon when blizzard is off').toBeNull();
+        expect(screen.getByText('Thrall \u2022 Shaman')).toBeInTheDocument();
+    });
+});
