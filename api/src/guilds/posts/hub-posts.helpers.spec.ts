@@ -11,6 +11,7 @@ import {
   personAvatarUrl,
   postDeepLink,
   toHubPost,
+  toPerson,
   type HubPostPersonRow,
 } from './hub-posts.helpers';
 
@@ -219,5 +220,37 @@ describe('toHubPost edit + relay', () => {
     );
     expect(unknown.relay?.messageUrl).toBeNull();
     expect(HubPostSchema.parse(known)).toEqual(known);
+  });
+});
+
+describe('toPerson — blocked authors (ROK-2328)', () => {
+  const AT_BAN = new Date('2026-11-20T00:00:00.000Z');
+
+  it('marks a banned author blocked: banned and keeps the link', () => {
+    const out = toPerson(person({ bannedAt: AT_BAN, deactivatedAt: null }));
+    expect(out).toEqual({
+      userId: 11,
+      displayName: 'thrall',
+      avatarUrl: null,
+      blocked: 'banned',
+    });
+  });
+
+  it('marks a deactivated author blocked: deactivated', () => {
+    const out = toPerson(person({ bannedAt: null, deactivatedAt: AT_BAN }));
+    expect(out.blocked).toBe('deactivated');
+    expect(out.userId).toBe(11);
+  });
+
+  it('a ban wins over a deactivation', () => {
+    const out = toPerson(person({ bannedAt: AT_BAN, deactivatedAt: AT_BAN }));
+    expect(out.blocked).toBe('banned');
+  });
+
+  it('an active author, or a row without the moderation columns, carries no blocked key', () => {
+    expect(
+      toPerson(person({ bannedAt: null, deactivatedAt: null })),
+    ).not.toHaveProperty('blocked');
+    expect(toPerson(person())).not.toHaveProperty('blocked');
   });
 });
