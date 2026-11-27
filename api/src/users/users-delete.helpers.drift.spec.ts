@@ -134,3 +134,15 @@ describe('user-FK wipe manifest — BG3 plugin tables (ROK-1957)', () => {
     );
   });
 });
+
+describe('user-FK wipe manifest — Google sign-in identities (ROK-2371)', () => {
+  // ROK-2371 (Codex P1): a ban+wipe must leave the Google identity on the
+  // banned row, or the banned `sub` becomes unknown and signs up afresh. A
+  // hard delete still drops it through the users-row CASCADE.
+  it('keeps user_auth_identities on a ban+wipe (ROK-2371)', () => {
+    expect(KEEP_TABLES.map(tableName)).toContain('user_auth_identities');
+    expect(WIPE_BY_COLUMN.map((w) => tableName(w.table))).not.toContain(
+      'user_auth_identities',
+    );
+  });
+});

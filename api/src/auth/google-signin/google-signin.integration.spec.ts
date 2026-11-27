@@ -9,7 +9,10 @@
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
-import { truncateAllTables } from '../../common/testing/integration-helpers';
+import {
+  loginAsAdmin,
+  truncateAllTables,
+} from '../../common/testing/integration-helpers';
 import {
   formsSentTo,
   stubGoogle,
@@ -350,6 +353,43 @@ describe('toggle on', () => {
         expect(identity?.lastUsedAt).toBeNull();
       },
     );
+  });
+
+  // Codex P1: a ban with `wipeData` keeps the users row; the Google identity
+  // must survive with it, or the banned `sub` reads as unknown and is parked
+  // for a brand-new, unbanned account.
+  describe('a ban with wipeData (Codex P1)', () => {
+    it('still refuses the banned sub as suspended — no pending identity, no new user', async () => {
+      const user = await insertUser(testApp, {
+        username: 'ban-wiped',
+        discordId: '300000000000000009',
+      });
+      await linkGoogleIdentity(testApp, user.id, KNOWN_SUB, SHARED_EMAIL);
+      const adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+      await testApp.request
+        .post(`/users/${user.id}/ban`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason: 'Spamming', wipeData: true })
+        .expect(201);
+      expect(await identitiesForSub(testApp, KNOWN_SUB)).toHaveLength(1);
+      const before = await userCount(testApp);
+
+      const { location, cookies } = await signInWith({
+        sub: KNOWN_SUB,
+        email: SHARED_EMAIL,
+        email_verified: true,
+      });
+
+      expect(
+        `${location.pathname}?error=${location.searchParams.get('error')}`,
+      ).toBe('/login?error=suspended');
+      expect(location.searchParams.get('reason')).toBe(
+        'Your account has been suspended: Spamming',
+      );
+      expect(cookies.has(PENDING_COOKIE)).toBe(false);
+      expect(cookies.has(REFRESH_COOKIE)).toBe(false);
+      expect(await userCount(testApp)).toBe(before);
+    });
   });
 
   describe('state + browser binding (AC6, sign-in side)', () => {

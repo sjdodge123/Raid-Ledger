@@ -50,11 +50,6 @@ export type { WipeTarget };
 export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   { table: schema.sessions, column: schema.sessions.userId },
   { table: schema.localCredentials, column: schema.localCredentials.userId },
-  // ROK-2371: Google sign-in identities (user_id CASCADE) — personal.
-  {
-    table: schema.userAuthIdentities,
-    column: schema.userAuthIdentities.userId,
-  },
   { table: schema.availability, column: schema.availability.userId },
   { table: schema.eventTemplates, column: schema.eventTemplates.userId },
   { table: schema.refreshTokens, column: schema.refreshTokens.userId },
@@ -276,6 +271,12 @@ export const REASSIGN_TABLES: readonly PgTable[] = [
  */
 export const KEEP_TABLES: readonly PgTable[] = [
   schema.adminActions,
+  // ROK-2371: a Google sign-in identity (user_id CASCADE). Kept on ban+wipe so
+  // the banned `sub` still resolves to the banned row and is REFUSED — the
+  // Google twin of `users.discord_id` staying on a banned user. Wiping it would
+  // make the `sub` unknown and let it create a fresh, unbanned account. A hard
+  // delete (self or admin) removes the users row, so the CASCADE drops it.
+  schema.userAuthIdentities,
   schema.activityLog,
   schema.aiRequestLogs,
   schema.adHocParticipants,
