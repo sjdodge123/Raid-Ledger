@@ -253,6 +253,31 @@ describe('toggle on', () => {
       expect(await userCount(testApp)).toBe(before + 1);
     });
 
+    it('two browsers creating the same sub at once: one 200, one 409, one account', async () => {
+      const claims = {
+        sub: NEW_SUB,
+        email: 'racer@example.test',
+        email_verified: true,
+        given_name: 'Racer',
+      };
+      const a = must(
+        (await signInWith(claims)).cookies.get(PENDING_COOKIE),
+        'a',
+      );
+      const b = must(
+        (await signInWith(claims)).cookies.get(PENDING_COOKIE),
+        'b',
+      );
+      const before = await userCount(testApp);
+      const [ra, rb] = await Promise.all([
+        createWith(a).send({}),
+        createWith(b).send({}),
+      ]);
+      expect([ra.status, rb.status].sort()).toEqual([200, 409]);
+      expect(await identitiesForSub(testApp, NEW_SUB)).toHaveLength(1);
+      expect(await userCount(testApp)).toBe(before + 1);
+    });
+
     it('with the same email as an existing account never reaches that account', async () => {
       const existing = await insertUser(testApp, { username: 'email-owner' });
       await linkGoogleIdentity(testApp, existing.id, KNOWN_SUB, SHARED_EMAIL);

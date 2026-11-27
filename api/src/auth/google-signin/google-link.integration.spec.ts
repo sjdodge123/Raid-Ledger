@@ -4,6 +4,8 @@
  * nonce, its `rl_link_google` cookie, the signed `link` state, the
  * `rl_link_state_google` binding, the seed and the identity insert are real.
  */
+import { eq } from 'drizzle-orm';
+import * as schema from '../../drizzle/schema';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { signTestAccessToken } from '../../common/testing/sign-test-access-token';
@@ -222,6 +224,30 @@ describe('Google link — rejected before the code exchange (AC 6)', () => {
     expect(again.message).toBe(LINK_REQUEST_EXPIRED_MESSAGE);
     expect(formsSentTo(spy, GOOGLE_TOKEN_URL)).toHaveLength(1);
   });
+});
+
+describe('Google link — account re-checked at consume time (spec §8)', () => {
+  it.each([
+    ['banned', { bannedAt: new Date(), banReason: 'Spamming' }],
+    ['deactivated', { deactivatedAt: new Date() }],
+    ['kicked in cooldown', { kickedAt: new Date() }],
+  ] as const)(
+    'a user %s after /link/start is refused before the exchange',
+    async (_label, status) => {
+      const me = await member();
+      const g = await toGoogle(me.token);
+      const spy = stubFor(g.oidcNonce);
+      await testApp.db
+        .update(schema.users)
+        .set(status)
+        .where(eq(schema.users.id, me.id));
+      const out = await land({ code: 'c1', state: g.state }, g.cookie);
+      expect(out.linked).toBe('error');
+      expect(out.message).toEqual(expect.any(String));
+      expect(spy).not.toHaveBeenCalled();
+      expect(await googleSubsOf(me.id)).toEqual([]);
+    },
+  );
 });
 
 describe('Google link — start nonce and toggle', () => {

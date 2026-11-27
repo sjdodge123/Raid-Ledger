@@ -41,6 +41,7 @@ import {
 } from './google-signin-claims.helpers';
 import { GoogleSigninService, type UserRow } from './google-signin.service';
 import { PendingIdentityStore } from './pending-identity.store';
+import { exchangeFailureClass } from './google-signin-errors.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -139,7 +140,10 @@ export class GoogleSigninFlowService {
         client.clientId,
         deriveSigninNonce(n),
       );
-    } catch {
+    } catch (err) {
+      this.logger.warn(
+        `google-signin exchange failed ${exchangeFailureClass(err)}`,
+      );
       return null;
     }
   }

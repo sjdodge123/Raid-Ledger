@@ -20,6 +20,7 @@ import type { GoogleClient } from '../../calendar-sync/providers/google/google-o
 import { AuthService } from '../auth.service';
 import { mintBrowserBoundAuthCode } from '../auth-code-cookie.helpers';
 import { RefreshTokenService } from '../refresh/refresh-token.service';
+import { isUniqueViolation } from './google-signin-errors.helpers';
 import { setRefreshCookie } from '../refresh/refresh-cookie.helpers';
 import type { PendingIdentity } from './pending-identity.store';
 
@@ -86,13 +87,29 @@ export class GoogleSigninService {
 
   /**
    * D1a "Create a new account": a `users` row with `discord_id NULL` plus the
-   * identity. Pre-checks the `sub` so the insert cannot violate (409).
+   * identity. Pre-checks the `sub` (409); a racing create that still collides
+   * rolls the whole transaction back and maps to the same 409 out here (no
+   * retry inside the transaction).
    */
   async createGoogleUser(p: PendingIdentity): Promise<UserRow> {
     if (await this.findUserBySub(p.subject)) {
       throw new ConflictException(GOOGLE_SUB_TAKEN_MESSAGE);
     }
-    const created = await this.db.transaction(async (tx) => {
+    let created: UserRow;
+    try {
+      created = await this.insertGoogleUser(p);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new ConflictException(GOOGLE_SUB_TAKEN_MESSAGE);
+      }
+      throw err;
+    }
+    this.usersService.invalidateCountCache();
+    return created;
+  }
+
+  private insertGoogleUser(p: PendingIdentity): Promise<UserRow> {
+    return this.db.transaction(async (tx) => {
       const [user] = await tx
         .insert(users)
         .values({ username: p.displayName, discordId: null, avatar: null })
@@ -107,8 +124,6 @@ export class GoogleSigninService {
       });
       return user;
     });
-    this.usersService.invalidateCountCache();
-    return created;
   }
 
   /**

@@ -37,8 +37,13 @@ import {
 } from './google-signin-oauth.helpers';
 import {
   readGoogleSigninClaims,
+  signinRefusalFor,
   type GoogleSigninClaims,
 } from './google-signin-claims.helpers';
+import {
+  exchangeFailureClass,
+  isUniqueViolation,
+} from './google-signin-errors.helpers';
 import {
   GOOGLE_SUB_TAKEN_MESSAGE,
   GoogleSigninService,
@@ -60,12 +65,6 @@ export const GOOGLE_LINK_RESULT_PATH = '/profile/integrations';
 export interface GoogleLinkQuery {
   code: unknown;
   state: unknown;
-}
-
-/** Postgres unique violation (a racing link of the same `sub`). */
-function isUniqueViolation(err: unknown): boolean {
-  const e = err as { code?: unknown; cause?: { code?: unknown } } | null;
-  return e?.code === '23505' || e?.cause?.code === '23505';
 }
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -153,9 +152,8 @@ export class GoogleLinkService {
     if (!state || typeof q.code !== 'string' || !q.code) {
       return this.refuse(base, LINK_REQUEST_EXPIRED_MESSAGE, 'state');
     }
-    const key = `${GOOGLE_SIGNIN_SEED_PREFIX}${state.n}`;
-    if (!(await this.svc.consumeSeedOnce(key, GOOGLE_SIGNIN_STATE_TTL_SECONDS)))
-      return this.refuse(base, LINK_REQUEST_EXPIRED_MESSAGE, 'replay');
+    const blocked = await this.preExchangeRefusal(state);
+    if (blocked) return this.refuse(base, blocked.message, blocked.reason);
     const claims = await this.exchange(client, q.code, state.n, base);
     if (!claims)
       return this.refuse(base, GOOGLE_LINK_FAILED_MESSAGE, 'exchange');
@@ -170,6 +168,38 @@ export class GoogleLinkService {
     }
     this.logger.log(`google-link ok user=${state.uid}`);
     return this.resultUrl(base);
+  }
+
+  /** Spend the seed once (replay → refused), then re-check the account. */
+  private async preExchangeRefusal(state: {
+    n: string;
+    uid: number;
+  }): Promise<{ message: string; reason: string } | null> {
+    const key = `${GOOGLE_SIGNIN_SEED_PREFIX}${state.n}`;
+    if (!(await this.svc.consumeSeedOnce(key, GOOGLE_SIGNIN_STATE_TTL_SECONDS)))
+      return { message: LINK_REQUEST_EXPIRED_MESSAGE, reason: 'replay' };
+    return this.accountRefusal(state.uid);
+  }
+
+  /**
+   * Spec §8: ban / kick cooldown / deactivation re-checked at consume time
+   * (the JWT was only checked at `/link/start`, up to 10 minutes earlier).
+   */
+  private async accountRefusal(
+    uid: number,
+  ): Promise<{ message: string; reason: string } | null> {
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.id, uid))
+      .limit(1);
+    if (!user) return { message: LINK_REQUEST_EXPIRED_MESSAGE, reason: 'gone' };
+    const refusal = await signinRefusalFor(this.db, user);
+    if (!refusal) return null;
+    return {
+      message: refusal.message ?? GOOGLE_LINK_FAILED_MESSAGE,
+      reason: refusal.reason,
+    };
   }
 
   /** A `link` state (with `uid`) that this browser was bound to; else null. */
@@ -206,7 +236,10 @@ export class GoogleLinkService {
         client.clientId,
         deriveSigninNonce(n),
       );
-    } catch {
+    } catch (err) {
+      this.logger.warn(
+        `google-link exchange failed ${exchangeFailureClass(err)}`,
+      );
       return null;
     }
   }
