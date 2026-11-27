@@ -6,3 +6,4 @@ export {
   editionOf,
 } from './minecraft.constants';
 export { ensureMinecraftBedrockGame } from './minecraft-bedrock-game';
+export { MINECRAFT_BEDROCK_GAME } from './minecraft-bedrock-game';

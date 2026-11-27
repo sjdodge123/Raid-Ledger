@@ -151,16 +151,12 @@
     "../plugins/wow-common/manifest"
   ],
   "src/games-lookup/seed-games.data.ts": [
-    "../plugins/minecraft/minecraft-bedrock-game",
     "../plugins/wow-common/blizzard.constants"
   ],
   "src/guilds/community/community-directory.matrix.test-fixtures.ts": [
     "../../plugins/pelican/pelican.constants",
     "../../plugins/wow-common/manifest",
     "../../plugins/wow-common/wow-forever-identity.helpers"
-  ],
-  "src/main.ts": [
-    "./plugins/valheim/link/ingest/valheim-link-body-bypass"
   ],
   "src/notifications/discord-notification-deactivate.helpers.ts": [
     "../plugins/wow-common/addon-import/external-id.owner-status"
@@ -240,9 +236,6 @@
   ],
   "src/plugins/wow-common/gg/wow-gg.registration.ts": [
     "../../core/gg/gg-card.registry"
-  ],
-  "src/queue/queue-registry.ts": [
-    "../plugins/core/steam-stats/steam-stats.constants"
   ],
   "src/users/users-delete.helpers.ts": [
     "../plugins/wow-common/addon-import/external-id.guid-release"

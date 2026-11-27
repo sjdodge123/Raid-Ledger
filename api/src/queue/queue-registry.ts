@@ -29,7 +29,7 @@ import { AI_SUGGESTIONS_PREGEN_QUEUE } from '../lineups/ai-suggestions/pre-gen.q
 import { EPHEMERAL_VOICE_IDLE_QUEUE } from '../discord-bot/queues/ephemeral-voice-idle.queue';
 import { SCHEDULING_POLL_EMBED_QUEUE } from '../lineups/scheduling/scheduling-poll-embed.queue';
 import { CHANNEL_LIFECYCLE_NUDGE_QUEUE } from '../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
-import { STEAM_APP_STATS_QUEUE } from '../plugins/core/steam-stats/steam-stats.constants';
+import { STEAM_APP_STATS_QUEUE } from '../plugins/core';
 import { SIGNUP_PING_QUEUE } from '../guilds/forum/discord/hub-forum-discord-signup-pings.queue';
 import { FORUM_CHAT_COPY_QUEUE } from '../guilds/forum/discord/forum-chat-copy.queue';
 import {
