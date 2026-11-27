@@ -54,7 +54,7 @@ export function FirstTimeChoiceCard(props: FirstTimeChoiceProps): JSX.Element {
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Signed in with {providerName(view.provider)}</p>
                 <h1 className="text-lg font-semibold text-foreground" data-testid="first-time-title">{FIRST_TIME_HEADING}</h1>
                 <p className="text-sm text-secondary">
-                    There’s no Raid Ledger account for <span className="break-all font-medium text-foreground">{view.displayName}</span> yet.
+                    There’s no Raid Ledger account for <span className="break-words font-medium text-foreground">{view.displayName}</span> yet.
                 </p>
             </div>
             {props.notice && <p role="alert" className="text-sm text-danger text-center" data-testid="first-time-notice">{props.notice}</p>}

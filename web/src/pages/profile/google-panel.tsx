@@ -29,7 +29,7 @@ function GoogleLinkedRow({ methods }: { methods: SigninMethodsDto }): JSX.Elemen
         <div className="flex flex-wrap items-center gap-4 p-4 rounded-lg bg-success/5 border border-success/20"
             data-testid="google-linked">
             <GoogleMark className="w-8 h-8 shrink-0" />
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 basis-48">
                 <p className="text-sm font-medium text-foreground truncate">
                     {email ? `Linked as ${email}` : 'Google linked'}
                 </p>
