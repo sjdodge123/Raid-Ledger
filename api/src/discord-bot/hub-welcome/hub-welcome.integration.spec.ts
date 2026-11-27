@@ -4,8 +4,12 @@
  * in-memory channel (a deleted message answers a genuine 10008). The event
  * cases go through the real `@OnEvent` listener via `emitAsync`.
  */
-import { ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EmbedBuilder, type APIEmbed } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import { HubWelcomeResultSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -132,6 +136,35 @@ async function activateHubPlugins(): Promise<void> {
   }
 }
 
+/**
+ * ROK-2362 #10: Valheim owns the welcome copy (its claim provider), so the
+ * inactive case deactivates it; re-activate BEFORE the truncate, since
+ * `ensureInstalled` on a wiped table would not restore suspended adapters.
+ */
+async function setValheimActive(active: boolean): Promise<void> {
+  const registry = testApp.app.get(PluginRegistryService);
+  if (registry.isActive(VALHEIM_PLUGIN_ID) === active) return;
+  await registry.ensureInstalled(VALHEIM_PLUGIN_ID);
+  if (active) await registry.activate(VALHEIM_PLUGIN_ID);
+  else await registry.deactivate(VALHEIM_PLUGIN_ID);
+}
+
+/** The first embed of the first message `channel` was sent. */
+function firstSentEmbed(channel: FakeTextChannel): APIEmbed {
+  const payload: unknown = channel.send.mock.calls[0]?.[0];
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    !('embeds' in payload) ||
+    !Array.isArray(payload.embeds)
+  ) {
+    throw new Error('sent payload has no embeds');
+  }
+  const [embed]: unknown[] = payload.embeds;
+  if (!(embed instanceof EmbedBuilder)) throw new Error('no EmbedBuilder sent');
+  return embed.toJSON();
+}
+
 beforeAll(async () => {
   testApp = await getTestApp();
   welcome = testApp.app.get(HubWelcomeService, { strict: false });
@@ -150,11 +183,13 @@ beforeEach(async () => {
   jest
     .spyOn(client, 'getBotUser')
     .mockReturnValue({ id: FAKE_BOT_ID, username: 'rl-bot' });
+  await activateHubPlugins();
   hubId = await insertServerHub(await valheimGameId());
 });
 
 afterEach(async () => {
   jest.restoreAllMocks();
+  await setValheimActive(true);
   testApp.seed = await truncateAllTables(testApp.db);
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
 });
@@ -202,6 +237,19 @@ describe('hub welcome — linked event', () => {
     expect(now.channel).toBe('c-b');
     expect(chanB.store.has(now.message ?? '')).toBe(true);
     expect(chanA.store.has(old.message ?? '')).toBe(false);
+  });
+
+  it('posts the Valheim plugin copy byte-for-byte (ROK-2362 #10)', async () => {
+    await link('c-a');
+    const embed = firstSentEmbed(chanA);
+    expect(embed.description).toBe(
+      "This channel is linked to the **Ashlands** hub: who's online, the map, chests, the crafting planner and the play schedule, all in one place.",
+    );
+    expect(embed.fields?.[0]).toEqual({
+      name: 'Claim your character',
+      value:
+        "Link Steam once on Raid Ledger and every character you play here is claimed for you. Or open the hub's Characters tab and pick yours.",
+    });
   });
 
   it('skips a hub that is not a Valheim server hub', async () => {
@@ -252,6 +300,38 @@ describe('hub welcome — re-post', () => {
       pinned: true,
       warning: null,
     });
+  });
+});
+
+describe('hub welcome — Valheim plugin inactive (ROK-2362 #10)', () => {
+  it('a link posts nothing', async () => {
+    await setValheimActive(false);
+    await link('c-a');
+    expect(await welcome.welcomeLinked(hubId, 'c-a')).toBeNull();
+    expect(chanA.send).not.toHaveBeenCalled();
+    expect(await stored()).toEqual({ channel: null, message: null });
+  });
+
+  it('a re-post is refused with 400 unsupported', async () => {
+    await bind(hubId, 'c-a');
+    await setValheimActive(false);
+    await expect(welcome.repost(hubId)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(chanA.send).not.toHaveBeenCalled();
+  });
+
+  it('clearing the channel still deletes a welcome posted while active', async () => {
+    await link('c-a');
+    const old = await stored();
+    expect(chanA.store.has(old.message ?? '')).toBe(true);
+    await setValheimActive(false);
+    await events.emitAsync(HUB_CHANNEL_EVENTS.CLEARED, {
+      guildId: hubId,
+      previousChannelId: 'c-a',
+    });
+    expect(chanA.store.has(old.message ?? '')).toBe(false);
+    expect(await stored()).toEqual({ channel: null, message: null });
   });
 });
 
