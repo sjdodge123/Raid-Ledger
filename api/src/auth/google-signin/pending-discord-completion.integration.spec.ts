@@ -233,6 +233,16 @@ describe('POST /auth/first-time/create for a parked Discord identity (M2b)', () 
     expect((await create(parked.cookie)).status).toBe(404);
   });
 
+  it('appends a parked PUG invite to the landing, as the invite sign-in does', async () => {
+    const res = await create(
+      (await parkDiscord({ inviteCode: 'PUG-42' })).cookie,
+    );
+    expect(res.status).toBe(200);
+    const redirect = new URL(String(res.body.redirect), 'http://rl.test');
+    expect(redirect.searchParams.get('via')).toBe('discord');
+    expect(redirect.searchParams.get('invite')).toBe('PUG-42');
+  });
+
   it('runs the fleet first-login promotion on the created Discord user', async () => {
     process.env.DEMO_MODE = 'true';
     process.env[FLEET_FIRST_LOGIN_ENV] = 'true';

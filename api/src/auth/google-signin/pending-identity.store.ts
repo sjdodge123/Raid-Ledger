@@ -15,6 +15,7 @@ import type Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { browserBoundCookieAttrs } from '../browser-bound-cookie.helpers';
 import { readCookie } from '../link-nonce-cookie.helpers';
+import { isInviteCodeFormat } from '../../plugins/discord/invite-code-format';
 
 export const PENDING_IDENTITY_COOKIE = 'rl_pending_identity';
 export const PENDING_IDENTITY_TTL_SECONDS = 600;
@@ -31,6 +32,11 @@ export interface PendingIdentity {
   email: string | null;
   /** Discord avatar hash (Discord only). */
   avatar: string | null;
+  /**
+   * Discord only: the PUG invite code from the signed login state (ROK-394),
+   * re-applied to the `/auth/success` landing when the account is created.
+   */
+  inviteCode?: string;
 }
 
 function keyFor(secret: string): string {
@@ -54,12 +60,13 @@ export function parsePendingIdentity(
   }
   if (!v || typeof v !== 'object') return null;
   const rec: Record<string, unknown> = { ...v };
-  const { provider, subject, displayName, email, avatar } = rec;
+  const { provider, subject, displayName, email, avatar, inviteCode } = rec;
   if (provider !== 'google' && provider !== 'discord') return null;
   if (typeof subject !== 'string' || !subject) return null;
   if (typeof displayName !== 'string') return null;
   if (!strOrNull(email) || !strOrNull(avatar)) return null;
-  return { provider, subject, displayName, email, avatar };
+  const invite = isInviteCodeFormat(inviteCode) ? { inviteCode } : {};
+  return { provider, subject, displayName, email, avatar, ...invite };
 }
 
 @Injectable()

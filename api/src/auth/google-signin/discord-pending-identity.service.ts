@@ -16,6 +16,7 @@ import type { Request, Response } from 'express';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { UsersService } from '../../users/users.service';
+import { isInviteCodeFormat } from '../../plugins/discord/invite-code-format';
 import {
   refusalRedirect,
   signinRefusalFor,
@@ -91,9 +92,13 @@ export class DiscordPendingIdentityService {
         this.logger.log('discord pending-link refused reason=not_found');
         return `${base}/auth/first-time?error=not_found`;
       }
-      await this.pending.create(req, res, req.user.pendingDiscord);
+      const invite = state?.inviteCode;
+      const parked = isInviteCodeFormat(invite)
+        ? { ...req.user.pendingDiscord, inviteCode: invite }
+        : req.user.pendingDiscord;
+      await this.pending.create(req, res, parked);
       this.logger.log('discord pending identity parked');
-      return firstTimeUrl(base, state?.inviteCode);
+      return firstTimeUrl(base, invite);
     }
     const userId = userIdOf(req.user);
     if (action !== 'pending-link' || userId === null) return null;

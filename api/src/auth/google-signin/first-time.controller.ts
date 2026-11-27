@@ -20,6 +20,7 @@ import type { PendingIdentityViewDto } from '@raid-ledger/contract';
 import { RateLimit } from '../../throttler/rate-limit.decorator';
 import { AuthService } from '../auth.service';
 import { GoogleSigninService, type UserRow } from './google-signin.service';
+import { withParkedInvite } from './discord-pending-identity.helpers';
 import {
   PendingIdentityStore,
   type PendingIdentity,
@@ -60,7 +61,8 @@ export class FirstTimeController {
     if (!parked) throw new NotFoundException(EXPIRED);
     const user = await this.createFor(parked);
     const method = parked.provider === 'google' ? 'google' : 'discord';
-    return { redirect: await this.svc.issueSession(req, res, user, method) };
+    const landing = await this.svc.issueSession(req, res, user, method);
+    return { redirect: withParkedInvite(landing, parked) };
   }
 
   /**

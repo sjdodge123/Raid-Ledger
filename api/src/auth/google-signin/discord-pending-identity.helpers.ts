@@ -35,3 +35,15 @@ export function firstTimeUrl(base: string, inviteCode: unknown): string {
   }
   return `${base}/auth/first-time?invite=${encodeURIComponent(inviteCode)}`;
 }
+
+/**
+ * The `/auth/success` landing for a created Discord account, carrying the
+ * parked PUG invite exactly as today's invite sign-in does (`&invite=`).
+ */
+export function withParkedInvite(
+  landing: string,
+  parked: Pick<PendingIdentity, 'provider' | 'inviteCode'>,
+): string {
+  if (parked.provider !== 'discord' || !parked.inviteCode) return landing;
+  return `${landing}&invite=${encodeURIComponent(parked.inviteCode)}`;
+}

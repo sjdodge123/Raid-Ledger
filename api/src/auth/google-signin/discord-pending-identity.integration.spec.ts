@@ -189,6 +189,29 @@ describe('Discord sign-in with an unknown snowflake', () => {
     });
   });
 
+  it('keeps a PUG invite through the park and re-applies it on create (review m6)', async () => {
+    googleEnabled(true);
+    profileId = 'snowflake-new-invite';
+    const res = await callback(
+      await start('/auth/discord/invite?code=PUGCODE1'),
+    );
+    expect(res.headers.location).toBe(
+      `${clientUrl()}/auth/first-time?invite=PUGCODE1`,
+    );
+    const pending = cookiesOf(res).filter((c) =>
+      c.startsWith(`${PENDING_IDENTITY_COOKIE}=`),
+    );
+    const created = await testApp.request
+      .post('/auth/first-time/create')
+      .set('Cookie', pending)
+      .send({});
+    expect(created.status).toBe(200);
+    expect(String(created.body.redirect)).toMatch(
+      /^\/auth\/success\?code=[0-9a-f]{64}&via=discord&invite=PUGCODE1$/,
+    );
+    expect(await userByDiscordId(profileId)).not.toBeNull();
+  });
+
   it('still signs a known Discord user straight in while Google sign-in is on', async () => {
     googleEnabled(true);
     profileId = 'snowflake-known-on';
