@@ -36,6 +36,7 @@ import {
   toCandidate,
 } from './valheim-hub-claim.helpers';
 import { findHubServerId, findViewerFacts } from './valheim-hub-claim.queries';
+import { VALHEIM_HUB_WELCOME_COPY } from './valheim-hub-welcome.copy';
 
 /** Unclaimed rows read per status call; core caps the response at 50. */
 export const VALHEIM_CLAIM_SCAN_LIMIT = 500;
@@ -61,6 +62,8 @@ const gone = () =>
 @Injectable()
 export class ValheimHubClaimProvider implements HubClaimProvider, OnModuleInit {
   readonly pluginSlug = VALHEIM_PLUGIN_ID;
+  /** ROK-2362 #10: the hub welcome copy core posts for this plugin's hubs. */
+  readonly welcome = VALHEIM_HUB_WELCOME_COPY;
 
   constructor(
     private readonly registry: PluginRegistryService,

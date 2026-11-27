@@ -1,4 +1,4 @@
-import { getRoleIconUrl } from '../../plugins/wow/lib/role-icons';
+import { getRoleIconUrl } from './role-icons';
 
 interface RoleIconProps {
     role: string;
@@ -8,8 +8,8 @@ interface RoleIconProps {
 }
 
 /**
- * Renders a WoW Dungeon Finder role icon for tank/healer/dps.
- * Falls back to a colored dot for other roles.
+ * Renders the core signup role icon for tank/healer/dps (ROK-2359: core, not WoW).
+ * Renders nothing for other roles.
  */
 export function RoleIcon({ role, size = 'w-4 h-4', className = '' }: RoleIconProps) {
     const url = getRoleIconUrl(role);

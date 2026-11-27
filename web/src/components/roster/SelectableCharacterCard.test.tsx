@@ -15,10 +15,16 @@
  *       <ProfessionBadges> was added — i.e. no extra nodes / no leading
  *       separator).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { SelectableCharacterCard } from './SelectableCharacterCard';
+import { activateWowPlugin } from '../../test/activate-wow-plugin';
+import { usePluginStore } from '../../stores/plugin-store';
+
+// ROK-2359: class icon + pills reach the card through the WoW plugin's slots, so it is active by default here.
+beforeEach(activateWowPlugin);
+afterEach(() => { usePluginStore.setState({ activeSlugs: new Set() }); });
 
 vi.mock('../../plugins/wow/lib/profession-icons', () => ({
     getProfessionIconUrl: (slug: string | null | undefined) => {
@@ -241,5 +247,22 @@ describe('SelectableCharacterCard — profession pills omitted (AC #8 + AC #9)',
             populatedContainer,
         ).childElementCount;
         expect(populatedMetaCount).toBeGreaterThan(baselineMetaCount);
+    });
+});
+
+describe('SelectableCharacterCard — WoW slots hide while the plugin is inactive (ROK-2359)', () => {
+    it('renders no class icon and no pills, but keeps the class name', () => {
+        usePluginStore.setState({ activeSlugs: new Set() });
+        const { container } = render(
+            <SelectableCharacterCard character={createMockCharacter({ professions: POPULATED_PROFESSIONS })} isSelected={false} onSelect={vi.fn()} />,
+        );
+        expect(container.querySelector('img[src="https://render.example/class.jpg"]'), 'no class icon when blizzard is off').toBeNull();
+        expect(screen.queryByRole('img', { name: /tailoring/i }), 'no profession pill when blizzard is off').toBeNull();
+        expect(screen.getByText('Mage')).toBeInTheDocument();
+    });
+
+    it('renders the class icon while the WoW plugin is active', () => {
+        const { container } = render(<SelectableCharacterCard character={createMockCharacter()} isSelected={false} onSelect={vi.fn()} />);
+        expect(container.querySelector('img[src="https://render.example/class.jpg"]'), 'class icon via the slot').not.toBeNull();
     });
 });

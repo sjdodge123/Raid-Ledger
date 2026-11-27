@@ -19,6 +19,8 @@ import { CharacterDetailHeaderBadges } from './slots/character-detail-header-bad
 import { ProfileCharacterActions } from './slots/profile-character-actions';
 import { EventDetailSignupWarnings } from './slots/event-detail-signup-warnings';
 import { CharacterVariantBadge } from './slots/character-variant-badge';
+import { CharacterClassIcon } from './slots/character-class-icon';
+import { CharacterProfessions } from './slots/character-professions';
 import { CharacterDetailOwnerActions } from './slots/character-detail-owner-actions';
 import { CharacterDetailAdminActions } from './slots/character-detail-admin-actions';
 import { CharacterDetailReadOnlyActions } from './slots/character-detail-read-only-actions';
@@ -74,6 +76,9 @@ blizzard.registerSlot('event-detail:signup-warnings', EventDetailSignupWarnings)
 blizzard.registerSlot('admin-settings:plugin-content', BlizzardIntegrationSlot);
 blizzard.registerSlot('profile:character-actions', ProfileCharacterActions);
 blizzard.registerSlot('character-card:badges', CharacterVariantBadge);
+// ROK-2359 — class icons and profession pills on core cards (hidden while blizzard is inactive).
+blizzard.registerSlot('character-card:class-icon', CharacterClassIcon);
+blizzard.registerSlot('character-card:professions', CharacterProfessions);
 blizzard.registerSlot('players:header-cards', PlayersGuildCard);
 blizzard.registerCharacterIdentity(foreverIdentityProvider);
 blizzard.registerHubModule(wowHubModule);

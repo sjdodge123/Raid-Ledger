@@ -98,6 +98,8 @@ function makeCharacter(
 }
 
 describe('CharacterCardCompact — ProfessionBadges data flow', () => {
+    // ROK-2359: the pills reach the core card through the WoW plugin's `character-card:professions` slot.
+    beforeEach(activateWowPlugin);
     it('renders pills when `character.professions` is populated', () => {
         const character = makeCharacter({ professions: PROFESSIONS_TAILORING });
         renderWithProviders(<CharacterCardCompact character={character} />);
@@ -172,5 +174,24 @@ describe('CharacterCardCompact — Forever portrait from portraitGameId (event a
     it('a non-Forever game id keeps the normal avatar', () => {
         renderWithProviders(<CharacterCardCompact {...flat} portraitGameId={99} />);
         expect(screen.queryByTestId('forever-portrait')).toBeNull();
+    });
+});
+
+/** ROK-2359: class icon + profession pills are WoW plugin slots, so they hide while the plugin is inactive. */
+describe('CharacterCardCompact — WoW class icon / professions slots (ROK-2359)', () => {
+    const character = () => makeCharacter({ class: 'Mage', professions: PROFESSIONS_TAILORING });
+
+    it('renders the class icon and the pills while the WoW plugin is active', () => {
+        activateWowPlugin();
+        const { container } = renderWithProviders(<CharacterCardCompact character={character()} />);
+        expect(container.querySelector('img[src="https://render.example/class.jpg"]'), 'class icon via the slot').not.toBeNull();
+        expect(document.querySelector('[title="Tailoring 450/450"]'), 'profession pill via the slot').not.toBeNull();
+    });
+
+    it('renders neither while the WoW plugin is inactive, but keeps the class name', () => {
+        const { container } = renderWithProviders(<CharacterCardCompact character={character()} />);
+        expect(container.querySelector('img[src="https://render.example/class.jpg"]'), 'no class icon when blizzard is off').toBeNull();
+        expect(document.querySelector('[title="Tailoring 450/450"]'), 'no profession pill when blizzard is off').toBeNull();
+        expect(screen.getByText('Mage')).toBeInTheDocument();
     });
 });

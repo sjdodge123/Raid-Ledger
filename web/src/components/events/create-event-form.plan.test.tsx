@@ -45,10 +45,6 @@ vi.mock('../../plugins', () => ({
             : <div data-testid="content-browser" data-type={context.contentType}>{context.selectedInstances.map((i) => i.name).join(',')}</div>
     )),
 }));
-vi.mock('../../plugins/wow/utils', () => ({
-    getWowVariant: vi.fn(() => 'wow_forever'),
-    getContentType: vi.fn((slug: string) => (slug === 'dungeon' || slug === 'raid' ? slug : null)),
-}));
 vi.mock('./game-search-input', () => ({ GameSearchInput: vi.fn(() => <div data-testid="game-search-input" />) }));
 
 const GAME = { id: 5, name: 'WoW Forever', slug: 'wow-forever', coverUrl: null };

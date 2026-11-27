@@ -91,9 +91,6 @@
   "src/discord-bot/ad-hoc-server-presence.module.ts": [
     "../plugins/pelican/presence/server-presence.sink"
   ],
-  "src/discord-bot/hub-welcome/hub-welcome.service.ts": [
-    "../../plugins/valheim/valheim.constants"
-  ],
   "src/discord-bot/listeners/voice-state-server-presence.handlers.ts": [
     "../../plugins/pelican/presence/server-presence.reader"
   ],
