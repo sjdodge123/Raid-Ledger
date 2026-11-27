@@ -69,6 +69,16 @@ class FakeListener {
     throw new TypeError(CRASH_MESSAGE);
   }
 
+  /** Consults the gate, then starts a same-instance helper that crashes. */
+  gateThenCrashLater(): void {
+    if (!gate.isActive('valheim')) void this.crashLater();
+  }
+
+  private async crashLater(): Promise<void> {
+    await ticks(3);
+    throw new TypeError(CRASH_MESSAGE);
+  }
+
   private async work(): Promise<void> {
     await ticks(5);
     this.db.insert();
@@ -127,6 +137,12 @@ describe('ROK-2369 deactivate probe', () => {
 
   it('reports a crash after the gate was consulted', async () => {
     expect(await problems(true, false, 'crashAfterGate')).toEqual([
+      `k: threw ${crash}`,
+    ]);
+  });
+
+  it('reports a fire-and-forget helper that rejects after the gate (Codex P2)', async () => {
+    expect(await problems(true, false, 'gateThenCrashLater')).toEqual([
       `k: threw ${crash}`,
     ]);
   });

@@ -118,10 +118,12 @@ function methodNames(instance: object): string[] {
 
 /**
  * Pass-through spy on every method of `instance` that records each promise
- * it returns; `drain()` awaits them until none are left (no timers).
+ * it returns; `drain()` awaits them until none are left (no timers) and
+ * returns each distinct rejection reason, so a crashing un-awaited helper
+ * is not swallowed.
  */
 export function trackAsync(instance: object): {
-  drain(): Promise<void>;
+  drain(): Promise<unknown[]>;
   restore(): void;
 } {
   const pending: PromiseLike<unknown>[] = [];
@@ -143,9 +145,13 @@ export function trackAsync(instance: object): {
   }
   return {
     drain: async () => {
+      const reasons = new Set<unknown>();
       while (pending.length > 0) {
-        await Promise.allSettled(pending.splice(0));
+        for (const r of await Promise.allSettled(pending.splice(0))) {
+          if (r.status === 'rejected') reasons.add(r.reason);
+        }
       }
+      return [...reasons];
     },
     restore: () => restores.forEach((r) => r()),
   };
@@ -190,21 +196,27 @@ export interface ProbeResult {
   lastError: unknown;
 }
 
-/** One fire of `t` with `payload`: watch, gate spies, drain, restore. */
+/**
+ * One fire of `t` with `payload`: watch, gate spies, drain, restore.
+ * `errors` is the direct throw plus every rejection of tracked work (the
+ * top-level promise is tracked too, so it is de-duplicated).
+ */
 async function probeOnce(
   t: { instance: object; method: string },
   deps: { db: WritableDb; gate: ActiveGate },
   payload: unknown,
-): Promise<{ effects: string[]; gateCalls: number; error: unknown }> {
+): Promise<{ effects: string[]; gateCalls: number; errors: unknown[] }> {
   const track = trackAsync(t.instance);
   const watch = watchSideEffects(deps.db);
   const isActive = jest.spyOn(deps.gate, 'isActive');
   const slugs = jest.spyOn(deps.gate, 'getActiveSlugsSync');
   try {
     const error = await invoke(t.instance, t.method, payload);
-    await track.drain();
+    const rejected = await track.drain();
+    const errors = new Set<unknown>(error === undefined ? [] : [error]);
+    rejected.forEach((e) => errors.add(e));
     const gateCalls = isActive.mock.calls.length + slugs.mock.calls.length;
-    return { effects: watch.effects(), gateCalls, error };
+    return { effects: watch.effects(), gateCalls, errors: [...errors] };
   } finally {
     isActive.mockRestore();
     slugs.mockRestore();
@@ -216,9 +228,10 @@ async function probeOnce(
 /**
  * Fire `t` with each payload in turn until one reaches the gate (a handler
  * may filter on `payload.slug` before its active check). Effects of every
- * attempt count. A throw counts only from an attempt that consulted the gate:
- * a crash before it is a probe-shape miss (a later payload may still reach
- * the gate), a crash after it is a real leak.
+ * attempt count. A throw — direct, or a rejection of tracked fire-and-forget
+ * work — counts only from an attempt that consulted the gate: a crash before
+ * it is a probe-shape miss (a later payload may still reach the gate), a
+ * crash after it is a real leak.
  */
 export async function probeTarget(
   t: { key: string; instance: object; method: string },
@@ -236,10 +249,9 @@ export async function probeTarget(
     const r = await probeOnce(t, deps, payload);
     out.effects.push(...r.effects);
     out.gateCalls += r.gateCalls;
-    if (r.error !== undefined) {
-      out.lastError = r.error;
-      if (r.gateCalls > 0) out.errors.push(r.error);
-    }
+    const last = r.errors.at(-1);
+    if (last !== undefined) out.lastError = last;
+    if (r.gateCalls > 0) out.errors.push(...r.errors);
     if (out.gateCalls > 0) break;
   }
   return out;
