@@ -19,6 +19,9 @@
  *      event carries `slotConfig` mmo 1/1/3 and the dungeon in
  *      `contentInstances` (spec §3.4 / §6.2).
  * W7 — a non-WoW `/lfg/<slug>` renders no WoW grouping UI (regression).
+ * W8 — a lock-in on dungeon A withdraws the locker's `now` hand in dungeon B
+ *      (§3.2): `/lfg/<forever>` shows the cleared-hand notice once, the view
+ *      acks it, and a reload shows nothing.
  *
  * Isolation: since b9b7422e6 both the spawn/attach guard and the group
  * page's `playingNow` read are per GROUP (`readPlayingNow` takes the group
@@ -391,6 +394,53 @@ test('W7: a non-WoW LFG page renders no WoW grouping UI', async ({ page }) => {
     await expect(page.getByTestId('lfg-hero').or(page.getByTestId('lfg-playing-state')).first()).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('wow-lfg-groups'), 'no WoW group list on a non-WoW game').toHaveCount(0);
     await expect(page.getByTestId('lfg-hub-picker'), 'no WoW hub picker on a non-WoW game').toHaveCount(0);
+});
+
+interface NoticeList { notices?: { fromGroupKey: string; toGroupKey: string }[] }
+
+async function noticesFor(w: World): Promise<NoticeList['notices']> {
+    const list = (await apiGet(w.tokens.gm, `/lfg/${w.seeded.gameId}/groups`)) as NoticeList | null;
+    return list?.notices ?? [];
+}
+
+test('W8: a lock-in withdraws the other now hand and the page says so once', async ({ page, browser }, testInfo) => {
+    test.setTimeout(180_000);
+    await withWowLfg(browser, testInfo, async (w) => {
+        const { gameId, users } = w.seeded;
+        const a = must(w.instances.dungeons[0], 'dungeon A');
+        const b = must(w.instances.dungeons[1], 'dungeon B');
+        for (const g of [a, b]) {
+            await apiPost(w.tokens.gm, '/lfg', { gameId, urgency: 'now', groupKey: g.groupKey, handDetail: { roles: ['tank'], characterId: users.gm.characterId } });
+        }
+        const start = new Date(Date.now() + 60 * 60_000);
+        const event = (await apiPost(w.tokens.gm, '/events', {
+            title: `ROK-2352 W8 ${w.seeded.name}`, gameId, lfgGameId: gameId, lfgGroupKey: a.groupKey,
+            startTime: start.toISOString(), endTime: new Date(start.getTime() + 60 * 60_000).toISOString(),
+        })) as { id?: number } | null;
+        const eventId = event?.id ?? null;
+        try {
+            expect(eventId, 'the lock-in created an event').not.toBeNull();
+            await pollForCondition(
+                async () => ((await noticesFor(w))?.some((n) => n.fromGroupKey === b.groupKey && n.toGroupKey === a.groupKey) ? true : null),
+                { timeoutMs: 15_000, description: `a cleared-hand notice for ${b.groupKey} → ${a.groupKey}` },
+            );
+            await openAsGm(page, w, '');
+            const notice = page.getByTestId('lfg-cleared-hand-notice');
+            await expect(notice).toContainText(
+                `Your hand for ${must(b.groupLabel, 'dungeon B label')} was withdrawn because you're in ${must(a.groupLabel, 'dungeon A label')} now.`,
+                { timeout: 20_000 },
+            );
+            await pollForCondition(
+                async () => ((await noticesFor(w))?.length === 0 ? true : null),
+                { timeoutMs: 15_000, description: 'the shown notice was acked' },
+            );
+            await page.reload();
+            await expect(page.getByTestId('wow-lfg-raids'), 'the reloaded page has rendered its groups').toBeVisible({ timeout: 20_000 });
+            await expect(notice, 'an acked notice does not come back').toHaveCount(0);
+        } finally {
+            if (eventId !== null) await apiDelete(w.admin, `/events/${eventId}`).catch(() => undefined);
+        }
+    });
 });
 
 test('W3: Start now on a dungeon group is group-scoped and titles the event with the instance', async ({ page, browser }, testInfo) => {
