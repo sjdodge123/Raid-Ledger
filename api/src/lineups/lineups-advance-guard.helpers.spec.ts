@@ -16,19 +16,22 @@ function render(guard: Parameters<typeof advanceGuardCondition>[0]) {
 }
 
 describe('advanceGuardFrom', () => {
-  it('captures the judged target, disarm stamp and grace claim of a building row', () => {
+  it('captures the judged target, disarm stamp, grace claim and arm of a building row', () => {
     const claim = new Date('2026-11-27T10:00:00Z');
+    const armed = new Date('2026-11-27T09:00:00Z');
     expect(
       advanceGuardFrom({
         status: 'building',
         nominationTargetPct: 50,
         nominationTargetDisarmedAt: null,
         pendingAdvanceAt: claim,
+        nominationTargetBelowSeenAt: armed,
       }),
     ).toEqual({
       nominationTargetPct: 50,
       nominationTargetDisarmedAt: null,
       pendingAdvanceAt: claim,
+      nominationTargetBelowSeenAt: armed,
     });
   });
 
@@ -39,6 +42,7 @@ describe('advanceGuardFrom', () => {
         nominationTargetPct: 50,
         nominationTargetDisarmedAt: null,
         pendingAdvanceAt: new Date(),
+        nominationTargetBelowSeenAt: null,
       }),
     ).toBeUndefined();
   });
@@ -51,6 +55,7 @@ describe('advanceGuardCondition', () => {
       nominationTargetPct: 50,
       nominationTargetDisarmedAt: null,
       pendingAdvanceAt: claim,
+      nominationTargetBelowSeenAt: null,
     });
     // An edit rewrites the pct and nulls the claim, so the stale advance
     // matches no row.
@@ -65,8 +70,29 @@ describe('advanceGuardCondition', () => {
       nominationTargetPct: null,
       nominationTargetDisarmedAt: null,
       pendingAdvanceAt: null,
+      nominationTargetBelowSeenAt: null,
     });
     expect(where.sql).toMatch(/"nomination_target_pct" is null/);
     expect(where.sql).toMatch(/"pending_advance_at" is null/);
+    // Unarmed snapshot: its own predicate may arm while judging, so the arm
+    // stamp is left unconstrained.
+    expect(where.sql).not.toMatch(/"nomination_target_below_seen_at"/);
+  });
+
+  it('a target-driven advance requires the arm stamp it judged (Codex round 4 ABA)', () => {
+    const armed = new Date('2026-11-27T09:00:00Z');
+    const where = render({
+      nominationTargetPct: 50,
+      nominationTargetDisarmedAt: null,
+      pendingAdvanceAt: null,
+      nominationTargetBelowSeenAt: armed,
+    });
+    expect(where.sql).toMatch(/"nomination_target_below_seen_at" = \$\d/);
+    const pinsArm = where.params.some((v) =>
+      v instanceof Date
+        ? v.getTime() === armed.getTime()
+        : String(v).startsWith('2026-11-27T09:00:00'),
+    );
+    expect(pinsArm).toBe(true);
   });
 });

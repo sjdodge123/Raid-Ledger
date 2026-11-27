@@ -11,6 +11,11 @@
  * row and fails as a concurrent change (both callers swallow that). Postgres
  * re-checks the WHERE after waiting on the edit's row lock, so this holds
  * even when the two overlap. No new column: the edit already rewrites these.
+ *
+ * The rising-edge arm stamp is pinned too (Codex round 4): an edit sequence
+ * that ends on the judged pct (50 -> 75 -> 50) restores pct, disarm and claim
+ * but always rewrites or clears `nomination_target_below_seen_at`, so the arm
+ * the evaluation saw is the one value an ABA edit cannot put back.
  */
 import { and, eq, isNull, type SQL } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
@@ -22,6 +27,8 @@ export interface AdvanceGuard {
   nominationTargetPct: number | null;
   nominationTargetDisarmedAt: Date | null;
   pendingAdvanceAt: Date | null;
+  /** Rising-edge arm stamp the evaluation saw (null = unarmed). */
+  nominationTargetBelowSeenAt: Date | null;
 }
 
 /**
@@ -36,6 +43,7 @@ export function advanceGuardFrom(
     | 'nominationTargetPct'
     | 'nominationTargetDisarmedAt'
     | 'pendingAdvanceAt'
+    | 'nominationTargetBelowSeenAt'
   >,
 ): AdvanceGuard | undefined {
   if (lineup.status !== 'building') return undefined;
@@ -43,10 +51,19 @@ export function advanceGuardFrom(
     nominationTargetPct: lineup.nominationTargetPct ?? null,
     nominationTargetDisarmedAt: lineup.nominationTargetDisarmedAt ?? null,
     pendingAdvanceAt: lineup.pendingAdvanceAt ?? null,
+    nominationTargetBelowSeenAt: lineup.nominationTargetBelowSeenAt ?? null,
   };
 }
 
-/** WHERE fragment: the row still holds exactly the judged target state. */
+/**
+ * WHERE fragment: the row still holds exactly the judged target state.
+ *
+ * The arm stamp is matched only when the evaluation saw one. A target-driven
+ * ready needs an arm, so that is the case an ABA edit can fake. An unarmed
+ * snapshot is ready for another reason (deadline-free quorum), and its own
+ * predicate may stamp the arm while judging (`armNominationTarget`), which
+ * must not void the advance it is about to make.
+ */
 export function advanceGuardCondition(guard: AdvanceGuard): SQL | undefined {
   const c = schema.communityLineups;
   return and(
@@ -59,5 +76,8 @@ export function advanceGuardCondition(guard: AdvanceGuard): SQL | undefined {
     guard.pendingAdvanceAt === null
       ? isNull(c.pendingAdvanceAt)
       : eq(c.pendingAdvanceAt, guard.pendingAdvanceAt),
+    guard.nominationTargetBelowSeenAt === null
+      ? undefined
+      : eq(c.nominationTargetBelowSeenAt, guard.nominationTargetBelowSeenAt),
   );
 }

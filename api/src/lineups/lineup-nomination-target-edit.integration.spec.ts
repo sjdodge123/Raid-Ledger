@@ -25,6 +25,8 @@ import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { nonEmpty } from '../common/testing/narrow';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 import { LINEUP_GRACE_ADVANCE } from './queue/lineup-phase.constants';
+import { runStatusTransition } from './lineups-transition.helpers';
+import { advanceGuardFrom } from './lineups-advance-guard.helpers';
 
 type Game = typeof schema.games.$inferSelect;
 type Lineup = typeof schema.communityLineups.$inferSelect;
@@ -267,6 +269,52 @@ function describeNominationTargetEdit() {
       .get(LineupPhaseProcessor)
       .process({ name: LINEUP_GRACE_ADVANCE, data: { lineupId } } as never);
     expect((await readRow(lineupId)).status).toBe('voting');
+  });
+
+  it('a stale zero-grace evaluation cannot advance after a 50 -> 75 -> 50 edit (Codex round 4 ABA)', async () => {
+    const a = await createMember('aba-a');
+    const b = await createMember('aba-b');
+    const lineupId = await createLineup(50);
+    // 9 of 20 = 45%: below target, so the rising edge is armed.
+    const games = await createGames(10);
+    await nominateAll(lineupId, games.slice(0, 9), a, b);
+    // The 10th entry lands without the nominate hook, then the evaluation
+    // reads the row: 10/20 = 50% while armed, i.e. a ready crossing.
+    const tenth = nonEmpty(games.slice(9), 'tenth game')[0];
+    await testApp.db.insert(schema.communityLineupEntries).values({
+      lineupId,
+      gameId: tenth.id,
+      nominatedBy: b.userId,
+    });
+    const judged = await readRow(lineupId);
+    expect(judged.status).toBe('building');
+    expect(judged.nominationTargetBelowSeenAt).not.toBeNull();
+
+    // Before that evaluation writes, an operator raises the target and puts
+    // it back. 50% is not below 50%, so the edit leaves the lineup unarmed.
+    expect(
+      (await patchTarget(lineupId, { nominationTargetPct: 75 })).status,
+    ).toBe(200);
+    const back = await patchTarget(lineupId, { nominationTargetPct: 50 });
+    expect(back.status).toBe(200);
+    expect(back.body.nominationTargetArmed).toBe(false);
+
+    // The stale evaluation now writes its transition, pinned to `judged`.
+    const processor = testApp.app.get(LineupPhaseProcessor);
+    const outcome = await runStatusTransition(
+      processor['buildTransitionDeps'](),
+      lineupId,
+      { status: 'voting' },
+      null,
+      advanceGuardFrom(judged),
+    ).then(
+      () => 'advanced',
+      (err: unknown) => (err instanceof Error ? err.name : String(err)),
+    );
+
+    // An evaluation judged under the old arm must not advance an unarmed lineup.
+    expect(outcome).toBe('ConflictException');
+    expect((await readRow(lineupId)).status).toBe('building');
   });
 
   it('still honours the 24h revert pause after a re-arm', async () => {
