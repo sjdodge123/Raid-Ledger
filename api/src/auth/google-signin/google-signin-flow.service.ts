@@ -209,10 +209,11 @@ export class GoogleSigninFlowService {
     ) {
       return `${base}/auth/first-time?error=already_linked`;
     }
-    if (!(await this.pending.consume(req, res))) {
+    const spent = await this.pending.consume(req, res);
+    if (spent?.provider !== 'discord' || spent.subject !== pending.subject) {
       return `${base}/auth/first-time?error=expired`;
     }
-    return this.linkPendingDiscord(req, res, base, user, pending, claims.sub);
+    return this.linkPendingDiscord(req, res, base, user, spent, claims.sub);
   }
 
   private async linkPendingDiscord(

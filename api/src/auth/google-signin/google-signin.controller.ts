@@ -11,7 +11,6 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import type { Request, Response } from 'express';
 import { RateLimit } from '../../throttler/rate-limit.decorator';
 import { browserBoundCookieAttrs } from '../browser-bound-cookie.helpers';
@@ -32,7 +31,6 @@ export class GoogleSigninController {
     private readonly svc: GoogleSigninService,
     private readonly flow: GoogleSigninFlowService,
     private readonly pending: PendingIdentityStore,
-    private readonly jwt: JwtService,
   ) {}
 
   /**
