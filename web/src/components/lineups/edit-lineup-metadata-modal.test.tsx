@@ -332,12 +332,23 @@ describe('EditLineupMetadataModal — nomination target (ROK-1710)', () => {
         expect(Object.keys(sentBody(m))).toEqual(['title', 'description']);
     });
 
+});
+
+describe('EditLineupMetadataModal — disarmed nomination target (ROK-1710)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
     it('shows the disarmed hint and omits the key on an untouched disarmed lineup', async () => {
         const m = mockMutation();
         renderTargetModal({ initialPct: 75, disarmed: true });
-        expect(screen.getByTestId('edit-lineup-target-disarmed')).toHaveTextContent(
+        const hint = screen.getByTestId('edit-lineup-target-disarmed');
+        expect(hint).toHaveTextContent(
             'Early advance is off — this lineup was reverted. Saving a target turns it back on.',
         );
+        expect(hint.id, 'the hint needs an id to be referenced').not.toBe('');
+        expect(
+            targetToggle().getAttribute('aria-describedby')?.split(' '),
+            'the toggle must be described by the disarmed hint',
+        ).toContain(hint.id);
         fireEvent.change(titleInput(), { target: { value: 'Saturday Lineup' } });
         fireEvent.click(saveButton());
         await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
@@ -359,6 +370,11 @@ describe('EditLineupMetadataModal — nomination target (ROK-1710)', () => {
         renderTargetModal({ initialPct: 50, disarmed: false });
         expect(screen.queryByTestId('edit-lineup-target-disarmed')).not.toBeInTheDocument();
     });
+
+});
+
+describe('EditLineupMetadataModal — nomination target guards (ROK-1710)', () => {
+    beforeEach(() => vi.clearAllMocks());
 
     it('a target-only change makes Cancel ask before discarding', async () => {
         mockMutation();

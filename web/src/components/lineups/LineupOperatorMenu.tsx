@@ -39,7 +39,6 @@ interface Props {
   onTiebreakerIntercept?: (() => void) | undefined;
 }
 
-/** Edit / Abort / phase-transition modal host, driven by the menu's state. */
 /** ROK-1710: the target is editable only while nominating (the API 409s otherwise). */
 function editableTarget(lineup: LineupDetailResponseDto): EditableTarget | undefined {
   if (lineup.status !== 'building') return undefined;
@@ -49,6 +48,7 @@ function editableTarget(lineup: LineupDetailResponseDto): EditableTarget | undef
   };
 }
 
+/** Edit / Abort / phase-transition modal host, driven by the menu's state. */
 function MenuModalsHost({
   lineup,
   modals,
