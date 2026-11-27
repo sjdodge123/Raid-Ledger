@@ -140,7 +140,7 @@ describe('ROK-2362 — presence arrivals while Pelican is off', () => {
     expect(q.refreshMemberCount).not.toHaveBeenCalled();
   });
 
-  it('after reactivation the first live join is still an arrival', async () => {
+  it('a player online across the off period is recorded once, as an arrival', async () => {
     let active = false;
     const roster = { current: [player('12', 'Astrid')] };
     const svc = make(roster, () => active);
@@ -151,6 +151,26 @@ describe('ROK-2362 — presence arrivals while Pelican is off', () => {
     expect(q.upsertSighting).toHaveBeenLastCalledWith(
       expect.anything(),
       expect.objectContaining({ userId: 12 }),
+      true,
+    );
+  });
+
+  it('a roster cached before deactivation never hides a rejoin after reactivation', async () => {
+    let active = true;
+    const roster = { current: [player('11', 'Bjorn')] };
+    const svc = make(roster, () => active);
+    await svc.onPresenceChanged(LIVE);
+    active = false;
+    roster.current = [];
+    await svc.onPresenceChanged(LIVE);
+    roster.current = [player('11', 'Bjorn')];
+    await svc.onPresenceChanged(LIVE);
+    active = true;
+    await svc.onPresenceChanged(LIVE);
+    expect(q.upsertSighting).toHaveBeenCalledTimes(2);
+    expect(q.upsertSighting).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ userId: 11 }),
       true,
     );
   });

@@ -73,11 +73,16 @@ export class ServerHubMembershipService {
   /**
    * The one call site on the presence pipeline: record each arrival. Inert
    * while Pelican is off (ROK-2362) — not only because the supervisor stops
-   * its sessions on deactivate.
+   * its sessions on deactivate. The cached rosters are dropped while off, so
+   * the first event after reactivation is judged like the first after boot,
+   * never against a pre-deactivation snapshot.
    */
   @OnEvent(SERVER_PRESENCE_EVENTS.CHANGED)
   async onPresenceChanged(src: ServerPresenceChangedPayload): Promise<void> {
-    if (!this.registry.isActive(PELICAN_PLUGIN_ID)) return;
+    if (!this.registry.isActive(PELICAN_PLUGIN_ID)) {
+      this.rosters.clear();
+      return;
+    }
     try {
       await this.recordArrivals(
         src.pelicanServerId,
