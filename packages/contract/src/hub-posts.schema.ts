@@ -19,12 +19,26 @@ export const HUB_POST_BODY_MAX = 4000;
 export const HUB_POST_PAGE_DEFAULT = 10;
 export const HUB_POST_PAGE_MAX = 50;
 
+/**
+ * Why an author's account is blocked (ROK-2328): `bannedAt` wins over
+ * `deactivatedAt`, as `accountBlockReason` decides on the server.
+ */
+export const HubPostPersonBlockedSchema = z.enum(['banned', 'deactivated']);
+export type HubPostPersonBlocked = z.infer<typeof HubPostPersonBlockedSchema>;
+
 /** A person on a post; null fields once the user is wiped (SET NULL). */
 export const HubPostPersonSchema = z
   .object({
     userId: id.nullable(),
     displayName: z.string().nullable(),
     avatarUrl: z.string().nullable(),
+    /**
+     * ROK-2328 (additive): set when the author is banned or deactivated. The
+     * post stays linked to the account, but the web shows it as
+     * "Deactivated member" with no avatar and no profile credit. Absent or
+     * null = an active account.
+     */
+    blocked: HubPostPersonBlockedSchema.nullable().optional(),
   })
   .strict();
 export type HubPostPerson = z.infer<typeof HubPostPersonSchema>;

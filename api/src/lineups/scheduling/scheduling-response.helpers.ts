@@ -175,6 +175,7 @@ export type PollResponseBase = Omit<
   SchedulePollPageResponseDto,
   | 'pollStatus'
   | 'lockedInTime'
+  | 'linkedEventCancelledAt'
   | 'cancelReason'
   | 'canVote'
   | 'canSuggest'

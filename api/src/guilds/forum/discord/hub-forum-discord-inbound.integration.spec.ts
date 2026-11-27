@@ -231,6 +231,50 @@ describe('ROK-2208 inbound Discord → RL', () => {
     );
   });
 
+  it('ROK-2328: banned and deactivated Discord authors stay linked and read as blocked', async () => {
+    const { g, channelId } = await boundHub();
+    const blockedUser = async (
+      tag: string,
+      over: Partial<typeof schema.users.$inferInsert>,
+    ) => {
+      const discordId = `d${freshId()}`;
+      const [u] = nonEmpty(
+        await ctx.testApp.db
+          .insert(schema.users)
+          .values({ discordId, username: `${tag}-${seq}`, ...over })
+          .returning(),
+        tag,
+      );
+      return { id: u.id, discordId };
+    };
+    const banned = await blockedUser('banned', { bannedAt: new Date() });
+    const gone = await blockedUser('gone', { deactivatedAt: new Date() });
+    const thread = post(channelId);
+    const starter = msg(thread, { id: thread.id, authorId: banned.discordId });
+    expect(await ingest.onCreate(starter, thread, noBot)).toBe('imported');
+    const reply = msg(thread, { authorId: gone.discordId });
+    expect(await ingest.onCreate(reply, thread, noBot)).toBe('imported');
+    const rlThread = await threadRow(thread.id);
+    expect(rlThread.authorId).toBe(banned.id);
+    expect((await replyRow(reply.id))?.authorId).toBe(gone.id);
+    const res = await ctx.testApp.request
+      .get(`/guilds/${g}/forum/${rlThread.id}`)
+      .set('Authorization', `Bearer ${ctx.tokens.officerA}`);
+    expect(res.status).toBe(200);
+    expect(res.body.author).toMatchObject({
+      userId: banned.id,
+      blocked: 'banned',
+    });
+    expect(res.body.replies).toContainEqual(
+      expect.objectContaining({
+        author: expect.objectContaining({
+          userId: gone.id,
+          blocked: 'deactivated',
+        }),
+      }),
+    );
+  });
+
   it('AC10/R3: a Discord edit of an old Discord-origin reply lands; a delete soft-deletes as author', async () => {
     const { channelId } = await boundHub();
     const { thread } = await importPost(channelId);
