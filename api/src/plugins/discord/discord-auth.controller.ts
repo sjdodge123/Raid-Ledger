@@ -42,7 +42,7 @@ import { verifyDiscordLinkState } from './discord-link-state.helpers';
 import { signBrowserBoundLoginState } from './discord-login-state.helpers';
 import { mintBrowserBoundAuthCode } from '../../auth/auth-code-cookie.helpers';
 import { verifiedLoginStateOf } from './discord-verified-login-state';
-import { isInviteCodeFormat } from './invite-code-format';
+import { isInviteCodeFormat } from '../../auth/invite-code-format';
 import { assertDiscordNotOnAnotherUser } from './discord-link-conflict.helpers';
 import { DiscordPendingIdentityService } from '../../auth/google-signin/discord-pending-identity.service';
 

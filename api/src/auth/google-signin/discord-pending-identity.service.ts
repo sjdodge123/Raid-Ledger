@@ -16,7 +16,7 @@ import type { Request, Response } from 'express';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { UsersService } from '../../users/users.service';
-import { isInviteCodeFormat } from '../../plugins/discord/invite-code-format';
+import { isInviteCodeFormat } from '../invite-code-format';
 import {
   refusalRedirect,
   signinRefusalFor,

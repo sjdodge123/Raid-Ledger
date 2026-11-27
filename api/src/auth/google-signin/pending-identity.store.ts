@@ -15,7 +15,7 @@ import type Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { browserBoundCookieAttrs } from '../browser-bound-cookie.helpers';
 import { readCookie } from '../link-nonce-cookie.helpers';
-import { isInviteCodeFormat } from '../../plugins/discord/invite-code-format';
+import { isInviteCodeFormat } from '../invite-code-format';
 
 export const PENDING_IDENTITY_COOKIE = 'rl_pending_identity';
 export const PENDING_IDENTITY_TTL_SECONDS = 600;
