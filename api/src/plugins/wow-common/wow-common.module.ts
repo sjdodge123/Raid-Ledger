@@ -57,8 +57,6 @@ import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { PLUGIN_EVENTS } from '../plugin-host/plugin-manifest.interface';
 import { WOW_COMMON_MANIFEST } from './manifest';
 import * as addonImport from './addon-import/addon-import.registration';
-import { wowUserLifecycleHooks } from './addon-import/wow-user-lifecycle.hooks';
-import { registerUserLifecycleHooks } from '../../users/lifecycle/user-lifecycle.registry';
 import * as foreverAutoLink from './forever-auto-link/forever-auto-link.registration';
 import * as rosterArmory from './forever-armory-snapshot/roster-armory.registration';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
@@ -218,8 +216,6 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    // ROK-2364: unconditional — withdrawn-data cleanup runs while inactive.
-    registerUserLifecycleHooks(WOW_COMMON_MANIFEST.id, wowUserLifecycleHooks);
     // ROK-1964: outside bestEffortInit — a bad registration is a boot error,
     // and a failed seed must not leave the contract unhandled. The registry
     // resolves it only while `blizzard` is active.

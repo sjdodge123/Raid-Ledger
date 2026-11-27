@@ -76,7 +76,12 @@ export async function runUserReactivated(
   let written = 0;
   for (const hooks of userLifecycleHooks()) {
     if (!hooks.onUserReactivated) continue;
-    written += await hooks.onUserReactivated(tx, userId, deactivatedAt, actorId);
+    written += await hooks.onUserReactivated(
+      tx,
+      userId,
+      deactivatedAt,
+      actorId,
+    );
   }
   return written;
 }

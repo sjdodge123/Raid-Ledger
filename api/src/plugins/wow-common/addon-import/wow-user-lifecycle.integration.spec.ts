@@ -172,11 +172,8 @@ beforeAll(async () => {
   gameId = await ensureGame();
 });
 
-// Leave the plugin as the other specs expect it. No truncate here: the shared
-// integration setup closes the pool, and the next spec truncates in beforeAll.
-afterAll(async () => {
-  await registry.activate(PLUGIN);
-});
+// No afterAll: the shared integration setup closes the pool in its own
+// afterAll. The parity block runs last and leaves the plugin active.
 
 describe('ROK-2364: lifecycle cleanup runs while the owning plugin is INACTIVE', () => {
   beforeAll(async () => {

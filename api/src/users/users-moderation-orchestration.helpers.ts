@@ -282,8 +282,7 @@ async function banWithGuidAudit(
   return db.transaction(async (tx) => {
     const wasActive = (await lockDeactivatedAt(tx, input.userId)) === null;
     const row = await banUserById(tx, input.userId, input.reason);
-    if (row && wasActive)
-      await runUserDeactivated(tx, row.id, input.actorId);
+    if (row && wasActive) await runUserDeactivated(tx, row.id, input.actorId);
     return row;
   });
 }

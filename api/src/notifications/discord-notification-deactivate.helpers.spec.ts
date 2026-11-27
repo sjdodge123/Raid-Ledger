@@ -47,11 +47,7 @@ jest.mock('../guilds/community/community-membership.queries', () => ({
 describe('ROK-2160: GUID release audit on deactivation', () => {
   it('audits the rows the user GUIDs stop holding, with no actor', async () => {
     await runWith('manual');
-    expect(runUserDeactivated).toHaveBeenCalledWith(
-      expect.anything(),
-      7,
-      null,
-    );
+    expect(runUserDeactivated).toHaveBeenCalledWith(expect.anything(), 7, null);
   });
 });
 

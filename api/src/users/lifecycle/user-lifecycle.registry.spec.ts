@@ -12,7 +12,10 @@ import {
   runUserReactivated,
   userLifecycleHooks,
 } from './user-lifecycle.registry';
-import type { UserLifecycleHooks, UserLifecycleTx } from './user-lifecycle.types';
+import type {
+  UserLifecycleHooks,
+  UserLifecycleTx,
+} from './user-lifecycle.types';
 
 const tx: UserLifecycleTx = createDrizzleMock() as unknown as UserLifecycleTx;
 
@@ -39,32 +42,44 @@ describe('user-lifecycle registry (ROK-2364)', () => {
   it('wipe is two-phase: every prepare runs before the delete, every finisher after', async () => {
     const calls: string[] = [];
     registerUserLifecycleHooks('wipe-a', {
-      prepareWipe: async (_t, userId) => {
+      prepareWipe: (_t, userId) => {
         calls.push(`prepare-a:${userId}`);
-        return async () => {
+        return Promise.resolve(() => {
           calls.push('finish-a');
-        };
+          return Promise.resolve();
+        });
       },
     });
     registerUserLifecycleHooks('wipe-b', {
-      prepareWipe: async () => {
+      prepareWipe: () => {
         calls.push('prepare-b');
-        return async () => {
+        return Promise.resolve(() => {
           calls.push('finish-b');
-        };
+          return Promise.resolve();
+        });
       },
     });
     const finish = await runPrepareWipe(tx, 42);
     calls.push('delete');
     await finish(tx);
     const mine = calls.filter((c) => /-(a|b)(:|$)|delete/.test(c));
-    expect(mine).toEqual(['prepare-a:42', 'prepare-b', 'delete', 'finish-a', 'finish-b']);
+    expect(mine).toEqual([
+      'prepare-a:42',
+      'prepare-b',
+      'delete',
+      'finish-a',
+      'finish-b',
+    ]);
   });
 
-  it('reactivate returns the sum of every hook\'s audit count', async () => {
+  it("reactivate returns the sum of every hook's audit count", async () => {
     const base = await runUserReactivated(tx, 1, '2026-01-01 00:00:00', null);
-    registerUserLifecycleHooks('react-a', { onUserReactivated: jest.fn().mockResolvedValue(2) });
-    registerUserLifecycleHooks('react-b', { onUserReactivated: jest.fn().mockResolvedValue(3) });
+    registerUserLifecycleHooks('react-a', {
+      onUserReactivated: jest.fn().mockResolvedValue(2),
+    });
+    registerUserLifecycleHooks('react-b', {
+      onUserReactivated: jest.fn().mockResolvedValue(3),
+    });
     const total = await runUserReactivated(tx, 1, '2026-01-01 00:00:00', null);
     expect(total - base).toBe(5);
   });
@@ -81,9 +96,8 @@ describe('user-lifecycle registry (ROK-2364)', () => {
     const later = jest.fn().mockResolvedValue(undefined);
     // Throws only for user 999, so the other cases' runs stay unaffected.
     registerUserLifecycleHooks('throw-1', {
-      onUserDeactivated: async (_t, userId) => {
-        if (userId === 999) throw new Error('boom');
-      },
+      onUserDeactivated: (_t, userId) =>
+        userId === 999 ? Promise.reject(new Error('boom')) : Promise.resolve(),
     });
     registerUserLifecycleHooks('throw-2', { onUserDeactivated: later });
     await expect(runUserDeactivated(tx, 999, null)).rejects.toThrow('boom');
