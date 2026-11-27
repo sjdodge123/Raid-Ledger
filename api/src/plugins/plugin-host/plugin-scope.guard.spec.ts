@@ -48,8 +48,9 @@ const CONTROLLER_ALLOWLIST: ScopeAllowlist = {
   // Withdrawal: delete my data / remove my saves runs while bg3 is off (file header says so).
   'plugins/bg3/me-data/bg3-my-data.controller.ts#Bg3MyDataController':
     'cleanup',
+  // Sign-in is core: Discord login/link stays up with the plugin off (operator ruling 2026-11-27).
   'plugins/discord/discord-auth.controller.ts#DiscordAuthController':
-    'gap: Discord login/link routes have no discord-plugin active check — they run while the plugin is deactivated',
+    'core-auth',
   // DEMO_MODE fixture seeders (each checks DEMO_MODE, JWT + admin).
   'plugins/pelican/pelican-demo-seed.controller.ts#PelicanDemoSeedController':
     DEMO,
@@ -82,8 +83,8 @@ const CONTROLLER_ALLOWLIST: ScopeAllowlist = {
 /** Cache/token drops: state removal only, must run while off so reactivation is not stale. */
 const CACHE_DROP = 'cleanup';
 const HANDLER_ALLOWLIST: ScopeAllowlist = {
-  'plugins/discord/discord-auth.strategy.ts#handleOAuthUpdate':
-    'gap: reloads the Discord OAuth strategy on a settings save with no discord-plugin active check',
+  // Keeps the core sign-in strategy current on a settings save (operator ruling 2026-11-27).
+  'plugins/discord/discord-auth.strategy.ts#handleOAuthUpdate': 'core-auth',
   'plugins/pelican/hub/server-hub-membership.service.ts#onPresenceChanged':
     'gap: records hub arrivals with no pelican active check — relies on presence sessions being stopped on deactivate',
   // reconcile → desired → enabledPanelUrl, pelican-presence.supervisor.ts:225.
