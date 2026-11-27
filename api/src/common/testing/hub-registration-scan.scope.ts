@@ -18,9 +18,13 @@ export type ScopeAllowlist = Readonly<Record<string, string>>;
 /** Plugin folders whose code is always on (Core) or is the plugin host itself. */
 const EXEMPT_FOLDERS: readonly string[] = ['core', 'plugin-host'];
 
-/** The fixed reason set; `gap:` marks a real gap the Lead files as a story. */
+/**
+ * The fixed reason set; `gap:` marks a real gap the Lead files as a story.
+ * `core-auth`: sign-in/link is core and runs with its plugin off (operator
+ * ruling 2026-11-27, ROK-2365 follow-up).
+ */
 export const SCOPE_REASON =
-  /^(cleanup|demo-only|service-checks-active|own-guard: [A-Z]\w+|gap: \S.*)$/;
+  /^(cleanup|core-auth|demo-only|service-checks-active|own-guard: [A-Z]\w+|gap: \S.*)$/;
 
 const ROUTE = /@(Get|Post|Put|Patch|Delete|All|Head|Options|Sse)\(/;
 const GUARD = /\bPluginActiveGuard\b/;
