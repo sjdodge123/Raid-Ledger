@@ -161,7 +161,10 @@ async function armNominationTarget(
  *   unarmed at/above its NEW target was armed by the stale stamp and advanced
  *   on the very next nomination.
  */
-export function belowSeenStampCondition(lineupId: number, judgedTarget: number) {
+export function belowSeenStampCondition(
+  lineupId: number,
+  judgedTarget: number,
+) {
   const t = schema.communityLineups;
   return and(
     eq(t.id, lineupId),

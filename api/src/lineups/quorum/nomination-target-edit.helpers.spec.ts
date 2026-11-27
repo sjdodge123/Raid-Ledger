@@ -75,7 +75,10 @@ function fakeDb(entryCount: number) {
 }
 
 /** Render a recorded WHERE to SQL text + params; a missing one fails loudly. */
-function renderWhere(cond: SQL | undefined): { sql: string; params: unknown[] } {
+function renderWhere(cond: SQL | undefined): {
+  sql: string;
+  params: unknown[];
+} {
   if (!cond) throw new Error('expected a recorded WHERE condition');
   return new PgDialect().sqlToQuery(cond);
 }
