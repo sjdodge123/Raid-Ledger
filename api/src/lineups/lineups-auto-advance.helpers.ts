@@ -31,7 +31,11 @@ import { announceTieDetected } from './tiebreaker/tie-notify.helpers';
 import type { TieResult } from './tiebreaker/tiebreaker-detect.helpers';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { runStatusTransition } from './lineups-transition.helpers';
-import { advanceGuardFrom } from './lineups-advance-guard.helpers';
+import {
+  advanceGuardCondition,
+  advanceGuardFrom,
+  type AdvanceGuard,
+} from './lineups-advance-guard.helpers';
 import {
   checkBuildingQuorum,
   checkVotingQuorum,
@@ -113,13 +117,16 @@ async function clearPendingAdvance(
  * wrote if THIS caller won the write; null if another caller already set
  * `pending_advance_at`. Pattern mirrors `applyStatusUpdate`'s conditional
  * UPDATE (architect correction #2). ROK-1253 rework: return the deadline
- * so the caller can broadcast it via the gateway.
+ * so the caller can broadcast it via the gateway. ROK-1710: `guard` (a
+ * building claim) also pins the target state the quorum was judged under, so
+ * an evaluation that read the row before a target edit claims nothing.
  */
 export async function claimGraceWindow(
   db: Db,
   lineupId: number,
   fromStatus: LineupStatus,
   graceMs: number,
+  guard?: AdvanceGuard,
 ): Promise<Date | null> {
   const deadline = new Date(Date.now() + graceMs);
   const result = await db
@@ -130,6 +137,7 @@ export async function claimGraceWindow(
         eq(schema.communityLineups.id, lineupId),
         eq(schema.communityLineups.status, fromStatus),
         isNull(schema.communityLineups.pendingAdvanceAt),
+        guard ? advanceGuardCondition(guard) : undefined,
       ),
     )
     .returning({ id: schema.communityLineups.id });
@@ -213,11 +221,13 @@ async function scheduleOrAdvance(
     );
     return;
   }
+  // ROK-1710: a stale evaluation cannot claim after a target edit.
   const pendingAdvanceAt = await claimGraceWindow(
     deps.db,
     lineup.id,
     lineup.status,
     graceMs,
+    advanceGuardFrom(lineup),
   );
   if (!pendingAdvanceAt) return;
   await deps.phaseQueue.scheduleGraceAdvance(lineup.id, graceMs);

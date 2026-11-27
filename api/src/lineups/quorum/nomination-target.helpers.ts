@@ -50,6 +50,7 @@
  * than inferred from a `count - 1` delta the way `checkNominationMilestone`
  * does. That trick is only sound when the denominator is fixed.
  */
+import { ConflictException } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -227,6 +228,10 @@ export async function armNominationTargetOnCreate(
   await armIfBelowTarget(db, lineup.id, target);
 }
 
+/** 409 text for a target edit made while an early advance counts down. */
+export const PENDING_ADVANCE_EDIT_MESSAGE =
+  'An early advance is already counting down — wait for it or advance manually';
+
 /**
  * True when an edit to `nextPct` changes nothing: same target AND the lineup
  * is not disarmed. Re-sending the current value on a disarmed lineup is the
@@ -255,28 +260,31 @@ export function isNominationTargetEditNoop(
  * owns the `building`-only status gate and runs this inside the transaction
  * that holds the lineup row lock (`authorizeAndPersistMetadata`).
  *
- * The same UPDATE retires any grace claim (`pending_advance_at`) judged under
- * the old target (Codex P2): a later crossing of the NEW target claims a full
- * window of its own instead of advancing at the old deadline. Returns true
- * when it wrote, so the caller cancels the queued grace job after commit; a
- * job that survives finds no claim and is a no-op.
+ * A target edit is refused while an early advance is pending
+ * (`pending_advance_at` set, ROK-1710 Codex round 3): the countdown was judged
+ * under the current target, so it runs out or the operator advances by hand.
+ * The caller checks that on the locked row; the UPDATE repeats it in its
+ * WHERE, and a write that matches no row fails the whole edit with a 409.
  */
 export async function applyNominationTargetEdit(
   db: DbOrTx,
   lineup: LineupRow,
   nextPct: number | null,
-): Promise<boolean> {
-  if (isNominationTargetEditNoop(lineup, nextPct)) return false;
-  await db
-    .update(schema.communityLineups)
+): Promise<void> {
+  if (isNominationTargetEditNoop(lineup, nextPct)) return;
+  const t = schema.communityLineups;
+  const written = await db
+    .update(t)
     .set({
       nominationTargetPct: nextPct,
       nominationTargetDisarmedAt: null,
       nominationTargetBelowSeenAt: null,
-      pendingAdvanceAt: null,
       updatedAt: new Date(),
     })
-    .where(eq(schema.communityLineups.id, lineup.id));
+    .where(and(eq(t.id, lineup.id), isNull(t.pendingAdvanceAt)))
+    .returning({ id: t.id });
+  if (written.length === 0) {
+    throw new ConflictException(PENDING_ADVANCE_EDIT_MESSAGE);
+  }
   if (nextPct !== null) await armIfBelowTarget(db, lineup.id, nextPct);
-  return true;
 }
