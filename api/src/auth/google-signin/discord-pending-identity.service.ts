@@ -143,6 +143,11 @@ export class DiscordPendingIdentityService {
   ): Promise<'taken' | 'already_linked' | null> {
     const owner = await this.svc.findUserBySub(sub);
     if (owner) return owner.id === userId ? null : 'taken';
+    return (await this.hasGoogleIdentity(userId)) ? 'already_linked' : null;
+  }
+
+  /** Whether the user has Google sign-in (AC7 copy on the Discord link). */
+  async hasGoogleIdentity(userId: number): Promise<boolean> {
     const [own] = await this.db
       .select({ id: identities.id })
       .from(identities)
@@ -150,7 +155,7 @@ export class DiscordPendingIdentityService {
         and(eq(identities.userId, userId), eq(identities.provider, 'google')),
       )
       .limit(1);
-    return own ? 'already_linked' : null;
+    return own !== undefined;
   }
 
   /** Insert the identity; false when a concurrent link took the `sub`. */

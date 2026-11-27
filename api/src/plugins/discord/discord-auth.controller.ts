@@ -43,6 +43,7 @@ import { signBrowserBoundLoginState } from './discord-login-state.helpers';
 import { mintBrowserBoundAuthCode } from '../../auth/auth-code-cookie.helpers';
 import { verifiedLoginStateOf } from './discord-verified-login-state';
 import { isInviteCodeFormat } from './invite-code-format';
+import { assertDiscordNotOnAnotherUser } from './discord-link-conflict.helpers';
 import { DiscordPendingIdentityService } from '../../auth/google-signin/discord-pending-identity.service';
 
 interface RequestWithUser extends Request {
@@ -318,19 +319,10 @@ export class DiscordAuthController {
       tokens.access_token,
       discordFetch,
     );
-    await this.validateNoExistingLink(discordProfile.id, userId);
+    const ids = { discordId: discordProfile.id, userId };
+    const google = this.pendingIdentity;
+    await assertDiscordNotOnAnotherUser(this.usersService, google, ids);
     return discordProfile;
-  }
-
-  /** Validate that the Discord account isn't already linked to another user. */
-  private async validateNoExistingLink(
-    discordId: string,
-    userId: number,
-  ): Promise<void> {
-    const existingUser =
-      await this.usersService.findByDiscordIdIncludingUnlinked(discordId);
-    if (existingUser && existingUser.id !== userId)
-      throw new Error('This Discord account is already linked to another user');
   }
 
   /** Send welcome DM safely (fire-and-forget). */
