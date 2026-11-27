@@ -7,10 +7,7 @@ import {
   buildHubWelcomeRow,
   hubWelcomeUrls,
 } from './hub-welcome-embed.helpers';
-import {
-  HUB_WELCOME_COPY,
-  HUB_WELCOME_VALHEIM_COPY,
-} from './hub-welcome.constants';
+import { HUB_WELCOME_COPY } from './hub-welcome.constants';
 
 const base = { hubId: 42, hubName: 'gamersaloon' };
 
@@ -81,11 +78,9 @@ describe('buildHubWelcomeRow', () => {
 describe('welcome description escapes the hub name (ROK-1950 review)', () => {
   const evil = '[Login](https://evil.example) @everyone';
 
-  it.each([
-    ['generic', HUB_WELCOME_COPY.description],
-    ['valheim', HUB_WELCOME_VALHEIM_COPY.description],
-  ])('%s copy renders a link and mention in the name literally', (_k, fn) => {
-    const text = fn(evil);
+  // The Valheim copy's case lives in valheim-hub-welcome.copy.spec.ts (ROK-2362).
+  it('generic copy renders a link and mention in the name literally', () => {
+    const text = HUB_WELCOME_COPY.description(evil);
     expect(text).toContain(
       '**\\[Login](https://evil.example) @\u200beveryone**',
     );

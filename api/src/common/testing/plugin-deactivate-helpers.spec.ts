@@ -181,11 +181,16 @@ describe('ROK-2369 deactivate inventory', () => {
     const index = new Map<string, object>([
       ['ValheimSteamLinkListener', { handleLinked: () => undefined }],
       ['ValheimClaimSuggestListener', { onBotConnected: () => undefined }],
+      ['ServerHubMembershipService', { onPresenceChanged: () => undefined }],
     ]);
     const inv = checkedHandlerTargets(raw, index);
     const dir = 'plugins/valheim/armory/identity';
     expect(inv.unresolved).toEqual([]);
     expect(inv.targets.map((t) => [t.key, t.gate])).toEqual([
+      [
+        'plugins/pelican/hub/server-hub-membership.service.ts#onPresenceChanged',
+        'direct',
+      ],
       [`${dir}/valheim-claim-suggest.listener.ts#onBotConnected`, 'callback'],
       [`${dir}/valheim-steam-link.listener.ts#handleLinked`, 'direct'],
     ]);

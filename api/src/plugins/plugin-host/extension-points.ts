@@ -425,6 +425,12 @@ export interface HubClaimProviderStatus {
   dismissScope?: string;
 }
 
+/** ROK-2362 #10: a claim provider's hub welcome copy (see `HubClaimProvider.welcome`). */
+export interface HubWelcomeCopy {
+  description(hubName: string): string;
+  claimHint: string;
+}
+
 /**
  * ROK-2153: one "claim your character" provider per plugin, keyed by plugin
  * slug under `EXTENSION_POINTS.HUB_CLAIM_PROVIDER`. Core serves
@@ -433,6 +439,12 @@ export interface HubClaimProviderStatus {
  */
 export interface HubClaimProvider {
   readonly pluginSlug: string;
+  /**
+   * ROK-2362 #10: the hub welcome embed's copy for the hubs this provider
+   * serves. Omit it and those hubs get no welcome; a provider of an inactive
+   * plugin is hidden, so its hubs get none either.
+   */
+  readonly welcome?: HubWelcomeCopy;
   supports(hub: HubClaimHubRef): boolean;
   status(ctx: HubClaimContext): Promise<HubClaimProviderStatus>;
   claim(

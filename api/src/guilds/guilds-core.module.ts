@@ -45,7 +45,7 @@ import { HubSessionNoteController } from './session-note/hub-session-note.contro
 import { HubSessionNoteService } from './session-note/hub-session-note.service';
 import { CommunityHubKindAdapter } from './community/community-hub-kind.adapter';
 import { HubClaimController } from './claim/hub-claim.controller';
-import { HubClaimRegistry } from './claim/hub-claim.registry';
+import { HubClaimRegistryModule } from './claim/hub-claim-registry.module';
 import { HubClaimService } from './claim/hub-claim.service';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
@@ -66,6 +66,7 @@ import {
     ChannelMirrorModule,
     SettingsModule,
     HubWelcomeModule,
+    HubClaimRegistryModule,
   ],
   // Order matters (ROK-1831): the literal `guilds/onboarding` and
   // `guilds/mine` / `guilds/taggable` must register before `guilds/:id`.
@@ -113,7 +114,6 @@ import {
     EventDiscussionService,
     HubSessionNoteService,
     CommunityHubKindAdapter,
-    HubClaimRegistry,
     HubClaimService,
   ],
   exports: [
@@ -130,7 +130,7 @@ import {
     HubVisibleGuard,
     HubPostsService,
     CommunityHubKindAdapter,
-    HubClaimRegistry,
+    HubClaimRegistryModule,
   ],
 })
 export class GuildsCoreModule implements OnModuleInit {

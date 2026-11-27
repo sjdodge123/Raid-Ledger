@@ -8,8 +8,9 @@ import { fetchWowInstanceDetail } from '../api-client';
 import { useSystemStatus } from '../../../hooks/use-system-status';
 import { buildBasicInstanceDetail } from '../lib/instance-detail';
 import { levelRange } from '../utils/level-fit';
+import { getWowVariant } from '../utils';
 
-interface EventCreateContentBrowserProps {
+interface WowContentBrowserProps {
     wowVariant: string;
     contentType: 'dungeon' | 'raid';
     selectedInstances: WowInstanceDetailDto[];
@@ -103,7 +104,17 @@ function UnconfiguredNotice() {
     );
 }
 
-export function EventCreateContentBrowser({ wowVariant, contentType, selectedInstances, onInstancesChange }: EventCreateContentBrowserProps) {
+/**
+ * The `event-create:content-browser` slot (ROK-2359): core hands over the game
+ * slug; a slug that is not a WoW game renders nothing.
+ */
+export function EventCreateContentBrowser({ gameSlug, ...rest }: Omit<WowContentBrowserProps, 'wowVariant'> & { gameSlug?: string | null | undefined }) {
+    const wowVariant = gameSlug ? getWowVariant(gameSlug) : null;
+    if (!wowVariant) return null;
+    return <WowContentBrowser wowVariant={wowVariant} {...rest} />;
+}
+
+function WowContentBrowser({ wowVariant, contentType, selectedInstances, onInstancesChange }: WowContentBrowserProps) {
     const systemStatus = useSystemStatus();
     const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? true;
     const headingId = useId();

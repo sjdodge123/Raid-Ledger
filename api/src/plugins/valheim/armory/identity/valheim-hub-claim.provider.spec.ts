@@ -15,6 +15,7 @@ import {
   ValheimHubClaimProvider,
 } from './valheim-hub-claim.provider';
 import { findHubServerId, findViewerFacts } from './valheim-hub-claim.queries';
+import { VALHEIM_HUB_WELCOME_COPY } from './valheim-hub-welcome.copy';
 
 jest.mock('./valheim-hub-claim.queries');
 const serverIdMock = jest.mocked(findHubServerId);
@@ -63,6 +64,10 @@ describe('ValheimHubClaimProvider registration + supports', () => {
       provider,
       { ownerPluginId: 'valheim' },
     );
+  });
+
+  it('carries the Valheim hub welcome copy (ROK-2362 #10)', () => {
+    expect(setup().provider.welcome).toBe(VALHEIM_HUB_WELCOME_COPY);
   });
 
   it('serves only Valheim game_server hubs', () => {

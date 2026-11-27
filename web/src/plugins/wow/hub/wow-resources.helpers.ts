@@ -8,7 +8,7 @@
  * boot-time import, and pulling the panel in here would undo its lazy chunk.
  */
 import type { GuildAddonList } from '@raid-ledger/contract';
-import { useGuildAddons } from '../../../components/hub/api/use-guild-content';
+import { useGuildAddons } from './use-guild-addons';
 
 /** Pinned rows count too — they are shown to everyone, editable or not. */
 export function wowAddonsVisible(list: GuildAddonList | undefined): boolean {
