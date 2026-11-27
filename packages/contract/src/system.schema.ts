@@ -8,6 +8,12 @@ export const LoginMethodSchema = z.object({
     loginPath: z.string(),
     /** Hex color for the provider button (e.g. '#5865F2') */
     color: z.string().optional(),
+    /**
+     * ROK-2371: where the login page renders it. Absent = 'primary' (a
+     * top-level button, e.g. Discord and Google); 'alternate' sits behind
+     * "Sign in not working? Try another way".
+     */
+    placement: z.enum(['primary', 'alternate']).optional(),
 });
 
 export type LoginMethodDto = z.infer<typeof LoginMethodSchema>;
