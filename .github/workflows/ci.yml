@@ -70,6 +70,8 @@ jobs:
               - 'tsconfig*.json'
               - '.eslintrc*'
               - '**/eslint.config.*'
+              # ROK-2366: the shared plugin-boundary rule + its allowlists.
+              - 'eslint-rules/**'
               # ROK-1516: test-bot is not a workspace; the lint job runs its
               # eslint in a dedicated step below.
               - 'tools/test-bot/**'
@@ -269,9 +271,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/eslintcache
-          key: ${{ runner.os }}-eslint-${{ hashFiles('package-lock.json', 'tools/test-bot/package-lock.json', 'web/eslint.config.*', 'packages/*/eslint.config.*', 'tools/*/eslint.config.*') }}-${{ github.sha }}
+          key: ${{ runner.os }}-eslint-${{ hashFiles('package-lock.json', 'tools/test-bot/package-lock.json', 'web/eslint.config.*', 'eslint-rules/**', 'packages/*/eslint.config.*', 'tools/*/eslint.config.*') }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-eslint-${{ hashFiles('package-lock.json', 'tools/test-bot/package-lock.json', 'web/eslint.config.*', 'packages/*/eslint.config.*', 'tools/*/eslint.config.*') }}-
+            ${{ runner.os }}-eslint-${{ hashFiles('package-lock.json', 'tools/test-bot/package-lock.json', 'web/eslint.config.*', 'eslint-rules/**', 'packages/*/eslint.config.*', 'tools/*/eslint.config.*') }}-
 
       # Every workspace except api (above), read from package.json so a new
       # workspace is linted without editing this file. --if-present matches

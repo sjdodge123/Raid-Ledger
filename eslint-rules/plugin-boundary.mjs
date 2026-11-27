@@ -67,12 +67,13 @@ export function crossesBoundary({ fromRel, specifier, srcDir, fromAbs, aliases, 
  */
 export function createPluginBoundaryRule({ workspaceDir, allowlistFile, aliases = {}, hostDirs = [], entries = ['index'] }) {
   const srcDir = path.join(workspaceDir, 'src');
-  const allowlist = loadAllowlist(allowlistFile);
   const listName = toPosix(path.relative(workspaceDir, allowlistFile));
   return {
     meta: {
       type: 'problem',
-      schema: [],
+      // The allowlist rides in as the rule's option (see pluginBoundaryBlock) so
+      // it is part of ESLint's config hash: editing it invalidates --cache results.
+      schema: [{ type: 'object', properties: { allowlist: { type: 'object' } }, additionalProperties: false }],
       messages: {
         deep: "'{{spec}}' reaches inside plugin '{{slug}}'. Import it through plugins/{{slug}}/index.ts (export it there) instead. (ROK-2366)",
         stale: "{{list}} lists '{{spec}}' for this file, but it no longer deep-imports a plugin. Delete the entry — the allowlist only shrinks. (ROK-2366)",
@@ -83,6 +84,8 @@ export function createPluginBoundaryRule({ workspaceDir, allowlistFile, aliases 
       const fromRel = toPosix(path.relative(srcDir, fromAbs));
       if (fromRel.startsWith('..')) return {};
       const wsRel = toPosix(path.relative(workspaceDir, fromAbs));
+      /** @type {Record<string, string[]>} */
+      const allowlist = context.options[0]?.allowlist ?? {};
       const allowed = new Set(allowlist[wsRel] ?? []);
       const seen = new Set();
       /** @param {any} node */
@@ -124,6 +127,6 @@ export function pluginBoundaryBlock({ workspaceDir, files, ignores, ...rest }) {
     files,
     ignores,
     plugins: { 'rl-plugin-boundary': { rules: { 'deep-import': rule } } },
-    rules: { 'rl-plugin-boundary/deep-import': 'error' },
+    rules: { 'rl-plugin-boundary/deep-import': ['error', { allowlist: loadAllowlist(allowlistFile) }] },
   };
 }
