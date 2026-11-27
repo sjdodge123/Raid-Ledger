@@ -102,7 +102,9 @@ function EditActions({ onCancel, saveDisabled, isPending }: {
  * overwrite (ROK-1710 Codex P2). A modal opened during voting has no target;
  * if a refetch then shows the lineup back in building, the snapshot is taken
  * at that moment (Codex round 4), or every edit to the shown control would be
- * silently dropped from the PATCH.
+ * silently dropped from the PATCH. Once touched, an edit survives the section
+ * disappearing again (the lineup left building): it keeps the dirty-close
+ * guard armed and is sent, so the API's 409 reaches the user.
  */
 function useTargetEdit(target: EditableTarget | undefined) {
     const [opened, setOpened] = useState(target);
@@ -117,7 +119,11 @@ function useTargetEdit(target: EditableTarget | undefined) {
         setPctState(next);
         setTouched(true);
     };
-    const changed = target !== undefined && opened !== undefined && touched
+    // Deliberately NOT gated on the live `target`: if the lineup leaves
+    // building after the user changed the target (Codex round 5), the edit
+    // stays dirty and is still sent, so the server's 409 surfaces instead of
+    // a silent drop reported as success.
+    const changed = opened !== undefined && touched
         && (pct !== opened.initialPct || opened.disarmed);
     const bodyPatch: { nominationTargetPct?: number | null } = changed ? { nominationTargetPct: pct } : {};
     return { pct, setPct, changed, bodyPatch };

@@ -384,6 +384,49 @@ describe('EditLineupMetadataModal — target appears after open (ROK-1710 Codex 
     });
 });
 
+describe('EditLineupMetadataModal — target edit when the lineup leaves building (ROK-1710 Codex round 5)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    const props = { lineupId: 7, initialTitle: 'Friday Lineup', initialDescription: null, onClose: vi.fn() };
+
+    /** Open on {50, armed}, move the slider to 60, then a refetch shows voting. */
+    function editThenLeaveBuilding() {
+        const { rerender } = renderWithProviders(
+            <EditLineupMetadataModal {...props} target={{ initialPct: 50, disarmed: false }} />,
+        );
+        fireEvent.change(screen.getByTestId('nomination-target-pct'), { target: { value: '60' } });
+        rerender(<EditLineupMetadataModal {...props} />);
+        expect(screen.queryByTestId('nomination-target-enabled')).not.toBeInTheDocument();
+    }
+
+    it('keeps the dirty target in the PATCH so the 409 surfaces instead of a false success', async () => {
+        const m = mockMutation({
+            mutateAsync: vi.fn().mockRejectedValue(new Error('Nomination target can only be changed while nominating')),
+        });
+        editThenLeaveBuilding();
+        fireEvent.click(saveButton());
+        await waitFor(() => expect(m.mutateAsync).toHaveBeenCalledTimes(1));
+        expect(
+            sentBody(m).nominationTargetPct,
+            'a target the user changed must not be silently dropped when the section disappears',
+        ).toBe(60);
+        await waitFor(() =>
+            expect(toast.error).toHaveBeenCalledWith('Nomination target can only be changed while nominating'),
+        );
+        expect(toast.success, 'the dropped edit must not be reported as saved').not.toHaveBeenCalled();
+        expect(props.onClose).not.toHaveBeenCalled();
+    });
+
+    it('keeps the dirty-close guard armed after the section disappears', async () => {
+        mockMutation();
+        const user = userEvent.setup();
+        editThenLeaveBuilding();
+        await user.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(props.onClose, 'an unsaved target edit must still ask before discarding').not.toHaveBeenCalled();
+        expect(screen.getByText('Discard your changes?')).toBeInTheDocument();
+    });
+});
+
 describe('EditLineupMetadataModal — disarmed nomination target (ROK-1710)', () => {
     beforeEach(() => vi.clearAllMocks());
 
