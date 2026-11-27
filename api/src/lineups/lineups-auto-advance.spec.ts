@@ -181,15 +181,26 @@ describe('maybeAutoAdvance', () => {
     );
   });
 
-  it('escape hatch: graceMs=0 advances immediately', async () => {
-    setLineup('building');
+  it('escape hatch: graceMs=0 advances immediately, pinned to the judged target (ROK-1710)', async () => {
+    setLineup('building', {
+      nominationTargetPct: 50,
+      nominationTargetDisarmedAt: null,
+    });
     (checkBuildingQuorum as jest.Mock).mockResolvedValue({ ready: true });
     (runStatusTransition as jest.Mock).mockResolvedValue(undefined);
     const deps = makeDeps({ graceMs: '0' });
     await maybeAutoAdvance(deps, 7);
-    expect(runStatusTransition).toHaveBeenCalledWith(expect.any(Object), 7, {
-      status: 'voting',
-    });
+    expect(runStatusTransition).toHaveBeenCalledWith(
+      expect.any(Object),
+      7,
+      { status: 'voting' },
+      null,
+      {
+        nominationTargetPct: 50,
+        nominationTargetDisarmedAt: null,
+        pendingAdvanceAt: null,
+      },
+    );
     expect(deps._phaseQueue.scheduleGraceAdvance).not.toHaveBeenCalled();
   });
 

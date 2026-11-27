@@ -10,11 +10,20 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { authorizeAndPersistMetadata } from './lineups-metadata.helpers';
+import {
+  authorizeAndPersistMetadata,
+  runMetadataUpdate,
+} from './lineups-metadata.helpers';
 import { applyNominationTargetEdit } from './quorum/nomination-target.helpers';
 
 jest.mock('./quorum/nomination-target.helpers', () => ({
   applyNominationTargetEdit: jest.fn(),
+}));
+jest.mock('./lineups-response.helpers', () => ({
+  buildDetailResponse: jest.fn().mockResolvedValue({ id: 1 }),
+}));
+jest.mock('./lineups-notify-hooks.helpers', () => ({
+  fireLineupMetadataRefresh: jest.fn(),
 }));
 
 const applyEditMock = applyNominationTargetEdit as jest.MockedFunction<
@@ -189,5 +198,35 @@ describe('authorizeAndPersistMetadata nomination target gate (ROK-1710)', () => 
     expect(applyEditMock).not.toHaveBeenCalled();
     expect(sets[0]).toMatchObject({ title: 'Renamed' });
     expect(sets[0]).not.toHaveProperty('nominationTargetPct');
+  });
+});
+
+describe('runMetadataUpdate grace job hygiene (ROK-1710 Codex P2)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  async function run(dto: { nominationTargetPct?: number | null }) {
+    const { db } = fakeDb(lineup({ status: 'building' }));
+    const phaseQueue = { cancelGraceAdvance: jest.fn() };
+    await runMetadataUpdate(
+      db,
+      {} as never,
+      phaseQueue,
+      { warn: jest.fn() } as never,
+      1,
+      dto,
+      { id: CREATOR_ID, role: 'member' },
+    );
+    return phaseQueue.cancelGraceAdvance;
+  }
+
+  it('cancels the queued grace job after a target edit that wrote', async () => {
+    applyEditMock.mockResolvedValue(true);
+    const cancel = await run({ nominationTargetPct: 55 });
+    expect(cancel).toHaveBeenCalledWith(1);
+  });
+
+  it('leaves the grace job alone on a no-op target edit', async () => {
+    applyEditMock.mockResolvedValue(false);
+    expect(await run({ nominationTargetPct: 50 })).not.toHaveBeenCalled();
   });
 });

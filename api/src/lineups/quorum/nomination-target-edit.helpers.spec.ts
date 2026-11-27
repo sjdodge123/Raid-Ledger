@@ -112,8 +112,19 @@ describe('applyNominationTargetEdit', () => {
 
   it('writes nothing for a no-op edit', async () => {
     const { db, sets } = fakeDb(5);
-    await applyNominationTargetEdit(db, row({}), 25);
+    expect(await applyNominationTargetEdit(db, row({}), 25)).toBe(false);
     expect(sets).toEqual([]);
+  });
+
+  it('retires a grace claim judged under the old target and reports the write (Codex P2)', async () => {
+    const { db, sets } = fakeDb(10); // 10/20 = 50% < 55%
+    const wrote = await applyNominationTargetEdit(
+      db,
+      row({ nominationTargetPct: 50, pendingAdvanceAt: new Date() }),
+      55,
+    );
+    expect(wrote).toBe(true);
+    expect(sets[0]).toHaveProperty('pendingAdvanceAt', null);
   });
 
   it('clears both stamps and arms a lineup below the new target', async () => {
