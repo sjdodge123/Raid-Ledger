@@ -190,6 +190,8 @@ export interface LoginMethod {
   loginPath: string;
   /** Hex color for the provider button (e.g. '#5865F2') */
   color?: string;
+  /** ROK-2371: top-level button vs "Try another way" (absent = primary). */
+  placement?: 'primary' | 'alternate';
 }
 
 /** Pluggable authentication strategy provided by a plugin */

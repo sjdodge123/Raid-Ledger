@@ -12,7 +12,13 @@ import {
  * not `LinkProvider` (whose JWT purposes are per link flow).
  */
 export type LinkStateProvider =
-  LinkProvider | 'calendar-google' | 'calendar-microsoft' | 'discord-login';
+  | LinkProvider
+  | 'calendar-google'
+  | 'calendar-microsoft'
+  | 'discord-login'
+  // ROK-2371: Google sign-in (and its pending-link) + the Profile Google link.
+  | 'google-signin'
+  | 'google';
 import { linkCookieAttrs, readCookie } from './link-nonce-cookie.helpers';
 
 /**
