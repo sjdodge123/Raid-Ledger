@@ -22,7 +22,7 @@ describe('VALHEIM_HUB_WELCOME_COPY', () => {
       '[Login](https://evil.example) @everyone',
     );
     expect(text).toContain(
-      '**\\[Login](https://evil.example) @​everyone**',
+      '**\\[Login](https://evil.example) @\u200beveryone**',
     );
     expect(text).not.toMatch(/(?<!\\)\[Login\]\(/);
   });
