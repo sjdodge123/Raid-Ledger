@@ -1,21 +1,4 @@
 {
-  "src/components/characters/character-card-compact.tsx": [
-    "../../plugins/wow/components/ProfessionBadges",
-    "../../plugins/wow/lib/class-icons"
-  ],
-  "src/components/events/player-card.tsx": [
-    "../../plugins/wow/lib/class-icons"
-  ],
-  "src/components/events/shared/game-details-section.tsx": [
-    "../../../plugins/wow/utils"
-  ],
-  "src/components/roster/SelectableCharacterCard.tsx": [
-    "../../plugins/wow/components/ProfessionBadges",
-    "../../plugins/wow/lib/class-icons"
-  ],
-  "src/components/shared/RoleIcon.tsx": [
-    "../../plugins/wow/lib/role-icons"
-  ],
   "src/lazy-routes.ts": [
     "./plugins/valheim/pages/valheim-character-page",
     "./plugins/wow/admin/addon-errors-page",

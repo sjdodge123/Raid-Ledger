@@ -34,12 +34,26 @@ function mockHooks(blizzardConfigured = true): void {
 
 function renderBrowser(selected: WowInstanceDetailDto[] = []) {
     const onInstancesChange = vi.fn();
-    render(<EventCreateContentBrowser wowVariant="classic_era" contentType="dungeon"
+    render(<EventCreateContentBrowser gameSlug="world-of-warcraft-classic" contentType="dungeon"
         selectedInstances={selected} onInstancesChange={onInstancesChange} />);
     return onInstancesChange;
 }
 
 beforeEach(() => { vi.clearAllMocks(); mockHooks(); });
+
+describe('EventCreateContentBrowser — game slug (ROK-2359)', () => {
+    it('derives the variant from the WoW game slug core hands over', () => {
+        renderBrowser();
+        expect(vi.mocked(useWowInstances)).toHaveBeenCalledWith('classic_era', 'dungeon');
+    });
+
+    it('renders nothing for a game slug that is not a WoW game', () => {
+        const { container } = render(<EventCreateContentBrowser gameSlug="valheim" contentType="raid"
+            selectedInstances={[]} onInstancesChange={vi.fn()} />);
+        expect(container).toBeEmptyDOMElement();
+        expect(vi.mocked(useWowInstances)).not.toHaveBeenCalled();
+    });
+});
 
 describe('EventCreateContentBrowser — search (ROK-1654 H5)', () => {
     it('is a named searchbox that keeps the smoke placeholder', () => {
