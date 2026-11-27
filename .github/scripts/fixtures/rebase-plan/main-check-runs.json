@@ -1,6 +1,0 @@
-[
-  {"name": "lint", "status": "completed", "conclusion": "failure", "started_at": "2026-01-02T00:00:00Z", "completed_at": "2026-01-02T00:05:00Z"},
-  {"name": "lint", "status": "completed", "conclusion": "success", "started_at": "2026-01-02T01:00:00Z", "completed_at": "2026-01-02T01:05:00Z"},
-  {"name": "unit-tests", "status": "completed", "conclusion": "failure", "started_at": "2026-01-02T00:00:00Z", "completed_at": "2026-01-02T00:05:00Z"},
-  {"name": "smoke-tests", "status": "in_progress", "conclusion": null, "started_at": "2026-01-02T00:00:00Z", "completed_at": null}
-]
