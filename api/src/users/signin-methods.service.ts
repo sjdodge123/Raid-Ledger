@@ -52,8 +52,8 @@ export class SigninMethodsService {
 
   /**
    * `DELETE /users/me/discord`: the guard, then today's unlink
-   * (`unlinked:<id>`). A Discord-only user passes the guard by design
-   * (`DISCORD_ONLY_MAY_UNLINK`).
+   * (`unlinked:<id>`). A Discord-only user is refused like any last method
+   * (`DISCORD_ONLY_MAY_UNLINK`, ruling 10).
    */
   async unlinkDiscord(userId: number): Promise<void> {
     const user = await this.usersService.findById(userId);

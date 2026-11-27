@@ -23,11 +23,11 @@ export const LAST_SIGNIN_METHOD_CODE = 'LAST_SIGNIN_METHOD';
 export const LAST_SIGNIN_METHOD_MESSAGE = 'Add another way to sign in first';
 
 /**
- * Spec §3 exception (operator Q3/Q6 (a)): a Discord-only user may still
- * unlink Discord exactly as today — the `unlinked:<id>` row relinks on the
- * next Discord OAuth (`auth.service.ts`), so it is not a lockout.
+ * Spec header ruling 10 (supersedes the §3 "exception kept" draft): unlinking
+ * Discord when it is the user's last sign-in method is refused too, so a
+ * Discord-only user gets the same 409 as any other last method.
  */
-export const DISCORD_ONLY_MAY_UNLINK = true;
+export const DISCORD_ONLY_MAY_UNLINK = false;
 
 function findGoogleIdentity(db: SigninMethodsDb, userId: number) {
   return db

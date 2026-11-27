@@ -1,8 +1,8 @@
 /**
  * ROK-2371 — sign-in methods + the last-method guard (spec §3, §5; AC 8–10).
  *
- * Real controllers, guards and Postgres: both unlink routes incl. the kept
- * Discord-only exception, `/auth/me` `signinMethods`, the "Allow sign-in with
+ * Real controllers, guards and Postgres: both unlink routes incl. a
+ * Discord-only user being refused (ruling 10), `/auth/me` `signinMethods`, the "Allow sign-in with
  * Google" admin toggle (400 without a client, round-trip with one) and the
  * self-delete path removing identity rows.
  */
@@ -149,12 +149,14 @@ describe('DELETE /users/me/discord', () => {
     expect(await googleRows(userId)).toHaveLength(1);
   });
 
-  it('keeps the Discord-only exception: unlinks exactly as today', async () => {
+  it('refuses a Discord-only user: Discord is their last method (ruling 10)', async () => {
     const { userId, token } = await makeUser('donly', {
       discordId: '300400501',
     });
-    expect((await del('/users/me/discord', token)).status).toBe(204);
-    expect(await discordIdOf(userId)).toBe('unlinked:300400501');
+    const res = await del('/users/me/discord', token);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: 'LAST_SIGNIN_METHOD' });
+    expect(await discordIdOf(userId)).toBe('300400501');
   });
 });
 
