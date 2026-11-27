@@ -17,8 +17,6 @@ import { browserBoundCookieAttrs } from '../browser-bound-cookie.helpers';
 import { bindLinkStateToBrowser } from '../link-state-cookie.helpers';
 import {
   buildGoogleSigninUrl,
-  GOOGLE_SIGNIN_CALLBACK_PATH,
-  googleRedirectUri,
   type GoogleSigninAction,
 } from './google-signin-oauth.helpers';
 import { GoogleSigninFlowService } from './google-signin-flow.service';
@@ -59,7 +57,7 @@ export class GoogleSigninController {
     res.redirect(
       buildGoogleSigninUrl({
         clientId: client.clientId,
-        redirectUri: googleRedirectUri(base, GOOGLE_SIGNIN_CALLBACK_PATH),
+        redirectUri: await this.svc.redirectUri('signin'),
         state,
         n,
       }),

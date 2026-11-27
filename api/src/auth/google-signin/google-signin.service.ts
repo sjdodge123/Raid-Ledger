@@ -14,7 +14,11 @@ import { REDIS_CLIENT } from '../../redis/redis.module';
 import { SettingsService } from '../../settings/settings.service';
 import { getCalendarProviderConfig } from '../../settings/settings-calendar-sync.helpers';
 import { getClientUrl } from '../../settings/settings-bot.helpers';
-import { getGoogleSigninEnabled } from '../../settings/settings-google-signin.helpers';
+import {
+  getGoogleSigninEnabled,
+  googleSigninRedirectUris,
+  type GoogleSigninRedirectUris,
+} from '../../settings/settings-google-signin.helpers';
 import { UsersService } from '../../users/users.service';
 import type { GoogleClient } from '../../calendar-sync/providers/google/google-oauth.helpers';
 import { AuthService } from '../auth.service';
@@ -61,6 +65,11 @@ export class GoogleSigninService {
   /** `CLIENT_URL` without a trailing slash (same source as the admin URIs). */
   async clientUrl(): Promise<string> {
     return (await getClientUrl(this.settings)).replace(/\/+$/, '');
+  }
+
+  /** Exact Google redirect URI — the Discord callback's API base (§2). */
+  async redirectUri(kind: keyof GoogleSigninRedirectUris): Promise<string> {
+    return (await googleSigninRedirectUris(this.settings))[kind];
   }
 
   /** The user a Google `sub` is linked to, or null. */

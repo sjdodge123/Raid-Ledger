@@ -99,7 +99,10 @@ export class GoogleLinkController {
       res.redirect(this.link.resultUrl(base, LINK_REQUEST_EXPIRED_MESSAGE));
       return;
     }
-    res.redirect(this.link.authorizeUrl(res, client, base, claims.userId));
+    const redirectUri = await this.svc.redirectUri('link');
+    res.redirect(
+      this.link.authorizeUrl(res, client, redirectUri, claims.userId),
+    );
   }
 
   /** GET /auth/google/link/callback — state + cookie checked before exchange. */

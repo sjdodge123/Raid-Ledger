@@ -141,8 +141,8 @@ describe('Google link from Profile (ROK-2371 §3, AC 6)', () => {
     expect(await googleSubsOf(me.id)).toEqual([SUB]);
     const forms = formsSentTo(spy, GOOGLE_TOKEN_URL);
     expect(forms).toHaveLength(1);
-    expect(forms[0]?.redirect_uri).toMatch(
-      /\/api\/auth\/google\/link\/callback$/,
+    expect(forms[0]?.redirect_uri).toBe(
+      'http://localhost:3000/auth/google/link/callback',
     );
   });
 

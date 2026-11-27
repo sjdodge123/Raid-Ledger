@@ -28,10 +28,8 @@ import {
   buildGoogleSigninUrl,
   deriveSigninNonce,
   deriveSigninVerifier,
-  GOOGLE_LINK_CALLBACK_PATH,
   GOOGLE_SIGNIN_SEED_PREFIX,
   GOOGLE_SIGNIN_STATE_TTL_SECONDS,
-  googleRedirectUri,
   signGoogleSigninState,
   verifyGoogleSigninState,
 } from './google-signin-oauth.helpers';
@@ -123,7 +121,7 @@ export class GoogleLinkService {
   authorizeUrl(
     res: Response,
     client: GoogleClient,
-    base: string,
+    redirectUri: string,
     userId: number,
   ): string {
     const r = bindLinkStateToBrowser(res, 'google');
@@ -134,7 +132,7 @@ export class GoogleLinkService {
     });
     return buildGoogleSigninUrl({
       clientId: client.clientId,
-      redirectUri: googleRedirectUri(base, GOOGLE_LINK_CALLBACK_PATH),
+      redirectUri,
       state,
       n,
     });
@@ -154,7 +152,7 @@ export class GoogleLinkService {
     }
     const blocked = await this.preExchangeRefusal(state);
     if (blocked) return this.refuse(base, blocked.message, blocked.reason);
-    const claims = await this.exchange(client, q.code, state.n, base);
+    const claims = await this.exchange(client, q.code, state.n);
     if (!claims)
       return this.refuse(base, GOOGLE_LINK_FAILED_MESSAGE, 'exchange');
     if (!claims.emailVerified) {
@@ -222,13 +220,12 @@ export class GoogleLinkService {
     client: GoogleClient,
     code: string,
     n: string,
-    base: string,
   ): Promise<GoogleSigninClaims | null> {
     try {
       const tokens = await exchangeGoogleCode(client, {
         code,
         codeVerifier: deriveSigninVerifier(n),
-        redirectUri: googleRedirectUri(base, GOOGLE_LINK_CALLBACK_PATH),
+        redirectUri: await this.svc.redirectUri('link'),
       });
       if (!tokens.idToken) return null;
       return readGoogleSigninClaims(

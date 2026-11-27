@@ -23,10 +23,8 @@ import { assertLinkStateBoundToBrowser } from '../link-state-cookie.helpers';
 import {
   deriveSigninNonce,
   deriveSigninVerifier,
-  GOOGLE_SIGNIN_CALLBACK_PATH,
   GOOGLE_SIGNIN_SEED_PREFIX,
   GOOGLE_SIGNIN_STATE_TTL_SECONDS,
-  googleRedirectUri,
   signGoogleSigninState,
   verifyGoogleSigninState,
   type GoogleSigninAction,
@@ -110,7 +108,7 @@ export class GoogleSigninFlowService {
       GOOGLE_SIGNIN_STATE_TTL_SECONDS,
     );
     if (!fresh) return this.refuse(base, { reason: 'oauth_failed' }, 'replay');
-    const claims = await this.exchange(client, q.code, state.n, base);
+    const claims = await this.exchange(client, q.code, state.n);
     if (!claims)
       return this.refuse(base, { reason: 'oauth_failed' }, 'exchange');
     if (state.action === 'pending-link') {
@@ -126,13 +124,12 @@ export class GoogleSigninFlowService {
     client: GoogleClient,
     code: string,
     n: string,
-    base: string,
   ): Promise<GoogleSigninClaims | null> {
     try {
       const tokens = await exchangeGoogleCode(client, {
         code,
         codeVerifier: deriveSigninVerifier(n),
-        redirectUri: googleRedirectUri(base, GOOGLE_SIGNIN_CALLBACK_PATH),
+        redirectUri: await this.svc.redirectUri('signin'),
       });
       if (!tokens.idToken) return null;
       return readGoogleSigninClaims(

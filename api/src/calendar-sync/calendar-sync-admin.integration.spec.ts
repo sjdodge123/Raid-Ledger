@@ -64,9 +64,10 @@ function expectedRedirectUris(base: string) {
   return {
     google: `${base}/api/calendar-sync/oauth/google/callback`,
     microsoft: `${base}/api/calendar-sync/oauth/microsoft/callback`,
+    // ROK-2371: the API base of the Discord callback (local Nest, no /api).
     googleSignin: [
-      `${base}/api/auth/google/callback`,
-      `${base}/api/auth/google/link/callback`,
+      'http://localhost:3000/auth/google/callback',
+      'http://localhost:3000/auth/google/link/callback',
     ],
   };
 }

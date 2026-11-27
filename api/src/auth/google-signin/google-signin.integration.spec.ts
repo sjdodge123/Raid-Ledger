@@ -138,7 +138,10 @@ describe('toggle on', () => {
 
       const [form] = formsSentTo(spy, GOOGLE_TOKEN_URL);
       expect(form?.code).toBe('auth-code-1');
-      expect(form?.redirect_uri).toMatch(/\/api\/auth\/google\/callback$/);
+      // Built like the Discord callback (Codex P2): Nest serves no `/api` here.
+      expect(form?.redirect_uri).toBe(
+        'http://localhost:3000/auth/google/callback',
+      );
       expect(s256(form?.code_verifier ?? '')).toBe(started.challenge);
     });
 

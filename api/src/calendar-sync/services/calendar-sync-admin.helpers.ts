@@ -24,8 +24,8 @@ import {
   type CalendarProviderConfigUpdate,
 } from '../../settings/settings-calendar-sync.helpers';
 import {
-  GOOGLE_SIGNIN_CALLBACK_PATHS,
   getGoogleSigninEnabled,
+  googleSigninRedirectUris,
   setGoogleSigninEnabled,
 } from '../../settings/settings-google-signin.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -56,11 +56,13 @@ export async function buildRedirectUris(
   svc: SettingsCore,
 ): Promise<AdminCalendarSyncSettings['redirectUris']> {
   const base = (await getClientUrl(svc)).replace(/\/+$/, '');
+  // ROK-2371: Google sign-in + Profile link, on the same Google client — the
+  // exact URIs the sign-in flow sends (built like the Discord callback).
+  const signin = await googleSigninRedirectUris(svc);
   return {
     google: `${base}${oauthCallbackPath('google')}`,
     microsoft: `${base}${oauthCallbackPath('microsoft')}`,
-    // ROK-2371: Google sign-in + Profile link, on the same Google client.
-    googleSignin: GOOGLE_SIGNIN_CALLBACK_PATHS.map((p) => `${base}${p}`),
+    googleSignin: [signin.signin, signin.link],
   };
 }
 

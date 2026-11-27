@@ -28,9 +28,6 @@ const ACTIONS: readonly GoogleSigninAction[] = [
 
 /** Basic scopes only (ruling 5) — never a calendar scope. */
 export const GOOGLE_SIGNIN_SCOPES = 'openid email profile';
-/** Registered on the OAuth client by the admin (spec §2). */
-export const GOOGLE_SIGNIN_CALLBACK_PATH = '/api/auth/google/callback';
-export const GOOGLE_LINK_CALLBACK_PATH = '/api/auth/google/link/callback';
 /** Consumed-once key prefix for a state seed. */
 export const GOOGLE_SIGNIN_SEED_PREFIX = 'google-signin-state:';
 export const GOOGLE_SIGNIN_STATE_TTL_SECONDS = 600;
@@ -97,11 +94,6 @@ export function buildGoogleSigninUrl(p: GoogleSigninUrlParams): string {
     code_challenge_method: 'S256',
   });
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;
-}
-
-/** Absolute redirect URI for a callback path on `clientUrl`. */
-export function googleRedirectUri(clientUrl: string, path: string): string {
-  return `${clientUrl.replace(/\/+$/, '')}${path}`;
 }
 
 export interface SignGoogleSigninStateInput {
