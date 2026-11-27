@@ -175,7 +175,7 @@ describe('ROK-2369 — a deactivated plugin does nothing (integration)', () => {
     expect(await effectsOf(inv)).toEqual([]);
   });
 
-  it("deactivating a plugin unregisters its CronRegistrar jobs", async () => {
+  it('deactivating a plugin unregisters its CronRegistrar jobs', async () => {
     const scheduler = testApp.app.get(SchedulerRegistry);
     const crons = testApp.app.get(CronManagerService);
     const registrars = registry.getAdaptersForExtensionPoint<CronRegistrar>(

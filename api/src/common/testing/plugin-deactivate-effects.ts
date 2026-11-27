@@ -24,11 +24,26 @@ function blocked(): Promise<never> {
   );
 }
 
+/** Blocked Discord bot sends. */
+function discordSpies(): Record<string, jest.SpyInstance> {
+  const discord = DiscordBotClientService.prototype;
+  return {
+    'discord.sendDirectMessage': jest
+      .spyOn(discord, 'sendDirectMessage')
+      .mockImplementation(blocked),
+    'discord.sendEmbedDM': jest
+      .spyOn(discord, 'sendEmbedDM')
+      .mockImplementation(blocked),
+    'discord.sendEmbed': jest
+      .spyOn(discord, 'sendEmbed')
+      .mockImplementation(blocked),
+  };
+}
+
 /** Start watching writes on `db` and outbound calls process-wide. */
 export function watchSideEffects(
   db: PostgresJsDatabase<typeof schema>,
 ): SideEffectWatch {
-  const discord = DiscordBotClientService.prototype;
   const spies: Record<string, jest.SpyInstance> = {
     'db.insert': jest.spyOn(db, 'insert'),
     'db.update': jest.spyOn(db, 'update'),
@@ -40,15 +55,7 @@ export function watchSideEffects(
     'queue.addBulk': jest
       .spyOn(Queue.prototype, 'addBulk')
       .mockImplementation(blocked),
-    'discord.sendDirectMessage': jest
-      .spyOn(discord, 'sendDirectMessage')
-      .mockImplementation(blocked),
-    'discord.sendEmbedDM': jest
-      .spyOn(discord, 'sendEmbedDM')
-      .mockImplementation(blocked),
-    'discord.sendEmbed': jest
-      .spyOn(discord, 'sendEmbed')
-      .mockImplementation(blocked),
+    ...discordSpies(),
   };
   return {
     effects: () =>
