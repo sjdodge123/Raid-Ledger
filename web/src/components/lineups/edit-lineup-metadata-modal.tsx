@@ -6,6 +6,9 @@
  * `useDirtyCloseGuard`, so edited text is never dropped without "Discard your
  * changes?". Cancel + Save sit in the Modal's pinned `footer`; Save reaches the
  * fields' `<form>` through `form=`, so Enter in the title submits too.
+ *
+ * ROK-1710: while the lineup is nominating (`target` present) the modal also
+ * edits the early-advance nomination target; see `edit-lineup-target-section`.
  */
 import { useState, type FormEvent, type JSX } from 'react';
 import { Modal } from '../ui/modal';
@@ -16,11 +19,14 @@ import { Textarea } from '../ui/textarea';
 import { useUpdateLineupMetadata } from '../../hooks/use-lineups';
 import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { toast } from '../../lib/toast';
+import { EditTargetSection, type EditableTarget } from './edit-lineup-target-section';
 
 interface Props {
     lineupId: number;
     initialTitle: string;
     initialDescription: string | null;
+    /** Present only while the lineup is in `building`; absent hides the target block. */
+    target?: EditableTarget | undefined;
     onClose: () => void;
 }
 
@@ -86,11 +92,49 @@ function EditActions({ onCancel, saveDisabled, isPending }: {
     );
 }
 
+/**
+ * Target form state. The key goes in the PATCH body only once the user touched
+ * the control AND the pct differs from the value at open, or the lineup was
+ * disarmed at open (a deliberate re-arm at the same pct). Omitting the key
+ * keeps the stored target. The comparison is against a snapshot taken when
+ * the section first became editable, never the live prop: a background
+ * refetch (another operator's edit) must not turn an untouched control into an
+ * overwrite (ROK-1710 Codex P2). A modal opened during voting has no target;
+ * if a refetch then shows the lineup back in building, the snapshot is taken
+ * at that moment (Codex round 4), or every edit to the shown control would be
+ * silently dropped from the PATCH. Once touched, an edit survives the section
+ * disappearing again (the lineup left building): it keeps the dirty-close
+ * guard armed and is sent, so the API's 409 reaches the user.
+ */
+function useTargetEdit(target: EditableTarget | undefined) {
+    const [opened, setOpened] = useState(target);
+    const [pct, setPctState] = useState<number | null>(opened?.initialPct ?? null);
+    const [touched, setTouched] = useState(false);
+    if (opened === undefined && target !== undefined) {
+        // Render-phase snapshot (React's "adjust state on prop change").
+        setOpened(target);
+        setPctState(target.initialPct);
+    }
+    const setPct = (next: number | null): void => {
+        setPctState(next);
+        setTouched(true);
+    };
+    // Deliberately NOT gated on the live `target`: if the lineup leaves
+    // building after the user changed the target (Codex round 5), the edit
+    // stays dirty and is still sent, so the server's 409 surfaces instead of
+    // a silent drop reported as success.
+    const changed = opened !== undefined && touched
+        && (pct !== opened.initialPct || opened.disarmed);
+    const bodyPatch: { nominationTargetPct?: number | null } = changed ? { nominationTargetPct: pct } : {};
+    return { pct, setPct, changed, bodyPatch };
+}
+
 /** Form state + save. A blank title surfaces inline; only server errors toast. */
-function useEditLineupForm({ lineupId, initialTitle, initialDescription, onClose }: Props) {
+function useEditLineupForm({ lineupId, initialTitle, initialDescription, target, onClose }: Props) {
     const [title, setTitle] = useState(initialTitle);
     const [description, setDescription] = useState(initialDescription ?? '');
     const [titleTouched, setTitleTouched] = useState(false);
+    const targetEdit = useTargetEdit(target);
     const update = useUpdateLineupMetadata();
     const titleBlank = title.trim() === '';
 
@@ -100,7 +144,11 @@ function useEditLineupForm({ lineupId, initialTitle, initialDescription, onClose
             return;
         }
         try {
-            const body = { title: title.trim(), description: description.trim() === '' ? null : description };
+            const body = {
+                title: title.trim(),
+                description: description.trim() === '' ? null : description,
+                ...targetEdit.bodyPatch,
+            };
             await update.mutateAsync({ lineupId, body });
             toast.success('Lineup updated');
             onClose();
@@ -110,8 +158,8 @@ function useEditLineupForm({ lineupId, initialTitle, initialDescription, onClose
     }
 
     const titleError = titleTouched && titleBlank ? TITLE_REQUIRED : undefined;
-    const isDirty = title !== initialTitle || description !== (initialDescription ?? '');
-    return { title, setTitle, description, setDescription, titleBlank, titleError, isDirty,
+    const isDirty = title !== initialTitle || description !== (initialDescription ?? '') || targetEdit.changed;
+    return { title, setTitle, description, setDescription, titleBlank, titleError, isDirty, targetEdit,
         touchTitle: () => setTitleTouched(true), isPending: update.isPending, save };
 }
 
@@ -130,6 +178,13 @@ export function EditLineupMetadataModal(props: Props): JSX.Element {
             <form id={FORM_ID} noValidate onSubmit={submit} className="space-y-4">
                 <TitleField value={form.title} onChange={form.setTitle} error={form.titleError} onBlur={form.touchTitle} />
                 <DescriptionField value={form.description} onChange={form.setDescription} />
+                {props.target && (
+                    <EditTargetSection
+                        disarmed={props.target.disarmed}
+                        value={form.targetEdit.pct}
+                        onChange={form.targetEdit.setPct}
+                    />
+                )}
             </form>
         </Modal>
     );

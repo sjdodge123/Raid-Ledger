@@ -213,7 +213,11 @@ export function countLineupEntries(
 
 /** Count distinct nominators in a lineup (for dynamic cap). */
 export function countDistinctNominators(
-  db: PostgresJsDatabase<typeof schema>,
+  db:
+    | PostgresJsDatabase<typeof schema>
+    | Parameters<
+        Parameters<PostgresJsDatabase<typeof schema>['transaction']>[0]
+      >[0],
   lineupId: number,
 ) {
   return db

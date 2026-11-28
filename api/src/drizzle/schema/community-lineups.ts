@@ -189,7 +189,8 @@ export const communityLineups = pgTable(
      * target and IS a rising edge.
      *
      * Consequence, by design: a lineup reverted out of voting stays manually
-     * controlled for the rest of its life. Forward transitions do NOT clear it.
+     * controlled until an operator explicitly saves a target again (PATCH
+     * /lineups/:id/metadata, ROK-1710). Forward transitions do NOT clear it.
      */
     nominationTargetDisarmedAt: timestamp('nomination_target_disarmed_at', {
       withTimezone: true,

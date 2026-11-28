@@ -423,10 +423,13 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
     await processor.process(graceJob as never);
 
     expect(runStatusTransition).toHaveBeenCalledTimes(1);
-    expect(runStatusTransition).toHaveBeenCalledWith(expect.anything(), 42, {
-      status: 'decided',
-      decidedGameId: 9,
-    });
+    expect(runStatusTransition).toHaveBeenCalledWith(
+      expect.anything(),
+      42,
+      { status: 'decided', decidedGameId: 9 },
+      null,
+      undefined,
+    );
     expect(openTieHold).not.toHaveBeenCalled();
   });
 
@@ -443,9 +446,13 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
     await processor.process(graceJob as never);
 
     expect(runStatusTransition).toHaveBeenCalledTimes(1);
-    expect(runStatusTransition).toHaveBeenCalledWith(expect.anything(), 42, {
-      status: 'decided',
-    });
+    expect(runStatusTransition).toHaveBeenCalledWith(
+      expect.anything(),
+      42,
+      { status: 'decided' },
+      null,
+      undefined,
+    );
     expect(mockDb.set).toHaveBeenCalledWith(
       expect.objectContaining({ tieDetectedAt: null, tiePickGameId: null }),
     );
@@ -497,10 +504,13 @@ describe('LineupPhaseProcessor — ROK-1374 tie hold', () => {
 
     await processor.process(graceJob as never);
 
-    expect(runStatusTransition).toHaveBeenCalledWith(expect.anything(), 42, {
-      status: 'decided',
-      decidedGameId: 9,
-    });
+    expect(runStatusTransition).toHaveBeenCalledWith(
+      expect.anything(),
+      42,
+      { status: 'decided', decidedGameId: 9 },
+      null,
+      undefined,
+    );
     // The hold is NOT re-entered — re-entry here would be pure noise, and the
     // lineup is leaving `voting` anyway.
     expect(openTieHold).not.toHaveBeenCalled();

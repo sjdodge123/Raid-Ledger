@@ -29,6 +29,7 @@ import { FilterEntryTrigger } from '../../ui/filter-entry';
 import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 import { LineupHeroMeta } from '../LineupHeroMeta';
 import { rosterSize } from '../lineup-roster-size';
+import { targetSuffix } from './nomination-target-copy';
 
 export interface NominatingCompositeProps {
   lineup: LineupDetailResponseDto;
@@ -40,22 +41,6 @@ interface JourneyState {
   task: string;
   sub: string;
   tone: 'action' | 'waiting';
-}
-
-/**
- * ROK-1444: " · voting opens at N%" when the lineup carries an early-advance
- * target. Empty when the target is off (deadline-only) or has been permanently
- * disarmed by an operator revert, or never armed at all, so the copy never
- * promises an advance that cannot happen.
- */
-function targetSuffix(lineup: LineupDetailResponseDto): string {
-  if (lineup.nominationTargetPct == null) return '';
-  if (lineup.nominationTargetDisarmedAt != null) return '';
-  // Codex P2: an UNARMED target can never fire (carry-over seeded the lineup
-  // at or above its target, so there is no rising edge left to cross).
-  // Promising early voting there would be a lie.
-  if (!lineup.nominationTargetArmed) return '';
-  return ` · voting opens at ${lineup.nominationTargetPct}%`;
 }
 
 function deriveJourneyState(

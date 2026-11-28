@@ -11,6 +11,7 @@ import type {
   NominateGameDto,
   AbortLineupDto,
   PublicLineupResponseDto,
+  UpdateLineupMetadataDto,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 import { API_BASE_URL } from '../config';
@@ -149,13 +150,14 @@ export async function createLineup(
   });
 }
 
-/** Parameters for updating lineup metadata (ROK-1063). */
-export interface UpdateLineupMetadataParams {
-  title?: string;
-  description?: string | null;
-}
+/**
+ * Parameters for updating lineup metadata (ROK-1063). ROK-1710: an optional
+ * `nominationTargetPct` (1-100, or null = off) edits the early-advance target;
+ * leave the key out to keep the stored one. Only accepted while building (409).
+ */
+export type UpdateLineupMetadataParams = UpdateLineupMetadataDto;
 
-/** Update a lineup's title and/or description (ROK-1063). */
+/** Update a lineup's title, description and/or nomination target (ROK-1063, ROK-1710). */
 export async function updateLineupMetadata(
   lineupId: number,
   body: UpdateLineupMetadataParams,
