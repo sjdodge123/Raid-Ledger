@@ -32,6 +32,12 @@
 # .github/workflows/discord-smoke.yml) so a slow-but-alive holder, whose bot is
 # still connected, is never taken over.
 #
+# Waiting order (FIFO): a waiter queues a ticket ref
+# refs/locks/<name>/queue/<run_id>-<attempt> and only tries for a slot while
+# fewer live tickets sort before it than there are free slots — so the OLDEST
+# waiting run wins a freed slot, not whichever waiter polls first. Ordering,
+# stale-ticket rules and failure modes: scripts/ci/discord-smoke-lease-queue.sh.
+#
 # Needs job permissions `contents: write` (refs + commit objects) and
 # `actions: read` (holder run status). A read-only token (Dependabot, forks)
 # gets 403 on the commit create and this script FAILS the job rather than let
@@ -54,21 +60,23 @@ RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT:-1}"
 RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/${REPO}/actions/runs/${RUN_ID}"
 OUT="${GITHUB_OUTPUT:-/dev/stdout}"
 BODY="$(mktemp)"
+HDRS="$(mktemp)"
 CACHE="$(mktemp -d)"
-trap 'rm -rf "$BODY" "$CACHE"' EXIT
+trap 'rm -rf "$BODY" "$HDRS" "$CACHE"' EXIT
 
 [ -n "$TOKEN" ] || { echo "::error::lease: GH_TOKEN/GITHUB_TOKEN is not set"; exit 1; }
 
 # api METHOD PATH [JSON] — prints the HTTP status (000 on a transport error);
-# the response body lands in $BODY. The token never reaches stdout.
+# the response body lands in $BODY, its headers in $HDRS. The token never
+# reaches stdout.
 api() {
   local method="$1" path="$2" data="${3:-}" code
-  local args=(-sS -o "$BODY" -w '%{http_code}' -X "$method"
+  local args=(-sS -o "$BODY" -D "$HDRS" -w '%{http_code}' -X "$method"
     -H "Authorization: Bearer ${TOKEN}"
     -H 'Accept: application/vnd.github+json'
     -H 'X-GitHub-Api-Version: 2022-11-28')
   if [ -n "$data" ]; then args+=(-H 'Content-Type: application/json' --data "$data"); fi
-  : > "$BODY"
+  : > "$BODY"; : > "$HDRS"
   code="$(curl "${args[@]}" "${API}/repos/${REPO}/${path}" 2>/dev/null)" || true
   echo "${code:-000}"
 }
@@ -80,6 +88,19 @@ field() { sed -n "s/^$1=//p" | head -n 1; }  # read `key=value` from a commit me
 fatal_readonly() {
   echo "::error::lease: GITHUB_TOKEN cannot write git objects (HTTP $1): this run has a read-only token (Dependabot/fork?). Refusing to drive the shared Discord guild without the lease."
   exit 1
+}
+
+# rate_limited — the last response was a primary or secondary rate limit.
+rate_limited() {
+  grep -qiE '^x-ratelimit-remaining: *0[[:space:]]*$' "$HDRS" 2>/dev/null || grep -qi 'rate limit' "$BODY" 2>/dev/null
+}
+http_why() { if [ "$1" = 403 ] && rate_limited; then echo "HTTP 403, rate limited"; else echo "HTTP $1"; fi; }
+
+# denied CODE — a 403 on a write. A rate limit is waited out (warn; the caller
+# retries next poll, until LEASE_MAX_WAIT_S); anything else is a read-only token.
+denied() {
+  if rate_limited; then echo "::warning::lease: GitHub API rate limited (HTTP $1); retrying on the next poll" >&2; return 0; fi
+  fatal_readonly "$1"
 }
 
 check_readonly() { [ ! -f "$CACHE/readonly" ] || fatal_readonly "$(cat "$CACHE/readonly")"; }
@@ -94,29 +115,37 @@ lease_tree() {
   cat "$CACHE/tree"
 }
 
-# make_commit INDEX [PARENT_SHA] — prints the new owner-token commit sha.
+# post_commit MESSAGE [PARENT_SHA] — prints the new commit sha.
 # Runs inside $(...), so a read-only token is flagged via $CACHE/readonly
 # and turned into a job failure by the caller (an exit here would only
 # leave the subshell).
-make_commit() {
-  local idx="$1" parent="${2:-}" msg json code tree
+post_commit() {
+  local msg="$1" parent="${2:-}" json code tree
   tree="$(lease_tree)" || return 1
-  msg="$(printf '%s lease %s\n\nrun_id=%s\nrun_attempt=%s\nrun_url=%s\nacquired_at=%s\n' \
-    "$NAME" "$idx" "$RUN_ID" "$RUN_ATTEMPT" "$RUN_URL" "$(now)")"
   json="$(jq -nc --arg m "$msg" --arg t "$tree" --arg p "$parent" \
     '{message: $m, tree: $t, parents: (if $p == "" then [] else [$p] end)}')"
   code="$(api POST git/commits "$json")"
   case "$code" in
     201) jq -r '.sha' "$BODY" ;;
-    403) echo "$code" > "$CACHE/readonly"; return 1 ;;
+    403) if rate_limited; then echo "::warning::lease: commit create rate limited (HTTP 403), will retry" >&2
+         else echo "$code" > "$CACHE/readonly"; fi; return 1 ;;
     *) echo "::warning::lease: commit create failed (HTTP $code), will retry" >&2; return 1 ;;
   esac
 }
 
-# holder_msg SHA — the holder commit's message (cached per sha).
+# make_commit INDEX [PARENT_SHA] — prints the new owner-token commit sha.
+make_commit() {
+  post_commit "$(printf '%s lease %s\n\nrun_id=%s\nrun_attempt=%s\nrun_url=%s\nacquired_at=%s\n' \
+    "$NAME" "$1" "$RUN_ID" "$RUN_ATTEMPT" "$RUN_URL" "$(now)")" "${2:-}"
+}
+
+# holder_msg SHA — the commit's message (cached per sha). On failure the HTTP
+# code is left in $CACHE/msgerr-<sha> (404/422: no such commit).
 holder_msg() {
+  local code
   if [ ! -f "$CACHE/msg-$1" ]; then
-    [ "$(api GET "git/commits/$1")" = 200 ] || return 1
+    code="$(api GET "git/commits/$1")"
+    [ "$code" = 200 ] || { echo "$code" > "$CACHE/msgerr-$1"; return 1; }
     jq -r '.message' "$BODY" > "$CACHE/msg-$1"
   fi
   cat "$CACHE/msg-$1"
@@ -124,7 +153,7 @@ holder_msg() {
 
 # stale_reason SHA CHECK_RUN — prints why the lease is stale, or nothing.
 stale_reason() {
-  local sha="$1" check_run="$2" msg hid hatt hat code status
+  local sha="$1" check_run="$2" msg hid hatt hat reason
   msg="$(holder_msg "$sha")" || return 0   # unreadable right now: not stale
   hid="$(field run_id <<< "$msg")"; hatt="$(field run_attempt <<< "$msg")"
   hat="$(field acquired_at <<< "$msg")"
@@ -141,28 +170,29 @@ stale_reason() {
   if [ "$hid" = "$RUN_ID" ] && [ "$hatt" != "$RUN_ATTEMPT" ]; then
     echo "left by attempt ${hatt} of this same run"; return 0
   fi
-  [ "$check_run" = 1 ] && [ -n "$hid" ] || return 0
-  code="$(api GET "actions/runs/${hid}")"
-  case "$code" in
-    404) echo "holder run ${hid} no longer exists" ;;
-    200) status="$(jq -r '.status' "$BODY")"
-         [ "$status" = completed ] && echo "holder run ${hid} is completed" ;;
-    *) echo "::warning::lease: holder run status unavailable (HTTP $code)" >&2 ;;
-  esac
+  [ -n "$hid" ] || return 0
+  # Cached per run (queue.sh): completed/gone for good, live until the next check poll.
+  reason="$(run_end_reason "$hid" "$check_run" "$hatt")"
+  [ -z "$reason" ] || echo "holder $reason"
   return 0
 }
 
 own() {  # own REF SHA INDEX
+  echo "ref=$1" > "$CACHE/own"
   {
     echo "ref=$1"; echo "sha=$2"; echo "index=$3"; echo "acquired_at=$(now)"
   } >> "$OUT"
   if [ -n "${GITHUB_ENV:-}" ]; then echo "SMOKE_POOL_INDEX=$3" >> "$GITHUB_ENV"; fi
 }
 
-# try_slot INDEX CHECK_RUN — 0 when this run now holds the slot.
+# try_slot INDEX CHECK_RUN [CODE SHA] — 0 when this run now holds the slot.
+# CODE/SHA: this poll's read of the slot (scan_slots), which saves a GET.
 try_slot() {
-  local idx="$1" check_run="$2" ref="${NS}/${NAME}/$1" code holder reason sha json
-  code="$(api GET "git/ref/${ref}")"
+  local idx="$1" check_run="$2" ref="${NS}/${NAME}/$1" code="${3:-}" holder="${4:-}" reason sha json
+  if [ -z "$code" ]; then
+    code="$(api GET "git/ref/${ref}")"
+    [ "$code" != 200 ] || holder="$(jq -r '.object.sha' "$BODY")"
+  fi
   if [ "$code" = 404 ]; then
     sha="$(make_commit "$idx")" || { check_readonly; return 1; }
     json="$(jq -nc --arg r "refs/${ref}" --arg s "$sha" '{ref: $r, sha: $s}')"
@@ -170,12 +200,11 @@ try_slot() {
     case "$code" in
       201) own "$ref" "$sha" "$idx"; return 0 ;;
       422) return 1 ;;                       # another run created it first
-      403) fatal_readonly "$code" ;;
+      403) denied "$code"; return 1 ;;
       *) echo "::warning::lease: ref create HTTP $code" >&2; return 1 ;;
     esac
   fi
   if [ "$code" != 200 ]; then echo "::warning::lease: ref read HTTP $code" >&2; return 1; fi
-  holder="$(jq -r '.object.sha' "$BODY")"
   echo "$holder" > "$CACHE/holder-$idx"
   reason="$(stale_reason "$holder" "$check_run")"
   [ -n "$reason" ] || return 1
@@ -185,7 +214,7 @@ try_slot() {
   code="$(api PATCH "git/refs/${ref}" "$json")"
   case "$code" in
     200) own "$ref" "$sha" "$idx"; return 0 ;;
-    403) fatal_readonly "$code" ;;
+    403) denied "$code"; return 1 ;;
     *) return 1 ;;                           # 422: someone else moved/deleted it
   esac
 }
@@ -231,25 +260,29 @@ acquire() {
   release_earlier_attempts
   while :; do
     check=0; [ $(( polls % RUN_CHECK_EVERY )) -eq 0 ] && check=1
-    for idx in $(seq 0 $(( POOL_SIZE - 1 ))); do
-      if try_slot "$idx" "$check"; then
-        echo "lease: acquired ${NS}/${NAME}/${idx} after waiting $(mins $(( $(now) - start )))"
-        return 0
-      fi
-    done
+    if poll_once "$check"; then
+      echo "lease: acquired $(sed -n 's/^ref=//p' "$CACHE/own") after waiting $(mins $(( $(now) - start )))"
+      return 0
+    fi
     polls=$(( polls + 1 )); waited=$(( $(now) - start ))
     if [ "$waited" -ge "$MAX_WAIT_S" ]; then
+      delete_ticket
       echo "::error::lease: gave up after waiting $(mins "$waited") for ${NS}/${NAME}"; exit 1
     fi
+    echo "lease: waited $(mins "$waited"); $(cat "$CACHE/status" 2>/dev/null || echo 'status unknown')"
     for idx in $(seq 0 $(( POOL_SIZE - 1 ))); do
       holder="$(cat "$CACHE/holder-$idx" 2>/dev/null || true)"
-      echo "lease: waited $(mins "$waited"); slot ${idx} held by $( [ -n "$holder" ] && holder_msg "$holder" | field run_url)"
+      echo "lease: slot ${idx} last seen held by $( [ -n "$holder" ] && holder_msg "$holder" | field run_url)"
     done
     sleep "$POLL_S"
   done
 }
 
-release() {
+# release — free the slot first, then dequeue (a run that gave up or was
+# cancelled while queued still has a ticket).
+release() { release_lease; delete_ticket; }
+
+release_lease() {
   local ref="${LEASE_REF:-}" sha="${LEASE_SHA:-}" code holder
   if [ -z "$ref" ] || [ -z "$sha" ]; then echo "lease: nothing to release"; return 0; fi
   for _ in 1 2 3; do
@@ -274,6 +307,9 @@ release() {
   echo "::warning::lease: could not release ${ref} (last HTTP $code); waiters take it over once this run completes"
   return 0
 }
+
+# shellcheck source=scripts/ci/discord-smoke-lease-queue.sh
+source "$(dirname "${BASH_SOURCE[0]}")/discord-smoke-lease-queue.sh"
 
 # LEASE_LIB_ONLY=1 stops here so scripts/test can source the functions.
 # shellcheck disable=SC2317  # the `exit` runs only when executed, not sourced

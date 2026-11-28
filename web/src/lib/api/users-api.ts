@@ -197,6 +197,11 @@ export async function unlinkDiscord(): Promise<void> {
   return fetchApi("/users/me/discord", { method: "DELETE" });
 }
 
+/** ROK-2371: unlink the Google sign-in identity (409 LAST_SIGNIN_METHOD when it is the last way in). */
+export async function unlinkGoogle(): Promise<void> {
+  return fetchApi("/users/me/identities/google", { method: "DELETE" });
+}
+
 /** Fetch a user's taste profile (radar + intensity + co-play partners, ROK-948/949) */
 export async function getTasteProfile(
   userId: number,

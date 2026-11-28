@@ -32,6 +32,14 @@ import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.serv
 import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
 import { ACCESS_TOKEN_TTL_SECONDS } from './access-token-mint.helpers';
 import { PasswordChangeSessionService } from './password-change/password-change-session.service';
+import { GoogleSigninService } from './google-signin/google-signin.service';
+import { GoogleSigninFlowService } from './google-signin/google-signin-flow.service';
+import { GoogleSigninController } from './google-signin/google-signin.controller';
+import { FirstTimeController } from './google-signin/first-time.controller';
+import { PendingIdentityStore } from './google-signin/pending-identity.store';
+import { GoogleAuthProviderAdapter } from './google-signin/google-auth-provider.adapter';
+import { GoogleLinkController } from './google-signin/google-link.controller';
+import { GoogleLinkService } from './google-signin/google-link.service';
 
 /**
  * Auth module — core authentication logic (JWT, local auth, intent tokens).
@@ -70,6 +78,9 @@ import { PasswordChangeSessionService } from './password-change/password-change-
     DiscordSigninLinkController,
     SigninCodeController,
     LinkStartController,
+    GoogleSigninController,
+    FirstTimeController,
+    GoogleLinkController,
   ],
   providers: [
     AuthService,
@@ -86,6 +97,11 @@ import { PasswordChangeSessionService } from './password-change/password-change-
     ImpersonationSessionService,
     PasswordChangeSessionService,
     SigninCodeStore,
+    GoogleSigninService,
+    GoogleSigninFlowService,
+    GoogleLinkService,
+    PendingIdentityStore,
+    GoogleAuthProviderAdapter,
   ],
   exports: [
     AuthService,
@@ -98,6 +114,9 @@ import { PasswordChangeSessionService } from './password-change/password-change-
     PasswordChangeSessionService,
     // ROK-2370: the `/login code:` bot path approves codes through it.
     SigninCodeStore,
+    // ROK-2371: the Discord OAuth callback parks unknown snowflakes (D1a).
+    GoogleSigninService,
+    PendingIdentityStore,
   ],
 })
 export class AuthModule {}

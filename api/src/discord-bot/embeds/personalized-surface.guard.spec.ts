@@ -107,6 +107,7 @@ const CHROME_MODULE = 'discord-bot/embeds/embed-chrome.helpers.ts';
  * its filename alone — it goes red here and gets a conscious ruling.
  */
 const KNOWN_SPEC_HELPER_FIXTURES = [
+  'auth/google-signin/google-signin.integration.spec-helpers.ts',
   'calendar-sync/calendar-microsoft.integration.spec-helpers.ts',
   'calendar-sync/calendar-oauth.integration.spec-helpers.ts',
   'calendar-sync/providers/apple/apple-caldav.spec-helpers.ts',

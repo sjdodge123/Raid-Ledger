@@ -2,7 +2,7 @@ import { LinkStartResponseSchema } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../config';
 import { fetchWithAuth } from './fetch-api';
 
-export type LinkProvider = 'discord' | 'steam';
+export type LinkProvider = 'discord' | 'steam' | 'google';
 
 /** POST /auth/{provider}/link/start did not hand back a usable nonce. */
 export class LinkStartError extends Error {

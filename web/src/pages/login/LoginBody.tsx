@@ -1,7 +1,7 @@
 /**
  * ROK-2370: the login card's body. Order (operator ruling 2026-11-25):
  * last-used card (when this browser remembers a sign-in) → top-level
- * provider buttons → "Try another way" disclosure (Discord-app code, then
+ * provider buttons (`placement` absent/'primary' — Discord, Google; ROK-2371) → "Try another way" disclosure (Discord-app code, then
  * username/password). With a last-used card, the providers + disclosure sit
  * under an "or" divider behind "Sign in another way". With no providers the
  * password form shows on its own, as before — plus the code disclosure when
@@ -10,13 +10,14 @@
 import type { JSX } from 'react';
 import type { LoginMethodDto } from '@raid-ledger/contract';
 import type { User } from '../../hooks/use-auth';
-import { DiscordIcon } from '../../components/icons/DiscordIcon';
 import { Button } from '../../components/ui/button';
 import { clearPendingSigninCode, readPendingSigninCode } from '../../lib/signin-code';
 import { LocalLoginForm } from './LocalLoginForm';
 import { SigninCodePanel } from './SigninCodePanel';
 import { SignInAnotherWay, type SignInSection, type SignInSectionId } from './SignInAnotherWay';
 import { LastUsedSigninCard } from './LastUsedSigninCard';
+import { ProviderButtons } from './ProviderButtons';
+import { splitByPlacement } from './login-providers';
 import { useLastUsedSignin, type LastUsedSignin } from './use-last-used-signin';
 
 export const ANOTHER_WAY_INTRO = 'If the button above doesn’t work in your browser, get a code and confirm it in Discord.';
@@ -24,6 +25,7 @@ export const NO_PROVIDER_INTRO = 'Have Discord? Get a code and confirm it there 
 export const CODE_SECTION_TITLE = 'Get a code to confirm in Discord';
 export const PASSWORD_SECTION_TITLE = 'Sign in with username';
 export const SIGN_IN_ANOTHER_WAY_TOGGLE = 'Sign in another way';
+export const OTHER_PROVIDERS_TITLE = 'Other sign-in options';
 
 export interface LoginBodyProps {
     authProviders: LoginMethodDto[];
@@ -39,22 +41,6 @@ export interface LoginBodyProps {
     onCodeSignedIn: (user: User) => void;
 }
 
-/** Top-level provider buttons (Discord today; ROK-2371 adds Google as another entry). */
-export function ProviderButtons({ providers, isRedirecting, onLogin }: {
-    providers: LoginMethodDto[]; isRedirecting: boolean; onLogin: (provider: LoginMethodDto) => void;
-}): JSX.Element {
-    return (
-        <div className="space-y-3">
-            {providers.map((provider) => (
-                <Button key={provider.key} onClick={() => onLogin(provider)} size="lg" fullWidth
-                    brandColor={provider.color ?? '#5865F2'} loading={isRedirecting} loadingLabel="Redirecting...">
-                    {provider.icon === 'discord' && <DiscordIcon className="w-5 h-5" />}{provider.label}
-                </Button>
-            ))}
-        </div>
-    );
-}
-
 /** The Discord-app code section (only offered when the server reports it). */
 function codeSection(props: LoginBodyProps): SignInSection {
     return {
@@ -63,13 +49,23 @@ function codeSection(props: LoginBodyProps): SignInSection {
     };
 }
 
+/** ROK-2371: the `placement: 'alternate'` login methods, when the server sends any. */
+function alternateSection(props: LoginBodyProps, alternate: LoginMethodDto[]): SignInSection[] {
+    if (alternate.length === 0) return [];
+    return [{
+        id: 'other-providers', title: OTHER_PROVIDERS_TITLE, showHeading: true,
+        node: <ProviderButtons providers={alternate} isRedirecting={props.isRedirecting} onLogin={props.onProviderLogin} />,
+    }];
+}
+
 /** The ordered workaround sections; the code panel only when the server offers it. */
-function buildSections(props: LoginBodyProps): SignInSection[] {
+function buildSections(props: LoginBodyProps, alternate: LoginMethodDto[]): SignInSection[] {
     const password: SignInSection = {
         id: 'password', title: PASSWORD_SECTION_TITLE, showHeading: true,
         node: <LocalLoginForm onSubmit={props.onLocalLogin} isLoading={props.isLoading} error={props.error} />,
     };
-    return props.discordSigninCode ? [codeSection(props), password] : [password];
+    const code = props.discordSigninCode ? [codeSection(props)] : [];
+    return [...code, password, ...alternateSection(props, alternate)];
 }
 
 /**
@@ -113,10 +109,11 @@ function OrDivider(): JSX.Element {
 function OtherMethods({ props, lastUsed }: { props: LoginBodyProps; lastUsed: LastUsedSignin }): JSX.Element {
     const initial = initialDisclosure(props);
     const req = lastUsed.request;
+    const { primary, alternate } = splitByPlacement(props.authProviders);
     return (
         <>
-            <ProviderButtons providers={props.authProviders} isRedirecting={props.isRedirecting} onLogin={props.onProviderLogin} />
-            <SignInAnotherWay key={req ? `${req.section}-${req.n}` : 'initial'} sections={buildSections(props)}
+            <ProviderButtons providers={primary} isRedirecting={props.isRedirecting} onLogin={props.onProviderLogin} />
+            <SignInAnotherWay key={req ? `${req.section}-${req.n}` : 'initial'} sections={buildSections(props, alternate)}
                 intro={props.discordSigninCode ? ANOTHER_WAY_INTRO : null} defaultOpen={req ? true : initial.open}
                 initialSection={req ? req.section : initial.section} onClose={clearPendingSigninCode} />
         </>

@@ -84,7 +84,7 @@ export async function dismissGameTimeCheck(page: Page): Promise<void> {
  * so a password login would starve `signin-code.smoke.spec.ts` on reruns. Stub
  * the start (and its poll) for pages that only want the password form.
  */
-async function stubSigninCodeStart(page: Page): Promise<void> {
+export async function stubSigninCodeStart(page: Page): Promise<void> {
     const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
     await page.route('**/auth/discord/signin-code', (route) => route.fulfill({
         json: { code: 'STBK-2222', deviceSecret: 's'.repeat(43), expiresAt, pollIntervalMs: 60_000 },

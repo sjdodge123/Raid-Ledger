@@ -164,12 +164,53 @@ function mockRedisPipeline(set: ReturnType<typeof mockRedisSet>) {
         return pipeline;
       },
       exec: async (): Promise<Array<[Error | null, unknown]>> => {
-        const out: Array<[Error | null, unknown]> = [];
-        for (const run of queued) out.push([null, await run()]);
-        return out;
+        // Every queued op mutates the store synchronously when called, so
+        // starting them all in one tick (no await between) keeps two
+        // concurrent execs from interleaving — atomic, like real MULTI.
+        const pending = queued.map((run) => run());
+        const values = await Promise.all(pending);
+        return values.map((v): [Error | null, unknown] => [null, v]);
       },
     };
     return pipeline;
+  };
+}
+
+/**
+ * Redis mock MULTI (ROK-2371): queues GET / DEL / SET and runs them in order
+ * on `exec` without yielding between them — an atomic read-and-spend
+ * (`multi().get(k).del(k)`). Resolves ioredis's `[[err, result], …]` shape.
+ */
+function mockRedisMulti(
+  store: Map<string, string>,
+  set: ReturnType<typeof mockRedisSet>,
+  del: ReturnType<typeof mockRedisDel>,
+) {
+  return () => {
+    const queued: Array<() => Promise<unknown>> = [];
+    const multi = {
+      get: (key: string) => {
+        queued.push(() => Promise.resolve(store.get(key) ?? null));
+        return multi;
+      },
+      del: (...keys: string[]) => {
+        queued.push(() => del(...keys));
+        return multi;
+      },
+      set: (key: string, value: string, ...args: (string | number)[]) => {
+        queued.push(() => set(key, value, ...args));
+        return multi;
+      },
+      exec: async (): Promise<Array<[Error | null, unknown]>> => {
+        // Every queued op mutates the store synchronously when called, so
+        // starting them all in one tick (no await between) keeps two
+        // concurrent execs from interleaving — atomic, like real MULTI.
+        const pending = queued.map((run) => run());
+        const values = await Promise.all(pending);
+        return values.map((v): [Error | null, unknown] => [null, v]);
+      },
+    };
+    return multi;
   };
 }
 
@@ -199,6 +240,11 @@ function buildRedisMockClient(
     mget: (...keys: string[]) =>
       Promise.resolve(keys.map((k) => store.get(k) ?? null)),
     pipeline: mockRedisPipeline(mockRedisSet(store, expiries)),
+    multi: mockRedisMulti(
+      store,
+      mockRedisSet(store, expiries),
+      mockRedisDel(store, expiries),
+    ),
     getdel: mockRedisGetdel(store, expiries),
     lpush: (key: string, ...values: string[]) => {
       const list = readList(store, key);

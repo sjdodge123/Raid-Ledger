@@ -197,13 +197,7 @@ export class UsersMeController {
     );
   }
 
-  /** Unlink Discord from current user's account. */
-  @Delete('me/discord')
-  @UseGuards(AuthGuard('jwt'))
-  @HttpCode(204)
-  async unlinkDiscord(@Request() req: AuthenticatedRequest) {
-    await this.usersService.unlinkDiscord(req.user.id);
-  }
+  // DELETE me/discord lives in users-signin-methods.controller.ts (ROK-2371).
 
   /** Upload a custom avatar (ROK-220). */
   @Post('me/avatar')

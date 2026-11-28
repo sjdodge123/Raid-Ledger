@@ -34,6 +34,8 @@ const LOGIN_ACTIONS: ReadonlySet<string> = new Set([
   'login',
   'invite',
   'silent',
+  // ROK-2371 D1a: "I already have an account" for a parked Google identity.
+  'pending-link',
 ]);
 
 export type LoginStateCheck =

@@ -7,37 +7,27 @@ import { API_BASE_URL } from '../lib/config';
 import { toast } from '../lib/toast';
 import { consumeAuthRedirect } from '../components/auth';
 import { setAuthMethod, clearSilentGuard } from '../lib/api/silent-reauth';
-import { DEACTIVATED_MESSAGE } from '../lib/api/deactivated-session';
 import type { LoginMethodDto } from '@raid-ledger/contract';
 import { LoginBody } from './login/LoginBody';
+import { oauthErrorMessage } from './login/oauth-error-message';
 import { nativeFetch } from '../lib/api/native-fetch';
 import { safeGetItem, safeSetItem } from '../lib/safe-storage';
 import { recordLastSignin } from '../lib/last-signin';
 
-/** Watches for OAuth error query param and displays a toast */
+/**
+ * Watches for an OAuth refusal (`?error=…&reason=…`) and toasts it. ROK-313
+ * AC4: banned/kicked land here from Discord OAuth; ROK-1753: a deactivated
+ * session; ROK-2371: the same codes from Google plus `google_unverified`.
+ */
 function useOAuthErrorHandler(): void {
     const [searchParams, setSearchParams] = useSearchParams();
     useEffect(() => {
-        const oauthError = searchParams.get('error');
-        if (oauthError === 'oauth_failed') {
-            toast.error('Login failed. Please try again.');
-            searchParams.delete('error');
-            setSearchParams(searchParams, { replace: true });
-        } else if (oauthError === 'suspended') {
-            // ROK-313 AC4: banned/kicked users hitting Discord OAuth are redirected
-            // here with the admin-authored reason so the suspension message shows
-            // on every login path, not just local login.
-            toast.error(searchParams.get('reason') || 'Your account has been suspended.');
-            searchParams.delete('error');
-            searchParams.delete('reason');
-            setSearchParams(searchParams, { replace: true });
-        } else if (oauthError === 'deactivated') {
-            // ROK-1753: the API 401s a deactivated session (USER_DEACTIVATED);
-            // the web ends it and lands here — same toast idiom as a ban.
-            toast.error(DEACTIVATED_MESSAGE);
-            searchParams.delete('error');
-            setSearchParams(searchParams, { replace: true });
-        }
+        const message = oauthErrorMessage(searchParams.get('error'), searchParams.get('reason'));
+        if (!message) return;
+        toast.error(message);
+        searchParams.delete('error');
+        searchParams.delete('reason');
+        setSearchParams(searchParams, { replace: true });
     }, [searchParams, setSearchParams]);
 }
 

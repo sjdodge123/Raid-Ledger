@@ -11,6 +11,7 @@ import { NasOnlyRoute } from './components/admin/nas-only-route';
 import { PluginRoute } from './components/routing/plugin-route';
 import { LegacyCalendarsRedirect, LegacySendEventsRedirect } from './components/features/calendar-sync/calendar-legacy-redirects';
 import { AuthSuccessPage } from './pages/auth-success-page';
+import { FirstTimePage } from './pages/first-time-page';
 import { PublicLineupPage } from './pages/public/PublicLineupPage';
 
 import {
@@ -165,8 +166,11 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<RootRedirect />} />
-      <Route path="/login" element={<Navigate to="/" replace />} />
+      {/* Keep `?error=&reason=`: Discord + Google sign-in refusals land on /login (ROK-2371). */}
+      <Route path="/login" element={<RedirectKeepingLocation to="/" />} />
       <Route path="/auth/success" element={<AuthSuccessPage />} />
+      {/* ROK-2371 D1a: an unknown Google/Discord identity — link it to an account or create one. */}
+      <Route path="/auth/first-time" element={<FirstTimePage />} />
       <Route path="/join" element={<JoinPage />} />
       <Route path="/i/:code" element={<InvitePage />} />
       <Route path="/p/lineup/:slug" element={<PublicLineupPage />} />

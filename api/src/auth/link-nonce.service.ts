@@ -13,7 +13,8 @@ export const LINK_NONCE_TTL_SECONDS = 120;
 export const LINK_REQUEST_EXPIRED_MESSAGE =
   'Link request expired. Please try again.';
 
-export type LinkProvider = 'discord' | 'steam';
+// ROK-2371: 'google' is the signed-in Profile Google link (rl_link_google).
+export type LinkProvider = 'discord' | 'steam' | 'google';
 
 /** What a consumed nonce proves: who started the link, and Steam's returnTo. */
 export interface LinkNonceClaims {

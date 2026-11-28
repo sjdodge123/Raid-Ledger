@@ -357,8 +357,42 @@ describe('LoginPage — deactivated session notice (ROK-1753)', () => {
     it('toasts the deactivated copy and clears the error param', async () => {
         renderSuspended('?error=deactivated');
 
-        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Your account has been deactivated.'));
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Your account was deactivated when you left the Discord server. Rejoin it, then sign in with Discord.'));
         await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(''));
     });
 });
 
+// ROK-2371 §3: Google sign-in refusals share the Discord params. Banned and
+// kicked ride `suspended` + the server copy; deactivated always shows the
+// fixed Google copy (a crafted `reason` is ignored); unverified has its own code.
+describe('LoginPage — Google sign-in refusals (ROK-2371)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    const GOOGLE_DEACTIVATED =
+        'Your account was deactivated when you left the Discord server. Rejoin it, then sign in with Discord.';
+
+    it.each([
+        ['banned', 'error=suspended&reason=Your%20account%20has%20been%20suspended%3A%20Spamming', 'Your account has been suspended: Spamming'],
+        [
+            'kicked',
+            'error=suspended&reason=Your%20session%20was%20ended%20by%20an%20administrator.%20You%20may%20log%20in%20again%20in%205%20minute(s).',
+            'Your session was ended by an administrator. You may log in again in 5 minute(s).',
+        ],
+        ['deactivated', `error=deactivated&reason=${encodeURIComponent(GOOGLE_DEACTIVATED)}`, GOOGLE_DEACTIVATED],
+        ['deactivated with a crafted reason', 'error=deactivated&reason=Visit%20evil.example', GOOGLE_DEACTIVATED],
+        ['unverified', 'error=google_unverified', 'Google has not verified the email on that account, so it cannot be used to sign in.'],
+    ])('%s: toasts the refusal copy and scrubs error + reason', async (_label, query, copy) => {
+        renderSuspended(`?${query}`);
+
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith(copy));
+        await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(''));
+        expect(toast.error).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores an error code that is not a sign-in refusal', () => {
+        renderSuspended('?error=something_else');
+        expect(toast.error).not.toHaveBeenCalled();
+    });
+});

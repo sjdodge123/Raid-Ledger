@@ -165,6 +165,20 @@ function resolveExistingUserRedirect(searchParams: URLSearchParams, navigate: Re
     return false;
 }
 
+/**
+ * ROK-1353: record which OAuth provider signed in (drives the silent re-auth
+ * fallback) and reset the one-shot guard. ROK-2371: `via=google` records
+ * `'google'` — never a Discord method or the Discord-OAuth timestamp, so a
+ * later failed refresh shows the login page instead of a Discord bounce.
+ */
+function recordOAuthMethod(searchParams: URLSearchParams): 'discord' | 'google' {
+    const method = searchParams.get('via') === 'google' ? 'google' : 'discord';
+    setAuthMethod(method);
+    if (method === 'discord') recordDiscordOAuth();
+    clearSilentGuard();
+    return method;
+}
+
 function processAuthCode(
     code: string, searchParams: URLSearchParams,
     login: ReturnType<typeof useAuth>['login'], navigate: ReturnType<typeof useNavigate>,
@@ -172,14 +186,10 @@ function processAuthCode(
     void (async () => {
         try {
             const { access_token: token } = await exchangeAuthCode(code);
-            // ROK-1353: this is a Discord login — record the method (drives
-            // the silent re-auth fallback) and reset the one-shot guard.
-            setAuthMethod('discord');
-            recordDiscordOAuth();
-            clearSilentGuard();
+            const method = recordOAuthMethod(searchParams);
             const user = await login(token);
             if (!user) throw new Error('Failed to authenticate');
-            recordLastSignin('discord', user);
+            recordLastSignin(method, user);
 
             if (user.role !== 'admin' && !user.onboardingCompletedAt) { resolveNewUserRedirect(searchParams, navigate); return; }
             if (resolveExistingUserRedirect(searchParams, navigate)) return;

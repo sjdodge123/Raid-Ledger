@@ -4,6 +4,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { CALENDAR_READ_QUEUE } from '../calendar-sync/calendar-sync.constants';
 import * as multer from 'multer';
 import { UsersService } from './users.service';
+import { SigninMethodsService } from './signin-methods.service';
+import { UsersSigninMethodsController } from './users-signin-methods.controller';
 import { UsersModerationService } from './users-moderation.service';
 import { AvatarService } from './avatar.service';
 import { PreferencesService } from './preferences.service';
@@ -36,6 +38,7 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
   ],
   controllers: [
     UsersMeController,
+    UsersSigninMethodsController,
     UsersMeGameTimeController,
     ConnectionSpeedController,
     UsersManagementController,
@@ -44,6 +47,7 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
   ],
   providers: [
     UsersService,
+    SigninMethodsService,
     ConnectionSpeedService,
     UsersModerationService,
     AvatarService,
@@ -51,6 +55,12 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
     GameTimeService,
     GuildReconciliationService,
   ],
-  exports: [UsersService, AvatarService, PreferencesService, GameTimeService],
+  exports: [
+    UsersService,
+    SigninMethodsService,
+    AvatarService,
+    PreferencesService,
+    GameTimeService,
+  ],
 })
 export class UsersModule {}

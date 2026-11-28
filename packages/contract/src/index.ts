@@ -112,6 +112,7 @@ export * from './discord-threads.schema.js';
 
 // Auth (ROK-389)
 export * from './auth.schema.js';
+export * from './auth-identities.schema.js';
 
 // Backups
 export * from './backup.schema.js';
