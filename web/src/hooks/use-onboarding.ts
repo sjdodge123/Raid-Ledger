@@ -88,17 +88,6 @@ function useOnboardingLifecycleMutations() {
 function useOnboardingDataSourceMutations() {
   const queryClient = useQueryClient();
 
-  const saveBlizzardConfig = useMutation({
-    mutationFn: (data: { clientId: string; clientSecret: string }) =>
-      fetchApi<{ success: boolean; message: string }>('/admin/settings/blizzard', { method: 'PUT', body: JSON.stringify(data) }),
-    onSuccess: () => { toast.success('Blizzard API credentials saved'); void queryClient.invalidateQueries({ queryKey: OB_DATA_KEY }); },
-    onError: (err: Error) => { toast.error(err.message || 'Failed to save Blizzard config'); },
-  });
-
-  const testBlizzardConfig = useMutation({
-    mutationFn: () => fetchApi<{ success: boolean; message: string }>('/admin/settings/blizzard/test', { method: 'POST' }),
-  });
-
   const saveIgdbConfig = useMutation({
     mutationFn: (data: { clientId: string; clientSecret: string }) =>
       fetchApi<{ success: boolean; message: string }>('/admin/settings/igdb', { method: 'PUT', body: JSON.stringify(data) }),
@@ -110,7 +99,7 @@ function useOnboardingDataSourceMutations() {
     mutationFn: () => fetchApi<{ success: boolean; message: string }>('/admin/settings/igdb/test', { method: 'POST' }),
   });
 
-  return { saveBlizzardConfig, testBlizzardConfig, saveIgdbConfig, testIgdbConfig };
+  return { saveIgdbConfig, testIgdbConfig };
 }
 
 /**

@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DoneStep } from './done-step';
+import { usePluginStore } from '../../../stores/plugin-store';
 
 vi.mock('../../../hooks/use-onboarding', () => ({
     useOnboarding: vi.fn(),
@@ -11,6 +12,13 @@ vi.mock('../../../hooks/use-onboarding', () => ({
 import { useOnboarding } from '../../../hooks/use-onboarding';
 
 const mockUseOnboarding = useOnboarding as unknown as ReturnType<typeof vi.fn>;
+
+/** ROK-2361 #9: the Blizzard API row needs the `blizzard` plugin; the suite's default is on. */
+function setBlizzardActive(active: boolean) {
+    usePluginStore.setState({ activeSlugs: new Set(active ? ['core', 'blizzard'] : ['core']) });
+}
+
+beforeEach(() => setBlizzardActive(true));
 
 const defaultOnboarding = {
     statusQuery: {
@@ -305,5 +313,25 @@ describe('DoneStep — cloud flavour hides Secure Account (ROK-1701 OQ-8b)', () 
         // ROK-1703: three wizard-step rows; Blizzard and IGDB are links to their admin pages.
         expect(screen.getAllByRole('button', { name: /Skipped/ })).toHaveLength(3);
         expect(screen.getAllByRole('link', { name: /Skipped/ })).toHaveLength(2);
+    });
+});
+
+describe('DoneStep — Blizzard API row follows the blizzard plugin (ROK-2361 #9)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseOnboarding.mockReturnValue(defaultOnboarding);
+    });
+
+    it('shows the Blizzard API row, linked to the plugins page, while the plugin is active', () => {
+        renderWithProviders(<DoneStep onComplete={vi.fn()} goToStep={vi.fn()} />);
+        expect(screen.getByText('Blizzard API').closest('a')?.getAttribute('href')).toBe('/admin/settings/plugins');
+    });
+
+    it('hides the Blizzard API row while the plugin is inactive and does not count it as skipped', () => {
+        setBlizzardActive(false);
+        renderWithProviders(<DoneStep onComplete={vi.fn()} goToStep={vi.fn()} />);
+        expect(screen.queryByText('Blizzard API')).not.toBeInTheDocument();
+        expect(screen.getByText('IGDB / Twitch API')).toBeInTheDocument();
+        expect(screen.getAllByText('Skipped')).toHaveLength(5);
     });
 });

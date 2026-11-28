@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuthToken } from '../use-auth';
+import { usePluginStore } from '../../stores/plugin-store';
 import { adminFetch } from './admin-fetch';
 import type {
     BlizzardStatusResponse,
@@ -19,11 +20,17 @@ const BLIZZARD_KEY = ['admin', 'settings', 'blizzard'] as const;
  */
 export const BLIZZARD_DEPENDENT_QUERY_ROOT = ['admin', 'blizzard'] as const;
 
+/**
+ * ROK-2361 #9: the settings routes are `@RequirePlugin('blizzard')`, so the
+ * status read waits for the plugin — core admin pages compose this hook via
+ * `useAdminSettings` and must not fire a request that 403s while it is off.
+ */
 function useBlizzardStatusQuery() {
+    const isBlizzardActive = usePluginStore((s) => s.isPluginActive('blizzard'));
     return useQuery<BlizzardStatusResponse>({
         queryKey: [...BLIZZARD_KEY],
         queryFn: () => adminFetch('/admin/settings/blizzard'),
-        enabled: !!getAuthToken(),
+        enabled: !!getAuthToken() && isBlizzardActive,
         staleTime: 30_000,
     });
 }
