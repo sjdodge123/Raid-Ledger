@@ -144,6 +144,14 @@ export async function evaluateNominationTarget(
  * `stampBelowSeen`) so a stale snapshot cannot arm the lineup. The snapshot's
  * `updated_at` is passed through so an edit that landed after the read voids
  * the write even when it restored the judged pct (Codex round 5).
+ *
+ * A refused pinned write falls back to the create/edit arm check, which
+ * recounts the entries and re-reads the cap: any `updated_at` bump in the
+ * read-to-write window (a title edit, a share toggle, a deadline extension)
+ * would otherwise drop a legitimate arm, and if the next nomination crosses
+ * the target that crossing has no rising edge and never fires. The recount
+ * keeps the round-5 guarantee: after 75 -> 50 -> 75 the live count is what the
+ * last edit judged, so the fallback arms exactly when that edit would have.
  */
 async function armNominationTarget(
   db: Db,
@@ -151,7 +159,13 @@ async function armNominationTarget(
   judgedTarget: number,
 ): Promise<void> {
   if (lineup.nominationTargetBelowSeenAt != null) return;
-  await stampBelowSeen(db, lineup.id, judgedTarget, lineup.updatedAt);
+  const armed = await stampBelowSeen(
+    db,
+    lineup.id,
+    judgedTarget,
+    lineup.updatedAt,
+  );
+  if (!armed) await armIfBelowTarget(db, lineup.id, judgedTarget);
 }
 
 /**
@@ -168,9 +182,9 @@ async function armNominationTarget(
  *   judged pct (75 -> 50 -> 75) restores pct and both stamps, but every
  *   target edit bumps `updated_at`, so the stale arm matches no row.
  *   Nominating and unnominating never bump `updated_at`, so a live arm is not
- *   refused by its own path. An unrelated bump in the read-to-write window (a
- *   title edit, a share toggle, a deadline extension) only defers the arm to
- *   the next below-target evaluation. Compared at ms precision: the JS Date
+ *   refused by its own path; an unrelated bump in the read-to-write window is
+ *   re-judged on live data by `armNominationTarget`'s fallback. Compared at
+ *   ms precision: the JS Date
  *   read back is ms, while `defaultNow()` stores microseconds. Omitted for the
  *   create and edit paths, which read the row fresh under the edit's lock.
  */
@@ -196,11 +210,13 @@ async function stampBelowSeen(
   lineupId: number,
   judgedTarget: number,
   readUpdatedAt?: Date,
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const written = await db
     .update(schema.communityLineups)
     .set({ nominationTargetBelowSeenAt: new Date() })
-    .where(belowSeenStampCondition(lineupId, judgedTarget, readUpdatedAt));
+    .where(belowSeenStampCondition(lineupId, judgedTarget, readUpdatedAt))
+    .returning({ id: schema.communityLineups.id });
+  return written.length > 0;
 }
 
 /**

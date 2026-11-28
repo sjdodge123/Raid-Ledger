@@ -393,6 +393,34 @@ function describeNominationTargetEdit() {
     ).not.toBeNull();
   });
 
+  it('an evaluation still arms after an unrelated edit bumps updated_at (round 5 fallback)', async () => {
+    const a = await createMember('bump-a');
+    const b = await createMember('bump-b');
+    const lineupId = await createLineup(75);
+    await nominateAll(lineupId, await createGames(5), a, b);
+    // Fixture: an unarmed lineup at 5/20 = 25%, below its 75% target.
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ nominationTargetBelowSeenAt: null })
+      .where(eq(schema.communityLineups.id, lineupId));
+    const stale = await readRow(lineupId);
+
+    // Before the evaluation writes, a title-only edit bumps `updated_at`.
+    expect((await patchTarget(lineupId, { title: 'Renamed' })).status).toBe(
+      200,
+    );
+    const bumped = await readRow(lineupId);
+    expect(bumped.updatedAt).not.toEqual(stale.updatedAt);
+    expect(bumped.nominationTargetBelowSeenAt).toBeNull();
+
+    // The lineup is still below target, so the arm must land anyway.
+    await evaluateNominationTarget(testApp.db, stale, 5, 1);
+
+    expect(
+      (await readRow(lineupId)).nominationTargetBelowSeenAt,
+    ).not.toBeNull();
+  });
+
   it('a stale evaluation cannot re-arm after a 75 -> 50 -> 75 edit (Codex round 5)', async () => {
     const a = await createMember('rearm-a');
     const b = await createMember('rearm-b');
