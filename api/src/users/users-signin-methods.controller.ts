@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { AuthenticatedRequest } from '../auth/types';
+import { assertNotImpersonating } from '../auth/impersonation-guard.helpers';
 import { SigninMethodsService } from './signin-methods.service';
 
 @Controller('users')
@@ -23,6 +24,7 @@ export class UsersSigninMethodsController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(204)
   async unlinkDiscord(@Request() req: AuthenticatedRequest): Promise<void> {
+    assertNotImpersonating(req.user);
     await this.signinMethods.unlinkDiscord(req.user.id);
   }
 
@@ -31,6 +33,7 @@ export class UsersSigninMethodsController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(204)
   async unlinkGoogle(@Request() req: AuthenticatedRequest): Promise<void> {
+    assertNotImpersonating(req.user);
     await this.signinMethods.unlinkGoogle(req.user.id);
   }
 }

@@ -47,6 +47,7 @@ import { setNoStoreLinkHeaders } from './steam-link-headers.helpers';
 import type { SteamLinkStatusDto } from '@raid-ledger/contract';
 import type { Response, Request } from 'express';
 import type { AuthenticatedExpressRequest } from '../auth/types';
+import { assertNotImpersonating } from '../auth/impersonation-guard.helpers';
 
 /**
  * Steam Auth Controller (ROK-417)
@@ -343,6 +344,7 @@ export class SteamAuthController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(204)
   async unlinkSteam(@Req() req: AuthenticatedExpressRequest) {
+    assertNotImpersonating(req.user);
     // ROK-1835: the SteamID is read and cleared in one statement.
     const previous = await this.usersService.unlinkSteam(req.user.id);
     this.logger.log(`Steam account unlinked for user ${req.user.id}`);
