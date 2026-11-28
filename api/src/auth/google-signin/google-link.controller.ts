@@ -39,6 +39,7 @@ import {
   setLinkNonceCookie,
 } from '../link-nonce-cookie.helpers';
 import type { AuthenticatedExpressRequest } from '../types';
+import { assertNotImpersonating } from '../impersonation-guard.helpers';
 import type { GoogleClient } from '../../calendar-sync/providers/google/google-oauth.helpers';
 import { GoogleSigninService } from './google-signin.service';
 import { GoogleLinkService } from './google-link.service';
@@ -68,6 +69,7 @@ export class GoogleLinkController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<LinkStartResponseDto> {
     await this.clientOr404();
+    assertNotImpersonating(req.user);
     const parsed = LinkStartRequestSchema.safeParse(body ?? {});
     if (!parsed.success || parsed.data.returnTo !== undefined) {
       throw new BadRequestException('Invalid request body');
