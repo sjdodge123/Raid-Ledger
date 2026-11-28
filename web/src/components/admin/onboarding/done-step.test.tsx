@@ -15,7 +15,7 @@ const mockUseOnboarding = useOnboarding as unknown as ReturnType<typeof vi.fn>;
 
 /** ROK-2361 #9: the Blizzard API row needs the `blizzard` plugin; the suite's default is on. */
 function setBlizzardActive(active: boolean) {
-    usePluginStore.setState({ activeSlugs: new Set(active ? ['core', 'blizzard'] : ['core']) });
+    usePluginStore.setState({ activeSlugs: new Set(active ? ['core', 'blizzard'] : ['core']), initialized: true, settled: true });
 }
 
 beforeEach(() => setBlizzardActive(true));
@@ -333,5 +333,12 @@ describe('DoneStep — Blizzard API row follows the blizzard plugin (ROK-2361 #9
         expect(screen.queryByText('Blizzard API')).not.toBeInTheDocument();
         expect(screen.getByText('IGDB / Twitch API')).toBeInTheDocument();
         expect(screen.getAllByText('Skipped')).toHaveLength(5);
+    });
+
+    it('renders no summary rows until the plugin list has hydrated, so the Blizzard row never pops in', () => {
+        usePluginStore.setState({ activeSlugs: new Set(['core']), initialized: false, settled: false });
+        renderWithProviders(<DoneStep onComplete={vi.fn()} goToStep={vi.fn()} />);
+        expect(screen.queryByText('IGDB / Twitch API')).not.toBeInTheDocument();
+        expect(screen.queryByText('Skipped')).not.toBeInTheDocument();
     });
 });

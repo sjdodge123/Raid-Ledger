@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useOnboarding } from '../../../hooks/use-onboarding';
 import { usePluginStore } from '../../../stores/plugin-store';
+import { usePluginsHydrated } from '../../../hooks/use-plugins';
 
 interface DoneStepProps {
   onComplete: () => void;
@@ -135,7 +136,9 @@ function SkippedNotice({ hasSkipped }: { hasSkipped: boolean }) {
 export function DoneStep({ onComplete, goToStep, firstStep = 0 }: DoneStepProps) {
     const { statusQuery, dataSourcesQuery } = useOnboarding();
     const blizzardActive = usePluginStore((s) => s.isPluginActive('blizzard'));
-    const items = buildSummaryItems(statusQuery.data?.steps, dataSourcesQuery.data, blizzardActive);
+    // ROK-2361 #9: the store reads `{core}` until hydrated; wait so the Blizzard row never pops in.
+    const pluginsHydrated = usePluginsHydrated();
+    const items = pluginsHydrated ? buildSummaryItems(statusQuery.data?.steps, dataSourcesQuery.data, blizzardActive) : [];
     const hasSkipped = items.some((i) => !i.done);
 
     return (
