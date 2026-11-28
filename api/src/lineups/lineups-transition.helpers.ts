@@ -41,6 +41,7 @@ import {
   lineupSubjectFields,
 } from './lineup-lifecycle-emit.helpers';
 import { writeDecidedCohortMemory } from './cohort-memory-write.helpers';
+import type { AdvanceGuard } from './lineups-advance-guard.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -67,12 +68,16 @@ export interface TransitionDeps {
  * `lineup_auto_advance_paused` activity entries credit the operator. Auto-
  * advance callers (no human actor) pass null; we still log the pause but
  * without an actor — matching `logTransition`'s null-actor pattern.
+ *
+ * ROK-1710: an automatic advance passes the `guard` of the row it judged, so
+ * a nomination-target edit that commits first makes the write a 409.
  */
 export async function runStatusTransition(
   deps: TransitionDeps,
   id: number,
   dto: UpdateLineupStatusDto,
   actorId: number | null = null,
+  guard?: AdvanceGuard,
 ): Promise<LineupDetailResponseDto> {
   const [lineup] = await findLineupById(deps.db, id);
   if (!lineup) throw new NotFoundException('Lineup not found');
@@ -94,6 +99,7 @@ export async function runStatusTransition(
     dto,
     lineup,
     healClearedEventEmbeds(deps.embedSyncQueue, deps.logger, deps.eventEmitter),
+    guard,
   );
   // ROK-1374: the tie hold describes one vote. Cleared only once the CAS
   // above has landed (leaving voting for a non-decided status, or an operator

@@ -21,16 +21,20 @@ export const DEFAULT_NOMINATION_TARGET_PCT = 75;
 export function NominationTargetControl({
   value,
   onChange,
+  describedBy,
 }: {
   /** Percentage of the cap, or null when the target is off. */
   value: number | null;
   onChange: (next: number | null) => void;
+  /** Id of an extra hint read with the toggle (the Edit modal's disarmed note). */
+  describedBy?: string | undefined;
 }): JSX.Element {
   const enabled = value !== null;
   return (
     <div className="space-y-2">
       <Checkbox
         data-testid="nomination-target-enabled"
+        aria-describedby={describedBy}
         checked={enabled}
         onChange={(e) =>
           onChange(e.target.checked ? DEFAULT_NOMINATION_TARGET_PCT : null)

@@ -30,6 +30,7 @@ import { countDistinctNominators } from './lineups-query.helpers';
 import { nominationCap } from './common-ground-scoring.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 
 /** Effective cap for a lineup: the live cap floored at its recorded peak. */
@@ -61,7 +62,7 @@ export async function loadEffectiveNominationCap(
  * publishes or gates on a cap agrees with `validateNominationCap`.
  */
 export async function loadEffectiveNominationCapById(
-  db: Db,
+  db: Db | Tx,
   lineupId: number,
 ): Promise<number> {
   const [row] = await db

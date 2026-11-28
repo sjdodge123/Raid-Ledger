@@ -34,6 +34,10 @@ import {
 import { addInvitees } from './lineups-invitees.helpers';
 import { insertWithSlugRetry } from './public-lineup-slug.helpers';
 import { extractErrorDetail } from '../common/pg-error.helpers';
+import {
+  advanceGuardCondition,
+  type AdvanceGuard,
+} from './lineups-advance-guard.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -111,6 +115,7 @@ async function runConditionalStatusUpdate(
   dto: UpdateLineupStatusDto,
   lineup: typeof schema.communityLineups.$inferSelect,
   phaseDeadline: Date | null,
+  guard?: AdvanceGuard,
 ): Promise<void> {
   const values = {
     ...buildTransitionValues(dto, phaseDeadline),
@@ -126,6 +131,9 @@ async function runConditionalStatusUpdate(
       and(
         eq(schema.communityLineups.id, id),
         eq(schema.communityLineups.status, expectedPre),
+        // ROK-1710: an automatic advance also requires the target state it
+        // judged (see `lineups-advance-guard.helpers.ts`).
+        guard ? advanceGuardCondition(guard) : undefined,
       ),
     )
     .returning({ id: schema.communityLineups.id });
@@ -154,9 +162,10 @@ export async function applyStatusUpdate(
   dto: UpdateLineupStatusDto,
   lineup: typeof schema.communityLineups.$inferSelect,
   onEventsCleared?: (eventIds: number[]) => void,
+  guard?: AdvanceGuard,
 ): Promise<Date | null> {
   const phaseDeadline = computeTransitionDeadline(dto.status, lineup);
-  await runConditionalStatusUpdate(db, id, dto, lineup, phaseDeadline);
+  await runConditionalStatusUpdate(db, id, dto, lineup, phaseDeadline, guard);
 
   const nextPhase = getNextPhase(dto.status);
   if (nextPhase && phaseDeadline) {
