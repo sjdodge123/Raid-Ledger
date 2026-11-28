@@ -22,6 +22,7 @@ import { setNoStoreLinkHeaders } from '../steam/steam-link-headers.helpers';
 import { LinkNonceService } from './link-nonce.service';
 import { setLinkNonceCookie } from './link-nonce-cookie.helpers';
 import type { AuthenticatedExpressRequest } from './types';
+import { assertNotImpersonating } from './impersonation-guard.helpers';
 
 /**
  * Parse the start body with the strict contract schema. The start endpoints
@@ -55,6 +56,7 @@ export class LinkStartController {
     @Body() body: unknown,
     @Res({ passthrough: true }) res: Response,
   ): LinkStartResponseDto {
+    assertNotImpersonating(req.user);
     parseStartBody(body);
     const minted = this.linkNonceService.mint('discord', req.user.id);
     setLinkNonceCookie(res, 'discord', minted.nonce);
@@ -71,6 +73,7 @@ export class LinkStartController {
     @Body() body: unknown,
     @Res({ passthrough: true }) res: Response,
   ): LinkStartResponseDto {
+    assertNotImpersonating(req.user);
     setNoStoreLinkHeaders(res); // ROK-1731 OQ6: the body carries the nonce
     const { returnTo } = parseStartBody(body);
     const minted = this.linkNonceService.mint(
