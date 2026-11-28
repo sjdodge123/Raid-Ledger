@@ -4752,3 +4752,9 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 ### 2026-11-27 — rok-2362-hub-welcome-copy (ROK-2362 finding #10)
 
 - **resolved** `api/plugin-boundary-allowlist.json` — the `src/discord-bot/hub-welcome/hub-welcome.service.ts` → valheim specifier listed in the 2026-11-27 rok-2364-user-lifecycle entry above is gone: the welcome copy now rides on the Valheim `HubClaimProvider` (`welcome`), core reads it via `HubClaimRegistry`. Pin 99 → 98. 4 specifiers of that entry remain.
+
+### 2026-11-28 — rok-1710-nomination-target-edit (surfaced during ROK-1710 round-5 review, lane-notes/rok1710-review-r5.md)
+
+- **low** `api/src/lineups/quorum/nomination-target.helpers.ts:168,227-241` — the 28083cff3 fallback (pinned arm refused by an unrelated `updated_at` bump → recount on live data) writes the arm stamp without the `updated_at` pin and outside a row lock, so a 75 → 50 → 75 edit landing in the few-ms gap can still arm on a stale count; the comment at `:188-189` is now wrong. Shipped as is per operator ruling "one more round, then ship" (2026-11-27). Suggested: pin the fallback write to an `updated_at` it re-reads, and fix the comment.
+- **low** `api/src/lineups/lineup-nomination-target-edit.integration.spec.ts:374-386` — since the fallback, the "ms-precision match" case passes whether or not the pinned compare matches (the fallback arms anyway), so a broken pin would go unnoticed. Suggested: a case where only the pin can arm (fallback recount below target).
+- **low** `web/src/components/lineups/edit-lineup-metadata-modal.tsx:126-128,184-190` — after the 409 (lineup left building with a dirty target), the hidden target stays in every PATCH, so every Save 409s and title/description edits can't be saved without Cancel → Discard. Suggested: on that 409 drop the target from the payload (or show it read-only with "Undo target change") so the other edits can save.
