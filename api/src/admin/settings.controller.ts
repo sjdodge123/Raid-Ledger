@@ -22,19 +22,12 @@ import { RateLimit } from '../throttler/rate-limit.decorator';
 import { parseOAuthTestBody, testDiscordOAuth } from './settings-oauth.helpers';
 import {
   testIgdbCredentials,
-  testBlizzardCredentials,
   testSteamApiKey,
 } from './settings-api-test.helpers';
-import {
-  OAuthConfigDto,
-  IgdbConfigDto,
-  BlizzardConfigDto,
-  SteamConfigDto,
-} from './settings.dto';
+import { OAuthConfigDto, IgdbConfigDto, SteamConfigDto } from './settings.dto';
 import type {
   OAuthStatusResponse,
   IgdbStatusResponse,
-  BlizzardStatusResponse,
   OAuthTestResponse,
 } from './settings.dto';
 // Re-export DTOs/interfaces for consumers importing from this file
@@ -153,53 +146,6 @@ export class AdminSettingsController {
     this.settingsService['eventEmitter'].emit('settings.igdb.updated', null);
     this.logger.log('IGDB configuration cleared via admin UI');
     return { success: true, message: 'IGDB configuration cleared.' };
-  }
-
-  // ── Blizzard ────────────────────────────────────────────
-  @Get('blizzard')
-  async getBlizzardStatus(): Promise<BlizzardStatusResponse> {
-    return { configured: await this.settingsService.isBlizzardConfigured() };
-  }
-
-  @Put('blizzard')
-  @HttpCode(HttpStatus.OK)
-  async updateBlizzardConfig(
-    @Body() body: BlizzardConfigDto,
-  ): Promise<{ success: boolean; message: string }> {
-    await this.settingsService.setBlizzardConfig({
-      clientId: body.clientId,
-      clientSecret: body.clientSecret,
-    });
-    this.logger.log('Blizzard API configuration updated via admin UI');
-    return {
-      success: true,
-      message:
-        'Blizzard API configuration saved. WoW Armory import is now enabled.',
-    };
-  }
-
-  @Post('blizzard/test')
-  @HttpCode(HttpStatus.OK)
-  async testBlizzardConfig(): Promise<OAuthTestResponse> {
-    const config = await this.settingsService.getBlizzardConfig();
-    if (!config)
-      return { success: false, message: 'Blizzard API is not configured' };
-    return testBlizzardCredentials(config);
-  }
-
-  @Post('blizzard/clear')
-  @HttpCode(HttpStatus.OK)
-  async clearBlizzardConfig(): Promise<{ success: boolean; message: string }> {
-    await Promise.all([
-      this.settingsService.delete(SETTING_KEYS.BLIZZARD_CLIENT_ID),
-      this.settingsService.delete(SETTING_KEYS.BLIZZARD_CLIENT_SECRET),
-    ]);
-    this.settingsService['eventEmitter'].emit(
-      'settings.blizzard.updated',
-      null,
-    );
-    this.logger.log('Blizzard API configuration cleared via admin UI');
-    return { success: true, message: 'Blizzard API configuration cleared.' };
   }
 
   // ── Timezone ────────────────────────────────────────────

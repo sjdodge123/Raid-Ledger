@@ -43,6 +43,7 @@ import { setRefreshCookie } from '../auth/refresh/refresh-cookie.helpers';
 import { isCloudFlavour } from '../common/flavour/flavour';
 import { readClaimState } from '../setup-claim/claim-state.repository';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 
 /** Change-password response; `access_token` replaces the caller's revoked one. */
 type ChangePasswordResult = {
@@ -65,6 +66,7 @@ export class OnboardingController {
     private readonly localAuthService: LocalAuthService,
     private readonly passwordSession: PasswordChangeSessionService,
     private readonly discordClient: DiscordBotClientService,
+    private readonly plugins: PluginRegistryService,
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -128,8 +130,11 @@ export class OnboardingController {
         // ROK-1701 OQ-8b: on cloud the claim set the password; NAS keeps the step.
         secureAccount: isCloudFlavour() && claimed,
         communityIdentity: !!(s.communityName || s.defaultTimezone),
+        // ROK-2361 #9: Blizzard keys count only while the blizzard plugin is on.
         connectPlugins:
-          s.blizzardConfigured || s.igdbConfigured || s.discordConfigured,
+          (s.blizzardConfigured && this.plugins.isActive('blizzard')) ||
+          s.igdbConfigured ||
+          s.discordConfigured,
         // ROK-1703: OAuth saved + bot token saved + bot connected (D-3).
         discord:
           s.discordConfigured &&

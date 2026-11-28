@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useOnboarding } from '../../../hooks/use-onboarding';
+import { usePluginStore } from '../../../stores/plugin-store';
+import { usePluginsHydrated } from '../../../hooks/use-plugins';
 
 interface DoneStepProps {
   onComplete: () => void;
@@ -23,13 +25,21 @@ const EditIcon = (
     </svg>
 );
 
-function buildSummaryItems(steps: Record<string, boolean | undefined> | undefined, dataSources: Record<string, { configured: boolean }> | undefined): (SummaryRow & { skipMessage: string })[] {
+type SummaryItemRow = SummaryRow & { skipMessage: string };
+
+/** ROK-2361 #9: the Blizzard API row belongs to the `blizzard` plugin — no row while it is off. */
+function blizzardRow(dataSources: Record<string, { configured: boolean }> | undefined, blizzardActive: boolean): SummaryItemRow[] {
+    if (!blizzardActive) return [];
+    return [{ label: 'Blizzard API', done: dataSources?.blizzard?.configured ?? false, skipMessage: 'Not connected', href: '/admin/settings/plugins' }];
+}
+
+function buildSummaryItems(steps: Record<string, boolean | undefined> | undefined, dataSources: Record<string, { configured: boolean }> | undefined, blizzardActive: boolean): SummaryItemRow[] {
     return [
         { label: 'Password Changed', done: steps?.secureAccount ?? false, skipMessage: 'Default password still in use', wizardStep: 0 },
         { label: 'Community Identity', done: steps?.communityIdentity ?? false, skipMessage: 'Using default settings', wizardStep: 1 },
         { label: 'Discord', done: steps?.discord ?? false, skipMessage: 'Not connected', wizardStep: 2 },
         // No wizard step owns these yet (R15 adds Game data) — they link to their admin pages.
-        { label: 'Blizzard API', done: dataSources?.blizzard?.configured ?? false, skipMessage: 'Not connected', href: '/admin/settings/plugins' },
+        ...blizzardRow(dataSources, blizzardActive),
         { label: 'IGDB / Twitch API', done: dataSources?.igdb?.configured ?? false, skipMessage: 'Not connected', href: '/admin/settings/integrations/igdb' },
         { label: 'Discord OAuth', done: dataSources?.discord?.configured ?? false, skipMessage: 'Not configured', wizardStep: 2 },
     ];
@@ -125,7 +135,10 @@ function SkippedNotice({ hasSkipped }: { hasSkipped: boolean }) {
  */
 export function DoneStep({ onComplete, goToStep, firstStep = 0 }: DoneStepProps) {
     const { statusQuery, dataSourcesQuery } = useOnboarding();
-    const items = buildSummaryItems(statusQuery.data?.steps, dataSourcesQuery.data);
+    const blizzardActive = usePluginStore((s) => s.isPluginActive('blizzard'));
+    // ROK-2361 #9: the store reads `{core}` until hydrated; wait so the Blizzard row never pops in.
+    const pluginsHydrated = usePluginsHydrated();
+    const items = pluginsHydrated ? buildSummaryItems(statusQuery.data?.steps, dataSourcesQuery.data, blizzardActive) : [];
     const hasSkipped = items.some((i) => !i.done);
 
     return (

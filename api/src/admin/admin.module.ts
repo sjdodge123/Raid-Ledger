@@ -3,6 +3,7 @@ import { AdminController } from './admin.controller';
 import { AdminSettingsController } from './settings.controller';
 import { AdminSessionController } from './admin-session.controller';
 import { AdminGamesController } from './settings-games.controller';
+import { AdminBlizzardSettingsController } from './settings-blizzard.controller';
 import { BrandingController } from './branding.controller';
 import { DemoTestCoreController } from './demo-test-core.controller';
 import { DemoTestClaimController } from './demo-test-claim.controller';
@@ -127,6 +128,7 @@ import { UsersModule } from '../users/users.module';
   controllers: [
     AdminController,
     AdminSettingsController,
+    AdminBlizzardSettingsController,
     AdminSessionController,
     AdminGamesController,
     BrandingController,
